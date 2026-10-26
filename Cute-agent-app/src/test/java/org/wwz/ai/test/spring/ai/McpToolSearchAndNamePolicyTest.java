@@ -72,7 +72,7 @@ public class McpToolSearchAndNamePolicyTest {
                 .build();
         collection.setAgentContext(context);
 
-        Object result = collection.execute("mcp__demo__remote_tool", Map.of());
+        Object result = collection.execute("mcp__demo__remote_tool", Map.of(), context);
         String text = String.valueOf(result);
         Assert.assertTrue(text.contains(McpToolNames.TOOL_CALL));
         Assert.assertFalse(text.contains("select:"));

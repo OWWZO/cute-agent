@@ -89,7 +89,7 @@ public class WorkspaceReadDedupTest {
         childTools.setAgentContext(child);
 
         String childResult = String.valueOf(childTools.execute(
-                "workspace_read", Map.of("path", "demo.txt", "start_line", 1, "line_count", 20)));
+                "workspace_read", Map.of("path", "demo.txt", "start_line", 1, "line_count", 20), child));
         Assert.assertFalse(childResult.contains("File unchanged since last read"));
         Assert.assertTrue(childResult.contains("1 | alpha"));
     }

@@ -6,6 +6,7 @@ import org.springframework.context.annotation.ClassPathScanningCandidateComponen
 import org.springframework.core.type.filter.AssignableTypeFilter;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentContextFactory;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 
@@ -119,7 +120,7 @@ public class StatelessToolSharingTest {
         tools.setAgentContext(bound);
 
         // 旧签名路径不传 context：回落到 collection 自身绑定的那个，保证后台/测试路径不变。
-        Assert.assertEquals("bound", tools.execute(EchoContextTool.NAME, Map.of()));
+        Assert.assertEquals("bound", tools.execute(EchoContextTool.NAME, Map.of(), bound));
     }
 
     private static AgentContext context(String requestId) {
@@ -206,6 +207,31 @@ public class StatelessToolSharingTest {
             Assert.assertFalse("BaseTool 不得声明 execute(Object) 单参重载",
                     "execute".equals(method.getName()) && method.getParameterCount() == 1);
         }
+    }
+
+    /**
+     * 控制面生命周期锁：会话级状态共享、run 级状态独占。
+     *
+     * <p>把 026 的回归修复固化为长期守卫——{@code SubAgentContextFactory} 若回退到
+     * 共享整个 {@code RunControl}，子 Agent 的 {@code finishRun} 会再次提前关闭父 SSE、
+     * 覆盖父的取消令牌与 inject 队列（三类回归的根因）。</p>
+     *
+     * <p>共享的判据是<b>状态实例</b>而不是 {@code SessionControl} 外壳：子 Agent 拿到的是
+     * 自己的一层包装（便于按子 sessionKey 补建），但内部的 Todo 列表与后台任务表必须是
+     * 父的同一实例，否则 TaskStop / TaskOutput 命不中子 Agent。</p>
+     */
+    @Test
+    public void subAgentMustShareSessionStateButNotRunControl() {
+        AgentContext parent = context("parent-control");
+        AgentContext child = SubAgentContextFactory.create(
+                parent, "子任务", "描述", new ToolCollection(), "agent-control", "general-purpose");
+
+        Assert.assertSame("会话级 Todo 列表必须父子共享（TaskCreate/TaskGet 同一列表）",
+                parent.requireSessionTaskList(), child.requireSessionTaskList());
+        Assert.assertSame("会话级后台任务表必须父子共享（TaskStop/TaskOutput 命中子 Agent）",
+                parent.requireBackgroundTasks(), child.requireBackgroundTasks());
+        Assert.assertNotSame("run 级控制面必须独占（turnClosed/injects/令牌链互不覆盖）",
+                parent.control(), child.control());
     }
 
     /**

@@ -65,7 +65,7 @@ public class ToolCallUnwrapPipelineTest {
     @Test
     public void directDeferredNameDoesNotExecute() {
         Probe probe = Probe.create();
-        Object result = probe.collection.execute("mcp__demo__remote_tool", Map.of("q", "hi"));
+        Object result = probe.collection.execute("mcp__demo__remote_tool", Map.of("q", "hi"), null);
         Assert.assertTrue(String.valueOf(result).contains(McpToolNames.TOOL_CALL));
         Mockito.verifyNoInteractions(probe.executor);
     }

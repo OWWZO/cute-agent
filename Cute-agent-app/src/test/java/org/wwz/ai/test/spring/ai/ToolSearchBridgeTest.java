@@ -67,7 +67,7 @@ public class ToolSearchBridgeTest {
         args.put("arguments", Map.of("q", "hello"));
         DeferredToolCall.Result resolved = DeferredToolCall.resolve(fx.collection, args);
         Assert.assertTrue(resolved.ok());
-        Object output = fx.collection.executeResolved(resolved.name(), resolved.arguments());
+        Object output = fx.collection.executeResolved(resolved.name(), resolved.arguments(), null);
         Assert.assertEquals("ok-remote", output);
         Mockito.verify(fx.executor).executeTool(Mockito.argThat(info ->
                 "remote_tool".equals(info.getOriginalName())), Mockito.eq(Map.of("q", "hello")));
@@ -90,7 +90,7 @@ public class ToolSearchBridgeTest {
     @Test
     public void directDeferredExecuteFails() {
         Fixture fx = fixture();
-        Object result = fx.collection.execute("mcp__demo__remote_tool", Map.of("q", "x"));
+        Object result = fx.collection.execute("mcp__demo__remote_tool", Map.of("q", "x"), fx.context);
         Assert.assertTrue(String.valueOf(result).contains(McpToolNames.TOOL_CALL));
         Mockito.verifyNoInteractions(fx.executor);
     }

@@ -69,16 +69,16 @@ public class LtmForkParityTest {
                 .build();
         tools.setAgentContext(ctx);
 
-        Object denied = tools.execute("WebSearch", Map.of());
+        Object denied = tools.execute("WebSearch", Map.of(), ctx);
         Assert.assertTrue(String.valueOf(denied).contains("denied non-whitelisted tool"));
 
-        Object bashOk = tools.execute("bash", Map.of("command", "echo hi"));
+        Object bashOk = tools.execute("bash", Map.of("command", "echo hi"), ctx);
         Assert.assertFalse(String.valueOf(bashOk).contains("denied non-whitelisted tool"));
 
         Object memoryResult = tools.execute(MemoryTool.TOOL_NAME, Map.of(
                 "action", "add",
                 "target", "user",
-                "content", "prefers concise"));
+                "content", "prefers concise"), ctx);
         Assert.assertFalse(String.valueOf(memoryResult).contains("denied non-whitelisted tool"));
     }
 

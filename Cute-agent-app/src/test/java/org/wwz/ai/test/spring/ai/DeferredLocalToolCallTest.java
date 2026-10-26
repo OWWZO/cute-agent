@@ -43,14 +43,14 @@ public class DeferredLocalToolCallTest {
         Assert.assertTrue(((Map<?, ?>) described.get("parameters")).containsKey("required"));
 
         Assert.assertTrue(String.valueOf(collection.execute(
-                "document_generate", Map.of("title", "x"))).contains("ToolCall"));
+                "document_generate", Map.of("title", "x"), null)).contains("ToolCall"));
 
         Map<String, Object> call = new LinkedHashMap<>();
         call.put("name", "document_generate");
         call.put("arguments", Map.of("title", "x"));
         DeferredToolCall.Result resolved = DeferredToolCall.resolve(collection, call);
         Assert.assertTrue(resolved.ok());
-        Assert.assertEquals("generated:x", collection.executeResolved(resolved.name(), resolved.arguments()));
+        Assert.assertEquals("generated:x", collection.executeResolved(resolved.name(), resolved.arguments(), null));
         Assert.assertEquals(1, local.invocations);
 
         ToolCallTool bridge = new ToolCallTool();
