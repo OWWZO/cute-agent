@@ -356,9 +356,16 @@ public class DocToolRemoteProtocolTest {
     }
 
     private static final class GenTool extends AbstractDocGenTool {
-        /** agentContext 现位于 doc 包，protected 字段跨包不可见，这里开一个测试专用入口。 */
+        /** 测试夹具：保留一次绑定，旧签名 execute 转交给显式 context 版本。 */
+        private AgentContext boundContext;
+
         private void bind(AgentContext ctx) {
-            this.agentContext = ctx;
+            this.boundContext = ctx;
+        }
+
+        @Override
+        public Object execute(Object input) {
+            return execute(input, boundContext);
         }
 
         @Override
@@ -383,9 +390,16 @@ public class DocToolRemoteProtocolTest {
     }
 
     private static final class ReadTool extends AbstractDocReadTool {
-        /** AbstractDocReadTool 在其它包，protected 字段不可见，这里开一个测试专用入口。 */
+        /** 测试夹具：保留一次绑定，旧签名 execute 转交给显式 context 版本。 */
+        private AgentContext boundContext;
+
         private void bind(AgentContext ctx) {
-            this.agentContext = ctx;
+            this.boundContext = ctx;
+        }
+
+        @Override
+        public Object execute(Object input) {
+            return execute(input, boundContext);
         }
 
         @Override

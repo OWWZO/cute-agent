@@ -11,6 +11,7 @@ import org.wwz.ai.domain.agent.image.model.ImageGenerationGatewayFile;
 import org.wwz.ai.domain.agent.image.model.ImageGenerationGatewayRequest;
 import org.wwz.ai.domain.agent.image.model.ImageGenerationGatewayResponse;
 import org.wwz.ai.infrastructure.gateway.CuteFileGateway;
+import org.wwz.ai.types.agent.config.ImageGenerationProperties;
 import org.wwz.ai.infrastructure.gateway.dto.ConversationUploadFileDTO;
 
 import javax.annotation.Resource;
@@ -29,6 +30,9 @@ import java.util.regex.Pattern;
 public class CuteImageGenerationGateway implements ICuteImageGenerationGateway {
 
     private static final Pattern UNSAFE_FILE_CHARS = Pattern.compile("[<>:\"/\\\\|?*\\x00-\\x1F]+");
+
+    @Resource
+    private ImageGenerationProperties imageGenerationProperties;
 
     @Resource
     private CuteConfig cuteConfig;
@@ -91,10 +95,10 @@ public class CuteImageGenerationGateway implements ICuteImageGenerationGateway {
 
     private ImageGenerationClient buildClient(Integer timeoutSeconds) {
         String baseUrl = firstText(
-                cuteConfig.getImageGenerationBaseUrl(),
-                cuteConfig.getImageGenerationUrl()
+                imageGenerationProperties.getBaseUrl(),
+                imageGenerationProperties.getUrl()
         );
-        String apiKey = cuteConfig.getImageGenerationApiKey();
+        String apiKey = imageGenerationProperties.getApiKey();
         if (!StringUtils.hasText(baseUrl)) {
             throw new IllegalStateException("autobots.autoagent.image_generation.base_url 未配置");
         }
@@ -105,10 +109,10 @@ public class CuteImageGenerationGateway implements ICuteImageGenerationGateway {
         return new ImageGenerationClient(ImageGenerationClient.ClientConfig.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
-                .defaultModel(firstText(cuteConfig.getImageGenerationModel(), "gpt-image-2.5-flare"))
-                .grokBaseUrl(firstText(cuteConfig.getImageGenerationGrokBaseUrl(), baseUrl))
-                .grokApiKey(firstText(cuteConfig.getImageGenerationGrokApiKey(), apiKey))
-                .defaultGrokModel(firstText(cuteConfig.getImageGenerationGrokModel(), "grok-imagine-image-lite"))
+                .defaultModel(firstText(imageGenerationProperties.getModel(), "gpt-image-2.5-flare"))
+                .grokBaseUrl(firstText(imageGenerationProperties.getGrokBaseUrl(), baseUrl))
+                .grokApiKey(firstText(imageGenerationProperties.getGrokApiKey(), apiKey))
+                .defaultGrokModel(firstText(imageGenerationProperties.getGrokModel(), "grok-imagine-image-lite"))
                 .previewBaseUrl(cuteConfig.getCodeInterpreterUrl())
                 .timeoutSeconds(timeout)
                 .proxy(cuteConfig.getLlmProxy())

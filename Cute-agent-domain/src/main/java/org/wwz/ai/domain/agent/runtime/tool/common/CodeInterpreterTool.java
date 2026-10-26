@@ -14,7 +14,6 @@ import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
@@ -34,7 +33,6 @@ import java.util.stream.Collectors;
  * 将 Python 源码提交到受控执行服务，消费流式结果并把新生成文件转换为稳定 artifact 引用。
  */
 @Slf4j
-@Data
 public class CodeInterpreterTool implements BaseTool {
 
     private static final String DESCRIPTION = """
@@ -53,8 +51,6 @@ public class CodeInterpreterTool implements BaseTool {
             {"type":"object","properties":{"task":{"description":"任务的描述，不仅包括提供任务目标、任务的相关要求，还包括详细的完成任务需要的细节信息。详细是指不仅包含上下文中提及的所有与任务的相关内容，同时，包括：用户提供的业务名词、业务背景、数据等相关内容，确保这是一个易于理解、步骤明确、且能完成完整任务的描述。完整任务的定义是所有依赖项都在这里写清楚，明确无歧义，信息无丢失，基于上下文已有的数据进行。禁止编造数据，写出来的程序是基于上下文已有的数据进行。","type":"string"},"fileName":{"description":"最终代码解释器报告文件名称，必填且不超过20个字符（含扩展名），例如：销售趋势分析报告.md","type":"string","maxLength":20}},"required":["task","fileName"]}
             """;
 
-    private AgentContext agentContext;
-
     @Override
     public String getName() {
         return "code_interpreter";
@@ -72,6 +68,15 @@ public class CodeInterpreterTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext ctx) {
+        if (ctx == null) {
+            return buildFailurePayload("code_interpreter 执行失败：缺少 AgentContext");
+        }
         try {
             Map<String, Object> params = (Map<String, Object>) input;
             String task = (String) params.get("task");
@@ -80,22 +85,22 @@ public class CodeInterpreterTool implements BaseTool {
                     : String.valueOf(params.get("fileName"));
             String reportFileName = DeepSearchFileNamePolicy.resolveReportFileName(
                     requestedFileName, "代码解释器输出.md");
-            List<String> fileNames = agentContext.getProductFiles().stream().map(File::getFileName).collect(Collectors.toList());
+            List<String> fileNames = ctx.getProductFiles().stream().map(File::getFileName).collect(Collectors.toList());
             CodeInterpreterRequest request = CodeInterpreterRequest.builder()
-                    .requestId(agentContext.getSessionId()) // 适配多轮对话
-                    .query(agentContext.getQuery())
+                    .requestId(ctx.getSessionId()) // 适配多轮对话
+                    .query(ctx.getQuery())
                     .task(task)
                     .fileName(reportFileName)
                     .fileNames(fileNames)
                     .stream(true)
                     .build();
-            ToolArtifactSource artifactSource = agentContext.requireCurrentToolArtifactSource(getName());
+            ToolArtifactSource artifactSource = ctx.requireCurrentToolArtifactSource(getName());
 
             // 调用流式 API；execute 等待完整 ToolResult，但中间过程由 listener 实时推送到前端。
-            Future<ToolResultPayload> future = callCodeAgentStream(request, artifactSource);
+            Future<ToolResultPayload> future = callCodeAgentStream(ctx, request, artifactSource);
             return future.get();
         } catch (Exception e) {
-            log.error("{} code agent error", agentContext.getRequestId(), e);
+            log.error("{} code agent error", ctx.getRequestId(), e);
             return buildFailurePayload("code_interpreter 执行失败：" + e.getMessage());
         }
     }
@@ -103,14 +108,15 @@ public class CodeInterpreterTool implements BaseTool {
     /**
      * 调用 CodeAgent：细粒度 SSE（任务/过程/步骤思考/代码/执行输出/结论）对齐 data_analysis 累加推送。
      */
-    public CompletableFuture<ToolResultPayload> callCodeAgentStream(CodeInterpreterRequest codeRequest,
+    public CompletableFuture<ToolResultPayload> callCodeAgentStream(AgentContext ctx,
+                                                                    CodeInterpreterRequest codeRequest,
                                                                     ToolArtifactSource artifactSource) {
         CompletableFuture<ToolResultPayload> future = new CompletableFuture<>();
         try {
-            CuteConfig cuteConfig = requireCuteConfig();
+            CuteConfig cuteConfig = requireCuteConfig(ctx);
             String url = cuteConfig.getCodeInterpreterUrl() + "/v1/tool/code_interpreter";
-            log.info("{} code_interpreter request {}", agentContext.getRequestId(), JSONObject.toJSONString(codeRequest));
-            String digitalEmployee = agentContext.getToolCollection().getDigitalEmployee(getName());
+            log.info("{} code_interpreter request {}", ctx.getRequestId(), JSONObject.toJSONString(codeRequest));
+            String digitalEmployee = ctx.getToolCollection().getDigitalEmployee(getName());
             String messageId = StringUtil.getUUID();
             String toolCallId = artifactSource == null ? null : artifactSource.getToolCallId();
             StringBuilder fullContentBuilder = new StringBuilder();
@@ -120,7 +126,7 @@ public class CodeInterpreterTool implements BaseTool {
                             .codeOutput("code_interpreter执行失败")
                             .build());
 
-            requireRemoteStreamPort().openStream(RemoteStreamRequest.builder()
+            requireRemoteStreamPort(ctx).openStream(RemoteStreamRequest.builder()
                     .method("POST")
                     .url(url)
                     .headers(Map.of("Content-Type", "application/json"))
@@ -132,7 +138,7 @@ public class CodeInterpreterTool implements BaseTool {
                     .build(), new RemoteStreamListener() {
                 @Override
                 public void onOpen() {
-                    log.info("{} code_interpreter stream opened", agentContext.getRequestId());
+                    log.info("{} code_interpreter stream opened", ctx.getRequestId());
                 }
 
                 @Override
@@ -144,7 +150,7 @@ public class CodeInterpreterTool implements BaseTool {
                     if ("[DONE]".equals(data) || data.startsWith("heartbeat")) {
                         return;
                     }
-                    log.info("{} code_interpreter recv data: {}", agentContext.getRequestId(), data);
+                    log.info("{} code_interpreter recv data: {}", ctx.getRequestId(), data);
                     CodeInterpreterResponse codeResponse = JSONObject.parseObject(data, CodeInterpreterResponse.class);
                     if (codeResponse == null) {
                         return;
@@ -176,7 +182,7 @@ public class CodeInterpreterTool implements BaseTool {
                                     .description(fileInfo.getFileName())
                                     .isInternalFile(false)
                                     .build();
-                            agentContext.registerGeneratedArtifact(artifactSource, file);
+                            ctx.registerGeneratedArtifact(artifactSource, file);
                         }
                     }
 
@@ -199,7 +205,7 @@ public class CodeInterpreterTool implements BaseTool {
                         if (!finalFileInfo.isEmpty()) {
                             codeResponse.setFileInfo(finalFileInfo);
                         }
-                        agentContext.getPrinter().send(messageId, "code",
+                        ctx.getPrinter().send(messageId, "code",
                                 codeResponse, digitalEmployee, true);
                     } else if (StringUtils.isNotBlank(chunkText)) {
                         // 中间过程统一用 data 推 Markdown 增量；无 data 的 code/file 事件不刷 UI
@@ -211,7 +217,7 @@ public class CodeInterpreterTool implements BaseTool {
                                 .isFinal(false)
                                 .toolCallId(toolCallId)
                                 .build();
-                        agentContext.getPrinter().send(messageId, "code",
+                        ctx.getPrinter().send(messageId, "code",
                                 progress, digitalEmployee, false);
                     }
                 }
@@ -233,7 +239,7 @@ public class CodeInterpreterTool implements BaseTool {
                         codeResponse.setCodeOutput(StringUtils.firstNonBlank(codeResponse.getCodeOutput(), display));
                         codeResponse.setIsFinal(true);
                         codeResponse.setToolCallId(toolCallId);
-                        agentContext.getPrinter().send(messageId, "code",
+                        ctx.getPrinter().send(messageId, "code",
                                 codeResponse, digitalEmployee, true);
                     }
                     if (!future.isDone()) {
@@ -244,7 +250,7 @@ public class CodeInterpreterTool implements BaseTool {
                 @Override
                 public void onFailure(Throwable throwable, Integer statusCode, String responseBody) {
                     log.error("{} code_interpreter on failure, statusCode={}, body={}",
-                            agentContext.getRequestId(), statusCode, responseBody, throwable);
+                            ctx.getRequestId(), statusCode, responseBody, throwable);
                     if (!future.isDone()) {
                         if (statusCode != null) {
                             future.complete(buildFailurePayload("code_interpreter 执行失败：上游服务返回异常状态 " + statusCode + "。"));
@@ -255,7 +261,7 @@ public class CodeInterpreterTool implements BaseTool {
                 }
             });
         } catch (Exception e) {
-            log.error("{} code_interpreter request error", agentContext.getRequestId(), e);
+            log.error("{} code_interpreter request error", ctx.getRequestId(), e);
             future.complete(buildFailurePayload("code_interpreter 执行失败：" + e.getMessage()));
         }
 
@@ -347,17 +353,17 @@ public class CodeInterpreterTool implements BaseTool {
         );
     }
 
-    private CuteConfig requireCuteConfig() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private CuteConfig requireCuteConfig(AgentContext ctx) {
+        if (ctx == null || ctx.getRuntimeDependencies() == null) {
             throw new IllegalStateException("CodeInterpreterTool 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireCuteConfig();
+        return ctx.getRuntimeDependencies().requireCuteConfig();
     }
 
-    private RemoteStreamPort requireRemoteStreamPort() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private RemoteStreamPort requireRemoteStreamPort(AgentContext ctx) {
+        if (ctx == null || ctx.getRuntimeDependencies() == null) {
             throw new IllegalStateException("CodeInterpreterTool 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireRemoteStreamPort();
+        return ctx.getRuntimeDependencies().requireRemoteStreamPort();
     }
 }

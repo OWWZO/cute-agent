@@ -201,7 +201,7 @@ const ReplayDisclosure: FC<ReplayDisclosureProps> = (props) => {
             : "展开当前 run 的完整回放"
         }
         data-process-open={collapsible ? String(open) : undefined}
-        className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-lg text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused disabled:cursor-wait disabled:opacity-60"
+        className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-lg text-foreground-subtle focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)] disabled:cursor-wait disabled:opacity-60"
       >
         <span className="truncate">{label}</span>
         {isLoading ? (

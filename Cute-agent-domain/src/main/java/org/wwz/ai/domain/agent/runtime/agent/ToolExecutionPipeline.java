@@ -234,7 +234,7 @@ final class ToolExecutionPipeline {
             Object resultObject;
             context.bindCurrentToolArtifactSource(artifactSource);
             try {
-                resultObject = agent.getAvailableTools().executeResolved(toolName, args);
+                resultObject = agent.getAvailableTools().executeResolved(toolName, args, context);
             } finally {
                 context.clearCurrentToolArtifactSource();
             }

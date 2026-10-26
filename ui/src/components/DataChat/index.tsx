@@ -51,7 +51,7 @@ const TypeBar: CuteType.FC<{
                   type="button"
                   title={item.label}
                   className={cn(
-                    "inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-[12px] transition-colors",
+                    "inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-ui-sm transition-colors",
                     active
                       ? "bg-white font-medium text-[var(--chat-text)] shadow-sm"
                       : "text-[var(--chat-text-soft)] hover:bg-white/70 hover:text-[var(--chat-text)]"
@@ -67,7 +67,7 @@ const TypeBar: CuteType.FC<{
         ) : null}
         <button
           type="button"
-          className="inline-flex h-8 items-center gap-1 rounded-lg border border-[var(--chat-border)]/70 px-3 text-[12px] text-[var(--chat-text-soft)] transition-colors hover:bg-[var(--chat-surface-soft)] hover:text-[var(--chat-text)]"
+          className="inline-flex h-8 items-center gap-1 rounded-lg border border-[var(--chat-border)]/70 px-3 text-ui-sm text-[var(--chat-text-soft)] transition-colors hover:bg-[var(--chat-surface-soft)] hover:text-[var(--chat-text)]"
           onClick={() => setShowQueryArgs(!showQueryArgs)}
         >
           <span>分析参数</span>
@@ -79,7 +79,7 @@ const TypeBar: CuteType.FC<{
         </button>
       </div>
       {showQueryArgs ? (
-        <div className="mb-3 flex w-full flex-col gap-2 text-[12px] leading-6 text-[var(--chat-text-soft)]">
+        <div className="mb-3 flex w-full flex-col gap-2 text-ui-sm leading-6 text-[var(--chat-text-soft)]">
           {summary.dims.length > 0 ? (
             <div className="flex items-baseline gap-2">
               <span className="w-8 shrink-0 whitespace-nowrap">维度</span>

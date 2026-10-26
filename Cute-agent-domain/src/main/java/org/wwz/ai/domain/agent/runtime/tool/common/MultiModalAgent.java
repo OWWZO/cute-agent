@@ -2,7 +2,6 @@ package org.wwz.ai.domain.agent.runtime.tool.common;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamListener;
@@ -18,7 +17,6 @@ import org.wwz.ai.domain.agent.runtime.dto.FileRequest;
 import org.wwz.ai.domain.agent.runtime.dto.MultiModalAgentRequest;
 import org.wwz.ai.domain.agent.runtime.dto.MultiModalAgentResponse;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
-import org.wwz.ai.domain.agent.runtime.tool.ContextIsolatableTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.util.StringUtil;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
@@ -46,8 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * 并把生成产物绑定到当前 tool call。
  */
 @Slf4j
-@Data
-public class MultiModalAgent implements ContextIsolatableTool {
+public class MultiModalAgent implements BaseTool {
 
     private static final String DESCRIPTION = "本工具用于查询与用户相关的知识，作为在线知识的补充。支持文本和图像等多模态数据检索，能够高效访问和获取用户专属的知识信息。";
     private static final String PARAMS = """
@@ -69,18 +66,6 @@ public class MultiModalAgent implements ContextIsolatableTool {
      */
     private static final long MULTIMODAL_AGENT_IO_TIMEOUT_MINUTES = 10L;
 
-    private AgentContext agentContext;
-
-    @Override
-    public BaseTool isolateFor(AgentContext context) {
-        if (context == null) {
-            throw new IllegalArgumentException("MultiModalAgent.isolateFor context 不能为空");
-        }
-        MultiModalAgent copy = new MultiModalAgent();
-        copy.setAgentContext(context);
-        return copy;
-    }
-
     @Override
     public String getName() {
         return "multimodalagent_tool";
@@ -99,6 +84,16 @@ public class MultiModalAgent implements ContextIsolatableTool {
     @Override
     @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext agentContext) {
+        if (agentContext == null) {
+            return buildFailurePayload("multimodalagent_tool 执行失败：缺少 AgentContext");
+        }
         // execute 建立一次独立的远端流会话，并把取消句柄保存在局部引用中；
         // 超时只取消本次 session，不影响同一工具实例在其他上下文中的调用。
         final AtomicReference<RemoteStreamSession> streamSession = new AtomicReference<>();
@@ -109,7 +104,7 @@ public class MultiModalAgent implements ContextIsolatableTool {
                 return buildFailurePayload("multimodalagent_tool 执行失败：question 不能为空。");
             }
 
-            CuteConfig cuteConfig = requireCuteConfig();
+            CuteConfig cuteConfig = requireCuteConfig(agentContext);
             if (!StringUtils.hasText(cuteConfig.getMultiModalAgentUrl())) {
                 return buildFailurePayload("multimodalagent_tool 执行失败：未配置 multimodalagent_url。");
             }
@@ -129,7 +124,7 @@ public class MultiModalAgent implements ContextIsolatableTool {
             ToolArtifactSource artifactSource = agentContext.requireCurrentToolArtifactSource(getName());
 
             CompletableFuture<ToolResultPayload> future =
-                    callMultiModalAgentStream(request, artifactSource, streamSession);
+                    callMultiModalAgentStream(agentContext, request, artifactSource, streamSession);
             return future.get(MULTIMODAL_AGENT_TIMEOUT_MINUTES, TimeUnit.MINUTES);
         } catch (TimeoutException e) {
             RemoteStreamSession session = streamSession.get();
@@ -145,12 +140,8 @@ public class MultiModalAgent implements ContextIsolatableTool {
         }
     }
 
-    public CompletableFuture<ToolResultPayload> callMultiModalAgentStream(MultiModalAgentRequest multiModalAgentRequest,
-                                                                          ToolArtifactSource artifactSource) {
-        return callMultiModalAgentStream(multiModalAgentRequest, artifactSource, new AtomicReference<>());
-    }
-
     private CompletableFuture<ToolResultPayload> callMultiModalAgentStream(
+            AgentContext agentContext,
             MultiModalAgentRequest multiModalAgentRequest,
             ToolArtifactSource artifactSource,
             AtomicReference<RemoteStreamSession> streamSession) {
@@ -158,7 +149,7 @@ public class MultiModalAgent implements ContextIsolatableTool {
         // listener 只转发事件给局部 StreamState，避免并发调用共享缓冲区。
         CompletableFuture<ToolResultPayload> future = new CompletableFuture<>();
         try {
-            CuteConfig cuteConfig = requireCuteConfig();
+            CuteConfig cuteConfig = requireCuteConfig(agentContext);
             String url = cuteConfig.getMultiModalAgentUrl() + "/v1/tool/mragQuery";
             log.info("{} multimodalagent_tool request {}", agentContext.getRequestId(),
                     JSONObject.toJSONString(multiModalAgentRequest));
@@ -167,8 +158,8 @@ public class MultiModalAgent implements ContextIsolatableTool {
             int firstInterval = Integer.parseInt(interval[0]);
             int sendInterval = Integer.parseInt(interval[1]);
             // 单次调用局部 StreamState，避免并行 execute 抢写实例字段
-            StreamState localState = new StreamState(artifactSource, firstInterval, sendInterval, future);
-            RemoteStreamSession session = requireRemoteStreamPort().openStream(RemoteStreamRequest.builder()
+            StreamState localState = new StreamState(agentContext, artifactSource, firstInterval, sendInterval, future);
+            RemoteStreamSession session = requireRemoteStreamPort(agentContext).openStream(RemoteStreamRequest.builder()
                     .method("POST")
                     .url(url)
                     .headers(Map.of("Content-Type", "application/json"))
@@ -226,25 +217,29 @@ public class MultiModalAgent implements ContextIsolatableTool {
     private class StreamState {
         // 每次请求独立保存增量过程、完整答案和终态标记；finalSent 防止 close 与
         // 显式 final 包竞争时重复推送。
+        private final AgentContext agentContext;
         private final ToolArtifactSource artifactSource;
         private final int firstInterval;
         private final int sendInterval;
         private final CompletableFuture<ToolResultPayload> future;
         private final String messageId = StringUtil.getUUID();
-        private final String digitalEmployee = agentContext.getToolCollection().getDigitalEmployee(getName());
+        private final String digitalEmployee;
         private final StringBuilder incrementalBuffer = new StringBuilder();
         private final StringBuilder fullContent = new StringBuilder();
         private int chunkIndex = 1;
         private boolean finalSent;
 
-        private StreamState(ToolArtifactSource artifactSource,
+        private StreamState(AgentContext agentContext,
+                            ToolArtifactSource artifactSource,
                             int firstInterval,
                             int sendInterval,
                             CompletableFuture<ToolResultPayload> future) {
+            this.agentContext = agentContext;
             this.artifactSource = artifactSource;
             this.firstInterval = firstInterval;
             this.sendInterval = sendInterval;
             this.future = future;
+            this.digitalEmployee = agentContext.getToolCollection().getDigitalEmployee(getName());
         }
 
         private void consume(String data) {
@@ -268,6 +263,7 @@ public class MultiModalAgent implements ContextIsolatableTool {
             }
 
             boolean finished = handleChunk(
+                    agentContext,
                     streamResponse,
                     messageId,
                     digitalEmployee,
@@ -288,7 +284,7 @@ public class MultiModalAgent implements ContextIsolatableTool {
             // 上游可能没有发送显式 final，因此 close 时以 fullContent 做最后一致性
             // 检查，并只完成一次 future。
             if (!finalSent && fullContent.length() > 0) {
-                emitFinalMarkdown(messageId, digitalEmployee, fullContent.toString(), artifactSource);
+                emitFinalMarkdown(agentContext, messageId, digitalEmployee, fullContent.toString(), artifactSource);
                 finalSent = true;
             }
             if (future.isDone()) {
@@ -298,11 +294,12 @@ public class MultiModalAgent implements ContextIsolatableTool {
                 future.complete(buildFailurePayload("multimodalagent_tool 执行失败：上游未返回有效内容。"));
                 return;
             }
-            future.complete(buildSuccessPayload(fullContent.toString(), artifactSource));
+            future.complete(buildSuccessPayload(agentContext, fullContent.toString(), artifactSource));
         }
     }
 
-    private boolean handleChunk(MultiModalAgentResponse streamResponse,
+    private boolean handleChunk(AgentContext agentContext,
+                                MultiModalAgentResponse streamResponse,
                                 String messageId,
                                 String digitalEmployee,
                                 StringBuilder incrementalBuffer,
@@ -319,7 +316,7 @@ public class MultiModalAgent implements ContextIsolatableTool {
 
         // 细粒度 stage 事件：过程走 knowledge，答案 token 仍累加 fullContent，final 仅推答案 markdown
         if (StringUtils.hasText(streamResponse.getStage())) {
-            return handleStageEvent(streamResponse, messageId, digitalEmployee, incrementalBuffer,
+            return handleStageEvent(agentContext, streamResponse, messageId, digitalEmployee, incrementalBuffer,
                     fullContent, artifactSource);
         }
 
@@ -327,26 +324,26 @@ public class MultiModalAgent implements ContextIsolatableTool {
             MultiModalAgentResponse.Choice choice = streamResponse.getChoices().get(0);
             MultiModalAgentResponse.Delta delta = choice.getDelta();
             String content = delta == null ? null : delta.getContent();
-            appendContent(content, incrementalBuffer, fullContent);
-            if (shouldEmitIncremental(chunkIndex, firstInterval, sendInterval)) {
-                emitIncrementalKnowledge(messageId, digitalEmployee, incrementalBuffer);
+            appendContent(agentContext, content, incrementalBuffer, fullContent);
+            if (shouldEmitIncremental(agentContext, chunkIndex, firstInterval, sendInterval)) {
+                emitIncrementalKnowledge(agentContext, messageId, digitalEmployee, incrementalBuffer);
             }
             if ("stop".equalsIgnoreCase(choice.getFinishReason())) {
                 // 不在此终态：等待 stage=final，以便拼上图片 markdown 等尾部片段
-                flushIncrementalKnowledge(messageId, digitalEmployee, incrementalBuffer);
+                flushIncrementalKnowledge(agentContext, messageId, digitalEmployee, incrementalBuffer);
             }
             return false;
         }
 
-        appendContent(streamResponse.getData(), incrementalBuffer, fullContent);
+        appendContent(agentContext, streamResponse.getData(), incrementalBuffer, fullContent);
         if (Boolean.TRUE.equals(streamResponse.getIsFinal())
                 && !StringUtils.hasText(streamResponse.getStage())) {
-            flushIncrementalKnowledge(messageId, digitalEmployee, incrementalBuffer);
-            emitFinalMarkdown(messageId, digitalEmployee, fullContent.toString(), artifactSource);
+            flushIncrementalKnowledge(agentContext, messageId, digitalEmployee, incrementalBuffer);
+            emitFinalMarkdown(agentContext, messageId, digitalEmployee, fullContent.toString(), artifactSource);
             return true;
         }
-        if (shouldEmitIncremental(chunkIndex, firstInterval, sendInterval)) {
-            emitIncrementalKnowledge(messageId, digitalEmployee, incrementalBuffer);
+        if (shouldEmitIncremental(agentContext, chunkIndex, firstInterval, sendInterval)) {
+            emitIncrementalKnowledge(agentContext, messageId, digitalEmployee, incrementalBuffer);
         }
         return false;
     }
@@ -354,7 +351,8 @@ public class MultiModalAgent implements ContextIsolatableTool {
     /**
      * stage 事件分流：过程 Markdown 立即 knowledge；answer/final 不写答案 buffer 的过程标题；error 失败终态。
      */
-    private boolean handleStageEvent(MultiModalAgentResponse streamResponse,
+    private boolean handleStageEvent(AgentContext agentContext,
+                                     MultiModalAgentResponse streamResponse,
                                      String messageId,
                                      String digitalEmployee,
                                      StringBuilder incrementalBuffer,
@@ -366,41 +364,41 @@ public class MultiModalAgent implements ContextIsolatableTool {
         String data = streamResponse.getData();
 
         if ("error".equalsIgnoreCase(stage)) {
-            flushIncrementalKnowledge(messageId, digitalEmployee, incrementalBuffer);
+            flushIncrementalKnowledge(agentContext, messageId, digitalEmployee, incrementalBuffer);
             String message = StringUtils.hasText(data) ? data : "MRAG 检索失败";
             if (fullContent.length() == 0) {
                 fullContent.append(message);
             }
-            emitFinalMarkdown(messageId, digitalEmployee, fullContent.toString(), artifactSource);
+            emitFinalMarkdown(agentContext, messageId, digitalEmployee, fullContent.toString(), artifactSource);
             return true;
         }
 
         if ("final".equalsIgnoreCase(stage) || Boolean.TRUE.equals(streamResponse.getIsFinal())) {
-            flushIncrementalKnowledge(messageId, digitalEmployee, incrementalBuffer);
+            flushIncrementalKnowledge(agentContext, messageId, digitalEmployee, incrementalBuffer);
             // final.data 通常为空，答案真相在 fullContent（token 累加）
             if (StringUtils.hasText(data) && fullContent.length() == 0) {
                 fullContent.append(data);
             }
-            emitFinalMarkdown(messageId, digitalEmployee, fullContent.toString(), artifactSource);
+            emitFinalMarkdown(agentContext, messageId, digitalEmployee, fullContent.toString(), artifactSource);
             return true;
         }
 
         if ("answer".equalsIgnoreCase(stage)) {
             // 「# 生成答案」标题进过程区，不进入答案正文
             if (StringUtils.hasText(data)) {
-                emitProcessKnowledge(messageId, digitalEmployee, data);
+                emitProcessKnowledge(agentContext, messageId, digitalEmployee, data);
             }
             return false;
         }
 
         // task/route/retrieve_round/summarize/plan_next/merge/rerank …
         if (StringUtils.hasText(data)) {
-            emitProcessKnowledge(messageId, digitalEmployee, data);
+            emitProcessKnowledge(agentContext, messageId, digitalEmployee, data);
         }
         return false;
     }
 
-    private void emitProcessKnowledge(String messageId, String digitalEmployee, String markdown) {
+    private void emitProcessKnowledge(AgentContext agentContext, String messageId, String digitalEmployee, String markdown) {
         if (!StringUtils.hasText(markdown)) {
             return;
         }
@@ -409,17 +407,18 @@ public class MultiModalAgent implements ContextIsolatableTool {
                 .isFinal(false)
                 .stage("process")
                 .build();
-        attachToolCallId(response);
+        attachToolCallId(agentContext, response);
         agentContext.getPrinter().send(messageId, "knowledge", response, digitalEmployee, false);
     }
 
-    private void flushIncrementalKnowledge(String messageId,
+    private void flushIncrementalKnowledge(AgentContext agentContext,
+                                           String messageId,
                                            String digitalEmployee,
                                            StringBuilder incrementalBuffer) {
-        emitIncrementalKnowledge(messageId, digitalEmployee, incrementalBuffer);
+        emitIncrementalKnowledge(agentContext, messageId, digitalEmployee, incrementalBuffer);
     }
 
-    private void appendContent(String content, StringBuilder incrementalBuffer, StringBuilder fullContent) {
+    private void appendContent(AgentContext agentContext, String content, StringBuilder incrementalBuffer, StringBuilder fullContent) {
         if (content == null || content.isEmpty()) {
             return;
         }
@@ -429,12 +428,13 @@ public class MultiModalAgent implements ContextIsolatableTool {
         }
     }
 
-    private boolean shouldEmitIncremental(int chunkIndex, int firstInterval, int sendInterval) {
+    private boolean shouldEmitIncremental(AgentContext agentContext, int chunkIndex, int firstInterval, int sendInterval) {
         return Boolean.TRUE.equals(agentContext.getIsStream())
                 && (chunkIndex == firstInterval || chunkIndex % sendInterval == 0);
     }
 
-    private void emitIncrementalKnowledge(String messageId,
+    private void emitIncrementalKnowledge(AgentContext agentContext,
+                                          String messageId,
                                           String digitalEmployee,
                                           StringBuilder incrementalBuffer) {
         if (incrementalBuffer.length() == 0) {
@@ -444,12 +444,13 @@ public class MultiModalAgent implements ContextIsolatableTool {
                 .data(incrementalBuffer.toString())
                 .isFinal(false)
                 .build();
-        attachToolCallId(response);
+        attachToolCallId(agentContext, response);
         agentContext.getPrinter().send(messageId, "knowledge", response, digitalEmployee, false);
         incrementalBuffer.setLength(0);
     }
 
-    private void emitFinalMarkdown(String messageId,
+    private void emitFinalMarkdown(AgentContext agentContext,
+                                   String messageId,
                                    String digitalEmployee,
                                    String markdownContent,
                                    ToolArtifactSource artifactSource) {
@@ -463,16 +464,16 @@ public class MultiModalAgent implements ContextIsolatableTool {
                 .data(markdownContent)
                 .isFinal(true)
                 .build();
-        attachToolCallId(response);
+        attachToolCallId(agentContext, response);
         agentContext.getPrinter().send(messageId, "markdown", response, digitalEmployee, true);
-        uploadMarkdownArtifact(markdownContent, artifactSource);
+        uploadMarkdownArtifact(agentContext, markdownContent, artifactSource);
     }
 
     /**
      * 让知识检索阶段和最终 Markdown 结果都带上 toolCallId，
      * 前端才能把实时占位和真正结果准确折叠为同一张卡片。
      */
-    private void attachToolCallId(MultiModalAgentResponse response) {
+    private void attachToolCallId(AgentContext agentContext, MultiModalAgentResponse response) {
         ToolArtifactSource currentSource = agentContext.getCurrentToolArtifactSource();
         if (response == null || currentSource == null) {
             return;
@@ -480,7 +481,7 @@ public class MultiModalAgent implements ContextIsolatableTool {
         response.setToolCallId(currentSource.getToolCallId());
     }
 
-    private void uploadMarkdownArtifact(String markdownContent, ToolArtifactSource artifactSource) {
+    private void uploadMarkdownArtifact(AgentContext agentContext, String markdownContent, ToolArtifactSource artifactSource) {
         String baseName = StringUtils.hasText(agentContext.getQuery())
                 ? StringUtil.abbreviate(agentContext.getQuery(), 20, true)
                 : "多模态检索结果";
@@ -505,8 +506,8 @@ public class MultiModalAgent implements ContextIsolatableTool {
     /**
      * 多模态检索成功后，同时保留 Markdown 正文和稳定文件引用，便于后续 replay 重建。
      */
-    private ToolResultPayload buildSuccessPayload(String markdownContent, ToolArtifactSource artifactSource) {
-        List<Map<String, Object>> fileInfo = buildFileInfo(artifactSource);
+    private ToolResultPayload buildSuccessPayload(AgentContext agentContext, String markdownContent, ToolArtifactSource artifactSource) {
+        List<Map<String, Object>> fileInfo = buildFileInfo(agentContext, artifactSource);
         MultimodalAgentToolOutput structuredOutput = MultimodalAgentToolOutput.builder()
                 .summary(buildSummary(markdownContent))
                 .markdownContent(markdownContent)
@@ -549,7 +550,7 @@ public class MultiModalAgent implements ContextIsolatableTool {
     /**
      * 优先复用 artifact 账本中已经登记的稳定文件信息，不重复造一套文件来源。
      */
-    private List<Map<String, Object>> buildFileInfo(ToolArtifactSource artifactSource) {
+    private List<Map<String, Object>> buildFileInfo(AgentContext agentContext, ToolArtifactSource artifactSource) {
         List<Map<String, Object>> result = new ArrayList<>();
         if (artifactSource == null || !StringUtils.hasText(artifactSource.getToolCallId())) {
             return result;
@@ -573,17 +574,17 @@ public class MultiModalAgent implements ContextIsolatableTool {
         return result;
     }
 
-    private CuteConfig requireCuteConfig() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private CuteConfig requireCuteConfig(AgentContext ctx) {
+        if (ctx == null || ctx.getRuntimeDependencies() == null) {
             throw new IllegalStateException("MultiModalAgent 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireCuteConfig();
+        return ctx.getRuntimeDependencies().requireCuteConfig();
     }
 
-    private RemoteStreamPort requireRemoteStreamPort() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private RemoteStreamPort requireRemoteStreamPort(AgentContext ctx) {
+        if (ctx == null || ctx.getRuntimeDependencies() == null) {
             throw new IllegalStateException("MultiModalAgent 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireRemoteStreamPort();
+        return ctx.getRuntimeDependencies().requireRemoteStreamPort();
     }
 }

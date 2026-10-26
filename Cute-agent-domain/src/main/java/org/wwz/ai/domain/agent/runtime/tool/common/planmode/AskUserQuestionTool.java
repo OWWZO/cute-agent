@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
@@ -22,12 +21,9 @@ import java.util.Map;
  * </p>
  */
 @Slf4j
-@Data
 public class AskUserQuestionTool implements BaseTool {
 
     public static final String NAME = "AskUserQuestion";
-
-    private AgentContext agentContext;
 
     public AskUserQuestionTool() {
     }
@@ -111,12 +107,18 @@ public class AskUserQuestionTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
-        if (agentContext == null) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
+        if (context == null) {
             return fail("AskUserQuestion 未正确装配");
         }
-        if (agentContext.getRequestId() != null && agentContext.getRequestId().contains(":sub:")) {
+        if (context.getRequestId() != null && context.getRequestId().contains(":sub:")) {
             return fail("AskUserQuestion 不能在子 Agent 中使用");
         }
 
@@ -127,7 +129,7 @@ public class AskUserQuestionTool implements BaseTool {
         }
 
         String toolCallId = null;
-        ToolArtifactSource source = agentContext.getCurrentToolArtifactSource();
+        ToolArtifactSource source = context.getCurrentToolArtifactSource();
         if (source != null) {
             toolCallId = source.getToolCallId();
         }

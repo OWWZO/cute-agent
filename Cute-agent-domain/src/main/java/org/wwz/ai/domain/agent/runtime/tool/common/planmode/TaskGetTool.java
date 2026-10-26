@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -16,12 +15,12 @@ import java.util.Optional;
 
 /**
  * 按 ID 获取 Todo 任务详情。
+ *
+ * <p>无状态实现：context 由 {@link #execute(Object, AgentContext)} 显式传入，
+ * 实例可跨会话共享。</p>
  */
 @Slf4j
-@Data
 public class TaskGetTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -52,16 +51,22 @@ public class TaskGetTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有可读取的实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
             String taskId = ToolArgs.str(params.get("taskId"));
             if (StringUtils.isBlank(taskId)) {
                 return ToolResultPayload.failure("TaskGet 失败：taskId 必填", "TaskGet 失败：taskId 必填", null, "missing taskId");
             }
-            if (agentContext == null) {
+            if (context == null) {
                 return ToolResultPayload.failure("TaskGet 失败：无 AgentContext", "TaskGet 失败：无 AgentContext", null, "no context");
             }
-            Optional<SessionTaskItem> found = agentContext.requireSessionTaskList().get(taskId);
+            Optional<SessionTaskItem> found = context.requireSessionTaskList().get(taskId);
             if (found.isEmpty()) {
                 Map<String, Object> notFound = new LinkedHashMap<>();
                 notFound.put("taskId", taskId);
@@ -77,6 +82,4 @@ public class TaskGetTool implements BaseTool {
             return ToolResultPayload.failureFrom(msg, null);
         }
     }
-
-
 }

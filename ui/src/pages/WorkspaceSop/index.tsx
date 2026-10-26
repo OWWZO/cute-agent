@@ -272,19 +272,19 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
               to={ROUTES.HOME}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-text-soft)] transition hover:text-[var(--chat-text)]"
               title="返回首页"
             >
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <ClipboardList className="h-5 w-5 text-sky-600" />
-                <h1 className="truncate text-lg font-semibold text-slate-900">
+                <ClipboardList className="h-5 w-5 text-[var(--chat-accent)]" />
+                <h1 className="truncate text-lg font-semibold text-[var(--chat-text)]">
                   SOP 工作台
                 </h1>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[var(--chat-text-muted)]">
                 管理 PlanSolve 语义召回的标准作业程序（直连 cute-tool / Qdrant）
               </p>
             </div>
@@ -295,10 +295,10 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)_320px]">
         {/* 左：列表 */}
-        <section className="flex min-h-0 flex-col rounded-3xl border border-slate-200 bg-white/90 p-3 shadow-[var(--shadow-sm)]">
+        <section className="flex min-h-0 flex-col rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-3 shadow-[var(--shadow-sm)]">
           <div className="mb-3 flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--chat-text-muted)]" />
               <input
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
@@ -308,7 +308,7 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                   }
                 }}
                 placeholder="搜索名称/描述"
-                className="h-9 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none transition focus:border-sky-300 focus:bg-white"
+                className="h-9 w-full rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] pl-9 pr-3 text-sm outline-none transition focus:border-[var(--chat-accent)] focus:bg-[var(--chat-surface)]"
               />
             </div>
             <button
@@ -317,7 +317,7 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                 setAppliedKeyword(keyword.trim());
                 void refreshList({ keyword: keyword.trim() });
               }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[var(--chat-border)] text-[var(--chat-text-soft)] hover:bg-[var(--chat-surface-soft)]"
               title="刷新"
             >
               <RefreshCcw className={cn("h-3.5 w-3.5", loadingList && "animate-spin")} />
@@ -325,7 +325,7 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
             <button
               type="button"
               onClick={handleCreate}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-sky-600 text-white hover:bg-sky-500"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-[var(--chat-accent)] text-[var(--color-text-on-accent)] hover:bg-[var(--chat-accent-muted)]"
               title="新建"
             >
               <Plus className="h-4 w-4" />
@@ -344,13 +344,13 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
           </Select>
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {loadingList && items.length === 0 ? (
-              <div className="flex items-center justify-center py-10 text-sm text-slate-400">
+              <div className="flex items-center justify-center py-10 text-sm text-[var(--chat-text-muted)]">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 加载中…
               </div>
             ) : null}
             {!loadingList && items.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-8 text-center text-sm text-slate-400">
+              <div className="rounded-2xl border border-dashed border-[var(--chat-border)] px-3 py-8 text-center text-sm text-[var(--chat-text-muted)]">
                 暂无 SOP，点击 + 新建
               </div>
             ) : null}
@@ -364,25 +364,25 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                   className={cn(
                     "w-full rounded-2xl border px-3 py-2.5 text-left transition",
                     active
-                      ? "border-sky-200 bg-sky-50 shadow-sm"
-                      : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50"
+                      ? "border-[var(--color-accent-bd)] bg-[var(--color-accent-soft)] shadow-sm"
+                      : "border-[var(--chat-divider)] bg-[var(--chat-surface)] hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)]"
                   )}
                 >
-                  <div className="truncate text-sm font-semibold text-slate-800">
+                  <div className="truncate text-sm font-semibold text-[var(--chat-text)]">
                     {item.sopName || "未命名"}
                   </div>
                   <div className="mt-1 flex items-center justify-between gap-2">
-                    <span className="truncate text-[12px] text-slate-400">
+                    <span className="truncate text-ui-sm text-[var(--chat-text-muted)]">
                       {item.sopDesc || item.sopId}
                     </span>
                     <span
                       className={cn(
-                        "shrink-0 rounded-full px-2 py-0.5 text-[11px]",
+                        "shrink-0 rounded-full px-2 py-0.5 text-ui-sm",
                         item.status === "online"
-                          ? "bg-emerald-50 text-emerald-600"
+                          ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
                           : item.status === "draft"
                             ? "bg-[var(--chat-surface-muted)] text-[var(--chat-text-soft)]"
-                            : "bg-slate-100 text-slate-500"
+                            : "bg-[var(--chat-surface-muted)] text-[var(--chat-text-soft)]"
                       )}
                     >
                       {statusLabel(item.status)}
@@ -395,14 +395,14 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
         </section>
 
         {/* 中：编辑器 */}
-        <section className="flex min-h-0 flex-col rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-[var(--shadow-sm)]">
+        <section className="flex min-h-0 flex-col rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-4 shadow-[var(--shadow-sm)]">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">
+              <h2 className="text-base font-semibold text-[var(--chat-text)]">
                 {draft.sopId ? "编辑 SOP" : "新建 SOP"}
               </h2>
               {draft.sopId ? (
-                <p className="text-[12px] text-slate-400">ID: {draft.sopId}</p>
+                <p className="text-ui-sm text-[var(--chat-text-muted)]">ID: {draft.sopId}</p>
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -420,7 +420,7 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                 <button
                   type="button"
                   onClick={handleDelete}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-2xl border border-rose-200 px-3 text-sm text-rose-600 hover:bg-rose-50"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-2xl border border-[var(--color-danger-soft)] px-3 text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   删除
@@ -430,7 +430,7 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                 type="button"
                 disabled={saving}
                 onClick={() => void handleSave()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-2xl bg-sky-600 px-4 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-60"
+                className="inline-flex h-9 items-center gap-1.5 rounded-2xl bg-[var(--chat-accent)] px-4 text-sm font-medium text-[var(--color-text-on-accent)] hover:bg-[var(--chat-accent-muted)] disabled:opacity-60"
               >
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 保存并索引
@@ -440,36 +440,36 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-slate-500">名称</span>
+              <span className="mb-1.5 block text-xs font-medium text-[var(--chat-text-soft)]">名称</span>
               <input
                 value={draft.sopName}
                 onChange={(event) =>
                   setDraft((prev) => ({ ...prev, sopName: event.target.value }))
                 }
-                className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-sky-300 focus:bg-white"
+                className="h-10 w-full rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] px-3 text-sm outline-none focus:border-[var(--chat-accent)] focus:bg-[var(--chat-surface)]"
                 placeholder="例如：对销售数据进行综合分析"
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-slate-500">描述</span>
+              <span className="mb-1.5 block text-xs font-medium text-[var(--chat-text-soft)]">描述</span>
               <textarea
                 value={draft.sopDesc}
                 onChange={(event) =>
                   setDraft((prev) => ({ ...prev, sopDesc: event.target.value }))
                 }
                 rows={3}
-                className="w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-sky-300 focus:bg-white"
+                className="w-full resize-y rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] px-3 py-2 text-sm outline-none focus:border-[var(--chat-accent)] focus:bg-[var(--chat-surface)]"
                 placeholder="该 SOP 适用的业务场景与目标"
               />
             </label>
 
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">步骤</span>
+                <span className="text-xs font-medium text-[var(--chat-text-soft)]">步骤</span>
                 <button
                   type="button"
                   onClick={addStep}
-                  className="text-xs font-medium text-sky-600 hover:text-sky-500"
+                  className="text-xs font-medium text-[var(--chat-accent)] hover:text-[var(--chat-accent-muted)]"
                 >
                   + 添加步骤
                 </button>
@@ -478,10 +478,10 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                 {draft.sopSteps.map((step, stepIndex) => (
                   <div
                     key={`step-${stepIndex}`}
-                    className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3"
+                    className="rounded-2xl bg-[var(--chat-surface-soft)] p-3"
                   >
                     <div className="mb-2 flex items-center gap-2">
-                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-slate-500 shadow-sm">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--chat-surface)] text-ui-sm font-semibold text-[var(--chat-text-soft)] shadow-sm">
                         {stepIndex + 1}
                       </span>
                       <input
@@ -489,13 +489,13 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                         onChange={(event) =>
                           updateStepTitle(stepIndex, event.target.value)
                         }
-                        className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-300"
+                        className="h-9 min-w-0 flex-1 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 text-sm outline-none focus:border-[var(--chat-accent)]"
                         placeholder="步骤标题"
                       />
                       <button
                         type="button"
                         onClick={() => removeStep(stepIndex)}
-                        className="text-xs text-slate-400 hover:text-rose-500"
+                        className="text-xs text-[var(--chat-text-muted)] hover:text-[var(--color-danger)]"
                       >
                         删除
                       </button>
@@ -508,13 +508,13 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                             onChange={(event) =>
                               updateSubStep(stepIndex, subIndex, event.target.value)
                             }
-                            className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-300"
+                            className="h-9 min-w-0 flex-1 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 text-sm outline-none focus:border-[var(--chat-accent)]"
                             placeholder="子步骤说明（可写工具/动作）"
                           />
                           <button
                             type="button"
                             onClick={() => removeSubStep(stepIndex, subIndex)}
-                            className="shrink-0 text-xs text-slate-400 hover:text-rose-500"
+                            className="shrink-0 text-xs text-[var(--chat-text-muted)] hover:text-[var(--color-danger)]"
                           >
                             移除
                           </button>
@@ -523,7 +523,7 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                       <button
                         type="button"
                         onClick={() => addSubStep(stepIndex)}
-                        className="text-[12px] text-sky-600 hover:text-sky-500"
+                        className="text-ui-sm text-[var(--chat-accent)] hover:text-[var(--chat-accent-muted)]"
                       >
                         + 子步骤
                       </button>
@@ -536,23 +536,23 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
         </section>
 
         {/* 右：试召回 */}
-        <section className="flex min-h-0 flex-col rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-[var(--shadow-sm)]">
-          <h2 className="mb-1 text-base font-semibold text-slate-900">试召回</h2>
-          <p className="mb-3 text-[12px] text-slate-400">
+        <section className="flex min-h-0 flex-col rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-4 shadow-[var(--shadow-sm)]">
+          <h2 className="mb-1 text-base font-semibold text-[var(--chat-text)]">试召回</h2>
+          <p className="mb-3 text-ui-sm text-[var(--chat-text-muted)]">
             用真实用户问题验证 SOP 是否进入 HIGH/COMMON 模式
           </p>
           <textarea
             value={recallQuery}
             onChange={(event) => setRecallQuery(event.target.value)}
             rows={4}
-            className="mb-3 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-sky-300 focus:bg-white"
+            className="mb-3 w-full resize-y rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] px-3 py-2 text-sm outline-none focus:border-[var(--chat-accent)] focus:bg-[var(--chat-surface)]"
             placeholder="例如：帮我做一份销售综合分析报告"
           />
           <button
             type="button"
             disabled={recallLoading}
             onClick={() => void handleRecallTest()}
-            className="mb-4 inline-flex h-9 items-center justify-center gap-1.5 rounded-2xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className="mb-4 inline-flex h-9 items-center justify-center gap-1.5 rounded-2xl bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-60"
           >
             {recallLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             执行召回
@@ -561,26 +561,26 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             {recallResult ? (
               <>
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
-                  <div className="text-[11px] uppercase tracking-wide text-slate-400">
+                <div className="rounded-2xl bg-[var(--chat-surface-soft)] px-3 py-2">
+                  <div className="text-ui-xs uppercase tracking-wide text-[var(--chat-text-muted)]">
                     mode
                   </div>
-                  <div className="mt-0.5 text-sm font-semibold text-slate-800">
+                  <div className="mt-0.5 text-sm font-semibold text-[var(--chat-text)]">
                     {recallResult.sopMode || "-"}
                   </div>
                 </div>
                 {recallResult.hits.length > 0 ? (
                   <div className="space-y-1.5">
-                    <div className="text-xs font-medium text-slate-500">Top hits</div>
+                    <div className="text-xs font-medium text-[var(--chat-text-soft)]">Top hits</div>
                     {recallResult.hits.map((hit) => (
                       <div
                         key={`${hit.sopId}-${hit.sopName}`}
-                        className="rounded-xl border border-slate-100 px-2.5 py-2 text-[12px]"
+                        className="rounded-xl border border-[var(--chat-divider)] px-2.5 py-2 text-ui-sm"
                       >
-                        <div className="truncate font-medium text-slate-700">
+                        <div className="truncate font-medium text-[var(--chat-text)]">
                           {hit.sopName || hit.sopId}
                         </div>
-                        <div className="text-slate-400">
+                        <div className="text-[var(--chat-text-muted)]">
                           score: {hit.score ?? "-"}
                         </div>
                       </div>
@@ -588,16 +588,16 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                   </div>
                 ) : null}
                 <div>
-                  <div className="mb-1 text-xs font-medium text-slate-500">
+                  <div className="mb-1 text-xs font-medium text-[var(--chat-text-soft)]">
                     注入文本预览
                   </div>
-                  <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-100 bg-slate-50 p-3 text-[12px] leading-5 text-slate-600">
+                  <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap rounded-2xl bg-[var(--chat-surface-soft)] p-3 text-ui-sm leading-5 text-[var(--chat-text-soft)]">
                     {recallResult.choosedSopString || "(空)"}
                   </pre>
                 </div>
               </>
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-8 text-center text-sm text-slate-400">
+              <div className="rounded-2xl border border-dashed border-[var(--chat-border)] px-3 py-8 text-center text-sm text-[var(--chat-text-muted)]">
                 保存 online SOP 后在此验证召回
               </div>
             )}

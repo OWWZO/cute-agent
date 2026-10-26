@@ -50,6 +50,8 @@ public class DigitalEmployeePromptFormattingTest {
         BaseTool tool = Mockito.mock(BaseTool.class);
         Mockito.when(tool.getName()).thenReturn(name);
         Mockito.when(tool.getDescription()).thenReturn(description);
+        // 提示词组装走带 context 的重载；default 方法在 mock 上不执行原实现，需显式 stub。
+        Mockito.when(tool.getDescription(Mockito.any())).thenReturn(description);
         return tool;
     }
 

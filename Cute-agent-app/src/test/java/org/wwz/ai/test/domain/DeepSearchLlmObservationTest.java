@@ -59,7 +59,11 @@ public class DeepSearchLlmObservationTest {
 
         ToolResultPayload payload = builder.buildPayload("fallback");
         DeepSearchToolOutput structuredOutput = (DeepSearchToolOutput) payload.getStructuredOutput();
-        JSONObject llmObservation = JSON.parseObject(payload.getLlmObservation());
+        // buildPayload 只产出强类型 llmData；llmObservation 由 ToolExecutionPipeline
+        // 交给 ToolObservationFormatter 的 deep_search 投影器生成（输出 Markdown 散文，
+        // 不是 JSON）。这里断言的是 buildPayload 自己的产出契约，即 llmData 对象。
+        Assert.assertNull("llmObservation 应交由中央投影生成", payload.getLlmObservation());
+        JSONObject llmObservation = (JSONObject) JSON.toJSON(payload.getLlmData());
 
         Assert.assertNotNull(structuredOutput);
         Assert.assertEquals("deep_search", structuredOutput.getToolName());
@@ -75,8 +79,8 @@ public class DeepSearchLlmObservationTest {
         Assert.assertEquals(2, llmObservation.getJSONArray("results").size());
         Assert.assertEquals(1, llmObservation.getJSONArray("chapters").size());
         Assert.assertFalse(payload.getFailed());
-        Assert.assertTrue(payload.getLlmObservation().contains("海关总署：出口量创新高"));
-        Assert.assertTrue(payload.getLlmObservation().contains("https://example.com/customs"));
+        Assert.assertTrue(llmObservation.toJSONString().contains("海关总署：出口量创新高"));
+        Assert.assertTrue(llmObservation.toJSONString().contains("https://example.com/customs"));
     }
 
     @Test
@@ -103,7 +107,9 @@ public class DeepSearchLlmObservationTest {
                 .build());
         builder.recordFinalAnswer("AI 芯片供应链", fullAnswer);
 
-        JSONObject llmObservation = JSON.parseObject(builder.buildPayload("fallback").getLlmObservation());
+        ToolResultPayload payload = builder.buildPayload("fallback");
+        // 同 shouldSeparateStructuredOutputAndCompactObservation：断言 buildPayload 的 llmData 契约。
+        JSONObject llmObservation = (JSONObject) JSON.toJSON(payload.getLlmData());
         JSONArray results = llmObservation.getJSONArray("results");
         JSONArray docs = results.getJSONObject(0).getJSONArray("docs");
 

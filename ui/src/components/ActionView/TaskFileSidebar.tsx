@@ -130,7 +130,7 @@ const TaskFileSidebar = memo(function TaskFileSidebar(props: TaskFileSidebarProp
         <button
           type="button"
           onClick={onBack}
-          className="flex h-9 w-full items-center gap-2 rounded-[10px] px-2.5 text-ui-base font-medium text-[var(--chat-text)] transition-colors hover:bg-black/[0.04]"
+          className="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-ui-base font-medium text-[var(--chat-text)] transition-colors hover:bg-black/[0.04]"
         >
           <ArrowLeft className="h-4 w-4 text-[var(--chat-text-muted)]" />
           返回

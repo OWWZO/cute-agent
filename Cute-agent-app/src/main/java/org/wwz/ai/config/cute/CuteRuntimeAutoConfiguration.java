@@ -24,6 +24,7 @@ import org.wwz.ai.domain.agent.runtime.llm.retry.LlmResilientCompletionPort;
 import org.wwz.ai.domain.agent.runtime.tool.mcp.port.McpToolExecutor;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.runtime.CuteLlmDependencies;
+import org.wwz.ai.domain.agent.memory.CompactionBudget;
 import org.wwz.ai.domain.agent.memory.SessionContextCompactionService;
 import org.wwz.ai.domain.agent.memory.ltm.BackgroundReviewService;
 import org.wwz.ai.domain.agent.memory.ltm.CuratedMemoryStore;
@@ -34,7 +35,11 @@ import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.wwz.ai.domain.agent.image.service.IImageGenerationExecutionKernel;
+import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
+import org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentConcurrencyGate;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner;
 import org.wwz.ai.domain.agent.runtime.tool.codemode.CodeModeExecutorPort;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceService;
 import org.wwz.ai.infrastructure.codemode.GraalJsCodeModeExecutor;
@@ -42,7 +47,9 @@ import org.wwz.ai.types.agent.config.AgentExecutorNames;
 import org.wwz.ai.types.agent.config.AgentExecutorProperties;
 import org.wwz.ai.types.agent.config.CodeModeProperties;
 import org.wwz.ai.types.agent.config.HostCliProperties;
+import org.wwz.ai.types.agent.config.ImageGenerationProperties;
 import org.wwz.ai.types.agent.config.OpenCliProperties;
+import org.wwz.ai.types.agent.config.WebSearchProperties;
 
 import java.util.concurrent.Executor;
 
@@ -52,8 +59,50 @@ import java.util.concurrent.Executor;
  * 不在此处承接执行编排、controller 协议适配。
  */
 @Configuration
-@EnableConfigurationProperties(CodeModeProperties.class)
+@EnableConfigurationProperties({
+        CodeModeProperties.class,
+        CompactionProperties.class,
+        WebSearchProperties.class,
+        ImageGenerationProperties.class})
 public class CuteRuntimeAutoConfiguration {
+
+    /**
+     * 工作记忆压缩预算（domain 值对象）。
+     * <p>压缩配置的唯一运行时来源：{@link CompactionProperties} 绑定
+     * {@code autobots.autoagent.compaction.*}，此处构建不可变 {@code CompactionBudget}
+     * 注入 {@code SessionContextCompactionServiceImpl}，取代原构造器上的 25 个 {@code @Value}。</p>
+     */
+    @Bean
+    public CompactionBudget compactionBudget(CompactionProperties properties) {
+        return CompactionBudget.builder()
+                .enabled(properties.isEnabled())
+                .llmEnabled(properties.isLlmEnabled())
+                .microEnabled(properties.isMicroEnabled())
+                .sessionMemoryEnabled(properties.isSessionMemoryEnabled())
+                .contextWindow(CompactionBudget.DEFAULT_CONTEXT_WINDOW)
+                .thresholdPercent(properties.getThresholdPercent())
+                .keepMinTokens(properties.getKeepMinTokens())
+                .keepMinTextMessages(properties.getKeepMinTextMessages())
+                .keepMaxTokens(properties.getKeepMaxTokens())
+                .maxConsecutiveFailures(properties.getMaxConsecutiveFailures())
+                .temperature(properties.getTemperature())
+                .messageContentCharLimit(properties.getMessageContentCharLimit())
+                .summaryTargetRatio(properties.getSummaryTargetRatio())
+                .protectFirstN(properties.getProtectFirstN())
+                .protectLastN(properties.getProtectLastN())
+                .contentMaxChars(properties.getContentMaxChars())
+                .contentHeadChars(properties.getContentHeadChars())
+                .contentTailChars(properties.getContentTailChars())
+                .summaryInputMaxChars(properties.getSummaryInputMaxChars())
+                .summarizerTimeoutSeconds(properties.getSummarizerTimeoutSeconds())
+                .microKeepRecentToolResults(properties.getMicroKeepRecentToolResults())
+                .microToolResultMaxChars(properties.getMicroToolResultMaxChars())
+                .midRunEnabled(properties.isMidRunEnabled())
+                .persistProjection(properties.isPersistProjection())
+                .auditEnabled(properties.isAuditEnabled())
+                .auditStoreMessages(properties.isAuditStoreMessages())
+                .build();
+    }
 
     /**
      * Code Mode 执行器（GraalJS 同 JVM）。
@@ -112,6 +161,8 @@ public class CuteRuntimeAutoConfiguration {
                                                                    ObjectProvider<HostCliProperties> hostCliPropertiesProvider,
                                                                    ObjectProvider<CodeModeProperties> codeModePropertiesProvider,
                                                                    ObjectProvider<CodeModeExecutorPort> codeModeExecutorPortProvider,
+                                                                 ObjectProvider<WebSearchProperties> webSearchPropertiesProvider,
+                                                                 ObjectProvider<ImageGenerationProperties> imageGenerationPropertiesProvider,
                                                                   @Qualifier(AgentExecutorNames.LLM_EXECUTOR) Executor llmExecutor,
                                                                   @Qualifier(AgentExecutorNames.TASK_EXECUTOR) Executor taskExecutor,
                                                                   @Qualifier(AgentExecutorNames.TOOL_EXECUTOR) Executor toolExecutor,
@@ -126,6 +177,10 @@ public class CuteRuntimeAutoConfiguration {
                                                                    ObjectProvider<TasklistPersistencePort> tasklistPersistencePortProvider,
                                                                    ObjectProvider<SubAgentSessionPort> subAgentSessionPortProvider,
                                                                    ObjectProvider<SubAgentSessionStreamPort> subAgentSessionStreamPortProvider,
+                                                                   ObjectProvider<SubAgentRunner> subAgentRunnerProvider,
+                                                                   ObjectProvider<SubAgentRegistry> subAgentRegistryProvider,
+                                                                   ObjectProvider<ActiveAgentRunRegistry> activeAgentRunRegistryProvider,
+                                                                   ObjectProvider<PlanArtifactStore> planArtifactStoreProvider,
                                                                    AgentExecutorProperties agentExecutorProperties) {
         // SessionContextCompactionService 是接口，@Lazy 可走 JDK 代理；
         // 反向依赖用 ObjectProvider，避免对 final 的 CuteRuntimeDependencies 做 CGLIB 代理。
@@ -146,6 +201,8 @@ public class CuteRuntimeAutoConfiguration {
                 .hostCliProperties(hostCliPropertiesProvider.getIfAvailable())
                 .codeModeProperties(codeModePropertiesProvider.getIfAvailable())
                 .codeModeExecutorPort(codeModeExecutorPortProvider.getIfAvailable())
+                .webSearchProperties(webSearchPropertiesProvider.getIfAvailable())
+                .imageGenerationProperties(imageGenerationPropertiesProvider.getIfAvailable())
                 .llmExecutor(llmExecutor)
                 .taskExecutor(taskExecutor)
                 .toolExecutor(toolExecutor)
@@ -160,6 +217,10 @@ public class CuteRuntimeAutoConfiguration {
                 .tasklistPersistencePort(tasklistPersistencePortProvider.getIfAvailable())
                 .subAgentSessionPort(subAgentSessionPortProvider.getIfAvailable())
                 .subAgentSessionStreamPort(subAgentSessionStreamPortProvider.getIfAvailable())
+                .subAgentRunner(subAgentRunnerProvider.getIfAvailable())
+                .subAgentRegistry(subAgentRegistryProvider.getIfAvailable())
+                .activeAgentRunRegistry(activeAgentRunRegistryProvider.getIfAvailable())
+                .planArtifactStore(planArtifactStoreProvider.getIfAvailable())
                 .ltmFlushMinTurns(ltmPropertiesProvider.getIfAvailable() == null
                         ? 6
                         : ltmPropertiesProvider.getIfAvailable().getFlushMinTurns())

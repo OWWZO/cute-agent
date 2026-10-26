@@ -42,8 +42,6 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
     /** 调用总超时在读超时之外预留的余量，覆盖排队与响应体接收。 */
     private static final long CALL_TIMEOUT_MARGIN_SECONDS = 30L;
 
-    protected AgentContext agentContext;
-
     protected abstract String endpointPath();
 
     protected abstract String defaultDescription();
@@ -94,10 +92,15 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             // 工具输入可能来自 JSON 字符串或结构化 Map，先统一成字符串键的参数表。
             Map<String, Object> params = ToolArgs.map(input);
-            CuteConfig config = requireCuteConfig();
+            CuteConfig config = requireCuteConfig(context);
             String base = StringUtils.trimToEmpty(config.getCodeInterpreterUrl());
             if (StringUtils.isBlank(base)) {
                 return failure(getName() + " 执行失败：未配置 autobots.autoagent.code_interpreter_url");
@@ -108,15 +111,15 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
 
             // requestId 和 workspace_root 是领域侧注入的运行时元数据，不依赖模型自行传入。
             Map<String, Object> body = new LinkedHashMap<>(params);
-            body.put("requestId", StringUtils.defaultIfBlank(agentContext.getSessionId(), agentContext.getRequestId()));
+            body.put("requestId", StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId()));
             if (injectsWorkspaceRoot()
-                    && StringUtils.isNotBlank(agentContext.getWorkspaceRoot())
+                    && StringUtils.isNotBlank(context.getWorkspaceRoot())
                     && !body.containsKey("workspace_root")) {
-                body.put("workspace_root", agentContext.getWorkspaceRoot());
+                body.put("workspace_root", context.getWorkspaceRoot());
             }
 
             long timeoutSeconds = timeoutSeconds();
-            String responseText = requireRemoteHttpPort().execute(RemoteHttpRequest.builder()
+            String responseText = requireRemoteHttpPort(context).execute(RemoteHttpRequest.builder()
                     .method("POST")
                     .url(url)
                     .headers(Map.of("Content-Type", "application/json"))
@@ -147,20 +150,21 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
 
             // fileInfo 先登记到账本关联的 artifact source，再向前端发送文件事件；正文仍由
             // buildLlmData 按上限裁剪，避免大文档直接进入下一轮 prompt。
-            ToolArtifactSource artifactSource = agentContext.requireCurrentToolArtifactSource(getName());
-            List<File> files = registerFiles(json.getJSONArray("fileInfo"), artifactSource);
-            emitFileMessage(files, artifactSource);
+            ToolArtifactSource artifactSource = context.requireCurrentToolArtifactSource(getName());
+            List<File> files = registerFiles(json.getJSONArray("fileInfo"), artifactSource, context);
+            emitFileMessage(files, artifactSource, context);
 
             // 对齐工具协议：返回给 LLM 的 data 受长度上限保护，完整文件通过 artifact 引用交付。
             return ToolResultPayload.fromData(buildLlmData(json, files));
         } catch (Exception e) {
-            log.error("{} {} error, input={}", agentContext == null ? "-" : agentContext.getRequestId(),
+            log.error("{} {} error, input={}", context == null ? "-" : context.getRequestId(),
                     getName(), input, e);
             return failure(getName() + " 执行失败：" + e.getMessage());
         }
     }
 
-    private List<File> registerFiles(JSONArray fileInfoArr, ToolArtifactSource artifactSource) {
+    private List<File> registerFiles(JSONArray fileInfoArr, ToolArtifactSource artifactSource,
+                                     AgentContext context) {
         List<File> files = new ArrayList<>();
         if (fileInfoArr == null || fileInfoArr.isEmpty()) {
             return files;
@@ -190,14 +194,15 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
                     .description(getName() + fileDescriptionSuffix())
                     .isInternalFile(false)
                     .build();
-            agentContext.registerGeneratedArtifact(artifactSource, file);
+            context.registerGeneratedArtifact(artifactSource, file);
             files.add(file);
         }
         return files;
     }
 
-    private void emitFileMessage(List<File> files, ToolArtifactSource artifactSource) {
-        if (files == null || files.isEmpty() || agentContext.getPrinter() == null) {
+    private void emitFileMessage(List<File> files, ToolArtifactSource artifactSource,
+                                 AgentContext context) {
+        if (files == null || files.isEmpty() || context.getPrinter() == null) {
             return;
         }
         // 文件事件只负责实时 UI 展示，不能替代 artifact 登记；无 Printer 的后台执行仍保留
@@ -210,10 +215,10 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
             resultMap.put("toolName", artifactSource.getToolName());
         }
         String messageId = StringUtil.getUUID();
-        String digitalEmployee = agentContext.getToolCollection() == null
+        String digitalEmployee = context.getToolCollection() == null
                 ? null
-                : agentContext.getToolCollection().getDigitalEmployee(getName());
-        agentContext.getPrinter().send(messageId, "file", resultMap, digitalEmployee, true);
+                : context.getToolCollection().getDigitalEmployee(getName());
+        context.getPrinter().send(messageId, "file", resultMap, digitalEmployee, true);
     }
 
     /**
@@ -244,18 +249,18 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
         return ToolResultPayload.failureFrom(message, null);
     }
 
-    protected CuteConfig requireCuteConfig() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    protected CuteConfig requireCuteConfig(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             throw new IllegalStateException(getName() + " 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireCuteConfig();
+        return context.getRuntimeDependencies().requireCuteConfig();
     }
 
-    protected RemoteHttpPort requireRemoteHttpPort() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    protected RemoteHttpPort requireRemoteHttpPort(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             throw new IllegalStateException(getName() + " 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireRemoteHttpPort();
+        return context.getRuntimeDependencies().requireRemoteHttpPort();
     }
 
     protected static Map<String, Object> stringProp(String description) {

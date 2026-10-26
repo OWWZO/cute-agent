@@ -34,7 +34,7 @@ export default function ToolDetail({ tool, onBack, onSelectFunction }: ToolDetai
           <h2 id="tool-detail-title" className="text-base font-semibold text-[var(--color-text)]">
             {tool.title}
           </h2>
-          <p className="mt-1 max-w-3xl break-words text-[13px] leading-5 text-[var(--color-text-muted)]">
+          <p className="mt-1 max-w-3xl break-words text-ui-caption leading-5 text-[var(--color-text-muted)]">
             {tool.description}
           </p>
         </div>
@@ -51,7 +51,7 @@ export default function ToolDetail({ tool, onBack, onSelectFunction }: ToolDetai
             type="button"
             aria-label={`配置任务：${toolFunction.title}`}
             onClick={() => onSelectFunction(toolFunction)}
-            className="flex min-h-[192px] min-w-0 flex-col items-start rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] p-4 text-left transition-colors hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+            className="flex min-h-[192px] min-w-0 flex-col items-start rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] p-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
           >
             <span className="flex w-full items-start justify-between gap-3">
               <span className="text-sm font-medium leading-5 text-[var(--color-text)]">
@@ -60,18 +60,18 @@ export default function ToolDetail({ tool, onBack, onSelectFunction }: ToolDetai
               <ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--color-text-faint)]" />
             </span>
             {toolFunction.access === "write" ? (
-              <span className="mt-2 rounded-sm border border-rose-300 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200">
+              <span className="mt-2 rounded-full border border-[var(--color-danger)] bg-[var(--color-danger-soft)] px-2 py-0.5 text-ui-sm font-semibold text-[var(--color-danger)]">
                 写入操作
               </span>
             ) : null}
-            <span className="mt-2 line-clamp-3 min-h-[60px] w-full break-words text-[12px] leading-5 text-[var(--color-text-muted)]">
+            <span className="mt-2 line-clamp-3 min-h-[60px] w-full break-words text-ui-sm leading-5 text-[var(--color-text-muted)]">
               {toolFunction.description}
             </span>
             <span className="mt-auto w-full border-t border-[var(--color-line)] pt-3 text-left">
-              <span className="block text-[10px] font-medium uppercase text-[var(--color-text-faint)]">
+              <span className="block text-ui-xs font-medium uppercase text-[var(--color-text-faint)]">
                 {tool.kind === "opencli-site" ? "OpenCLI 命令" : "BaseTool 名称"}
               </span>
-              <code className="mt-1 block break-all font-mono text-[11px] text-[var(--color-text)]">
+              <code className="mt-1 block break-all font-mono text-ui-sm text-[var(--color-text)]">
                 {toolFunction.command ?? toolFunction.id}
               </code>
             </span>

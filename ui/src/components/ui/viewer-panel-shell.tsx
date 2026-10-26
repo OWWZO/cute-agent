@@ -34,11 +34,11 @@ export function ViewerPanelShell({
       {hideHeader ? null : (
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--chat-border)]/40 bg-[var(--chat-surface)] px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="inline-flex items-center rounded-md bg-[var(--chat-surface-muted)] px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--chat-text-soft)]">
+            <span className="inline-flex items-center rounded-md bg-[var(--chat-surface-muted)] px-2 py-0.5 font-mono text-ui-xs font-semibold uppercase tracking-[0.14em] text-[var(--chat-text-soft)]">
               {label}
             </span>
             {subtitle ? (
-              <span className="hidden truncate text-[12px] text-[var(--chat-text-muted)] sm:inline">
+              <span className="hidden truncate text-ui-sm text-[var(--chat-text-muted)] sm:inline">
                 {subtitle}
               </span>
             ) : null}

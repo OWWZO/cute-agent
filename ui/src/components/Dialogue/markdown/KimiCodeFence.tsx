@@ -153,8 +153,8 @@ export const KimiCodeFence = memo(function KimiCodeFence({
     }
     const preferDark = document.documentElement.classList.contains("dark");
     tokenizeCode(code, lang, preferDark)
-      .then((tokens) => {
-        if (alive) setLines(tokens);
+      .then((tokenized) => {
+        if (alive) setLines(tokenized.tokens);
       })
       .catch(() => {
         if (alive) setLines(null);

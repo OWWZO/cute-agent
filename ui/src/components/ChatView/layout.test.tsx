@@ -366,7 +366,7 @@ describe("ChatView layout", () => {
       'class="flex h-full min-h-0 w-full max-w-[980px] flex-col overflow-hidden" id="chat-view"'
     );
     expect(html).toContain(
-      'class="shrink-0 bg-[var(--color-bg)] pb-5 pt-4"'
+      'class="shrink-0 bg-[var(--color-bg)] motion-reduce:transform-none pb-5 pt-4"'
     );
     expect(html).toContain('data-general-input="true"');
     expect(html).not.toContain("sticky bottom-0");

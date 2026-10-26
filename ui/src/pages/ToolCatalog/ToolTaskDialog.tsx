@@ -28,20 +28,27 @@ function fileNames(value: unknown): string[] {
   return values.filter(isToolTaskFile).map((file) => file.name);
 }
 
-function inputClassName(): string {
-  return "mt-1 h-9 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] px-3 text-[13px] text-[var(--color-text)] outline-none focus-visible:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent-soft)]";
+function inputClassName(hasError = false): string {
+  const base = "mt-1 h-9 w-full min-w-0 rounded-md border bg-[var(--color-surface-raised)] px-3 text-ui-caption text-[var(--color-text)] outline-none focus-visible:ring-3";
+  // 错误态：边框与聚焦环都转危险色，让用户直接定位到出错的字段，
+  // 而不是只看到下方一行红字却不知道对应哪个输入框（DESIGN.md §9）。
+  return hasError
+    ? `${base} border-[var(--color-danger)] focus-visible:border-[var(--color-danger)] focus-visible:ring-[var(--color-danger-soft)]`
+    : `${base} border-[var(--color-line)] focus-visible:border-[var(--color-accent)] focus-visible:ring-[var(--color-accent-soft)]`;
 }
 
 function renderFieldControl(
   field: ToolField,
   value: unknown,
   onChange: (value: unknown) => void,
+  hasError = false,
 ): ReactNode {
   const common = {
     id: `tool-field-${field.name}`,
     name: field.name,
     placeholder: field.placeholder,
-    className: inputClassName(),
+    className: inputClassName(hasError),
+    "aria-invalid": hasError || undefined,
     "aria-describedby": field.description ? `tool-field-description-${field.name}` : undefined,
   };
 
@@ -126,10 +133,10 @@ function renderFieldControl(
               onChange(field.type === "file" ? selected[0] ?? [] : selected);
               event.currentTarget.value = "";
             }}
-            className="block w-full min-w-0 cursor-pointer text-[12px] text-[var(--color-text-muted)] file:mr-3 file:rounded-sm file:border file:border-[var(--color-line)] file:bg-[var(--color-surface-raised)] file:px-2.5 file:py-1.5 file:text-[12px] file:text-[var(--color-text)]"
+            className="block w-full min-w-0 cursor-pointer text-ui-sm text-[var(--color-text-muted)] file:mr-3 file:rounded-sm file:border file:border-[var(--color-line)] file:bg-[var(--color-surface-raised)] file:px-2.5 file:py-1.5 file:text-ui-sm file:text-[var(--color-text)]"
           />
           {names.length ? (
-            <span className="block break-all text-[11px] text-[var(--color-text-muted)]">
+            <span className="block break-all text-ui-sm text-[var(--color-text-muted)]">
               {names.join("、")}
             </span>
           ) : null}
@@ -237,17 +244,17 @@ export default function ToolTaskDialog({
       </Button>
 
       <div className="border-b border-[var(--color-line)] pb-4">
-        <p className="text-[11px] text-[var(--color-text-faint)]">{tool.title}</p>
+        <p className="text-ui-sm text-[var(--color-text-faint)]">{tool.title}</p>
         <h2 id="tool-task-title" className="mt-1 text-base font-semibold text-[var(--color-text)]">
           {toolFunction.title}
         </h2>
-        <p className="mt-1 text-[13px] leading-5 text-[var(--color-text-muted)]">
+        <p className="mt-1 text-ui-caption leading-5 text-[var(--color-text-muted)]">
           {toolFunction.description}
         </p>
       </div>
 
       {toolFunction.access === "write" ? (
-        <div className="mt-4 border-l-4 border-rose-600 bg-rose-50 px-3 py-2.5 text-[13px] font-semibold text-rose-900 dark:bg-rose-950/60 dark:text-rose-100" role="note">
+        <div className="mt-4 border-l-4 border-[var(--color-danger)] bg-[var(--color-danger-soft)] px-3 py-2.5 text-ui-caption font-semibold text-[var(--color-danger)]" role="note">
           {tool.kind === "opencli-site" && toolFunction.browser === false
             ? "此任务会对目标站点执行写入操作。"
             : "此任务会操作用户本机浏览器。"}
@@ -264,37 +271,37 @@ export default function ToolTaskDialog({
               >
                 {field.type === "boolean" ? (
                   <div className="flex min-h-9 items-center gap-2">
-                    {renderFieldControl(field, values[field.name], (value) => setFieldValue(field.name, value))}
-                    <label htmlFor={`tool-field-${field.name}`} className="text-[13px] font-medium text-[var(--color-text)]">
+                    {renderFieldControl(field, values[field.name], (value) => setFieldValue(field.name, value), Boolean(errors[field.name]))}
+                    <label htmlFor={`tool-field-${field.name}`} className="text-ui-caption font-medium text-[var(--color-text)]">
                       {field.label}
                     </label>
                   </div>
                 ) : (
-                  <label htmlFor={`tool-field-${field.name}`} className="block min-w-0 text-[13px] font-medium text-[var(--color-text)]">
+                  <label htmlFor={`tool-field-${field.name}`} className="block min-w-0 text-ui-caption font-medium text-[var(--color-text)]">
                     <span className="flex flex-wrap items-center gap-2">
                       {field.label}
-                      {field.required ? <span className="text-[11px] font-normal text-rose-700">必填</span> : null}
+                      {field.required ? <span className="text-ui-sm font-normal text-[var(--color-danger)]">必填</span> : null}
                     </span>
-                    {renderFieldControl(field, values[field.name], (value) => setFieldValue(field.name, value))}
+                    {renderFieldControl(field, values[field.name], (value) => setFieldValue(field.name, value), Boolean(errors[field.name]))}
                   </label>
                 )}
                 {field.description ? (
-                  <p id={`tool-field-description-${field.name}`} className="mt-1 text-[11px] leading-4 text-[var(--color-text-faint)]">
+                  <p id={`tool-field-description-${field.name}`} className="mt-1 text-ui-sm leading-4 text-[var(--color-text-faint)]">
                     {field.description}
                   </p>
                 ) : null}
                 {errors[field.name] ? (
-                  <p className="mt-1 text-[12px] text-rose-700" role="alert">{errors[field.name]}</p>
+                  <p className="mt-1 text-ui-sm text-[var(--color-danger)]" role="alert">{errors[field.name]}</p>
                 ) : null}
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-[13px] text-[var(--color-text-muted)]">此功能无需额外参数。</p>
+          <p className="text-ui-caption text-[var(--color-text-muted)]">此功能无需额外参数。</p>
         )}
 
         {submitError ? (
-          <p className="text-[13px] text-rose-700" role="alert">{submitError}</p>
+          <p className="text-ui-caption text-[var(--color-danger)]" role="alert">{submitError}</p>
         ) : null}
         <div className="flex justify-end border-t border-[var(--color-line)] pt-4">
           <Button type="submit" className="workspace-admin-primary" disabled={submitting}>

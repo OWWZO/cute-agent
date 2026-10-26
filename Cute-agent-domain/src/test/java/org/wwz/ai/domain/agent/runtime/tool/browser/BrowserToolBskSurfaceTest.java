@@ -33,10 +33,10 @@ public class BrowserToolBskSurfaceTest {
     public void shouldRunBskCliWithJsonFlagAndNoOpencliFormatFlag() {
         CliExecutionPort cli = successfulCli();
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(cli, bskSurfaceProperties()));
+        AgentContext context = context(cli, bskSurfaceProperties());
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(
-                Map.of("args", List.of("click", "@e3")));
+                Map.of("args", List.of("click", "@e3")), context);
 
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         ArgumentCaptor<CliInvocation> captor = ArgumentCaptor.forClass(CliInvocation.class);
@@ -52,9 +52,9 @@ public class BrowserToolBskSurfaceTest {
     public void shouldInjectBskGatewayEnvironmentButNotASessionId() {
         CliExecutionPort cli = successfulCli();
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(cli, bskSurfaceProperties()));
+        AgentContext context = context(cli, bskSurfaceProperties());
 
-        tool.execute(Map.of("args", List.of("observe")));
+        tool.execute(Map.of("args", List.of("observe")), context);
 
         ArgumentCaptor<CliInvocation> captor = ArgumentCaptor.forClass(CliInvocation.class);
         Mockito.verify(cli).exec(captor.capture());
@@ -74,9 +74,9 @@ public class BrowserToolBskSurfaceTest {
     @Test
     public void shouldDescribeOnlyBskCommandsInBskSurface() {
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(successfulCli(), bskSurfaceProperties()));
+        AgentContext context = context(successfulCli(), bskSurfaceProperties());
 
-        Map<?, ?> params = (Map<?, ?>) tool.toParams().get("properties");
+        Map<?, ?> params = (Map<?, ?>) tool.toParams(context).get("properties");
         Map<?, ?> args = (Map<?, ?>) params.get("args");
         String description = String.valueOf(args.get("description"));
         Assert.assertTrue(description.contains("observe"));
@@ -89,9 +89,9 @@ public class BrowserToolBskSurfaceTest {
     @Test
     public void shouldKeepOpencliGuidanceWhenSurfaceIsNotBsk() {
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(successfulCli(), opencliSurfaceProperties()));
+        AgentContext context = context(successfulCli(), opencliSurfaceProperties());
 
-        Map<?, ?> params = (Map<?, ?>) tool.toParams().get("properties");
+        Map<?, ?> params = (Map<?, ?>) tool.toParams(context).get("properties");
         Map<?, ?> args = (Map<?, ?>) params.get("args");
         Assert.assertTrue(String.valueOf(args.get("description")).contains("list"));
     }
@@ -102,10 +102,10 @@ public class BrowserToolBskSurfaceTest {
         OpenCliProperties properties = bskSurfaceProperties();
         properties.setBskPrefixArgs(List.of());
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(cli, properties));
+        AgentContext context = context(cli, properties);
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(
-                Map.of("args", List.of("click", "@e3")));
+                Map.of("args", List.of("click", "@e3")), context);
 
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertEquals("bsk_surface_unavailable", payload.getErrorMsg());
@@ -119,10 +119,10 @@ public class BrowserToolBskSurfaceTest {
                         + "Hint: The page changed while the command was running. Inspect the page state before retrying.\n"
                         + "Retry: unsafe_to_retry\n");
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(cli, bskSurfaceProperties()));
+        AgentContext context = context(cli, bskSurfaceProperties());
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(
-                Map.of("args", List.of("click", "@e3")));
+                Map.of("args", List.of("click", "@e3")), context);
 
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Map<?, ?> data = (Map<?, ?>) payload.getLlmData();
@@ -137,10 +137,10 @@ public class BrowserToolBskSurfaceTest {
     public void shouldOmitRetryFieldsWhenStderrHasNoClassification() {
         CliExecutionPort cli = failingCli("some unrelated crash\n");
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(cli, bskSurfaceProperties()));
+        AgentContext context = context(cli, bskSurfaceProperties());
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(
-                Map.of("args", List.of("click", "@e3")));
+                Map.of("args", List.of("click", "@e3")), context);
 
         Map<?, ?> data = (Map<?, ?>) payload.getLlmData();
         Assert.assertFalse(data.containsKey("retry"));

@@ -73,7 +73,7 @@ const WorkspaceToolSwitcher: CuteType.FC = ({ className }) => {
             to={item.to}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "group inline-flex min-h-[30px] shrink-0 items-center gap-1.5 rounded-md border border-transparent px-2.5 text-[13px] font-medium transition-[background-color,border-color,color] duration-[160ms] ease-[var(--ease-out)]",
+              "group inline-flex min-h-[30px] shrink-0 items-center gap-1.5 rounded-md border border-transparent px-2.5 text-ui-caption font-medium transition-[background-color,border-color,color] duration-[var(--duration-base)] ease-[var(--ease-out)]",
               active
                 ? "border-[var(--color-accent-bd)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
                 : "text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",

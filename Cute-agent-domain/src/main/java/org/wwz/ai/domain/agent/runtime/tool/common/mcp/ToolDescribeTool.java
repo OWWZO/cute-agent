@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.mcp;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
@@ -17,10 +16,7 @@ import java.util.Map;
  * 返回延迟本地/MCP 工具的完整 parameter schema。
  */
 @Slf4j
-@Data
 public class ToolDescribeTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -49,6 +45,12 @@ public class ToolDescribeTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> args = DeferredToolCall.coerceMap(input);
             String name = String.valueOf(args.getOrDefault("name", "")).trim();
@@ -58,9 +60,9 @@ public class ToolDescribeTool implements BaseTool {
             if (McpToolNames.isBridge(name)) {
                 return error("'" + name + "' is a bridge tool, not a deferred tool.");
             }
-            DeferredToolCatalog catalog = agentContext == null || agentContext.getToolCollection() == null
+            DeferredToolCatalog catalog = context == null || context.getToolCollection() == null
                     ? null
-                    : agentContext.getToolCollection().getDeferredToolCatalog();
+                    : context.getToolCollection().getDeferredToolCatalog();
             if (catalog == null || !catalog.contains(name)) {
                 return error("'" + name + "' is not a deferred tool in this collection. "
                         + "Re-run ToolSearch, or call it directly if it already appears in tools[].");

@@ -541,6 +541,17 @@
   --text-ui-xl: calc(var(--ui-font-size) + 4px); /* 18px — markdown h1 */
   --text-mobile-input-safe: 16px; /* iOS focus-zoom floor; does not scale */
 
+  /* --- text-display-* : page-level headings (NOT part of the UI scale) ---
+     Display 轨与界面刻度分开：标题的字号不随 --ui-font-size 缩放，
+     否则用户调整界面字号时标题会跟着变得离谱。取值按实际使用收敛（见 DESIGN.md §1.1）。 */
+  --text-display-sm: 22px; /* 分区标题 / 数据卡片主数值 */
+  --text-display-md: 32px; /* 页面 H1（小屏） */
+  --text-display-lg: 36px; /* 页面 H1（中屏） */
+  --text-display-xl: 40px; /* 页面 H1（大屏） */
+  --text-display-2xl: 42px; /* 页面 H1（超大屏） */
+  --text-display-3xl: 44px; /* 生图页大屏 */
+  --text-display-4xl: 48px; /* 欢迎页主视觉（唯一使用处） */
+
   /* --- Surfaces --- */
   --color-background-alt: var(--zc-background-alt);
   --color-header: var(--zc-header);
@@ -2188,6 +2199,11 @@ ol {
   display: flex;
   min-width: 100%;
   width: 100%;
+  /* 屏外行跳过布局与绘制（对齐 ZCode `CodeBlockContainer` 的 contentVisibility）。
+     展开体上限只有 240px，几百行的内联 diff 里绝大多数行都在视口外，
+     不隔离的话它们照样参与每一次重排 —— 展开动画期间每帧都要重算整棵树。 */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 20px;
 }
 
 .kimi-diff-row.is-added {
@@ -2255,6 +2271,17 @@ ol {
   text-decoration: underline dotted;
   text-underline-offset: 2px;
   cursor: help;
+  /* 状态词只在失败/停止时挂载，挂载瞬间即迁移瞬间：一次性淡入（仅透明度） */
+  animation: kimi-tool-row-status-in var(--duration-press) var(--ease-out);
+}
+
+@keyframes kimi-tool-row-status-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* 失败原因富提示卡（对齐 ZCode `ToolLayout.tsx:240-293` 的 statusTooltip）：
@@ -3412,6 +3439,10 @@ ol {
 
 @media (prefers-reduced-motion: reduce) {
   .kw-dot--running {
+    animation: none;
+  }
+
+  .kimi-tool-row-status {
     animation: none;
   }
 
@@ -4836,5 +4867,39 @@ ol {
     min-width: 36px !important;
     height: 36px !important;
     min-height: 36px !important;
+  }
+}
+
+/* Apple-grade 交互层补强（2026-10-25）：HITL 审批/提问卡片的按压反馈与焦点环。
+   对齐 DESIGN.md §7.1 与 §9；仅追加不改既有规则，颜色复用现有 token。 */
+.kimi-appr-btn,
+.kimi-qcard-btn {
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+.kimi-appr-btn:active:not(:disabled),
+.kimi-qcard-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.kimi-appr-btn:focus-visible,
+.kimi-qcard-btn:focus-visible,
+.kimi-qcard-min:focus-visible,
+.kimi-appr-min:focus-visible,
+.kimi-qcard-dot:focus-visible,
+.kimi-qcard-opt:focus-visible {
+  outline: none;
+  box-shadow: var(--p-focus-ring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kimi-appr-btn,
+  .kimi-qcard-btn {
+    transition: none;
+  }
+  .kimi-appr-btn:active:not(:disabled),
+  .kimi-qcard-btn:active:not(:disabled) {
+    transform: none;
   }
 }

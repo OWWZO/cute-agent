@@ -29,6 +29,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
+import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 
 /**
  * 后台派发 ACK 的账本语义回归（plans/032）：
@@ -183,7 +185,7 @@ public class BackgroundAgentLedgerStatusTest {
                 .sessionId("session-bg-ledger")
                 .executionRecorder(recorder)
                 .agentRunState(runState)
-                .backgroundTasks(registry)
+                .sessionControl(new SessionControl().withBackgroundTasks(registry))
                 .build();
         ToolCollection tools = new ToolCollection();
         tools.setAgentContext(context);

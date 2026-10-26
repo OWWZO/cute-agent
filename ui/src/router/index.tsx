@@ -27,15 +27,15 @@ const OpenUiDemo = React.lazy(() => import('@/pages/OpenUiDemo'));
 // OpenUI 混排协议的验证页：只在开发环境注册，不进生产产物。
 const openUiDemoRoutes = import.meta.env.DEV
   ? [
-      {
-        path: ROUTES.OPENUI_DEMO,
-        element: (
-          <Suspense fallback={<Loading loading={true} className="h-full" />}>
-            <OpenUiDemo />
-          </Suspense>
-        ),
-      },
-    ]
+    {
+      path: ROUTES.OPENUI_DEMO,
+      element: (
+        <Suspense fallback={<Loading loading={true} branded className="h-full" />}>
+          <OpenUiDemo />
+        </Suspense>
+      ),
+    },
+  ]
   : [];
 
 // 创建路由配置
@@ -47,7 +47,7 @@ const router = createBrowserRouter([
       {
         path: ROUTES.LOGIN,
         element: (
-          <Suspense fallback={<Loading loading={true} className="h-full" />}>
+          <Suspense fallback={<Loading loading={true} branded className="h-full" />}>
             <AuthPage mode="login" />
           </Suspense>
         ),
@@ -55,7 +55,7 @@ const router = createBrowserRouter([
       {
         path: ROUTES.REGISTER,
         element: (
-          <Suspense fallback={<Loading loading={true} className="h-full" />}>
+          <Suspense fallback={<Loading loading={true} branded className="h-full" />}>
             <AuthPage mode="register" />
           </Suspense>
         ),
@@ -63,7 +63,7 @@ const router = createBrowserRouter([
       {
         path: ROUTES.FEATURED_CONVERSATIONS,
         element: (
-          <Suspense fallback={<Loading loading={true} className="h-full" />}>
+          <Suspense fallback={<Loading loading={true} branded className="h-full" />}>
             <FeaturedConversations />
           </Suspense>
         ),
@@ -74,7 +74,7 @@ const router = createBrowserRouter([
           {
             index: true,
             element: (
-              <Suspense fallback={<Loading loading={true} className="h-full" />}>
+              <Suspense fallback={<Loading loading={true} branded className="h-full" />}>
                 <Home />
               </Suspense>
             ),
@@ -82,7 +82,7 @@ const router = createBrowserRouter([
           {
             path: ROUTES.FEATURED_CONVERSATION_DETAIL,
             element: (
-              <Suspense fallback={<Loading loading={true} className="h-full" />}>
+              <Suspense fallback={<Loading loading={true} branded className="h-full" />}>
                 <FeaturedConversationDetail />
               </Suspense>
             ),
@@ -122,7 +122,7 @@ const router = createBrowserRouter([
       {
         path: ROUTES.NOT_FOUND,
         element: (
-          <Suspense fallback={<Loading loading={true} className="h-full"/>}>
+          <Suspense fallback={<Loading loading={true} branded className="h-full"/>}>
             <NotFound />
           </Suspense>
         ),

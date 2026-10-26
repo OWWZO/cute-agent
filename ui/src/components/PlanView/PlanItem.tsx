@@ -47,7 +47,7 @@ const PlanItem: CuteType.FC<{
       {getStatusIcon(status)}
       <div className="min-w-0 flex-1">{title}</div>
       {typeof runTime === "number" && status === "in_progress" ? (
-        <span className="shrink-0 text-[12px] tabular-nums text-[var(--chat-text-muted)]">
+        <span className="shrink-0 text-ui-sm tabular-nums text-[var(--chat-text-muted)]">
           {formatSecondsToMinutes(runTime)}
           <span className="ml-2 text-[var(--chat-text-soft)]">执行中</span>
         </span>

@@ -14,6 +14,7 @@ import {
   shouldRenderDeepSearchPreview,
 } from "@/utils/deepSearch";
 import { getTaskFiles, isFileListOnlyTask } from "@/utils/taskArtifacts";
+import { DEEP_SEARCH_PREVIEW_ENTER } from "@/lib/motion";
 import {
   Reasoning,
   ReasoningTrigger,
@@ -149,7 +150,7 @@ export const ToolItem: FC<ToolItemProps> = memo(({
           <div className="kimi-ui-card__head">
             <span className="kimi-qcard-ic">🖥</span>
             <span className="kimi-qcard-title">桌面控制</span>
-            <span className="kimi-appr-badge" style={{ marginLeft: "auto" }}>
+            <span className="kimi-appr-badge">
               {status === "completed" ? "已完成" : "待操作"}
             </span>
           </div>
@@ -173,7 +174,7 @@ export const ToolItem: FC<ToolItemProps> = memo(({
           <div className="kimi-ui-card__head">
             <span className="kimi-qcard-ic">?</span>
             <span className="kimi-qcard-title">提问</span>
-            <span className="kimi-appr-badge" style={{ marginLeft: "auto" }}>
+            <span className="kimi-appr-badge">
               待回答
             </span>
           </div>
@@ -195,7 +196,7 @@ export const ToolItem: FC<ToolItemProps> = memo(({
             <div className="kimi-ui-card__head">
               <span className="kimi-appr-ic">!</span>
               <span className="kimi-appr-title">按这份计划开始执行？</span>
-              <span className="kimi-appr-badge" style={{ marginLeft: "auto" }}>
+              <span className="kimi-appr-badge">
                 需要确认
               </span>
             </div>
@@ -310,16 +311,16 @@ export const ToolItem: FC<ToolItemProps> = memo(({
               <LoaderCircleIcon className="size-4 animate-spin" />
             </div>
           ) : (
-              <div className={taskIconClass}>
-                <i
-                  className={`font_family ${getIcon(
-                    tool.messageType === "deep_search" &&
+            <div className={taskIconClass}>
+              <i
+                className={`font_family ${getIcon(
+                  tool.messageType === "deep_search" &&
                       tool.resultMap.messageType === "report"
-                      ? "file"
-                      : tool.messageType
-                  )} text-ui-lg leading-none text-[var(--chat-text-muted)] [text-shadow:none]`}
-                ></i>
-              </div>
+                    ? "file"
+                    : tool.messageType
+                )} text-ui-lg leading-none text-[var(--chat-text-muted)] [text-shadow:none]`}
+              ></i>
+            </div>
           )}
           <div className="flex min-w-0 items-center gap-2 overflow-hidden">
             <span className={taskTitleClass}>
@@ -415,7 +416,7 @@ const SubAgentTimelineCard: FC<{
           className={[
             "relative flex size-7 shrink-0 items-center justify-center rounded-lg border",
             subAgentFailed
-              ? "border-red-400/50 text-red-500"
+              ? "border-[var(--color-danger)]/50 text-[var(--color-danger)]"
               : subAgentRunning
                 ? "border-[var(--chat-accent)]/45 text-[var(--chat-accent)]"
                 : "border-[var(--chat-border)] text-[var(--chat-accent)]",
@@ -512,10 +513,7 @@ export const DeepSearchPreviewItem: FC<{
         opacity: 1,
         y: 0,
       }}
-      transition={{
-        duration: 0.2,
-        ease: [0.25, 0.46, 0.45, 0.94],
-      }}
+      transition={DEEP_SEARCH_PREVIEW_ENTER}
       className={[
         "mt-2 overflow-hidden rounded-2xl border border-[var(--chat-border)]/50",
         "bg-white px-4 py-3 ring-0",
@@ -662,37 +660,37 @@ const TimelineTaskBlock: FC<{
       ) : null}
       {expanded || !canCollapse
         ? children.map((tool, index) => {
-            const stage =
+          const stage =
               tool.messageType === "deep_search"
                 ? resolveDeepSearchStage(tool.resultMap?.messageType)
                 : undefined;
-            const shouldRenderPreview =
+          const shouldRenderPreview =
               tool.messageType === "deep_search" &&
               shouldRenderDeepSearchPreview(stage);
 
-            return (
-              <div
-                key={tool.id || tool.messageId || tool.taskId || index}
-                className="overflow-hidden"
-              >
-                {shouldRenderPreview ? (
-                  <DeepSearchPreviewItem
-                    tool={tool}
-                    chat={chat}
-                    changeActiveChat={changeActiveChat}
-                  />
-                ) : (
-                  <ToolItem
-                    tool={tool}
-                    chat={chat}
-                    changePlan={changePlan}
-                    changeActiveChat={changeActiveChat}
-                    changeFile={changeFile}
-                  />
-                )}
-              </div>
-            );
-          })
+          return (
+            <div
+              key={tool.id || tool.messageId || tool.taskId || index}
+              className="overflow-hidden"
+            >
+              {shouldRenderPreview ? (
+                <DeepSearchPreviewItem
+                  tool={tool}
+                  chat={chat}
+                  changeActiveChat={changeActiveChat}
+                />
+              ) : (
+                <ToolItem
+                  tool={tool}
+                  chat={chat}
+                  changePlan={changePlan}
+                  changeActiveChat={changeActiveChat}
+                  changeFile={changeFile}
+                />
+              )}
+            </div>
+          );
+        })
         : null}
     </div>
   );

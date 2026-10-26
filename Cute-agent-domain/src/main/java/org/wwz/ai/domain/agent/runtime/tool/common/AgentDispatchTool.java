@@ -1,7 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.tool.common;
 
 import com.alibaba.fastjson.JSON;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -25,27 +24,9 @@ import java.util.Map;
  * 默认同步阻塞；run_in_background=true 时注册后台任务并立即返回 task_id。
  */
 @Slf4j
-@Data
 public class AgentDispatchTool implements BaseTool {
 
     public static final String NAME = "Agent";
-
-    private final SubAgentRunner subAgentRunner;
-    private final SubAgentRegistry subAgentRegistry;
-    private final ActiveAgentRunRegistry activeAgentRunRegistry;
-    private AgentContext agentContext;
-
-    public AgentDispatchTool(SubAgentRunner subAgentRunner, SubAgentRegistry subAgentRegistry) {
-        this(subAgentRunner, subAgentRegistry, null);
-    }
-
-    public AgentDispatchTool(SubAgentRunner subAgentRunner,
-                             SubAgentRegistry subAgentRegistry,
-                             ActiveAgentRunRegistry activeAgentRunRegistry) {
-        this.subAgentRunner = subAgentRunner;
-        this.subAgentRegistry = subAgentRegistry;
-        this.activeAgentRunRegistry = activeAgentRunRegistry;
-    }
 
     @Override
     public String getName() {
@@ -54,6 +35,17 @@ public class AgentDispatchTool implements BaseTool {
 
     @Override
     public String getDescription() {
+        return buildDescription(null);
+    }
+
+    /** 可用 subagent_type 清单来自运行时注册表，只能从 context 取。 */
+    @Override
+    public String getDescription(AgentContext context) {
+        return buildDescription(context);
+    }
+
+    private String buildDescription(AgentContext context) {
+        SubAgentRegistry subAgentRegistry = resolveSubAgentRegistry(context);
         StringBuilder sb = new StringBuilder();
         sb.append("派发一个新的子 Agent 执行独立任务。")
                 .append("默认阻塞等待完成后返回精简报告；run_in_background=true 时立即返回 task_id 与 agentId。")
@@ -78,6 +70,17 @@ public class AgentDispatchTool implements BaseTool {
 
     @Override
     public Map<String, Object> toParams() {
+        return buildParams(null);
+    }
+
+    /** subagent_type 候选同样来自运行时注册表。 */
+    @Override
+    public Map<String, Object> toParams(AgentContext context) {
+        return buildParams(context);
+    }
+
+    private Map<String, Object> buildParams(AgentContext context) {
+        SubAgentRegistry subAgentRegistry = resolveSubAgentRegistry(context);
         Map<String, Object> description = new LinkedHashMap<>();
         description.put("type", "string");
         description.put("description", "任务短描述，3-5 个词，用于展示与日志");
@@ -116,6 +119,13 @@ public class AgentDispatchTool implements BaseTool {
     @Override
     @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext agentContext) {
         try {
             Map<String, Object> params = input instanceof Map
                     ? (Map<String, Object>) input
@@ -143,12 +153,14 @@ public class AgentDispatchTool implements BaseTool {
             if (StringUtils.isBlank(description)) {
                 description = StringUtils.defaultIfBlank(subagentType, "subagent-task");
             }
-            if (subAgentRunner == null) {
-                return ToolResultPayload.failureFrom("Agent 执行失败：SubAgentRunner 未注入", null);
-            }
             if (agentContext == null) {
                 return ToolResultPayload.failureFrom("Agent 执行失败：无 AgentContext", null);
             }
+            SubAgentRunner subAgentRunner = resolveSubAgentRunner(agentContext);
+            if (subAgentRunner == null) {
+                return ToolResultPayload.failureFrom("Agent 执行失败：SubAgentRunner 未注入", null);
+            }
+            ActiveAgentRunRegistry activeAgentRunRegistry = resolveActiveAgentRunRegistry(agentContext);
 
             // 必须在当前线程捕获：currentToolArtifactSource 是 ThreadLocal，
             // 后台线程不会继承，否则子事件丢失 parentToolUseId 并泄漏到主时间线。
@@ -202,6 +214,30 @@ public class AgentDispatchTool implements BaseTool {
 
     private static String trimToString(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    /** 子 Agent 执行器与 context 同源：装配期已挂到运行时依赖上。 */
+    private static SubAgentRunner resolveSubAgentRunner(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return null;
+        }
+        return context.getRuntimeDependencies().getOptionalSubAgentRunner();
+    }
+
+    /** 子 Agent 定义表与 context 同源：描述里的 subagent_type 清单由此生成。 */
+    private static SubAgentRegistry resolveSubAgentRegistry(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return null;
+        }
+        return context.getRuntimeDependencies().getOptionalSubAgentRegistry();
+    }
+
+    /** 活跃 run 登记表与 context 同源：后台派发需要它登记取消句柄。 */
+    private static ActiveAgentRunRegistry resolveActiveAgentRunRegistry(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return null;
+        }
+        return context.getRuntimeDependencies().getOptionalActiveAgentRunRegistry();
     }
 
     private static boolean coerceBoolean(Object value) {

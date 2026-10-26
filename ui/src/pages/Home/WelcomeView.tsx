@@ -2,11 +2,11 @@ import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowUp,
   AtSign,
   BarChart3,
   Briefcase,
   Building2,
+  ChevronRight,
   FileSearch,
   FileText,
   Globe2,
@@ -32,7 +32,7 @@ import GeneralInput from "@/components/GeneralInput";
 import { AnimatedOrb } from "@/components/chat/AnimatedOrb";
 import { KeyboardTypewriter } from "@/components/ai-elements/keyboard-typewriter";
 import type { FeaturedConversationCard as FeaturedConversationCardModel } from "@/services/featuredConversation";
-import { DURATION, EASE_OUT, useMotionConfig } from "@/lib/motion";
+import { DURATION, DURATION_QUICK, SPRING_GENTLE, SPRING_SOFT, useMotionConfig } from "@/lib/motion";
 import {
   suggestedQuestionsByProductType,
   type SuggestedQuestionIcon,
@@ -70,32 +70,32 @@ const SUGGESTION_ICON_MAP: Record<SuggestedQuestionIcon, LucideIcon> = {
 };
 
 const SUGGESTION_ICON_CLASS: Record<SuggestedQuestionIcon, string> = {
-  youtube: "text-[#ff0000]",
-  instagram: "text-[#e1306c]",
-  creator: "text-[#8294e8]",
-  tiktok: "text-[#111111]",
-  x: "text-[#111111]",
-  reddit: "text-[#ff4500]",
-  shopping: "text-[#e58b2a]",
-  megaphone: "text-[#e26b50]",
-  search: "text-[#7468d8]",
-  research: "text-[#4d83db]",
-  chart: "text-[#4d83db]",
-  amazon: "text-[#ff6b00]",
-  google: "text-[#4285f4]",
-  meta: "text-[#087eff]",
-  openai: "text-[#111111]",
-  seo: "text-[#8b9cfb]",
-  link: "text-[#8b9cfb]",
-  mention: "text-[#8b9cfb]",
-  company: "text-[#087eff]",
-  linkedin: "text-[#0877b5]",
-  news: "text-[#8b9cfb]",
-  map: "text-[#34a853]",
-  person: "text-[#8b9cfb]",
-  industry: "text-[#4285f4]",
-  briefcase: "text-[#8b9cfb]",
-  app: "text-[#147efb]",
+  youtube: "bg-[#ff0000]",
+  instagram: "bg-[#e1306c]",
+  creator: "bg-[#8294e8]",
+  tiktok: "bg-[#111111]",
+  x: "bg-[#111111]",
+  reddit: "bg-[#ff4500]",
+  shopping: "bg-[#e58b2a]",
+  megaphone: "bg-[#e26b50]",
+  search: "bg-[#7468d8]",
+  research: "bg-[#4d83db]",
+  chart: "bg-[#4d83db]",
+  amazon: "bg-[#ff6b00]",
+  google: "bg-[#4285f4]",
+  meta: "bg-[#087eff]",
+  openai: "bg-[#111111]",
+  seo: "bg-[#8b9cfb]",
+  link: "bg-[#8b9cfb]",
+  mention: "bg-[#8b9cfb]",
+  company: "bg-[#087eff]",
+  linkedin: "bg-[#0877b5]",
+  news: "bg-[#8b9cfb]",
+  map: "bg-[#34a853]",
+  person: "bg-[#8b9cfb]",
+  industry: "bg-[#4285f4]",
+  briefcase: "bg-[#8b9cfb]",
+  app: "bg-[#147efb]",
 };
 
 const HERO_TYPEWRITER_TEXTS = [
@@ -173,7 +173,7 @@ export default function WelcomeView(props: {
               <AnimatedOrb size={88} />
             </div>
             <h1
-              className="text-blur-intro mb-3 text-[32px] font-medium leading-[1.08] tracking-normal text-[var(--chat-text)] md:text-[42px] lg:text-[48px]"
+              className="text-blur-intro mb-3 text-display-md font-medium leading-[1.08] tracking-[-0.02em] text-[var(--chat-text)] md:text-display-2xl lg:text-display-4xl"
               style={{ fontFamily: "var(--font-sans)" }}
             >
               <KeyboardTypewriter
@@ -192,10 +192,12 @@ export default function WelcomeView(props: {
               opacity: hasSuggestedQuestions ? 1 : 0,
               y: reduce ? 0 : hasSuggestedQuestions ? 0 : -8,
             }}
-            transition={{
-              duration: reduce ? DURATION.reduced : 0.22,
-              ease: EASE_OUT,
-            }}
+            // 切换分类时推荐问题整块「让位」：弹簧让收起/展开跟手且可中断。
+            transition={
+              reduce
+                ? { duration: DURATION.reduced }
+                : { ...SPRING_SOFT }
+            }
             className={cn(
               "mx-auto w-full max-w-[960px] overflow-visible",
               hasSuggestedQuestions
@@ -204,55 +206,91 @@ export default function WelcomeView(props: {
             )}
           >
             <div
-              className="mb-4 flex w-full min-w-0 justify-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="mb-4 flex w-full min-w-0 justify-center overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               aria-label="推荐任务分类"
             >
-              {categories.map((category) => {
-                const active = category === activeCategory;
-                return (
-                  <button
-                    key={category}
-                    type="button"
-                    aria-pressed={active}
-                    className={cn(
-                      "shrink-0 rounded-full border px-4 py-2 text-[13px] font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)]/25",
-                      active
-                        ? "border-[var(--chat-tab-active-border)] bg-[var(--chat-tab-active-bg)] text-[var(--chat-text)]"
-                        : "border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-text-soft)] hover:border-[var(--chat-border-strong)] hover:text-[var(--chat-text)]"
-                    )}
-                    onClick={() => setSelectedCategory(category)}
-                  >
-                    {category}
-                  </button>
-                );
-              })}
+              <div className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-black/[0.04] p-1">
+                {categories.map((category) => {
+                  const active = category === activeCategory;
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      aria-pressed={active}
+                      className={cn(
+                        "relative shrink-0 rounded-full px-4 py-1.5 text-ui-caption font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]",
+                        active
+                          ? "text-[var(--chat-text)]"
+                          : "text-[var(--chat-text-soft)] hover:text-[var(--chat-text)]"
+                      )}
+                      onClick={() => setSelectedCategory(category)}
+                    >
+                      {active ? (
+                        <motion.span
+                          layoutId="welcome-suggestion-category-thumb"
+                          className="absolute inset-0 rounded-full bg-[var(--chat-surface)] shadow-[var(--shadow-sm)]"
+                          transition={
+                            reduce
+                              ? { duration: DURATION.reduced }
+                              : { ...SPRING_SOFT }
+                          }
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                      <span className="relative z-[1]">{category}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              {visibleSuggestedQuestions.map((item) => {
-                const Icon = SUGGESTION_ICON_MAP[item.icon] || Search;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="group flex min-h-[48px] min-w-0 w-full items-center gap-2 rounded-[12px] border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 py-2 text-left text-[13px] font-medium leading-4 text-[var(--chat-text)] shadow-[0_1px_1px_rgba(0,0,0,0.015)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)] hover:shadow-[var(--shadow-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)]/25"
-                    onClick={() => props.onSendQuestion(item)}
-                  >
-                    <Icon
-                      className={cn(
-                        "size-[17px] shrink-0 stroke-[1.8]",
-                        SUGGESTION_ICON_CLASS[item.icon]
-                      )}
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1">{item.label}</span>
-                    <ArrowUp
-                      className="size-[15px] shrink-0 text-[var(--chat-text-soft)] transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:text-[var(--chat-text)]"
-                      aria-hidden="true"
-                    />
-                  </button>
-                );
-              })}
+            <div className="mx-auto w-full max-w-[640px] overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] shadow-[var(--shadow-sm)]">
+              {/* 分类切换时列表整体淡入：key 变化即重挂载，仅动透明度。 */}
+              <motion.div
+                key={activeCategory}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={
+                  reduce ? { duration: DURATION.reduced } : DURATION_QUICK
+                }
+              >
+                {visibleSuggestedQuestions.map((item, index) => {
+                  const Icon = SUGGESTION_ICON_MAP[item.icon] || Search;
+                  // 分隔线从文字起点缩进：px-4 + size-7 + gap-3 = ml-14（iOS 分组列表口径）。
+                  return (
+                    <div key={item.id}>
+                      {index > 0 ? (
+                        <div
+                          aria-hidden="true"
+                          className="ml-14 border-t border-[var(--chat-border)]"
+                        />
+                      ) : null}
+                      <button
+                        type="button"
+                        className="group flex h-[52px] w-full min-w-0 items-center gap-3 px-4 text-left transition-colors hover:bg-black/[0.03] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
+                        onClick={() => props.onSendQuestion(item)}
+                      >
+                        <span
+                          className={cn(
+                            "flex size-7 shrink-0 items-center justify-center rounded-md",
+                            SUGGESTION_ICON_CLASS[item.icon]
+                          )}
+                          aria-hidden="true"
+                        >
+                          <Icon className="size-[15px] stroke-[1.8] text-white" />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-ui-base font-medium text-[var(--chat-text)]">
+                          {item.label}
+                        </span>
+                        <ChevronRight
+                          className="size-4 shrink-0 text-[var(--chat-text-soft)]"
+                          aria-hidden="true"
+                        />
+                      </button>
+                    </div>
+                  );
+                })}
+              </motion.div>
             </div>
           </motion.div>
 
@@ -271,11 +309,15 @@ export default function WelcomeView(props: {
               y: 0,
               scale: 1,
             }}
-            transition={{
-              duration: reduce ? DURATION.reduced : 0.28,
-              delay: reduce ? 0 : 0.08,
-              ease: EASE_OUT,
-            }}
+            // 输入区带 scale，是欢迎页的主视觉落点：弹簧让「放大就位」有分量感。
+            transition={
+              reduce
+                ? { duration: DURATION.reduced }
+                : {
+                  ...SPRING_GENTLE,
+                  delay: 0.08,
+                }
+            }
             className="mb-8 w-full max-w-[920px] lg:mb-10"
           >
             <div className="w-full">
@@ -312,29 +354,35 @@ export default function WelcomeView(props: {
               opacity: 1,
               y: 0,
             }}
-            transition={{
-              duration: reduce ? DURATION.reduced : 0.28,
-              delay: reduce ? 0 : 0.12,
-              ease: EASE_OUT,
-            }}
+            // 精品区是入场位移，用弹簧收尾：落到位置时有一点轻微回弹，
+            // 比 ease-out 的「匀速停住」更接近原生 sheet 的手感。
+            // reduce 时只保留淡入，不做可感知位移。
+            transition={
+              reduce
+                ? { duration: DURATION.reduced }
+                : {
+                  ...SPRING_GENTLE,
+                  delay: 0.12,
+                }
+            }
             className="mx-auto mt-4 w-full max-w-[1180px] pb-20"
           >
             <div className="mb-5 flex items-end justify-between gap-4">
               <div>
-                <h2 className="text-[22px] font-semibold tracking-tight text-[var(--chat-text)]">
+                <h2 className="text-display-sm font-semibold tracking-[-0.02em] text-[var(--chat-text)]">
                   精品对话
                 </h2>
-                <p className="mt-1 text-[13px] text-[var(--chat-text-muted)]">
+                <p className="mt-1 text-ui-caption text-[var(--chat-text-muted)]">
                   精选公开案例，点击查看完整回放
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => props.onOpenFeaturedConversations?.()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3.5 text-[13px] font-medium text-[var(--chat-text-soft)] transition hover:text-[var(--chat-text)]"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition hover:text-[var(--chat-text)]"
               >
                 <span>查看全部</span>
-                <i className="font_family icon-xinjianjiantou text-[10px]" />
+                <i className="font_family icon-xinjianjiantou text-ui-xs" />
               </button>
             </div>
 

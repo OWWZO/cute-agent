@@ -94,6 +94,16 @@ final class LlmRequestAssembler {
      * 排序按名称固定，避免同一批工具每次下发顺序不同破坏 prompt cache。
      */
     List<LlmToolDefinition> buildToolDefinitions(ToolCollection tools) {
+        return buildToolDefinitions(tools, null);
+    }
+
+    /**
+     * 本地工具与 MCP 工具统一转成出站工具定义。
+     * <p>
+     * 排序按名称固定，避免同一批工具每次下发顺序不同破坏 prompt cache。
+     * invoker 显式携带本次请求的 context，无状态工具因此不需要实例绑定。
+     */
+    List<LlmToolDefinition> buildToolDefinitions(ToolCollection tools, AgentContext context) {
         if (tools == null) {
             return List.of();
         }
@@ -106,8 +116,8 @@ final class LlmRequestAssembler {
                 .toList();
         for (BaseTool tool : localTools) {
             LlmToolDefinition definition = ToolDefinitionCache.getOrCreateFromMap(
-                    tool.getName(), StringUtils.defaultString(tool.getDescription()), tool.toParams());
-            definitions.add(definition.withInvoker(input -> tool.execute(parseToolInput(input))));
+                    tool.getName(), StringUtils.defaultString(tool.getDescription(context)), tool.toParams(context));
+            definitions.add(definition.withInvoker(input -> tool.execute(parseToolInput(input), context)));
         }
 
         List<McpToolInfo> mcpTools = tools.getMcpToolMap() == null
@@ -119,7 +129,7 @@ final class LlmRequestAssembler {
         for (McpToolInfo tool : mcpTools) {
             LlmToolDefinition definition = ToolDefinitionCache.getOrCreateFromRawSchemaString(
                     tool.getName(), StringUtils.defaultString(tool.getDesc()), tool.getParameters());
-            definitions.add(definition.withInvoker(input -> tools.execute(tool.getName(), input)));
+            definitions.add(definition.withInvoker(input -> tools.execute(tool.getName(), input, context)));
         }
         return definitions;
     }

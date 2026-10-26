@@ -53,7 +53,7 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
 
   if (!columns.length) {
     return (
-      <div className="flex h-[200px] w-full items-center justify-center text-[13px] text-[var(--chat-text-soft)]">
+      <div className="flex h-[200px] w-full items-center justify-center text-ui-caption text-[var(--chat-text-soft)]">
         暂无表格数据
       </div>
     );
@@ -68,12 +68,12 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
     : "";
 
   return (
-    <div className="flex w-full flex-col overflow-hidden rounded-lg border border-[#e5e5e5] bg-white text-[13px]">
+    <div className="flex w-full flex-col overflow-hidden rounded-lg border border-[#e5e5e5] bg-white text-ui-caption">
       <div className="flex shrink-0 items-center gap-2 border-b border-[#e5e5e5] bg-[#fafafa] px-2 py-1.5">
-        <div className="flex h-7 w-[64px] shrink-0 items-center justify-center rounded border border-[#d1d1d1] bg-white font-mono text-[12px] text-[#424242]">
+        <div className="flex h-7 w-[64px] shrink-0 items-center justify-center rounded border border-[#d1d1d1] bg-white font-mono text-ui-sm text-[#424242]">
           {selectedRef || "—"}
         </div>
-        <div className="flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded border border-[#d1d1d1] bg-white px-2 text-[12px] text-[#242424]">
+        <div className="flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded border border-[#d1d1d1] bg-white px-2 text-ui-sm text-[#242424]">
           <span className="truncate">
             {selectedValue || `${dataList.length} 行 · ${columns.length} 列`}
           </span>
@@ -89,12 +89,12 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
                 <th
                   key={col.key}
                   className={cn(
-                    "sticky top-0 z-20 h-7 min-w-[96px] border-b border-r border-[#d0d0d0] bg-[#f3f3f3] px-2 text-left text-[11px] font-semibold text-[#424242]",
+                    "sticky top-0 z-20 h-7 min-w-[96px] border-b border-r border-[#d0d0d0] bg-[#f3f3f3] px-2 text-left text-ui-sm font-semibold text-[#424242]",
                     selected?.col === colIndex && "bg-[#d7e8d3] text-[#0f6b36]"
                   )}
                   title={col.title}
                 >
-                  <span className="mr-1 font-mono text-[10px] font-normal text-[#8a8a8a]">
+                  <span className="mr-1 font-mono text-ui-xs font-normal text-[#8a8a8a]">
                     {col.letter}
                   </span>
                   {col.title}
@@ -107,7 +107,7 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
               <tr key={rowIndex} className="odd:bg-white even:bg-[#fcfcfc]">
                 <th
                   className={cn(
-                    "sticky left-0 z-10 h-7 w-10 min-w-10 border-b border-r border-[#e8e8e8] bg-[#f3f3f3] text-center text-[11px] font-medium text-[#616161]",
+                    "sticky left-0 z-10 h-7 w-10 min-w-10 border-b border-r border-[#e8e8e8] bg-[#f3f3f3] text-center text-ui-sm font-medium text-[#616161]",
                     selected?.row === rowIndex && "bg-[#d7e8d3] text-[#0f6b36]"
                   )}
                 >
@@ -125,7 +125,7 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
                       key={`${rowIndex}-${col.key}`}
                       onClick={() => setSelected({ row: rowIndex, col: colIndex })}
                       className={cn(
-                        "h-7 max-w-[240px] min-w-[96px] cursor-default truncate border-b border-r border-[#ececec] px-2 text-[12px] leading-[26px] text-[#1f1f1f]",
+                        "h-7 max-w-[240px] min-w-[96px] cursor-default truncate border-b border-r border-[#ececec] px-2 text-ui-sm leading-[26px] text-[#1f1f1f]",
                         numeric && "text-right tabular-nums",
                         isSelected &&
                           "relative z-[1] bg-[#e8f5e9] outline outline-2 outline-[#107c41] -outline-offset-1"
@@ -142,7 +142,7 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
               <tr>
                 <td
                   colSpan={columns.length + 1}
-                  className="px-3 py-8 text-center text-[12px] text-[#8a8a8a]"
+                  className="px-3 py-8 text-center text-ui-sm text-[#8a8a8a]"
                 >
                   暂无数据行
                 </td>

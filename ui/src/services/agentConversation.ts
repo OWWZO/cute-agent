@@ -111,6 +111,15 @@ export interface ConversationHistoryPage {
 
 export type ConversationHistoryRunDetail = ConversationRunReplay;
 
+/** 会话切换 bootstrap：一次返回恢复会话所需的全部数据。 */
+export interface ConversationSessionBootstrap {
+  detail: ConversationHistoryPage;
+  files: ConversationSessionFile[];
+  askUser: Record<string, unknown>[];
+  desktopControl: Record<string, unknown>[];
+  planApproval: Record<string, unknown>[];
+}
+
 /** 旧 rich detail 的类型别名，保留给已有 replay 测试和调用方。 */
 export interface ConversationHistoryDetail
   extends Omit<ConversationHistoryPage, "runs"> {
@@ -139,6 +148,11 @@ export const conversationHistoryApi = {
     api.get<ConversationSessionFile[]>(
       `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/files`
     ) as unknown as Promise<ConversationSessionFile[]>,
+  getSessionBootstrap: (sessionId: string, params: ConversationHistoryQuery = {}) =>
+    api.get<ConversationSessionBootstrap>(
+      `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/bootstrap`,
+      params
+    ) as unknown as Promise<ConversationSessionBootstrap>,
   getRunReplay: (requestId: string) =>
     api.get<ConversationRunReplay>(
       `/api/agent/conversation/runs/${encodeURIComponent(requestId)}/replay`

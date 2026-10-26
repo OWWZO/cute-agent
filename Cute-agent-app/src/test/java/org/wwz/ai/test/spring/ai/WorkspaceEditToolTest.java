@@ -49,9 +49,7 @@ public class WorkspaceEditToolTest {
                 .build();
 
         readTool = new WorkspaceReadTool(workspaceService, options);
-        readTool.setAgentContext(agentContext);
         editTool = new WorkspaceEditTool(workspaceService, options);
-        editTool.setAgentContext(agentContext);
     }
 
     @Test
@@ -60,19 +58,19 @@ public class WorkspaceEditToolTest {
                 "path", "demo.txt",
                 "old_string", "beta",
                 "new_string", "BETA"
-        )));
+        ), agentContext));
         Assert.assertTrue(result.contains("workspace_read"));
         Assert.assertTrue(Files.readString(targetFile, StandardCharsets.UTF_8).contains("beta"));
     }
 
     @Test
     public void shouldEditAfterReadWhenUnique() throws Exception {
-        readTool.execute(Map.of("path", "demo.txt"));
+        readTool.execute(Map.of("path", "demo.txt"), agentContext);
         ToolResultPayload payload = (ToolResultPayload) editTool.execute(Map.of(
                 "path", "demo.txt",
                 "old_string", "beta",
                 "new_string", "BETA"
-        ));
+        ), agentContext);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertEquals(1, ((Map<?, ?>) payload.getLlmData()).get("replacements"));
         Assert.assertEquals("alpha\nBETA\ngamma\n", Files.readString(targetFile, StandardCharsets.UTF_8));
@@ -81,13 +79,13 @@ public class WorkspaceEditToolTest {
     @Test
     public void shouldFailWhenNotUniqueUnlessReplaceAll() throws Exception {
         Files.writeString(targetFile, "x y x\n", StandardCharsets.UTF_8);
-        readTool.execute(Map.of("path", "demo.txt"));
+        readTool.execute(Map.of("path", "demo.txt"), agentContext);
 
         String uniqueFail = String.valueOf(editTool.execute(Map.of(
                 "path", "demo.txt",
                 "old_string", "x",
                 "new_string", "z"
-        )));
+        ), agentContext));
         Assert.assertTrue(uniqueFail.contains("occurrences") || uniqueFail.contains("replace_all"));
 
         ToolResultPayload replaceAll = (ToolResultPayload) editTool.execute(Map.of(
@@ -95,7 +93,7 @@ public class WorkspaceEditToolTest {
                 "old_string", "x",
                 "new_string", "z",
                 "replace_all", true
-        ));
+        ), agentContext);
         Assert.assertFalse(Boolean.TRUE.equals(replaceAll.getFailed()));
         Assert.assertEquals(2, ((Map<?, ?>) replaceAll.getLlmData()).get("replacements"));
         Assert.assertEquals("z y z\n", Files.readString(targetFile, StandardCharsets.UTF_8));
@@ -103,12 +101,12 @@ public class WorkspaceEditToolTest {
 
     @Test
     public void shouldFailWhenOldStringMissing() throws Exception {
-        readTool.execute(Map.of("path", "demo.txt"));
+        readTool.execute(Map.of("path", "demo.txt"), agentContext);
         ToolResultPayload payload = (ToolResultPayload) editTool.execute(Map.of(
                 "path", "demo.txt",
                 "old_string", "not-exist",
                 "new_string", "x"
-        ));
+        ), agentContext);
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertTrue(payload.getLlmData() instanceof Map<?, ?>);
         Map<?, ?> detail = (Map<?, ?>) payload.getLlmData();
@@ -123,12 +121,12 @@ public class WorkspaceEditToolTest {
      */
     @Test
     public void shouldReturnUnifiedDiffWithRealLineNumbers() throws Exception {
-        readTool.execute(Map.of("path", "demo.txt"));
+        readTool.execute(Map.of("path", "demo.txt"), agentContext);
         ToolResultPayload payload = (ToolResultPayload) editTool.execute(Map.of(
                 "path", "demo.txt",
                 "old_string", "beta",
                 "new_string", "BETA"
-        ));
+        ), agentContext);
 
         Map<?, ?> data = (Map<?, ?>) payload.getLlmData();
         Object diff = data.get("diff");
@@ -149,14 +147,14 @@ public class WorkspaceEditToolTest {
             content.append(line == 3 || line == 15 ? "TOKEN" : "L" + line).append('\n');
         }
         Files.writeString(targetFile, content.toString(), StandardCharsets.UTF_8);
-        readTool.execute(Map.of("path", "demo.txt"));
+        readTool.execute(Map.of("path", "demo.txt"), agentContext);
 
         ToolResultPayload payload = (ToolResultPayload) editTool.execute(Map.of(
                 "path", "demo.txt",
                 "old_string", "TOKEN",
                 "new_string", "TOKEN2",
                 "replace_all", true
-        ));
+        ), agentContext);
 
         Map<?, ?> data = (Map<?, ?>) payload.getLlmData();
         Assert.assertEquals(2, data.get("replacements"));

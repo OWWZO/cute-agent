@@ -2,7 +2,10 @@ package org.wwz.ai.test.domain;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
+import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
@@ -20,6 +23,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
+import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 
 /**
  * 异步后台 Agent 不能依赖 ThreadLocal 取 parentToolUseId。
@@ -93,10 +98,9 @@ public class SubAgentParentToolUseIdTest {
     @Test
     public void backgroundDispatchShouldPassCapturedParentIdAfterThreadLocalCleared() throws Exception {
         CapturingRunner runner = new CapturingRunner();
-        AgentDispatchTool tool = new AgentDispatchTool(runner, new SubAgentRegistry());
-        AgentContext parent = parentContext();
+        AgentDispatchTool tool = new AgentDispatchTool();
+        AgentContext parent = parentContext(new RecordingPrinter(), runner);
         parent.bindCurrentToolArtifactSource(source("agent-call-bg"));
-        tool.setAgentContext(parent);
 
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("description", "后台探索");
@@ -106,7 +110,7 @@ public class SubAgentParentToolUseIdTest {
 
         ToolResultPayload payload;
         try {
-            payload = (ToolResultPayload) tool.execute(input);
+            payload = (ToolResultPayload) tool.execute(input, parent);
         } finally {
             parent.clearCurrentToolArtifactSource();
         }
@@ -134,16 +138,27 @@ public class SubAgentParentToolUseIdTest {
     }
 
     private static AgentContext parentContext() {
-        return parentContext(new RecordingPrinter());
+        return parentContext(new RecordingPrinter(), null);
     }
 
     private static AgentContext parentContext(Printer printer) {
+        return parentContext(printer, null);
+    }
+
+    private static AgentContext parentContext(Printer printer, SubAgentRunner runnerOverride) {
+        SubAgentRegistry registry = new SubAgentRegistry();
         return AgentContext.builder()
                 .requestId("req-parent-id")
                 .sessionId("s-parent-id")
                 .query("q")
                 .printer(printer)
                 .toolCollection(new ToolCollection())
+                .sessionControl(new SessionControl().withBackgroundTasks(new RuntimeBackgroundTaskRegistry()))
+                .runtimeDependencies(CuteRuntimeDependencies.builder()
+                        .subAgentRegistry(registry)
+                        .subAgentRunner(runnerOverride != null ? runnerOverride : new SubAgentRunner(registry))
+                        .activeAgentRunRegistry(new ActiveAgentRunRegistry())
+                        .build())
                 .build();
     }
 

@@ -41,7 +41,7 @@ export function CommentDraft({
   }, []);
 
   return (
-    <div className="m-2 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-3 font-sans shadow-sm">
+    <div className="m-2 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-3 font-sans shadow-[var(--shadow-sm)]">
       <div className="mb-2 text-ui-base text-[var(--chat-text-soft)]">
         {formatCommentRange(labels, range)}
       </div>

@@ -6,6 +6,7 @@ import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.enums.AgentState;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
 
 public class ReActCancellationBoundaryTest {
 
@@ -17,7 +18,7 @@ public class ReActCancellationBoundaryTest {
         cancellation.cancel(RunCancellation.REASON_USER_STOP);
         agent.setContext(AgentContext.builder()
                 .requestId("think-cancelled")
-                .runCancellation(cancellation)
+                .control(new RunControl().withCancellation(cancellation))
                 .build());
 
         Assert.assertEquals("Terminated: User stopped", agent.step());
@@ -32,7 +33,7 @@ public class ReActCancellationBoundaryTest {
         RunCancellation cancellation = new RunCancellation();
         agent.setContext(AgentContext.builder()
                 .requestId("between-think-and-act")
-                .runCancellation(cancellation)
+                .control(new RunControl().withCancellation(cancellation))
                 .build());
         cancellation.cancel(RunCancellation.REASON_USER_STOP);
 

@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -18,10 +17,7 @@ import java.util.Optional;
  * 可阻塞等待终态；与 Todo 列表无关。
  */
 @Slf4j
-@Data
 public class TaskOutputTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -58,8 +54,14 @@ public class TaskOutputTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
             String taskId = ToolArgs.str(params.get("task_id"));
@@ -70,7 +72,7 @@ public class TaskOutputTool implements BaseTool {
                         null,
                         "missing task_id");
             }
-            if (agentContext == null) {
+            if (context == null) {
                 return ToolResultPayload.failure(
                         "TaskOutput 失败：无 AgentContext",
                         "TaskOutput 失败：无 AgentContext",
@@ -82,11 +84,11 @@ public class TaskOutputTool implements BaseTool {
                     ? coerceBoolean(params.get("block"), true)
                     : true;
 
-            Optional<RuntimeBackgroundTask> found = agentContext.requireBackgroundTasks().get(taskId);
+            Optional<RuntimeBackgroundTask> found = context.requireBackgroundTasks().get(taskId);
             if (found.isEmpty()) {
-                String sid = agentContext.getSessionId() != null
-                        ? agentContext.getSessionId()
-                        : agentContext.getRequestId();
+                String sid = context.getSessionId() != null
+                        ? context.getSessionId()
+                        : context.getRequestId();
                 return ToolResultPayload.failure(
                         "TaskOutput 失败：任务不存在 " + taskId
                                 + "（session=" + sid
@@ -99,8 +101,8 @@ public class TaskOutputTool implements BaseTool {
             RuntimeBackgroundTask task = found.get();
             String retrieval = "success";
             if (shouldBlock && RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
-                task = agentContext.requireBackgroundTasks()
-                        .awaitUntilTerminal(taskId, agentContext::isRunCancelled)
+                task = context.requireBackgroundTasks()
+                        .awaitUntilTerminal(taskId, context::isRunCancelled)
                         .orElse(task);
                 if (RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
                     retrieval = "not_ready";

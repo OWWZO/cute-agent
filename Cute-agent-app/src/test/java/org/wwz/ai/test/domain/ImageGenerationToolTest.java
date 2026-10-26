@@ -5,12 +5,12 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
+import org.wwz.ai.types.agent.config.ImageGenerationProperties;
 import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.tool.common.ImageGenerationTool;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
@@ -67,12 +67,11 @@ public class ImageGenerationToolTest {
                 .printer(printer)
                 .toolCollection(toolCollection)
                 .productFiles(new ArrayList<>())
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig, kernel))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig, kernel, new org.springframework.mock.env.MockEnvironment(), null, null, buildImageGenerationProperties()))
                 .build();
         toolCollection.setAgentContext(context);
 
         ImageGenerationTool tool = new ImageGenerationTool();
-        tool.setAgentContext(context);
         Assert.assertFalse(tool.toParams().containsKey("model"));
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()
                 .sessionId(context.getSessionId())
@@ -86,7 +85,7 @@ public class ImageGenerationToolTest {
         try {
             payload = (ToolResultPayload) tool.execute(JSONObject.parseObject("""
                     {"prompt":"生成活动海报","n":2,"size":"1536x1024"}
-                    """));
+                    """), context);
         } finally {
             context.clearCurrentToolArtifactSource();
         }
@@ -161,12 +160,11 @@ public class ImageGenerationToolTest {
                                 .isInternalFile(Boolean.FALSE)
                                 .build()
                 )))
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig, kernel))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig, kernel, new org.springframework.mock.env.MockEnvironment(), null, null, buildImageGenerationProperties()))
                 .build();
         toolCollection.setAgentContext(context);
 
         ImageGenerationTool tool = new ImageGenerationTool();
-        tool.setAgentContext(context);
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()
                 .sessionId(context.getSessionId())
                 .requestId(context.getRequestId())
@@ -178,7 +176,7 @@ public class ImageGenerationToolTest {
         try {
             ToolResultPayload payload = (ToolResultPayload) tool.execute(JSONObject.parseObject("""
                     {"prompt":"基于上传图片改成赛博朋克风"}
-                    """));
+                    """), context);
             Assert.assertFalse(payload.getFailed());
         } finally {
             context.clearCurrentToolArtifactSource();
@@ -229,12 +227,11 @@ public class ImageGenerationToolTest {
                                 .isInternalFile(Boolean.FALSE)
                                 .build()
                 )))
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig, kernel))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig, kernel, new org.springframework.mock.env.MockEnvironment(), null, null, buildImageGenerationProperties()))
                 .build();
         toolCollection.setAgentContext(context);
 
         ImageGenerationTool tool = new ImageGenerationTool();
-        tool.setAgentContext(context);
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()
                 .sessionId(context.getSessionId())
                 .requestId(context.getRequestId())
@@ -246,7 +243,7 @@ public class ImageGenerationToolTest {
         try {
             ToolResultPayload payload = (ToolResultPayload) tool.execute(JSONObject.parseObject("""
                     {"prompt":"沿用上一张图继续修改"}
-                    """));
+                    """), context);
             Assert.assertFalse(payload.getFailed());
         } finally {
             context.clearCurrentToolArtifactSource();
@@ -256,11 +253,16 @@ public class ImageGenerationToolTest {
     }
 
     private CuteConfig buildConfig() {
-        CuteConfig cuteConfig = new CuteConfig();
-        ReflectionTestUtils.setField(cuteConfig, "imageGenerationBaseUrl", "https://image-provider.example");
-        ReflectionTestUtils.setField(cuteConfig, "imageGenerationApiKey", "test-key");
-        ReflectionTestUtils.setField(cuteConfig, "imageGenerationModel", "gpt-image-2.5-flare");
-        return cuteConfig;
+        return new CuteConfig();
+    }
+
+    /** image_* 已从 CuteConfig 拆到 ImageGenerationProperties；codeInterpreterUrl 仍在 CuteConfig。 */
+    private static ImageGenerationProperties buildImageGenerationProperties() {
+        return ImageGenerationProperties.builder()
+                .baseUrl("https://image-provider.example")
+                .apiKey("test-key")
+                .model("gpt-image-2.5-flare")
+                .build();
     }
 
     private static class RecordingPrinter implements Printer {

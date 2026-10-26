@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -23,21 +22,7 @@ import java.util.Map;
  * </p>
  */
 @Slf4j
-@Data
 public class ExitPlanModeTool implements BaseTool {
-
-    private AgentContext agentContext;
-    private PlanArtifactStore planArtifactStore;
-
-    public ExitPlanModeTool(PlanArtifactStore planArtifactStore) {
-        this.planArtifactStore = planArtifactStore;
-    }
-
-    /** @deprecated 保留兼容旧装配签名；registry 已不再使用 */
-    @Deprecated
-    public ExitPlanModeTool(Object ignoredRegistry, PlanArtifactStore planArtifactStore) {
-        this.planArtifactStore = planArtifactStore;
-    }
 
     @Override
     public String getName() {
@@ -77,6 +62,12 @@ public class ExitPlanModeTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext agentContext) {
         try {
             if (agentContext == null) {
                 return fail("ExitPlanMode 失败：无 AgentContext");
@@ -90,6 +81,7 @@ public class ExitPlanModeTool implements BaseTool {
             String planFromArg = ToolArgs.str(params.get("plan"));
             String planFilePathArg = ToolArgs.str(params.get("planFilePath"));
 
+            PlanArtifactStore planArtifactStore = resolvePlanArtifactStore(agentContext);
             String planContent = planFromArg;
             if (StringUtils.isBlank(planContent) && planArtifactStore != null) {
                 planContent = planArtifactStore.readPlan(agentContext.getSessionId()).orElse(null);
@@ -132,5 +124,12 @@ public class ExitPlanModeTool implements BaseTool {
         return ToolResultPayload.failureFrom(msg, null);
     }
 
+    /** plan 产物存储与 context 同源：装配期已挂到运行时依赖上。 */
+    private static PlanArtifactStore resolvePlanArtifactStore(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return null;
+        }
+        return context.getRuntimeDependencies().getOptionalPlanArtifactStore();
+    }
 
 }

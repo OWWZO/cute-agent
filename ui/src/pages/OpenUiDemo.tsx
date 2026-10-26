@@ -67,12 +67,12 @@ export default function OpenUiDemo() {
   const visible = dslOnly ? segments.filter((seg) => seg.type === 'openui') : segments;
 
   return (
-    <div className="flex h-screen w-full flex-col gap-3 bg-white p-4">
+    <div className="flex h-screen w-full flex-col gap-3 bg-[var(--chat-surface)] p-4">
       <header className="flex flex-wrap items-center gap-3">
-        <h1 className="text-base font-semibold text-neutral-900">OpenUI 混排渲染验证</h1>
+        <h1 className="text-base font-semibold text-[var(--chat-text)]">OpenUI 混排渲染验证</h1>
         <Badge>{segments.length} 段</Badge>
         <Badge variant="secondary">{segments.filter((s) => s.type === 'openui').length} 个程序块</Badge>
-        <span className="ml-auto flex items-center gap-2 text-xs text-neutral-500">
+        <span className="ml-auto flex items-center gap-2 text-xs text-[var(--chat-text-muted)]">
           仅看 DSL
           <Switch size="sm" checked={dslOnly} onCheckedChange={setDslOnly} />
         </span>
@@ -100,12 +100,12 @@ export default function OpenUiDemo() {
 
       <div className="flex min-h-0 flex-1 gap-3">
         <textarea
-          className="h-full w-1/2 resize-none rounded-lg border border-neutral-200 bg-neutral-50 p-3 font-mono text-xs leading-relaxed text-neutral-800 outline-none focus:border-neutral-400"
+          className="h-full w-1/2 resize-none rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] p-3 font-mono text-xs leading-relaxed text-[var(--chat-text)] outline-none focus:border-[var(--chat-border-strong)]"
           value={raw}
           onChange={(e) => onEdit(e.target.value)}
           spellCheck={false}
         />
-        <div className="h-full w-1/2 overflow-auto rounded-lg border border-neutral-200 bg-white p-4">
+        <div className="h-full w-1/2 overflow-auto rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-4">
           {visible.map((seg, index) =>
             seg.type === 'markdown' ? (
               <MarkdownRenderer
@@ -114,7 +114,7 @@ export default function OpenUiDemo() {
                 isStreaming={streaming && index === visible.length - 1}
               />
             ) : (
-              <div key={`ui-${index}`} className="my-3 rounded-lg border border-dashed border-neutral-200 p-3">
+              <div key={`ui-${index}`} className="my-3 rounded-lg border border-dashed border-[var(--chat-border)] p-3">
                 <OpenUiRender
                   text={seg.text}
                   streaming={streaming && !seg.closed}

@@ -49,10 +49,9 @@ public class McpToolSearchAndNamePolicyTest {
 
         String signatureBefore = LlmToolCallbackProvider.buildToolSignature(collection);
         ToolSearchTool searchTool = new ToolSearchTool();
-        searchTool.setAgentContext(context);
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("query", "select:mcp__demo__remote_tool");
-        Object result = searchTool.execute(input);
+        Object result = searchTool.execute(input, context);
 
         Assert.assertTrue(result instanceof ToolResultPayload);
         Assert.assertFalse(collection.getMcpToolMap().containsKey("mcp__demo__remote_tool"));

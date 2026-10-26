@@ -87,6 +87,15 @@ export const EditToolCall = memo(function EditToolCall({
   const isError = status === "error";
   const errorText = isError ? output.join("\n").trim() : "";
 
+  /**
+   * 内联 diff 的高亮门禁：工具自身还没落定就跳过 shiki。
+   *
+   * 对齐 ZCode `message.tsx` 的 `enableSyntaxHighlighting={!renderStreaming}`。
+   * 这里刻意用**工具自己的状态**而不是 `chat.loading` —— 同一轮里别的工具还在跑时，
+   * 已经完成的这张卡内容不会再变，没必要跟着一起丢掉高亮。
+   */
+  const isStreaming = status === "running" || argStreaming;
+
   // 后端产出的 unified diff（带真实行号 + 3 行上下文）。拿不到时由 toolDiff 回退到片段 LCS。
   // toolResult 里现在会带整份 patch，JSON.parse 不宜每次渲染都跑，所以按 tool 记忆。
   const backendPatch = useMemo(() => resolveTaskToolPatch(tool), [tool]);
@@ -218,6 +227,7 @@ export const EditToolCall = memo(function EditToolCall({
                 kindLabel={toolLabel(name)}
                 status={status}
                 persistKey={`${resolveToolKey(tool)}:${index}`}
+                streaming={isStreaming}
                 onOpen={
                   onOpenToolDiff
                     ? () => onOpenToolDiff(tool, chat, index)
@@ -273,7 +283,12 @@ export const EditToolCall = memo(function EditToolCall({
       }}
     >
       {singlePatch ? (
-        <EditInlineDiffContent patch={singlePatch} path={singlePath} title={name} />
+        <EditInlineDiffContent
+          patch={singlePatch}
+          path={singlePath}
+          title={name}
+          streaming={isStreaming}
+        />
       ) : null}
       {hasParameters ? (
         <ToolParametersBlock value={inputJson} text={inputJson ? undefined : arg} />
@@ -324,12 +339,14 @@ const EditFileSubCard = memo(function EditFileSubCard({
   kindLabel,
   status,
   persistKey,
+  streaming,
   onOpen,
 }: {
   file: EditFileSummary;
   kindLabel: string;
   status: "running" | "ok" | "error";
   persistKey?: string;
+  streaming?: boolean;
   onOpen?: () => void;
 }) {
   const [open, setOpen] = useToolCardOpen(persistKey ?? "", false);
@@ -349,7 +366,11 @@ const EditFileSubCard = memo(function EditFileSubCard({
       }}
     >
       {file.patch ? (
-        <EditInlineDiffContent patch={file.patch} path={file.path} />
+        <EditInlineDiffContent
+          patch={file.patch}
+          path={file.path}
+          streaming={streaming}
+        />
       ) : null}
     </ToolRow>
   );

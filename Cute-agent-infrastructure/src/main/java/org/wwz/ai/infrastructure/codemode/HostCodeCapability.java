@@ -115,8 +115,7 @@ public final class HostCodeCapability {
                 CodeModeInvocationRecorder.summarize(toolParams), startedAt);
         try {
             HostCliTool hostCliTool = new HostCliTool(availableTools);
-            hostCliTool.setAgentContext(agentContext);
-            Map<String, Object> fields = invoke(hostCliTool, toolParams);
+            Map<String, Object> fields = invoke(hostCliTool, toolParams, agentContext);
             CodeModeInvocationRecorder.end(agentContext, invocationId, CodeModeInvocationRecorder.TOOL_HOST,
                     fields.get("ok") == Boolean.TRUE
                             ? ExecutionLedgerConstants.STATUS_SUCCESS
@@ -131,8 +130,8 @@ public final class HostCodeCapability {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> invoke(HostCliTool tool, Map<String, Object> params) {
-        Object raw = tool.execute(params);
+    private Map<String, Object> invoke(HostCliTool tool, Map<String, Object> params, AgentContext context) {
+        Object raw = tool.execute(params, context);
         Map<String, Object> fields = new LinkedHashMap<>();
         if (raw instanceof ToolResultPayload payload) {
             if (payload.getLlmData() instanceof Map<?, ?> data) {

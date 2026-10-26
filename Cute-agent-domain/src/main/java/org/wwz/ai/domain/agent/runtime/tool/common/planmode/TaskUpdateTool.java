@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -20,10 +19,7 @@ import java.util.Optional;
  * 更新 Todo 任务。
  */
 @Slf4j
-@Data
 public class TaskUpdateTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -69,22 +65,28 @@ public class TaskUpdateTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
             String taskId = ToolArgs.str(params.get("taskId"));
             if (StringUtils.isBlank(taskId)) {
                 return fail("TaskUpdate 失败：taskId 必填");
             }
-            if (agentContext == null) {
+            if (context == null) {
                 return fail("TaskUpdate 失败：无 AgentContext");
             }
             String status = ToolArgs.str(params.get("status"));
             if ("deleted".equalsIgnoreCase(status)) {
-                boolean removed = agentContext.requireSessionTaskList().delete(taskId);
+                boolean removed = context.requireSessionTaskList().delete(taskId);
                 if (!removed) {
                     return notFound(taskId);
                 }
-                SessionTaskListPublisher.publish(agentContext);
+                SessionTaskListPublisher.publish(context);
                 Map<String, Object> deleted = new LinkedHashMap<>();
                 deleted.put("deleted", Boolean.TRUE);
                 deleted.put("taskId", taskId);
@@ -94,7 +96,7 @@ public class TaskUpdateTool implements BaseTool {
 
             List<String> addBlocks = asStringList(params.get("addBlocks"));
             List<String> addBlockedBy = asStringList(params.get("addBlockedBy"));
-            Optional<SessionTaskItem> updated = agentContext.requireSessionTaskList().update(
+            Optional<SessionTaskItem> updated = context.requireSessionTaskList().update(
                     taskId,
                     emptyToNull(ToolArgs.str(params.get("subject"))),
                     params.containsKey("description") ? String.valueOf(params.get("description")) : null,
@@ -107,7 +109,7 @@ public class TaskUpdateTool implements BaseTool {
                 return notFound(taskId);
             }
             SessionTaskItem item = updated.get();
-            SessionTaskListPublisher.publish(agentContext);
+            SessionTaskListPublisher.publish(context);
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("success", Boolean.TRUE);
             fields.put("message", "已更新任务 #" + item.getId() + " — " + item.getSubject());

@@ -383,24 +383,12 @@ public abstract class BaseAgent {
         String basePrompt = context == null || context.getBasePrompt() == null
                 ? ""
                 : context.getBasePrompt().trim();
-        // SOP 为会话/请求级静态指引，进入 system 固定段（cache 友好）；query/date/files/history 只走 messages
-        String sopPrompt = context == null || context.getSopPrompt() == null
-                ? ""
-                : context.getSopPrompt().trim();
-        boolean hasSopPlaceholder = systemTemplate.contains("{{sopPrompt}}")
-                || systemTemplate.contains("{{executorSopPrompt}}");
         // tools 只走 API tools[]，不再写入 system 正文
         systemTemplate = systemTemplate
                 .replace("{{tools}}", "")
-                .replace("{{basePrompt}}", basePrompt)
-                .replace("{{sopPrompt}}", sopPrompt)
-                .replace("{{executorSopPrompt}}", sopPrompt);
+                .replace("{{basePrompt}}", basePrompt);
         if (extraPlaceholder != null && !extraPlaceholder.isEmpty()) {
             systemTemplate = systemTemplate.replace(extraPlaceholder, extraValue == null ? "" : extraValue);
-        }
-        // 模板无 {{sopPrompt}} 时仍把召回 SOP 并入 system（PlanSolve 主路径需要）
-        if (!sopPrompt.isEmpty() && !hasSopPlaceholder && !systemTemplate.contains(sopPrompt)) {
-            systemTemplate = systemTemplate.trim() + "\n\n# SOP\n" + sopPrompt + "\n";
         }
         // Tool guidance (WHEN/SKIP) + curated snapshot; skip_memory 不注入
         if (context != null && !Boolean.TRUE.equals(context.getSkipMemory())) {
@@ -448,7 +436,7 @@ public abstract class BaseAgent {
         if (!(viewTool instanceof SkillViewTool skillViewTool)) {
             return systemTemplate;
         }
-        String index = skillViewTool.promptIndex();
+        String index = skillViewTool.promptIndex(context);
         if (StringUtils.isBlank(index) || systemTemplate.contains(SkillPromptIndexBuilder.AVAILABLE_SKILLS_OPEN)) {
             return systemTemplate;
         }

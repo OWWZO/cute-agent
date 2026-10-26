@@ -6,7 +6,6 @@ import org.junit.Test;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentContextFactory;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
-import org.wwz.ai.domain.agent.runtime.tool.ContextScopedTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolObservationSerializer;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
@@ -53,32 +52,30 @@ public class WorkspaceReadDedupTest {
                 .workspaceRoot(workspaceRoot.toString())
                 .build();
         readTool = new WorkspaceReadTool(service, options);
-        readTool.setAgentContext(agentContext);
         editTool = new WorkspaceEditTool(service, options);
-        editTool.setAgentContext(agentContext);
     }
 
     @Test
     public void shouldReturnUnchangedStubOnSameRangeAndMtime() {
-        String first = String.valueOf(readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20)));
+        String first = String.valueOf(readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20), agentContext));
         Assert.assertTrue(first.contains("alpha"));
 
-        String second = String.valueOf(readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20)));
+        String second = String.valueOf(readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20), agentContext));
         Assert.assertTrue(second.contains("File unchanged since last read"));
         Assert.assertFalse(second.contains("1 | alpha"));
     }
 
     @Test
     public void shouldRereadWhenRangeDiffers() {
-        readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 1));
-        String second = String.valueOf(readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20)));
+        readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 1), agentContext);
+        String second = String.valueOf(readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20), agentContext));
         Assert.assertFalse(second.contains("File unchanged since last read"));
         Assert.assertTrue(second.contains("beta") || second.contains("alpha"));
     }
 
     @Test
     public void shouldNotReuseParentReadStateInSubAgent() {
-        readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20));
+        readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20), agentContext);
 
         ToolCollection childTools = new ToolCollection();
         childTools.addTool(readTool);
@@ -89,7 +86,7 @@ public class WorkspaceReadDedupTest {
                 childTools,
                 "child-read-1",
                 SubAgentRegistry.TYPE_GENERAL_PURPOSE);
-        ContextScopedTool.bindAll(childTools, child);
+        childTools.setAgentContext(child);
 
         String childResult = String.valueOf(childTools.execute(
                 "workspace_read", Map.of("path", "demo.txt", "start_line", 1, "line_count", 20)));
@@ -99,7 +96,7 @@ public class WorkspaceReadDedupTest {
 
     @Test
     public void shouldNotReuseParentReadStateInParallelFork() {
-        readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20));
+        readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20), agentContext);
 
         AgentContext child = agentContext.forkForParallelTask("inspect file");
         Assert.assertFalse(child.hasWorkspaceFileBeenRead(targetFile.toAbsolutePath().normalize().toString()));
@@ -107,7 +104,7 @@ public class WorkspaceReadDedupTest {
 
     @Test
     public void shouldRequireRereadWhenFileChangedBeforeEdit() throws Exception {
-        readTool.execute(Map.of("path", "demo.txt"));
+        readTool.execute(Map.of("path", "demo.txt"), agentContext);
         // 模拟外部修改
         Thread.sleep(5);
         Files.writeString(targetFile, "alpha\nbeta\nchanged\n", StandardCharsets.UTF_8);
@@ -116,14 +113,13 @@ public class WorkspaceReadDedupTest {
                 "path", "demo.txt",
                 "old_string", "beta",
                 "new_string", "BETA"
-        )));
+        ), agentContext));
         Assert.assertTrue(editResult.contains("modified since read") || editResult.contains("Read it again"));
     }
 
     @Test
     public void shouldReturnTextMetadataAndImageContentBlock() throws Exception {
-        ToolResultPayload textPayload = (ToolResultPayload) readTool.execute(
-                Map.of("file_path", "demo.txt", "offset", 2, "limit", 1));
+        ToolResultPayload textPayload = (ToolResultPayload) readTool.execute(Map.of("file_path", "demo.txt", "offset", 2, "limit", 1), agentContext);
         Assert.assertTrue(textPayload.getLlmData() instanceof Map<?, ?>);
         Map<?, ?> textData = (Map<?, ?>) textPayload.getLlmData();
         Assert.assertEquals("text", textData.get("type"));
@@ -133,7 +129,7 @@ public class WorkspaceReadDedupTest {
 
         Path image = workspaceRoot.resolve("pixel.png");
         Files.write(image, Base64.getDecoder().decode("iVBORw0KGgo="));
-        Object raw = readTool.execute(Map.of("path", "pixel.png"));
+        Object raw = readTool.execute(Map.of("path", "pixel.png"), agentContext);
         Assert.assertTrue(raw instanceof org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload);
         org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload payload =
                 (org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload) raw;
@@ -150,7 +146,7 @@ public class WorkspaceReadDedupTest {
 
     @Test
     public void shouldExposeTextContentOnlyOnceInLlmObservation() {
-        Object raw = readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20));
+        Object raw = readTool.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 20), agentContext);
         Assert.assertTrue(raw instanceof ToolResultPayload);
 
         ToolResultPayload payload = (ToolResultPayload) raw;

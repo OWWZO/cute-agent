@@ -81,9 +81,10 @@ public class BrowserToolTest {
                 .artifacts(List.of())
                 .build());
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(onlineContext(cli));
+        AgentContext context = onlineContext(cli);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("args", List.of("browser", "cookies")));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(
+                Map.of("args", List.of("browser", "cookies")), context);
 
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         // 敏感命令：模型需要完整输出才能继续推理，落库/回放/前端只保留脱敏版。
@@ -119,10 +120,9 @@ public class BrowserToolTest {
             });
             BrowserTool tool = new BrowserTool();
             AgentContext context = onlineArtifactContext(cli, workspace);
-            tool.setAgentContext(context);
 
             ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("args",
-                    List.of("xiaohongshu", "download", "https://x.test/note", "--output", "./xhs")));
+                    List.of("xiaohongshu", "download", "https://x.test/note", "--output", "./xhs")), context);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -171,10 +171,9 @@ public class BrowserToolTest {
                     .build());
             BrowserTool tool = new BrowserTool();
             AgentContext context = onlineArtifactContext(cli, workspace);
-            tool.setAgentContext(context);
 
             ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("args",
-                    List.of("browser", "click", "12")));
+                    List.of("browser", "click", "12")), context);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -212,10 +211,9 @@ public class BrowserToolTest {
             });
             BrowserTool tool = new BrowserTool();
             AgentContext context = onlineArtifactContext(cli, workspace);
-            tool.setAgentContext(context);
 
             ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
-                    "args", List.of("xiaohongshu", "download", "<signed-note-url>")));
+                    "args", List.of("xiaohongshu", "download", "<signed-note-url>")), context);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -250,10 +248,9 @@ public class BrowserToolTest {
             });
             BrowserTool tool = new BrowserTool();
             AgentContext context = onlineArtifactContext(cli, workspace);
-            tool.setAgentContext(context);
 
             ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
-                    "args", List.of("xiaohongshu", "download", "<signed-note-url>")));
+                    "args", List.of("xiaohongshu", "download", "<signed-note-url>")), context);
 
             Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
             Assert.assertEquals("opencli_execution_failed", payload.getErrorMsg());

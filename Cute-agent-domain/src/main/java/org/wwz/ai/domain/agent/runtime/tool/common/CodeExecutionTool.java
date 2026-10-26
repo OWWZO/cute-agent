@@ -2,7 +2,6 @@ package org.wwz.ai.domain.agent.runtime.tool.common;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpRequest;
@@ -23,10 +22,7 @@ import java.util.Map;
 
 /** 调用侧 Agent 直接执行 Python 源码，复用受控 code_execution Runner。 */
 @Slf4j
-@Data
 public class CodeExecutionTool implements BaseTool {
-    private AgentContext agentContext;
-
     @Override public String getName() { return "code_execution"; }
 
     @Override public String getDescription() {
@@ -72,24 +68,30 @@ public class CodeExecutionTool implements BaseTool {
         return Map.of("type", "object", "properties", properties, "required", List.of("source"));
     }
 
-    @Override @SuppressWarnings("unchecked")
+    @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = input instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
             String source = params.get("source") == null ? "" : StringUtils.trimToEmpty(String.valueOf(params.get("source")));
             if (source.isBlank()) return ToolResultPayload.failure("source 不能为空", "source 不能为空", null, "missing source");
-            ToolArtifactSource artifactSource = agentContext.requireCurrentToolArtifactSource(getName());
-            CuteConfig config = agentContext.getRuntimeDependencies().requireCuteConfig();
+            ToolArtifactSource artifactSource = context.requireCurrentToolArtifactSource(getName());
+            CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
             Map<String, Object> request = new LinkedHashMap<>(params);
-            request.put("requestId", agentContext.getSessionId());
-            request.put("sessionId", agentContext.getSessionId());
-            request.put("ownerKey", resolveOwnerKey());
+            request.put("requestId", context.getSessionId());
+            request.put("sessionId", context.getSessionId());
+            request.put("ownerKey", resolveOwnerKey(context));
             request.put("workspaceRoot", WorkspacePaths.resolveSandboxRoot(
-                    agentContext.getWorkspaceRoot(), agentContext.getSessionId()).toString());
+                    context.getWorkspaceRoot(), context.getSessionId()).toString());
             request.put("permissionProfile", "workspace");
             request.put("source", source);
             // 远端执行统一绑定当前会话工作区；返回文件再登记到当前 tool artifact source，形成可回放的产物链。
-            String body = agentContext.getRuntimeDependencies().requireRemoteHttpPort().execute(RemoteHttpRequest.builder()
+            String body = context.getRuntimeDependencies().requireRemoteHttpPort().execute(RemoteHttpRequest.builder()
                     .method("POST").url(config.getCodeInterpreterUrl() + "/v1/tool/code_execution")
                     .headers(Map.of("Content-Type", "application/json")).body(JSON.toJSONString(request))
                     .connectTimeoutSeconds(60L).readTimeoutSeconds(660L).writeTimeoutSeconds(60L).callTimeoutSeconds(660L).build());
@@ -98,18 +100,18 @@ public class CodeExecutionTool implements BaseTool {
             if (fileInfo == null) fileInfo = List.of();
             for (CodeInterpreterResponse.FileInfo info : fileInfo) {
                 // 只登记执行服务明确返回的文件，不扫描整个工作区，避免把历史产物误归入本次调用。
-                agentContext.registerGeneratedArtifact(artifactSource, File.builder().fileName(info.getFileName())
+                context.registerGeneratedArtifact(artifactSource, File.builder().fileName(info.getFileName())
                         .ossUrl(info.getOssUrl()).domainUrl(info.getDomainUrl()).fileSize(info.getFileSize())
                         .description(info.getFileName()).isInternalFile(false).build());
             }
-            if (!fileInfo.isEmpty() && agentContext.getPrinter() != null) {
+            if (!fileInfo.isEmpty() && context.getPrinter() != null) {
                 Map<String, Object> event = new LinkedHashMap<>();
                 event.put("command", "Python 代码执行产物"); event.put("toolCallId", artifactSource.getToolCallId());
                 event.put("toolName", artifactSource.getToolName());
-                event.put("requestId", agentContext.getSessionId());
-                event.put("sessionId", agentContext.getSessionId());
+                event.put("requestId", context.getSessionId());
+                event.put("sessionId", context.getSessionId());
                 event.put("fileInfo", fileInfo);
-                agentContext.getPrinter().send("file", event, null);
+                context.getPrinter().send("file", event, null);
             }
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("tool", "code_execution");
@@ -152,15 +154,15 @@ public class CodeExecutionTool implements BaseTool {
             data.put("ok", Boolean.TRUE);
             return ToolResultPayload.fromData(data);
         } catch (Exception e) {
-            log.error("{} code_execution failed", agentContext == null ? "unknown" : agentContext.getRequestId(), e);
+            log.error("{} code_execution failed", context == null ? "unknown" : context.getRequestId(), e);
             return ToolResultPayload.failureFrom("code_execution 执行失败：" + e.getMessage(), null);
         }
     }
 
-    private String resolveOwnerKey() {
-        LtmOwner owner = agentContext.getLtmOwner();
+    private String resolveOwnerKey(AgentContext context) {
+        LtmOwner owner = context.getLtmOwner();
         if (owner == null) {
-            owner = LtmOwnerResolver.resolve(agentContext.getUserId(), null);
+            owner = LtmOwnerResolver.resolve(context.getUserId(), null);
         }
         return owner.asOwnerKey();
     }

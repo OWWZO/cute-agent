@@ -65,10 +65,9 @@ public final class BrowserCodeCapability {
                 CodeModeInvocationRecorder.summarize(params), startedAt);
         try {
             BrowserTool tool = new BrowserTool();
-            tool.setAgentContext(agentContext);
             Map<String, Object> fields = BrowserCodeModeGate.withUserLock(
                     agentContext.getUserId(),
-                    () -> invoke(tool, params));
+                    () -> invoke(tool, params, agentContext));
             CodeModeInvocationRecorder.end(agentContext, invocationId, CodeModeInvocationRecorder.TOOL_BROWSER,
                     fields.get("ok") == Boolean.TRUE
                             ? ExecutionLedgerConstants.STATUS_SUCCESS
@@ -83,8 +82,8 @@ public final class BrowserCodeCapability {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> invoke(BrowserTool tool, Map<String, Object> params) {
-        Object raw = tool.execute(params);
+    private Map<String, Object> invoke(BrowserTool tool, Map<String, Object> params, AgentContext context) {
+        Object raw = tool.execute(params, context);
         Map<String, Object> fields = new LinkedHashMap<>();
         if (raw instanceof ToolResultPayload payload) {
             if (payload.getLlmData() instanceof Map<?, ?> data) {

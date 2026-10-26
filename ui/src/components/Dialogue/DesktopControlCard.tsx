@@ -87,7 +87,7 @@ const DesktopControlCard: FC<DesktopControlCardProps> = memo(({ tool }) => {
           {fields.streamUrl && !done ? (
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--color-hover)] px-3 text-ui-caption"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--color-hover)] px-3 text-ui-caption"
               onClick={openDesktop}
             >
               <PanelRightOpen className="h-3.5 w-3.5" aria-hidden="true" />
@@ -96,7 +96,7 @@ const DesktopControlCard: FC<DesktopControlCardProps> = memo(({ tool }) => {
           ) : null}
           <button
             type="button"
-            className="inline-flex h-8 items-center gap-1 rounded-[6px] bg-[var(--color-text)] px-3 text-ui-caption text-[var(--color-bg)] disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1 rounded-md bg-[var(--color-text)] px-3 text-ui-caption text-[var(--color-bg)] disabled:opacity-50"
             disabled={!fields.controlId || busy || done}
             onClick={() => void complete()}
           >

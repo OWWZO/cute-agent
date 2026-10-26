@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.mcp;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -17,12 +16,12 @@ import java.util.Map;
 
 /**
  * 搜索延迟本地/MCP 工具目录。不激活、不改 tools[]。
+ *
+ * <p>无状态实现：context 由 {@link #execute(Object, AgentContext)} 与
+ * {@link #getDescription(AgentContext)} 显式传入。</p>
  */
 @Slf4j
-@Data
 public class ToolSearchTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -31,7 +30,20 @@ public class ToolSearchTool implements BaseTool {
 
     @Override
     public String getDescription() {
-        DeferredToolCatalog catalog = resolveCatalog();
+        return buildDescription(null);
+    }
+
+    /**
+     * 描述里带延迟目录清单：清单内容来自本次请求的 ToolCollection，
+     * 因此必须走带 context 的重载才能拿到。
+     */
+    @Override
+    public String getDescription(AgentContext context) {
+        return buildDescription(context);
+    }
+
+    private String buildDescription(AgentContext context) {
+        DeferredToolCatalog catalog = resolveCatalog(context);
         int total = catalog == null ? 0 : catalog.size();
         StringBuilder desc = new StringBuilder();
         desc.append("Search ").append(total)
@@ -74,8 +86,14 @@ public class ToolSearchTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
-            DeferredToolCatalog catalog = resolveCatalog();
+            DeferredToolCatalog catalog = resolveCatalog(context);
             Map<String, Object> args = DeferredToolCall.coerceMap(input);
             String query = String.valueOf(args.getOrDefault("query", "")).trim();
             if ("null".equals(query)) {
@@ -124,11 +142,11 @@ public class ToolSearchTool implements BaseTool {
         }
     }
 
-    private DeferredToolCatalog resolveCatalog() {
-        if (agentContext == null || agentContext.getToolCollection() == null) {
+    private static DeferredToolCatalog resolveCatalog(AgentContext context) {
+        if (context == null || context.getToolCollection() == null) {
             return null;
         }
-        return agentContext.getToolCollection().getDeferredToolCatalog();
+        return context.getToolCollection().getDeferredToolCatalog();
     }
 
     private static int parseMaxResults(Object maxRaw) {

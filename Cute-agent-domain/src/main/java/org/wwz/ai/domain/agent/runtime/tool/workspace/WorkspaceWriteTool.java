@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 
 /**
  * 写入工作区文本文件。
@@ -47,10 +48,15 @@ public class WorkspaceWriteTool extends AbstractWorkspacePathTool {
 
     @Override
     public Object execute(Object input) {
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = requireInputMap(input);
-            Path workspaceRoot = requireWorkspaceRoot();
-            Path filePath = requireWritablePath(params);
+            Path workspaceRoot = requireWorkspaceRoot(context);
+            Path filePath = requireWritablePath(params, context);
             Object contentValue = params.get("content");
             if (contentValue == null) {
                 return failResult("content is required");
@@ -66,9 +72,9 @@ public class WorkspaceWriteTool extends AbstractWorkspacePathTool {
             }
             // 写入始终使用 UTF-8，并立即刷新 readState，使同一轮后续 edit 不必重复 read。
             Files.writeString(filePath, content, StandardCharsets.UTF_8);
-            if (agentContext != null) {
+            if (context != null) {
                 long mtimeMs = Files.getLastModifiedTime(filePath).toMillis();
-                agentContext.markWorkspaceFileRead(WorkspaceFileReadState.builder()
+                context.markWorkspaceFileRead(WorkspaceFileReadState.builder()
                         .absolutePath(filePath.toAbsolutePath().normalize().toString())
                         .mtimeMs(mtimeMs)
                         .startLine(1)
@@ -76,32 +82,32 @@ public class WorkspaceWriteTool extends AbstractWorkspacePathTool {
                         .contentHash(WorkspaceReadStateStore.sha256Hex(content))
                         .build());
                 // 写计划文件时同步 PlanModeState（ExitPlanMode / UI 一致）。
-                String agentPlanPath = toAgentPath(filePath);
+                String agentPlanPath = toAgentPath(filePath, context);
                 if (agentPlanPath != null
                         && agentPlanPath.replace('\\', '/').endsWith(org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore.RELATIVE_PLAN_PATH)
-                        && agentContext.getPlanModeState() != null) {
+                        && context.getPlanModeState() != null) {
                     // 计划路径对 Agent/提示词只保留虚拟相对路径
-                    agentContext.getPlanModeState().setPlan(content, agentPlanPath);
+                    context.getPlanModeState().setPlan(content, agentPlanPath);
                 }
             }
 
-            String agentPath = toAgentPath(filePath);
+            String agentPath = toAgentPath(filePath, context);
             String relativePath = toRelativePath(workspaceRoot, filePath);
             WorkspaceFileRegistration.registerLocalFile(
-                    agentContext, relativePath, filePath, "写入文件");
+                    context, relativePath, filePath, "写入文件");
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("message", "已写入文件");
             data.put("path", agentPath);
             data.put("chars", content.length());
             return okResult(data);
         } catch (WorkspaceAccessException e) {
-            log.warn("{} workspace_write failed, input={}", requestId(), input, e);
+            log.warn("{} workspace_write failed, input={}", requestId(context), input, e);
             return failResult(e.getMessage());
         } catch (IOException e) {
-            log.error("{} workspace_write io error, input={}", requestId(), input, e);
+            log.error("{} workspace_write io error, input={}", requestId(context), input, e);
             return failResult("workspace_write failed to write file");
         } catch (Exception e) {
-            log.error("{} workspace_write error, input={}", requestId(), input, e);
+            log.error("{} workspace_write error, input={}", requestId(context), input, e);
             return failResult("workspace_write execute failed");
         }
     }

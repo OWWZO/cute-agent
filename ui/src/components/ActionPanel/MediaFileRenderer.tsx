@@ -126,7 +126,7 @@ const MediaFileRenderer: CuteType.FC<MediaFileRendererProps> = React.memo((props
         )}
 
         {fileName ? (
-          <div className="flex max-w-full items-center gap-1.5 text-[12px] text-[var(--chat-text-muted)]">
+          <div className="flex max-w-full items-center gap-1.5 text-ui-sm text-[var(--chat-text-muted)]">
             <Icon className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{fileName}</span>
           </div>

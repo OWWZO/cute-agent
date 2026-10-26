@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.canvas;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.CanvasPublishToolOutput;
@@ -31,12 +30,9 @@ import java.util.Map;
  * </p>
  */
 @Slf4j
-@Data
 public class CanvasPublishTool implements BaseTool {
 
     private static final String HTML_MODE = "html";
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -85,6 +81,12 @@ public class CanvasPublishTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         String title = "Canvas";
         try {
             Map<String, Object> params = input instanceof Map<?, ?> map
@@ -100,28 +102,28 @@ public class CanvasPublishTool implements BaseTool {
             if (StringUtils.isBlank(htmlPath)) {
                 return failure(title, "html_path is required; write the file with workspace_write first");
             }
-            if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+            if (context == null || context.getRuntimeDependencies() == null) {
                 return failure(title, "canvas_publish requires an active agent context");
             }
 
-            String relativePath = resolveWorkspaceRelativePath(htmlPath);
+            String relativePath = resolveWorkspaceRelativePath(htmlPath, context);
             if (relativePath == null) {
                 return failure(title, "html_path not found or outside the active workspace: " + htmlPath);
             }
 
-            CuteConfig cuteConfig = agentContext.getRuntimeDependencies().requireCuteConfig();
+            CuteConfig cuteConfig = context.getRuntimeDependencies().requireCuteConfig();
             if (cuteConfig == null || StringUtils.isBlank(cuteConfig.getCodeInterpreterUrl())) {
                 return failure(title, "canvas_publish file service URL is not configured");
             }
 
             Path filePath = WorkspacePaths.resolveSandboxRoot(
-                            agentContext.getWorkspaceRoot(), agentContext.getSessionId())
+                            context.getWorkspaceRoot(), context.getSessionId())
                     .resolve(relativePath)
                     .normalize();
             int fileSize = (int) Math.min(Files.size(filePath), Integer.MAX_VALUE);
             String fileName = Path.of(relativePath).getFileName().toString();
-            String previewUrl = buildFileUrl(cuteConfig, "preview", relativePath);
-            String downloadUrl = buildFileUrl(cuteConfig, "download", relativePath);
+            String previewUrl = buildFileUrl(cuteConfig, "preview", relativePath, context);
+            String downloadUrl = buildFileUrl(cuteConfig, "download", relativePath, context);
 
             List<CodeInterpreterResponse.FileInfo> fileInfo = new ArrayList<>();
             fileInfo.add(CodeInterpreterResponse.FileInfo.builder()
@@ -132,8 +134,8 @@ public class CanvasPublishTool implements BaseTool {
                     .fileSize(fileSize)
                     .build());
 
-            ToolArtifactSource artifactSource = agentContext.getCurrentToolArtifactSource();
-            if (openInPanel && agentContext.getPrinter() != null) {
+            ToolArtifactSource artifactSource = context.getCurrentToolArtifactSource();
+            if (openInPanel && context.getPrinter() != null) {
                 String toolCallId = artifactSource == null ? null : artifactSource.getToolCallId();
                 CodeInterpreterResponse htmlResponse = CodeInterpreterResponse.builder()
                         .isFinal(true)
@@ -142,10 +144,10 @@ public class CanvasPublishTool implements BaseTool {
                         .data(title)
                         .codeOutput(title)
                         .build();
-                String digitalEmployee = agentContext.getToolCollection() == null
+                String digitalEmployee = context.getToolCollection() == null
                         ? null
-                        : agentContext.getToolCollection().getDigitalEmployee(getName());
-                agentContext.getPrinter().send(toolCallId, "html", htmlResponse, digitalEmployee, true);
+                        : context.getToolCollection().getDigitalEmployee(getName());
+                context.getPrinter().send(toolCallId, "html", htmlResponse, digitalEmployee, true);
             }
 
             CanvasPublishToolOutput structuredOutput = CanvasPublishToolOutput.builder()
@@ -168,13 +170,13 @@ public class CanvasPublishTool implements BaseTool {
             fields.put("salvaged", salvaged);
             return ToolResultPayload.okData(getName(), fields, structuredOutput);
         } catch (Exception e) {
-            log.error("{} canvas_publish error", agentContext == null ? "-" : agentContext.getRequestId(), e);
+            log.error("{} canvas_publish error", context == null ? "-" : context.getRequestId(), e);
             return failure(title, "canvas_publish failed: " + e.getMessage());
         }
     }
 
-    private String resolveWorkspaceRelativePath(String htmlPath) {
-        if (agentContext == null || StringUtils.isBlank(agentContext.getSessionId())) {
+    private String resolveWorkspaceRelativePath(String htmlPath, AgentContext context) {
+        if (context == null || StringUtils.isBlank(context.getSessionId())) {
             return null;
         }
         String normalized = htmlPath.trim().replace('\\', '/');
@@ -183,7 +185,7 @@ public class CanvasPublishTool implements BaseTool {
         }
         try {
             Path sessionRoot = WorkspacePaths.resolveSandboxRoot(
-                            agentContext.getWorkspaceRoot(), agentContext.getSessionId())
+                            context.getWorkspaceRoot(), context.getSessionId())
                     .toAbsolutePath()
                     .normalize();
             Path inputPath = Path.of(normalized);
@@ -201,18 +203,18 @@ public class CanvasPublishTool implements BaseTool {
             return sessionRoot.relativize(candidate).toString().replace('\\', '/');
         } catch (Exception e) {
             log.warn("{} canvas_publish html_path validation failed path={}",
-                    agentContext.getRequestId(), htmlPath, e);
+                    context.getRequestId(), htmlPath, e);
             return null;
         }
     }
 
-    private String buildFileUrl(CuteConfig cuteConfig, String operation, String relativePath) {
+    private String buildFileUrl(CuteConfig cuteConfig, String operation, String relativePath, AgentContext context) {
         String baseUrl = StringUtils.removeEnd(cuteConfig.getCodeInterpreterUrl(), "/");
         return baseUrl
                 + "/v1/file_tool/"
                 + operation
                 + "/"
-                + encodePathSegment(agentContext.getSessionId())
+                + encodePathSegment(context.getSessionId())
                 + "/"
                 + encodePath(relativePath);
     }

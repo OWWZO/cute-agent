@@ -163,7 +163,9 @@ public class ActiveAgentRunRegistry {
             return;
         }
         run.setAgentContext(agentContext);
-        agentContext.setRunCancellation(run.getCancellation());
+        // 用户 stop 令牌是外部注入的父令牌：经令牌链透传，/stop 杀得到嵌套子 Agent；
+        // 子 Agent 后续覆盖自己的任务级令牌（TaskStop）不会顶掉它。
+        agentContext.control().bindParentCancellation(run.getCancellation());
         agentContext.bindPendingInjectQueue(run.getPendingInjects());
     }
 

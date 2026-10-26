@@ -227,7 +227,7 @@ const FileList: React.FC<{
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               placeholder="搜索文件名或路径"
-              className="h-8 w-full rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] pl-8 pr-2.5 text-[13px] text-[var(--chat-text)] outline-none transition-colors placeholder:text-[var(--chat-text-muted)] focus:border-[var(--chat-border-strong)]"
+              className="h-8 w-full rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] pl-8 pr-2.5 text-ui-caption text-[var(--chat-text)] outline-none transition-colors placeholder:text-[var(--chat-text-muted)] focus:border-[var(--chat-border-strong)]"
             />
           </div>
           <div className="flex flex-wrap gap-1">

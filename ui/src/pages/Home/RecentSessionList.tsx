@@ -28,18 +28,18 @@ const RecentSessionList = memo((props: RecentSessionListProps) => {
   }
 
   return (
-    <div className="mx-auto mt-6 w-full max-w-[920px] rounded-[28px] border border-[var(--chat-border)] bg-[var(--chat-surface)]/88 p-4 shadow-[var(--shadow-sm)]">
+    <div className="mx-auto mt-6 w-full max-w-[920px] rounded-3xl bg-[var(--chat-surface)]/88 p-4 shadow-[var(--shadow-sm)]">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-[14px] font-medium text-[var(--chat-text)]">
+          <div className="text-ui-base font-medium text-[var(--chat-text)]">
             近期会话
           </div>
-          <div className="mt-1 text-[12px] text-[var(--chat-text-soft)]">
+          <div className="mt-1 text-ui-sm text-[var(--chat-text-soft)]">
             当前会话没有历史时，可手动切换到最近活跃的会话
           </div>
         </div>
         {loading ? (
-          <div className="text-[12px] text-[var(--chat-text-muted)]">加载中...</div>
+          <div className="text-ui-sm text-[var(--chat-text-muted)]">加载中...</div>
         ) : null}
       </div>
 
@@ -61,19 +61,20 @@ const RecentSessionList = memo((props: RecentSessionListProps) => {
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="truncate text-[14px] font-medium text-[var(--chat-text)]">
+                  <span className="truncate text-ui-base font-medium text-[var(--chat-text)]">
                     {session.title || "未命名会话"}
                   </span>
                   {isActive ? (
-                    <span className="rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-[11px] text-[var(--primary)]">
+                    <span className="rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-ui-sm text-[var(--primary)]">
                       当前会话
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-1 line-clamp-1 text-[12px] text-[var(--chat-text-soft)]">
+                <div className="mt-1 line-clamp-1 text-ui-sm text-[var(--chat-text-soft)]">
                   {session.latestQueryText || "暂无问题预览"}
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-[var(--chat-text-muted)]">
+                {/* 轮次计数会随运行变化，等宽数字避免刷新时整行左右抖动。 */}
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-ui-sm tabular-nums text-[var(--chat-text-muted)]">
                   <span>{STATUS_LABEL_MAP[session.status] || "未知状态"}</span>
                   <span>{session.finishedRunCount || 0} 成功</span>
                   <span>{session.failedRunCount || 0} 失败</span>
@@ -81,7 +82,7 @@ const RecentSessionList = memo((props: RecentSessionListProps) => {
                 </div>
               </div>
 
-              <div className="shrink-0 text-right text-[11px] text-[var(--chat-text-muted)]">
+              <div className="shrink-0 text-right text-ui-sm text-[var(--chat-text-muted)]">
                 <div>最近活动</div>
                 <div className="mt-1 whitespace-nowrap">
                   {formatTimestamp(Date.parse(session.lastActiveAt || "") || Date.now())}

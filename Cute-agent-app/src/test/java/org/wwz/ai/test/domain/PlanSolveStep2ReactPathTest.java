@@ -65,19 +65,7 @@ public class PlanSolveStep2ReactPathTest {
         Assert.assertEquals(1, count);
     }
 
-    @Test
-    public void shouldKeepSopInSystemWhenPresentOnContext() {
-        // 独立 session，避免 SessionPromptFreeze 复用无 SOP 的 system 前缀
-        ReactImplAgent agent = newReactAgent("必须先核对订单号再答复", "sess-ps2-sop");
-        Assert.assertTrue(agent.getSystemPrompt().contains("必须先核对订单号再答复"));
-        Assert.assertFalse(agent.getSystemPrompt().contains("{{sopPrompt}}"));
-    }
-
-    private ReactImplAgent newReactAgent(String sopPrompt) {
-        return newReactAgent(sopPrompt, "sess-ps2");
-    }
-
-    private ReactImplAgent newReactAgent(String sopPrompt, String sessionId) {
+    private ReactImplAgent newReactAgent(String sessionId) {
         CuteConfig config = new CuteConfig();
         ReflectionTestUtils.setField(config, "reactMaxSteps", 5);
         ReflectionTestUtils.setField(config, "reactModelName", "mock-model");
@@ -99,7 +87,6 @@ public class PlanSolveStep2ReactPathTest {
                 .requestId("req-ps2")
                 .sessionId(sessionId)
                 .query("q")
-                .sopPrompt(sopPrompt)
                 .toolCollection(new ToolCollection())
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config))
                 .printer(new NoopPrinter())

@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -19,10 +18,7 @@ import java.util.Optional;
  * 仅主 Agent 应挂载；子 Agent 工具池会剔除本工具。
  */
 @Slf4j
-@Data
 public class TaskStopTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -59,8 +55,14 @@ public class TaskStopTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
             String id = firstNonBlank(ToolArgs.str(params.get("task_id")), ToolArgs.str(params.get("shell_id")));
@@ -71,10 +73,10 @@ public class TaskStopTool implements BaseTool {
                         null,
                         "missing id");
             }
-            if (agentContext == null) {
+            if (context == null) {
                 return ToolResultPayload.failure("TaskStop 失败：无 AgentContext", "TaskStop 失败：无 AgentContext", null, "no context");
             }
-            Optional<RuntimeBackgroundTask> existing = agentContext.requireBackgroundTasks().get(id);
+            Optional<RuntimeBackgroundTask> existing = context.requireBackgroundTasks().get(id);
             if (existing.isEmpty()) {
                 return ToolResultPayload.failure(
                         "TaskStop 失败：任务不存在 " + id,
@@ -90,7 +92,7 @@ public class TaskStopTool implements BaseTool {
                         null,
                         "not_running");
             }
-            RuntimeBackgroundTask stopped = agentContext.requireBackgroundTasks().stop(id).orElse(before);
+            RuntimeBackgroundTask stopped = context.requireBackgroundTasks().stop(id).orElse(before);
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("message", "已停止后台任务 " + id + "（已发送取消令牌）");
             fields.put("task_id", stopped.getId());

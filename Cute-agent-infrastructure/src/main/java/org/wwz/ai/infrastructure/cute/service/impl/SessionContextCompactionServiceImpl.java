@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.memory.CompactionBudget;
@@ -79,108 +78,25 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
     private final WorkingMemoryCompactor compactor = new WorkingMemoryCompactor();
     private final ConcurrentHashMap<String, AtomicInteger> consecutiveFailures = new ConcurrentHashMap<>();
 
-    private final boolean enabled;
-    private final boolean llmEnabled;
-    private final boolean microEnabled;
-    private final boolean sessionMemoryEnabled;
-    private final double thresholdPercent;
-    private final int keepMinTokens;
-    private final int keepMinTextMessages;
-    private final int keepMaxTokens;
-    private final int maxConsecutiveFailures;
-    private final double temperature;
-    private final int messageContentCharLimit;
-    private final int microKeepRecentToolResults;
-    private final int microToolResultMaxChars;
-    private final double summaryTargetRatio;
-    private final int protectFirstN;
-    private final int protectLastN;
-    private final int contentMaxChars;
-    private final int contentHeadChars;
-    private final int contentTailChars;
-    private final int summaryInputMaxChars;
-    private final int summarizerTimeoutSeconds;
-    private final boolean persistProjection;
-    private final boolean auditEnabled;
-    private final boolean auditStoreMessages;
-    private final boolean midRunEnabled;
+    /**
+     * 压缩配置唯一来源。由 app 侧 {@code CompactionProperties} 绑定
+     * {@code autobots.autoagent.compaction.*} 后构建注入；本类不再持有摊开的配置字段，
+     * 消除「字段 vs CompactionBudget」两份配置的漂移面。
+     */
+    private final CompactionBudget budget;
 
     @Autowired
     public SessionContextCompactionServiceImpl(
             ObjectProvider<CuteRuntimeDependencies> runtimeDependenciesProvider,
             SessionWorkingMemoryService sessionWorkingMemoryService,
             IWorkingMemoryCompactionDao workingMemoryCompactionDao,
-            @Value("${autobots.autoagent.compaction.enabled:true}") boolean enabled,
-            @Value("${autobots.autoagent.compaction.llm-enabled:true}") boolean llmEnabled,
-            @Value("${autobots.autoagent.compaction.micro-enabled:true}") boolean microEnabled,
-            @Value("${autobots.autoagent.compaction.session-memory-enabled:false}") boolean sessionMemoryEnabled,
-            @Value("${autobots.autoagent.compaction.threshold-percent:0.50}") double thresholdPercent,
-            @Value("${autobots.autoagent.compaction.keep-min-tokens:10000}") int keepMinTokens,
-            @Value("${autobots.autoagent.compaction.keep-min-text-messages:5}") int keepMinTextMessages,
-            @Value("${autobots.autoagent.compaction.keep-max-tokens:40000}") int keepMaxTokens,
-            @Value("${autobots.autoagent.compaction.max-consecutive-failures:3}") int maxConsecutiveFailures,
-            @Value("${autobots.autoagent.compaction.temperature:0.2}") double temperature,
-            @Value("${autobots.autoagent.compaction.message-content-char-limit:4000}") int messageContentCharLimit,
-            @Value("${autobots.autoagent.compaction.micro-keep-recent-tool-results:5}") int microKeepRecentToolResults,
-             @Value("${autobots.autoagent.compaction.micro-tool-result-max-chars:8000}") int microToolResultMaxChars,
-             @Value("${autobots.autoagent.compaction.summary-target-ratio:0.20}") double summaryTargetRatio,
-             @Value("${autobots.autoagent.compaction.protect-first-n:3}") int protectFirstN,
-             @Value("${autobots.autoagent.compaction.protect-last-n:8}") int protectLastN,
-             @Value("${autobots.autoagent.compaction.content-max-chars:6000}") int contentMaxChars,
-             @Value("${autobots.autoagent.compaction.content-head-chars:4000}") int contentHeadChars,
-             @Value("${autobots.autoagent.compaction.content-tail-chars:1500}") int contentTailChars,
-             @Value("${autobots.autoagent.compaction.summary-input-max-chars:160000}") int summaryInputMaxChars,
-             @Value("${autobots.autoagent.compaction.summarizer-timeout-seconds:120}") int summarizerTimeoutSeconds,
-            @Value("${autobots.autoagent.compaction.persist-projection:true}") boolean persistProjection,
-            @Value("${autobots.autoagent.compaction.audit-enabled:true}") boolean auditEnabled,
-            @Value("${autobots.autoagent.compaction.audit-store-messages:true}") boolean auditStoreMessages,
-            @Value("${autobots.autoagent.compaction.mid-run-enabled:true}") boolean midRunEnabled) {
+            CompactionBudget budget) {
         this.runtimeDependenciesProvider = runtimeDependenciesProvider;
         this.sessionWorkingMemoryService = sessionWorkingMemoryService;
         this.workingMemoryCompactionDao = workingMemoryCompactionDao;
-        this.enabled = enabled;
-        this.llmEnabled = llmEnabled;
-        this.microEnabled = microEnabled;
-        this.sessionMemoryEnabled = sessionMemoryEnabled;
-        this.thresholdPercent = thresholdPercent;
-        this.keepMinTokens = keepMinTokens;
-        this.keepMinTextMessages = keepMinTextMessages;
-        this.keepMaxTokens = keepMaxTokens;
-        this.maxConsecutiveFailures = maxConsecutiveFailures;
-        this.temperature = temperature;
-        this.messageContentCharLimit = messageContentCharLimit;
-        this.microKeepRecentToolResults = microKeepRecentToolResults;
-        this.microToolResultMaxChars = microToolResultMaxChars;
-        this.summaryTargetRatio = summaryTargetRatio;
-        this.protectFirstN = protectFirstN;
-        this.protectLastN = protectLastN;
-        this.contentMaxChars = contentMaxChars;
-        this.contentHeadChars = contentHeadChars;
-        this.contentTailChars = contentTailChars;
-        this.summaryInputMaxChars = summaryInputMaxChars;
-        this.summarizerTimeoutSeconds = summarizerTimeoutSeconds;
-        this.persistProjection = persistProjection;
-        this.auditEnabled = auditEnabled;
-        this.auditStoreMessages = auditStoreMessages;
-        this.midRunEnabled = midRunEnabled;
+        this.budget = budget;
     }
 
-    public SessionContextCompactionServiceImpl(
-            ObjectProvider<CuteRuntimeDependencies> runtimeDependenciesProvider,
-            SessionWorkingMemoryService sessionWorkingMemoryService,
-            IWorkingMemoryCompactionDao workingMemoryCompactionDao,
-            boolean enabled, boolean llmEnabled, boolean microEnabled, boolean sessionMemoryEnabled,
-            double thresholdPercent, int keepMinTokens, int keepMinTextMessages,
-            int keepMaxTokens, int maxConsecutiveFailures, double temperature, int messageContentCharLimit,
-            int microKeepRecentToolResults, int microToolResultMaxChars,
-            boolean persistProjection, boolean auditEnabled, boolean auditStoreMessages, boolean midRunEnabled) {
-        this(runtimeDependenciesProvider, sessionWorkingMemoryService, workingMemoryCompactionDao,
-                enabled, llmEnabled, microEnabled, sessionMemoryEnabled, thresholdPercent,
-                keepMinTokens, keepMinTextMessages, keepMaxTokens, maxConsecutiveFailures, temperature,
-                messageContentCharLimit, microKeepRecentToolResults, microToolResultMaxChars,
-                0.20d, 3, 8, 6000, 4000, 1500, 160000, 120,
-                persistProjection, auditEnabled, auditStoreMessages, midRunEnabled);
-    }
     private CuteRuntimeDependencies runtimeDependencies() {
         return runtimeDependenciesProvider.getObject();
     }
@@ -394,7 +310,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                                              LtmFlushParity flushParity,
                                              PromptShape promptShape,
                                              ContextTokenTracker.Snapshot tokenSnapshot) {
-        if (!midRunEnabled) {
+        if (!budget.isMidRunEnabled()) {
             return messages == null ? List.of() : messages;
         }
         FLUSH_PARITY.set(flushParity);
@@ -642,6 +558,13 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
     }
 
     protected CompactionBudget resolveBudget() {
+        // 唯一需要运行时解析的是模型窗口；其余配置全部来自构造期注入的 budget。
+        return budget.toBuilder()
+                .contextWindow(resolveContextWindow())
+                .build();
+    }
+
+    private int resolveContextWindow() {
         int contextWindow = CompactionBudget.DEFAULT_CONTEXT_WINDOW;
         try {
             CuteConfig config = runtimeDependencies().requireCuteConfig();
@@ -653,30 +576,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
         } catch (Exception e) {
             log.debug("resolve compact budget fallback defaults: {}", e.getMessage());
         }
-        return CompactionBudget.builder()
-                .enabled(enabled)
-                .llmEnabled(llmEnabled)
-                .microEnabled(microEnabled)
-                .sessionMemoryEnabled(sessionMemoryEnabled)
-                .contextWindow(contextWindow)
-                .thresholdPercent(thresholdPercent)
-                .keepMinTokens(keepMinTokens)
-                .keepMinTextMessages(keepMinTextMessages)
-                .keepMaxTokens(keepMaxTokens)
-                .maxConsecutiveFailures(maxConsecutiveFailures)
-                .temperature(temperature)
-                .messageContentCharLimit(messageContentCharLimit)
-                .summaryTargetRatio(summaryTargetRatio)
-                .protectFirstN(protectFirstN)
-                .protectLastN(protectLastN)
-                .contentMaxChars(contentMaxChars)
-                .contentHeadChars(contentHeadChars)
-                .contentTailChars(contentTailChars)
-                .summaryInputMaxChars(summaryInputMaxChars)
-                .summarizerTimeoutSeconds(summarizerTimeoutSeconds)
-                .microKeepRecentToolResults(microKeepRecentToolResults)
-                .microToolResultMaxChars(microToolResultMaxChars)
-                .build();
+        return contextWindow;
     }
 
     private String resolveCompactModelName() {
@@ -729,7 +629,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                                          List<Message> result,
                                          String strategy,
                                          CompactionBudget budget) {
-        if (!persistProjection || STRATEGY_ABORT_UNCHANGED.equals(strategy) || result == null || result.isEmpty()) {
+        if (!budget.isPersistProjection() || STRATEGY_ABORT_UNCHANGED.equals(strategy) || result == null || result.isEmpty()) {
             return null;
         }
         if (result.equals(original)) {
@@ -788,7 +688,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                                        CompactionBudget budget,
                                        String errorMessage,
                                        String compactRequestId) {
-        if (!auditEnabled || workingMemoryCompactionDao == null || StringUtils.isBlank(sessionId)) {
+        if (!budget.isAuditEnabled() || workingMemoryCompactionDao == null || StringUtils.isBlank(sessionId)) {
             return;
         }
         if (after == null || after.isEmpty()) {
@@ -827,8 +727,8 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                     .afterMessageCount(after.size())
                     .thresholdTokens(budget == null ? 0 : budget.threshold())
                     .summaryText(summary)
-                    .beforeMessagesJson(auditStoreMessages ? toAuditJson(before) : null)
-                    .afterMessagesJson(auditStoreMessages ? toAuditJson(after) : null)
+                    .beforeMessagesJson(budget.isAuditStoreMessages() ? toAuditJson(before) : null)
+                    .afterMessagesJson(budget.isAuditStoreMessages() ? toAuditJson(after) : null)
                     .errorMessage(StringUtils.left(errorMessage, 1000))
                     .deleted(0)
                     .build();

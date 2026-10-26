@@ -37,12 +37,6 @@ public class BashTool implements BaseTool {
     private final SkillRuntimeOptions skillRuntimeOptions;
     private final SkillVirtualPaths skillVirtualPaths;
 
-    private AgentContext agentContext;
-
-    public void setAgentContext(AgentContext agentContext) {
-        this.agentContext = agentContext;
-    }
-
     @Override
     public String getName() {
         return TOOL_NAME;
@@ -87,6 +81,12 @@ public class BashTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             if (!(input instanceof Map<?, ?> raw)) {
                 return ToolResultPayload.failureFrom("bash 参数必须是对象", null);
@@ -95,42 +95,42 @@ public class BashTool implements BaseTool {
             if (command.isBlank()) {
                 return ToolResultPayload.failureFrom("command 不能为空", null);
             }
-            if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+            if (context == null || context.getRuntimeDependencies() == null) {
                 return ToolResultPayload.failureFrom("AgentContext 未就绪", null);
             }
 
-            CuteConfig config = agentContext.getRuntimeDependencies().requireCuteConfig();
+            CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
             if (StringUtils.isBlank(config.getCodeInterpreterUrl())) {
                 return ToolResultPayload.failureFrom("codeInterpreterUrl 未配置，无法调用沙箱 bash", null);
             }
 
-            String sessionId = StringUtils.defaultIfBlank(agentContext.getSessionId(), agentContext.getRequestId());
+            String sessionId = StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId());
             String workspaceRoot = WorkspacePaths.resolveSandboxRoot(
-                    agentContext.getWorkspaceRoot(), sessionId).toString();
+                    context.getWorkspaceRoot(), sessionId).toString();
             String skillLibraryRoot = null;
             if (skillVirtualPaths != null && skillVirtualPaths.isEnabled()) {
                 try {
                     skillLibraryRoot = skillVirtualPaths.requireLibraryRoot().toString();
                 } catch (Exception e) {
-                    log.warn("{} skill library root unavailable: {}", agentContext.getRequestId(), e.getMessage());
+                    log.warn("{} skill library root unavailable: {}", context.getRequestId(), e.getMessage());
                 }
             }
 
             Map<String, Object> request = new LinkedHashMap<>();
             request.put("requestId", sessionId);
             request.put("sessionId", sessionId);
-            request.put("ownerKey", resolveOwnerKey());
+            request.put("ownerKey", resolveOwnerKey(context));
             request.put("command", command);
             request.put("workspaceRoot", workspaceRoot);
             if (skillLibraryRoot != null) {
                 request.put("skillLibraryRoot", skillLibraryRoot);
             }
-            request.put("disabledSkillNames", disabledSkillNames());
+            request.put("disabledSkillNames", disabledSkillNames(context));
             request.put("timeoutSeconds", resolveTimeoutSec(raw.get("timeout_sec")));
             request.put("maxOutputChars",
                     skillRuntimeOptions == null ? 64000 : skillRuntimeOptions.getBashOutputMaxChars());
 
-            String body = agentContext.getRuntimeDependencies().requireRemoteHttpPort().execute(
+            String body = context.getRuntimeDependencies().requireRemoteHttpPort().execute(
                     RemoteHttpRequest.builder()
                             .method("POST")
                             .url(config.getCodeInterpreterUrl() + "/v1/tool/bash")
@@ -169,7 +169,7 @@ public class BashTool implements BaseTool {
             if (fileInfo instanceof List<?> files && !files.isEmpty()) {
                 List<Map<String, Object>> produced = new ArrayList<>();
                 List<Map<String, Object>> eventFileInfo = new ArrayList<>();
-                ToolArtifactSource artifactSource = agentContext.getCurrentToolArtifactSource();
+                ToolArtifactSource artifactSource = context.getCurrentToolArtifactSource();
                 for (Object item : files) {
                     if (!(item instanceof Map<?, ?> rawFile)) {
                         continue;
@@ -197,7 +197,7 @@ public class BashTool implements BaseTool {
                                 rawFile.get("ossUrl"), rawFile.get("oss_url")));
                         Integer size = integerValue(fileSize);
                         if (artifactSource != null) {
-                            agentContext.registerGeneratedArtifact(artifactSource, File.builder()
+                            context.registerGeneratedArtifact(artifactSource, File.builder()
                                     .fileName(String.valueOf(fileName))
                                     .ossUrl(downloadUrl)
                                     .domainUrl(previewUrl)
@@ -226,7 +226,7 @@ public class BashTool implements BaseTool {
                 if (!produced.isEmpty()) {
                     data.put("produced_files", produced);
                 }
-                if (!eventFileInfo.isEmpty() && agentContext.getPrinter() != null) {
+                if (!eventFileInfo.isEmpty() && context.getPrinter() != null) {
                     Map<String, Object> event = new LinkedHashMap<>();
                     event.put("command", "bash 执行产物");
                     event.put("requestId", sessionId);
@@ -236,13 +236,13 @@ public class BashTool implements BaseTool {
                         event.put("toolName", artifactSource.getToolName());
                     }
                     event.put("fileInfo", eventFileInfo);
-                    agentContext.getPrinter().send("file", event, null);
+                    context.getPrinter().send("file", event, null);
                 }
             }
             return ToolResultPayload.fromData(data);
         } catch (Exception e) {
             log.error("{} bash remote execute error, input={}",
-                    agentContext == null ? "unknown" : agentContext.getRequestId(),
+                    context == null ? "unknown" : context.getRequestId(),
                     input,
                     e);
             return ToolResultPayload.failureFrom(
@@ -251,19 +251,19 @@ public class BashTool implements BaseTool {
         }
     }
 
-    private String resolveOwnerKey() {
-        LtmOwner owner = agentContext.getLtmOwner();
+    private String resolveOwnerKey(AgentContext context) {
+        LtmOwner owner = context.getLtmOwner();
         if (owner == null) {
-            owner = LtmOwnerResolver.resolve(agentContext.getUserId(), null);
+            owner = LtmOwnerResolver.resolve(context.getUserId(), null);
         }
         return owner.asOwnerKey();
     }
 
-    private List<String> disabledSkillNames() {
-        if (agentContext == null || agentContext.getDisabledSkillNames() == null) {
+    private List<String> disabledSkillNames(AgentContext context) {
+        if (context == null || context.getDisabledSkillNames() == null) {
             return List.of();
         }
-        return new ArrayList<>(agentContext.getDisabledSkillNames());
+        return new ArrayList<>(context.getDisabledSkillNames());
     }
 
     private int resolveTimeoutSec(Object timeoutSecValue) {

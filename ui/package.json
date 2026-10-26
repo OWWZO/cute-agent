@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build --mode production",
     "test": "vitest run",
     "lint": "eslint .",
+    "check:tokens": "node scripts/check-design-tokens.mjs",
     "sync:opencli-catalog": "node scripts/generate-opencli-catalog.mjs",
     "openui:build": "node scripts/openui-generate.mjs",
     "openui:check": "node scripts/openui-generate.mjs --check",

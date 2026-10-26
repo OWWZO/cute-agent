@@ -1,7 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.tool.browser;
 
 import com.alibaba.fastjson.JSON;
-import lombok.Setter;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.AgentBrowserSession;
 import org.wwz.ai.domain.agent.adapter.port.AgentBrowserSessionPort;
@@ -27,15 +26,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-@Setter
 public class AgentBrowserTool implements BaseTool {
 
     public static final String TOOL_NAME = "agent_browser";
     private static final String KERNEL_API_KEY = "KERNEL_API_KEY";
     private static final String BROWSER_TIMEOUT_TEXT = "Agent 浏览器操作超时";
     private static final String REBUILT_NOTICE = "Agent 浏览器已重建，之前的页面状态已丢失。";
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -55,6 +51,13 @@ public class AgentBrowserTool implements BaseTool {
     @Override
     @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
         Map<String, Object> params = input instanceof Map<?, ?> map
                 ? new LinkedHashMap<>((Map<String, Object>) map)
                 : new LinkedHashMap<>();
@@ -62,15 +65,15 @@ public class AgentBrowserTool implements BaseTool {
         if (args.isEmpty()) {
             return ToolResultPayload.failure("args 不能为空", "args 不能为空", null, "missing args");
         }
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             return ToolResultPayload.failure("运行时未装配", "运行时未装配", null, "runtime_unavailable");
         }
-        String userId = StringUtils.trimToNull(agentContext.getUserId());
+        String userId = StringUtils.trimToNull(context.getUserId());
         if (userId == null) {
             return ToolResultPayload.failure("缺少用户身份", "缺少用户身份", null, "missing userId");
         }
 
-        CuteRuntimeDependencies deps = agentContext.getRuntimeDependencies();
+        CuteRuntimeDependencies deps = context.getRuntimeDependencies();
         AgentBrowserSessionPort sessionPort = deps.getOptionalAgentBrowserSessionPort();
         if (sessionPort == null || !sessionPort.isConfigured()) {
             return ToolResultPayload.failure("Agent 浏览器未配置", "Agent 浏览器未配置", null,
@@ -83,7 +86,7 @@ public class AgentBrowserTool implements BaseTool {
         }
         long budgetMs = BrowserCliSupport.resolveTimeout(params.get("timeout_ms"), properties);
         long started = System.nanoTime();
-        Execution execution = executeForUser(args, userId, sessionPort, cli, properties, budgetMs, started);
+        Execution execution = executeForUser(context, args, userId, sessionPort, cli, properties, budgetMs, started);
         if (execution.failure != null) {
             return execution.failure;
         }
@@ -91,7 +94,7 @@ public class AgentBrowserTool implements BaseTool {
         CliResult result = execution.result;
         List<String> rewritten = execution.rewritten;
         Map<String, Object> fields = BrowserCliSupport.toFields(result, session.getCdpWsUrl());
-        BrowserCliSupport.publishViewport(agentContext, String.valueOf(fields.get("stdout")), fields);
+        BrowserCliSupport.publishViewport(context, String.valueOf(fields.get("stdout")), fields);
         if (session.isReconstructed()) {
             fields.put("notice", REBUILT_NOTICE);
         }
@@ -127,8 +130,9 @@ public class AgentBrowserTool implements BaseTool {
         return ToolResultPayload.okData(TOOL_NAME, fields);
     }
 
-    private Execution executeForUser(List<String> args,
-                                            String userId,
+    private Execution executeForUser(AgentContext context,
+                                            List<String> args,
+                                             String userId,
                                              AgentBrowserSessionPort sessionPort,
                                             CliExecutionPort cli,
                                             OpenCliProperties properties,
@@ -165,14 +169,14 @@ public class AgentBrowserTool implements BaseTool {
         Map<String, String> env = new LinkedHashMap<>();
         env.put("OPENCLI_CDP_ENDPOINT", session.getCdpWsUrl());
         env.put("OPENCLI_CACHE_DIR", BrowserCliSupport.resolveCacheDir(properties, userId));
-        ToolArtifactSource source = agentContext.getCurrentToolArtifactSource();
+        ToolArtifactSource source = context.getCurrentToolArtifactSource();
         CliArtifactCapturePlan capturePlan = CliArtifactCaptureCoordinator.plan(
                 TOOL_NAME,
                 args,
                 processArgs,
-                agentContext.getWorkspaceRoot(),
+                context.getWorkspaceRoot(),
                 source == null ? null : source.getToolCallId(),
-                agentContext.getRequestId());
+                context.getRequestId());
         if (!capturePlan.isValid()) {
             return Execution.failed(BrowserCliSupport.captureFailure(capturePlan), rewritten, CliArtifactMaterialization.empty());
         }
@@ -185,7 +189,7 @@ public class AgentBrowserTool implements BaseTool {
                 result = cli.exec(CliInvocation.builder()
                         .tool(properties.getCommand())
                         .args(capturePlan.getRewrittenArgs())
-                        .cwd(agentContext.getWorkspaceRoot())
+                        .cwd(context.getWorkspaceRoot())
                         .env(env)
                         .unsetEnv(List.of(KERNEL_API_KEY))
                         .timeoutMs(remaining)
@@ -194,16 +198,16 @@ public class AgentBrowserTool implements BaseTool {
                         .build());
             } catch (RuntimeException e) {
                 CliArtifactMaterialization materialization = BrowserCliSupport.materialize(
-                        agentContext, capturePlan, baseline, List.of(), "agent_browser 执行产物");
+                        context, capturePlan, baseline, List.of(), "agent_browser 执行产物");
                 return Execution.failed(BrowserCliSupport.cliFailure(materialization), rewritten, materialization);
             }
             if (result == null) {
                 CliArtifactMaterialization materialization = BrowserCliSupport.materialize(
-                        agentContext, capturePlan, baseline, List.of(), "agent_browser 执行产物");
+                        context, capturePlan, baseline, List.of(), "agent_browser 执行产物");
                 return Execution.failed(BrowserCliSupport.cliFailure(materialization), rewritten, materialization);
             }
             CliArtifactMaterialization materialization = BrowserCliSupport.materialize(
-                    agentContext, capturePlan, baseline, result.getArtifacts(), "agent_browser 执行产物");
+                    context, capturePlan, baseline, result.getArtifacts(), "agent_browser 执行产物");
             return Execution.completed(session, result, rewritten, materialization);
         } catch (CliArtifactCaptureCoordinator.CliArtifactCaptureException e) {
             return Execution.failed(ToolResultPayload.failure(

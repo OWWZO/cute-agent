@@ -22,10 +22,22 @@ type Props = {
 };
 
 const OPTIONS: Array<{ key: ThinkingEffort; label: string }> = [
-  { key: null, label: "关闭" },
-  { key: "low", label: "低" },
-  { key: "medium", label: "中" },
-  { key: "high", label: "高" },
+  {
+    key: null,
+    label: "关闭"
+  },
+  {
+    key: "low",
+    label: "低"
+  },
+  {
+    key: "medium",
+    label: "中"
+  },
+  {
+    key: "high",
+    label: "高"
+  },
 ];
 
 const ThinkingToggle: CuteType.FC<Props> = ({
@@ -69,7 +81,7 @@ const ThinkingToggle: CuteType.FC<Props> = ({
         align="start"
         side="bottom"
         sideOffset={10}
-        className="w-[140px] rounded-[18px] border border-black/[0.04] bg-white p-1 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.28)]"
+        className="w-[140px] rounded-2xl border border-black/[0.04] bg-white p-1 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.28)]"
       >
         <div className="px-2.5 pb-1 pt-1.5 text-ui-xs font-medium text-foreground-subtle">
           深度思考
@@ -81,7 +93,7 @@ const ThinkingToggle: CuteType.FC<Props> = ({
               key={o.label}
               type="button"
               className={cn(
-                "flex w-full items-center gap-1.5 rounded-[12px] px-2 py-1.5 text-left text-ui-sm transition-colors",
+                "flex w-full items-center gap-1.5 rounded-xl px-2 py-1.5 text-left text-ui-sm transition-colors",
                 active ? "bg-hover" : "hover:bg-hover/80"
               )}
               onClick={() => {

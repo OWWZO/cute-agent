@@ -122,21 +122,21 @@ function KindBadge({ kind, className }: { kind: FileKind; className?: string }) 
   // 对齐 ClawsGO：X / T / 图片图标字母角标
   if (kind === "xlsx") {
     return (
-      <span className={cn("text-ui-base font-semibold tracking-tight", className)}>
+      <span className={cn("text-ui-base font-semibold tracking-[-0.02em]", className)}>
         X
       </span>
     );
   }
   if (kind === "md" || kind === "pdf" || kind === "file" || kind === "css") {
     return (
-      <span className={cn("text-ui-base font-semibold tracking-tight", className)}>
+      <span className={cn("text-ui-base font-semibold tracking-[-0.02em]", className)}>
         T
       </span>
     );
   }
   if (kind === "html" || kind === "code" || kind === "py") {
     return (
-      <span className={cn("text-ui-sm font-semibold tracking-tight", className)}>
+      <span className={cn("text-ui-sm font-semibold", className)}>
         &lt;/&gt;
       </span>
     );

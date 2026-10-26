@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { FLIP_TRANSITION } from "@/lib/motion";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 /**
  * 逐字符 3D 翻页数字（移植自 ZCode `components/ui/flip-metric-value.tsx`）。
@@ -8,41 +10,6 @@ import { cn } from "@/lib/utils";
  * 用于工具卡尾部的 `+N −M` 计数：数字变化时单槽绕 X 轴翻转，不整块跳动。
  * 非数字字符（小数点、单位）走静态 inline，避免混排时视觉中线不一致。
  */
-
-const FLIP_TRANSITION = {
-  duration: 0.16,
-  ease: [0.4, 0, 0.2, 1],
-} as const;
-
-function usePrefersReducedMotion() {
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => {
-      setPrefersReducedMotion(query.matches);
-    };
-    update();
-
-    if (typeof query.addEventListener === "function") {
-      query.addEventListener("change", update);
-      return () => {
-        query.removeEventListener("change", update);
-      };
-    }
-
-    query.addListener(update);
-    return () => {
-      query.removeListener(update);
-    };
-  }, []);
-
-  return prefersReducedMotion;
-}
 
 function isDigitCharacter(character: string) {
   return /^[0-9]$/.test(character);

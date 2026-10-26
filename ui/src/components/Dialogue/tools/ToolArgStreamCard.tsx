@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ToolArgStreamPreview } from "./ToolArgStreamPreview";
+import { useToolCardOpen } from "./useToolCardOpen";
 
 type ToolArgStreamCardProps = {
   icon: ReactNode;
@@ -35,7 +36,7 @@ export function ToolArgStreamCard({
   streaming,
   testId,
 }: ToolArgStreamCardProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useToolCardOpen(testId ?? "", false);
 
   return (
     <div

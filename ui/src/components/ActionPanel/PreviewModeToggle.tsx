@@ -48,7 +48,7 @@ export function PreviewModeToggle(props: PreviewModeToggleProps) {
             title={label}
             onClick={() => onChange(key)}
             className={cn(
-              "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] transition-colors",
+              "inline-flex items-center gap-1 rounded-md px-2 py-1 text-ui-sm transition-colors",
               active
                 ? "bg-[var(--chat-surface)] text-[var(--chat-text)] shadow-sm"
                 : "text-[var(--chat-text-muted)] hover:text-[var(--chat-text)]"

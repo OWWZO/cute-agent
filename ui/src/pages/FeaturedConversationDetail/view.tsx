@@ -57,7 +57,7 @@ export function FeaturedConversationDetailView(
 
   const detail = props.detail;
   const backClassName =
-    "inline-flex h-9 items-center gap-2 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3.5 text-[13px] font-medium text-[var(--chat-text-soft)] shadow-[var(--shadow-sm)] transition hover:text-[var(--chat-text)]";
+    "inline-flex h-9 items-center gap-2 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3.5 text-ui-caption font-medium text-[var(--chat-text-soft)] shadow-[var(--shadow-sm)] transition hover:text-[var(--chat-text)]";
 
   const backControl =
     props.embedded && props.onBack ? (
@@ -85,16 +85,16 @@ export function FeaturedConversationDetailView(
 
       {!detail.contentAvailable || !hasRenderableContent ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-16 sm:px-6">
-          <div className="mx-auto max-w-[720px] rounded-[28px] border border-dashed border-[var(--chat-border)] bg-[var(--chat-surface)] px-6 py-10 sm:px-8">
-            <div className="text-[18px] font-semibold tracking-tight text-[var(--chat-text)]">
+          <div className="mx-auto max-w-[720px] rounded-3xl border border-dashed border-[var(--chat-border)] bg-[var(--chat-surface)] px-6 py-10 sm:px-8">
+            <div className="text-ui-xl font-semibold tracking-[-0.02em] text-[var(--chat-text)]">
               正文暂不可用
             </div>
             {detail.summary ? (
-              <p className="mt-3 text-[14px] leading-7 text-[var(--chat-text-soft)]">
+              <p className="mt-3 text-ui-base leading-7 text-[var(--chat-text-soft)]">
                 {detail.summary}
               </p>
             ) : null}
-            <p className="mt-4 text-[13px] leading-6 text-[var(--chat-text-muted)]">
+            <p className="mt-4 text-ui-caption leading-6 text-[var(--chat-text-muted)]">
               {resolveUnavailableReason(detail)}
             </p>
           </div>

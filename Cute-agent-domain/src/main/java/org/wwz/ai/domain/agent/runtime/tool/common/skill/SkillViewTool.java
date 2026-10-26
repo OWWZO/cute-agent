@@ -42,12 +42,6 @@ public class SkillViewTool implements BaseTool {
     private final SkillRuntimeLayout skillRuntimeLayout;
     private final SkillScriptDiscoverer skillScriptDiscoverer;
 
-    private AgentContext agentContext;
-
-    public void setAgentContext(AgentContext agentContext) {
-        this.agentContext = agentContext;
-    }
-
     @Override
     public String getName() {
         return NAME;
@@ -81,6 +75,12 @@ public class SkillViewTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             if (!(input instanceof Map<?, ?> rawInput)) {
                 return ToolResultPayload.failureFrom("skill_view 参数格式错误，必须传入对象类型参数。", null);
@@ -89,7 +89,7 @@ public class SkillViewTool implements BaseTool {
             if (skillName.isBlank()) {
                 return ToolResultPayload.failureFrom("name is required", null);
             }
-            if (isDisabled(skillName)) {
+            if (isDisabled(skillName, context)) {
                 return ToolResultPayload.failureFrom(
                         "skill 「" + skillName + "」已在本会话关闭，请在能力面板中重新启用。", null);
             }
@@ -106,18 +106,18 @@ public class SkillViewTool implements BaseTool {
             detail.put("hint", "Use one of the available file paths listed above");
             return ToolResultPayload.failureFrom(e.getMessage(), detail);
         } catch (SkillLoadException e) {
-            log.warn("{} skill_view load failed, input={}", requestId(), input, e);
+            log.warn("{} skill_view load failed, input={}", requestId(context), input, e);
             return ToolResultPayload.failureFrom(e.getMessage(), null);
         } catch (Exception e) {
-            log.error("{} skill_view execute error, input={}", requestId(), input, e);
+            log.error("{} skill_view execute error, input={}", requestId(context), input, e);
             return ToolResultPayload.failureFrom("skill_view execute failed", null);
         }
     }
 
-    public String promptIndex() {
-        Set<String> disabled = agentContext == null || agentContext.getDisabledSkillNames() == null
+    public String promptIndex(AgentContext context) {
+        Set<String> disabled = context == null || context.getDisabledSkillNames() == null
                 ? Set.of()
-                : agentContext.getDisabledSkillNames();
+                : context.getDisabledSkillNames();
         return SkillPromptIndexBuilder.build(skillCatalog.list(), disabled);
     }
 
@@ -221,13 +221,13 @@ public class SkillViewTool implements BaseTool {
         return value == null ? null : String.valueOf(value);
     }
 
-    private boolean isDisabled(String skillName) {
-        return agentContext != null
-                && agentContext.getDisabledSkillNames() != null
-                && agentContext.getDisabledSkillNames().contains(skillName);
+    private boolean isDisabled(String skillName, AgentContext context) {
+        return context != null
+                && context.getDisabledSkillNames() != null
+                && context.getDisabledSkillNames().contains(skillName);
     }
 
-    private String requestId() {
-        return agentContext == null ? "unknown" : agentContext.getRequestId();
+    private String requestId(AgentContext context) {
+        return context == null ? "unknown" : context.getRequestId();
     }
 }

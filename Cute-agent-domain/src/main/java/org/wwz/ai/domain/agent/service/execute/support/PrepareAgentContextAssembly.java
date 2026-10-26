@@ -114,12 +114,10 @@ public class PrepareAgentContextAssembly {
                 .dateInfo(DateUtil.CurrentDateInfo())
                 .productFiles(new ArrayList<>(convertFiles(request.getSessionFiles())))
                 .workspaceRoot(resolveWorkspaceRoot(request.getSessionId()))
-                .sopPrompt(request.getSopPrompt())
                 .basePrompt(request.getBasePrompt())
                 .workingMemoryMessages(request.getWorkingMemoryMessages())
                 .agentType(request.getAgentType())
                 .isStream(Objects.nonNull(request.getIsStream()) ? request.getIsStream() : false)
-                .templateType("dataAgent".equals(request.getOutputStyle()) ? "table" : "empty")
                 .executionRecorder(agentExecutionRecorder)
                 .runtimeDependencies(cuteRuntimeDependencies)
                 .build();

@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.mcp;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -16,10 +15,7 @@ import java.util.Map;
  * 读取 MCP resource。
  */
 @Slf4j
-@Data
 public class ReadMcpResourceTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -55,8 +51,14 @@ public class ReadMcpResourceTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
-            McpToolExecutor executor = resolveExecutor();
+            McpToolExecutor executor = resolveExecutor(context);
             if (executor == null) {
                 return ToolResultPayload.failure("ReadMcpResource 失败：McpToolExecutor 不可用",
                         "ReadMcpResource 失败：McpToolExecutor 不可用", null, "no executor");
@@ -81,11 +83,11 @@ public class ReadMcpResourceTool implements BaseTool {
         }
     }
 
-    private McpToolExecutor resolveExecutor() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private McpToolExecutor resolveExecutor(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             return null;
         }
-        return agentContext.getRuntimeDependencies().getOptionalMcpToolExecutor();
+        return context.getRuntimeDependencies().getOptionalMcpToolExecutor();
     }
 
     private static String stringArg(Map<String, Object> args, String key) {

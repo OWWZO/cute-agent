@@ -23,7 +23,7 @@ const Card: CuteType.FC<{ data: Record<string, any> }> = (props) => {
 
   if (!items.length) {
     return (
-      <div className="flex h-[120px] w-full items-center justify-center text-[13px] text-[var(--chat-text-soft)]">
+      <div className="flex h-[120px] w-full items-center justify-center text-ui-caption text-[var(--chat-text-soft)]">
         暂无指标
       </div>
     );
@@ -36,10 +36,10 @@ const Card: CuteType.FC<{ data: Record<string, any> }> = (props) => {
           key={item.key}
           className="rounded-xl border border-[var(--chat-border)]/60 bg-[var(--chat-surface-soft)]/40 px-4 py-3"
         >
-          <div className="truncate text-[12px] font-medium text-[var(--chat-text-soft)]">
+          <div className="truncate text-ui-sm font-medium text-[var(--chat-text-soft)]">
             {item.label}
           </div>
-          <div className="mt-1 truncate text-[22px] font-semibold tracking-[-0.02em] text-[var(--chat-text)] tabular-nums">
+          <div className="mt-1 truncate text-display-sm font-semibold tracking-[-0.02em] text-[var(--chat-text)] tabular-nums">
             {item.value}
           </div>
         </div>

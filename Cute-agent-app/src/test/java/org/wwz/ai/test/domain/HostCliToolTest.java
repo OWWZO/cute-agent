@@ -31,11 +31,10 @@ public class HostCliToolTest {
     @Test
     public void shouldRejectToolsOutsideAllowlist() {
         HostCliTool tool = new HostCliTool(List.of("git"));
-        tool.setAgentContext(contextWith("git"));
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "tool", "rm",
                 "args", List.of("-rf", "/")
-        ));
+        ), contextWith("git"));
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertEquals("host_cli_denied", payload.getErrorMsg());
     }
@@ -53,11 +52,10 @@ public class HostCliToolTest {
                 .durationMs(3)
                 .build());
         HostCliTool tool = new HostCliTool(List.of("git"));
-        tool.setAgentContext(contextWith(cli));
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "tool", "git",
                 "args", List.of("status")
-        ));
+        ), contextWith(cli));
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertTrue(String.valueOf(payload.getLlmData()).contains("ok"));
         ArgumentCaptor<CliInvocation> invocationCaptor = ArgumentCaptor.forClass(CliInvocation.class);
@@ -74,16 +72,15 @@ public class HostCliToolTest {
     @Test
     public void shouldRejectWriteCommandsForSocialCli() {
         HostCliTool tool = new HostCliTool(List.of("twitter", "rdt"));
-        tool.setAgentContext(contextWith("git"));
 
         ToolResultPayload twitterPayload = (ToolResultPayload) tool.execute(Map.of(
                 "tool", "twitter",
                 "args", List.of("post", "hello")
-        ));
+        ), contextWith("git"));
         ToolResultPayload redditPayload = (ToolResultPayload) tool.execute(Map.of(
                 "tool", "rdt",
                 "args", List.of("upvote", "abc")
-        ));
+        ), contextWith("git"));
 
         Assert.assertTrue(Boolean.TRUE.equals(twitterPayload.getFailed()));
         Assert.assertEquals("host_cli_denied", twitterPayload.getErrorMsg());
@@ -104,8 +101,7 @@ public class HostCliToolTest {
                 .durationMs(3)
                 .build());
         HostCliTool tool = new HostCliTool(List.of("git"));
-        tool.setAgentContext(contextWith(cli, ""));
-        tool.execute(Map.of("tool", "git", "args", List.of("status")));
+        tool.execute(Map.of("tool", "git", "args", List.of("status")), contextWith(cli, ""));
 
         ArgumentCaptor<CliInvocation> invocationCaptor = ArgumentCaptor.forClass(CliInvocation.class);
         Mockito.verify(cli).exec(invocationCaptor.capture());
@@ -136,12 +132,11 @@ public class HostCliToolTest {
             Printer printer = Mockito.mock(Printer.class);
             HostCliTool tool = new HostCliTool(List.of("git"));
             AgentContext context = artifactContext(cli, fileArtifactPort, printer, workspace);
-            tool.setAgentContext(context);
 
             ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                     "tool", "git",
                     "args", List.of("status")
-            ));
+            ), context);
 
             Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
             @SuppressWarnings("unchecked")
@@ -185,12 +180,11 @@ public class HostCliToolTest {
             });
             HostCliTool tool = new HostCliTool(List.of("git"));
             AgentContext context = artifactContext(cli, fileArtifactPort, Mockito.mock(Printer.class), workspace);
-            tool.setAgentContext(context);
 
             ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                     "tool", "git",
                     "args", List.of("status")
-            ));
+            ), context);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) payload.getLlmData();

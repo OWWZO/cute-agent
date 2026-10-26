@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionTaskItem;
@@ -17,12 +16,12 @@ import java.util.stream.Collectors;
 
 /**
  * 列出全部 Todo 任务。
+ *
+ * <p>无状态实现：context 由 {@link #execute(Object, AgentContext)} 显式传入，
+ * 实例可跨会话共享。</p>
  */
 @Slf4j
-@Data
 public class TaskListTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -46,11 +45,17 @@ public class TaskListTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有可读取的实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
-            if (agentContext == null) {
+            if (context == null) {
                 return ToolResultPayload.failure("TaskList 失败：无 AgentContext", "TaskList 失败：无 AgentContext", null, "no context");
             }
-            List<SessionTaskItem> all = agentContext.requireSessionTaskList().list();
+            List<SessionTaskItem> all = context.requireSessionTaskList().list();
             if (all.isEmpty()) {
                 Map<String, Object> empty = new LinkedHashMap<>();
                 empty.put("tasks", List.of());

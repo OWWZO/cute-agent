@@ -59,7 +59,6 @@ public class MultiModalAgentToolTest {
             toolCollection.setAgentContext(agentContext);
 
             MultiModalAgent multiModalAgent = new MultiModalAgent();
-            multiModalAgent.setAgentContext(agentContext);
             ToolArtifactSource artifactSource = ToolArtifactSource.builder()
                     .sessionId(agentContext.getSessionId())
                     .requestId(agentContext.getRequestId())
@@ -72,7 +71,7 @@ public class MultiModalAgentToolTest {
             try {
                 payload = (ToolResultPayload) multiModalAgent.execute(JSONObject.parseObject("""
                         {"question":"总结多模态检索核心能力"}
-                        """));
+                        """), agentContext);
             } finally {
                 agentContext.clearCurrentToolArtifactSource();
             }
@@ -109,7 +108,7 @@ public class MultiModalAgentToolTest {
         CuteConfig cuteConfig = buildConfig("http://127.0.0.1:1601");
 
         MultiModalAgent multiModalAgent = new MultiModalAgent();
-        multiModalAgent.setAgentContext(AgentContext.builder()
+        AgentContext blankContext = AgentContext.builder()
                 .requestId("req-mrag-blank")
                 .sessionId("session-mrag-blank")
                 .query("空问题")
@@ -118,11 +117,11 @@ public class MultiModalAgentToolTest {
                 .toolCollection(new ToolCollection())
                 .productFiles(new ArrayList<>())
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig))
-                .build());
+                .build();
 
         ToolResultPayload payload = (ToolResultPayload) multiModalAgent.execute(JSONObject.parseObject("""
                 {"question":"   "}
-                """));
+                """), blankContext);
 
         Assert.assertEquals("multimodalagent_tool 执行失败：question 不能为空。", payload.getToolResult());
         Assert.assertTrue(payload.getFailed());

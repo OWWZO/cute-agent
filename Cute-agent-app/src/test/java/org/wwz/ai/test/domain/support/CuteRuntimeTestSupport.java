@@ -19,6 +19,8 @@ import org.wwz.ai.domain.agent.image.service.IImageGenerationExecutionKernel;
 import org.wwz.ai.infrastructure.adapter.port.OkHttpRemoteHttpAdapter;
 import org.wwz.ai.infrastructure.adapter.port.OkHttpRemoteStreamAdapter;
 import org.wwz.ai.infrastructure.adapter.port.CuteToolFileArtifactAdapter;
+import org.wwz.ai.types.agent.config.ImageGenerationProperties;
+import org.wwz.ai.types.agent.config.WebSearchProperties;
 
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -46,6 +48,18 @@ public final class CuteRuntimeTestSupport {
         return runtimeDependencies(cuteConfig, null, new MockEnvironment(), null);
     }
 
+    /**
+     * 显式携带拆出去的 WebSearch / ImageGeneration 配置。
+     * 这两组配置已从 CuteConfig 搬到 types 层的 properties，只被各自的单一消费方读取，
+     * 因此不走默认装配的测试必须在这里显式传入，否则消费方拿到 null。
+     */
+    public static CuteRuntimeDependencies runtimeDependencies(CuteConfig cuteConfig,
+                                                              WebSearchProperties webSearchProperties,
+                                                              ImageGenerationProperties imageGenerationProperties) {
+        return runtimeDependencies(cuteConfig, null, new MockEnvironment(), null,
+                webSearchProperties, imageGenerationProperties);
+    }
+
     public static CuteRuntimeDependencies runtimeDependencies(CuteConfig cuteConfig,
                                                                   RemoteHttpPort remoteHttpPort) {
         return runtimeDependencies(cuteConfig, null, new MockEnvironment(), remoteHttpPort);
@@ -66,6 +80,15 @@ public final class CuteRuntimeTestSupport {
                                                                   IImageGenerationExecutionKernel imageKernel,
                                                                   Environment environment,
                                                                   RemoteHttpPort overrideRemoteHttpPort) {
+        return runtimeDependencies(cuteConfig, imageKernel, environment, overrideRemoteHttpPort, null, null);
+    }
+
+    public static CuteRuntimeDependencies runtimeDependencies(CuteConfig cuteConfig,
+                                                                  IImageGenerationExecutionKernel imageKernel,
+                                                                  Environment environment,
+                                                                  RemoteHttpPort overrideRemoteHttpPort,
+                                                                  WebSearchProperties webSearchProperties,
+                                                                  ImageGenerationProperties imageGenerationProperties) {
         StreamResponseHandler streamResponseHandler = new StreamResponseHandler();
         ReflectionTestUtils.setField(streamResponseHandler, "cuteConfig", cuteConfig);
         CuteLlmDependencies llmDependencies = CuteLlmDependencies.builder()
@@ -93,6 +116,8 @@ public final class CuteRuntimeTestSupport {
                 .taskExecutor(sameThreadExecutor)
                 .toolExecutor(sameThreadExecutor)
                 .heartbeatScheduler(new ConcurrentTaskScheduler())
+                .webSearchProperties(webSearchProperties)
+                .imageGenerationProperties(imageGenerationProperties)
                 .build();
     }
 

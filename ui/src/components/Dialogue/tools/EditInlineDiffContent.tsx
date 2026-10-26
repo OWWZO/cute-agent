@@ -6,6 +6,7 @@ import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings";
 import { resolveCodeLanguage } from "@/lib/filePreview/language";
 import { getLightweightDiffLineParts, getPlainTextPatchPreviewLines } from "@/lib/patchPreview";
 import { tokenStyle, tokenizeCode } from "@/lib/shikiTokens";
+import { shouldTokenizeCode } from "../markdown/codeHighlightPolicy";
 import { LightweightDiffPreview } from "./LightweightDiffPreview";
 
 /** 超过这个字符数就放弃语法高亮：内联 diff 不值得为它阻塞主线程。 */
@@ -17,6 +18,15 @@ type EditInlineDiffContentProps = {
   /** 目标文件路径，用于推断高亮语言 */
   path?: string;
   title?: string;
+  /**
+   * 工具仍在执行 / 参数仍在生成。
+   *
+   * 对齐 ZCode `message.tsx` 的 `enableSyntaxHighlighting={!renderStreaming}`：
+   * 流式期间 `patch` 每帧都在变，而一次 tokenize 实测 ~116ms（30KB HTML）。
+   * 不门禁的话每帧都是一次全量 TextMate 高亮，主线程被直接打满 ——
+   * 表现就是「展开后整个前端卡住」。落定后 effect 会因 `streaming` 变化重跑一次。
+   */
+  streaming?: boolean;
 };
 
 /**
@@ -30,6 +40,7 @@ export const EditInlineDiffContent = memo(function EditInlineDiffContent({
   patch,
   path,
   title,
+  streaming = false,
 }: EditInlineDiffContentProps) {
   const isDark = useIsDarkTheme();
   const [wrapLongLines] = useCodePreviewWrap();
@@ -50,15 +61,20 @@ export const EditInlineDiffContent = memo(function EditInlineDiffContent({
     let alive = true;
     setTokens(null);
 
-    if (!highlightCode || highlightCode.length > MAX_HIGHLIGHT_CHARS) {
+    if (!shouldTokenizeCode(highlightCode, streaming)) {
+      return () => {
+        alive = false;
+      };
+    }
+    if (highlightCode.length > MAX_HIGHLIGHT_CHARS) {
       return () => {
         alive = false;
       };
     }
 
     tokenizeCode(highlightCode, language, isDark)
-      .then((next) => {
-        if (alive) setTokens(next);
+      .then((tokenized) => {
+        if (alive) setTokens(tokenized.tokens);
       })
       .catch(() => {
         // 语言不可用 / shiki 加载失败都只是丢掉高亮，纯文本预览仍然完整可读。
@@ -68,7 +84,7 @@ export const EditInlineDiffContent = memo(function EditInlineDiffContent({
     return () => {
       alive = false;
     };
-  }, [highlightCode, language, isDark]);
+  }, [highlightCode, language, isDark, streaming]);
 
   return (
     <div className="kimi-inline-diff" data-testid="edit-inline-diff">

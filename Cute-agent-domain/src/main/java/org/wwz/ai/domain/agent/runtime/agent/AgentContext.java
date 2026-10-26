@@ -11,6 +11,8 @@ import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.ledger.model.AgentRunState;
 import org.wwz.ai.domain.agent.runtime.cancel.PendingInjectMessage;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
+import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanModeState;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
@@ -18,7 +20,6 @@ import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionTaskListStore;
 import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
-import org.wwz.ai.domain.agent.runtime.tool.deferred.DeferredToolCatalog;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceFileReadState;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.llm.ContextTokenTracker;
@@ -31,13 +32,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Agent 运行时上下文：请求身份、工具会话、记忆、账本与取消控制。
  * 字段按「构造时确定 → run 内演化」分七区顺序排列；分区只描述归属，不改变扁平访问方式。
+ *
+ * <p><b>不生成全量 setter。</b>本类曾用 {@code @Data}，导致所有字段全部可写，
+ * 任何持有 context 的代码都能改写 {@code requestId} / {@code query} / {@code basePrompt}
+ * 这类构造期就该冻结的字段。现改为 {@link Getter} + 白名单 setter：
+ * 只有 run 内确实需要演化的字段才提供写入通道，其余字段构造后不可变。</p>
  */
-@Data
+@Getter
 @Builder
 @Slf4j
 @NoArgsConstructor
@@ -127,7 +132,6 @@ public class AgentContext {
      * 2. 消息分类：支持按类型（plan_thought/task/plan）推送不同格式的消息；
      * 核心方法：printer.send(String type, Object content)
      */
-    @ToString.Exclude
     @JSONField(serialize = false)
     Printer printer;
 
@@ -138,30 +142,14 @@ public class AgentContext {
      * 2. 工具调用：智能体思考阶段从该集合中选择待执行的工具；
      * 核心能力：工具注册、更新、查询、执行结果存储
      */
-    @ToString.Exclude
     @JSONField(serialize = false)
     ToolCollection toolCollection;
 
     /**
      * 主 Agent 的隐藏完整工具池，仅供 Agent 派发子 Agent 时筛选工具使用。
      */
-    @ToString.Exclude
     @JSONField(serialize = false)
     ToolCollection subAgentToolCollection;
-
-    /**
-     * 读取当前 toolCollection 上的不可变延迟工具目录。
-     * 目录跟 collection 走；主/子 Agent 通过过滤或重绑定生成各自的 catalog 视图。
-     */
-    public DeferredToolCatalog getDeferredToolCatalog() {
-        return toolCollection == null ? null : toolCollection.getDeferredToolCatalog();
-    }
-
-    public void setDeferredToolCatalog(DeferredToolCatalog catalog) {
-        if (toolCollection != null) {
-            toolCollection.setDeferredToolCatalog(catalog);
-        }
-    }
 
     /**
      * 会话工作区根目录（cwd 模式，供 workspace_* 工具使用）。
@@ -172,7 +160,6 @@ public class AgentContext {
      * 当前 Agent 的 workspace_read 状态（path + range + mtime）。
      */
     @Builder.Default
-    @ToString.Exclude
     @JSONField(serialize = false)
     Map<String, WorkspaceFileReadState> workspaceReadStateByPath = new ConcurrentHashMap<>();
 
@@ -180,7 +167,6 @@ public class AgentContext {
      * Cute 运行时依赖包。
      * 所有 Agent / Tool / LLM 必须通过这里读取运行时协作者，禁止自行回 Spring 容器查找。
      */
-    @ToString.Exclude
     @JSONField(serialize = false)
     CuteRuntimeDependencies runtimeDependencies;
 
@@ -209,24 +195,6 @@ public class AgentContext {
      * 模板复用：作为智能体的核心指令模板，可替换占位符生成最终的系统提示词；
      */
     String basePrompt;
-
-    /**
-     * SOP提示词（标准作业流程提示词）
-     * 用途：
-     * 1. 流程约束：引导智能体按固定SOP执行任务（如电商客服话术流程、报告生成流程）；
-     * 2. 提示词填充：填充到系统提示词的{{sopPrompt}}占位符，规范LLM的输出逻辑；
-     * 示例："生成市场报告需包含：行业分析、竞品对比、结论建议三个部分，每部分不低于200字"
-     */
-    String sopPrompt;
-
-    /**
-     * 提示词模板类型
-     * 用途：
-     * 1. 模板加载：根据类型加载不同场景的提示词模板（如default=通用模板、ecommerce=电商模板）；
-     * 2. 场景适配：不同模板类型对应不同的提示词占位符、输出格式；
-     * 枚举值示例："default"、"ecommerce"、"customer_service"、"market_analysis"
-     */
-    String templateType;
 
     // ---- 5. 跨轮记忆（run 前 hydrate）----
     /**
@@ -269,7 +237,6 @@ public class AgentContext {
      * 这是工具文件来源的唯一事实来源。
      */
     @Builder.Default
-    @ToString.Exclude
     @JSONField(serialize = false)
     ToolArtifactRegistry toolArtifactRegistry = new ToolArtifactRegistry();
 
@@ -278,7 +245,6 @@ public class AgentContext {
      * 同步工具直接读取；异步工具必须在 execute 阶段捕获后显式传递到回调线程。
      */
     @Builder.Default
-    @ToString.Exclude
     @JSONField(serialize = false)
     ThreadLocal<ToolArtifactSource> currentToolArtifactSourceHolder = new ThreadLocal<>();
 
@@ -286,7 +252,6 @@ public class AgentContext {
      * 当前请求的执行账本写入器。
      * 根节点初始化后挂入，LLM / BaseAgent / Summary 等运行时统一复用。
      */
-    @ToString.Exclude
     @JSONField(serialize = false)
     AgentExecutionRecorder executionRecorder;
 
@@ -295,7 +260,6 @@ public class AgentContext {
      * 统一保存 runId、LLM 顺序号和 toolCallId 映射，并兼容并发 executor 的线程内视图。
      */
     @Builder.Default
-    @ToString.Exclude
     @JSONField(serialize = false)
     AgentRunState agentRunState = AgentRunState.builder().build();
 
@@ -304,7 +268,6 @@ public class AgentContext {
      * 不放入共享 {@link AgentRunState}，避免父 Agent、子 Agent 与 LTM fork 互相污染。
      */
     @Builder.Default
-    @ToString.Exclude
     @JSONField(serialize = false)
     ContextTokenTracker contextTokenTracker = new ContextTokenTracker();
 
@@ -349,81 +312,79 @@ public class AgentContext {
     String streamMessageType;
 
     /**
-     * 会话 Todo 任务列表（TaskCreate/TaskGet）。
-     * 主/子 Agent 共享同一引用；懒创建。
-     */
-    @ToString.Exclude
-    @JSONField(serialize = false)
-    SessionTaskListStore sessionTaskList;
-
-    /**
-     * 后台运行任务注册表（TaskStop / TaskOutput）。
-     * 懒创建并按 session 从 DB hydrate；勿在 builder 默认 new 空表。
-     */
-    @ToString.Exclude
-    @JSONField(serialize = false)
-    RuntimeBackgroundTaskRegistry backgroundTasks;
-
-    /**
      * Plan Mode 状态（EnterPlanMode / ExitPlanMode）。
      */
     @Builder.Default
-    @ToString.Exclude
     @JSONField(serialize = false)
     PlanModeState planModeState = PlanModeState.builder().build();
 
     /**
-     * 本轮协作式取消。只由显式 stop 置位；SSE 断开只解绑观察流。
-     */
-    @ToString.Exclude
-    @JSONField(serialize = false)
-    RunCancellation runCancellation;
-
-    /**
-     * 父 run 是否已 finishRun（SUCCESS/FAILED/STOPPED/WAITING_INPUT）。
-     * 后台子 Agent 结束时只有这项为 true 才允许 stream_settle / registry.end。
+     * run 级控制面：取消令牌链、协作式关闭与注入队列。
+     *
+     * <p>这些状态由 run 外部的协调者（{@code /stop}、用户中途插话、ActiveRun 注册表）驱动，
+     * 与 spec / state 的生命周期不同，因此独立成对象。<b>run 级独占</b>：父 Agent 与子 Agent
+     * 各持一份，子 Agent finishRun / 覆盖任务令牌都不影响父；会话级共享状态在
+     * {@link #sessionControl}。</p>
+     *
+     * <p>惰性：构造时可为 null，读取方经 {@link #control()} 获取后由本类负责补建。</p>
      */
     @Builder.Default
-    @ToString.Exclude
-    @EqualsAndHashCode.Exclude
     @JSONField(serialize = false)
-    AtomicBoolean turnClosed = new AtomicBoolean(false);
+    RunControl control = new RunControl();
 
     /**
-     * 运行中用户/协调注入队列（控制面；与 ActiveRun 共享同一实例）。
+     * 获取或懒创建 run 级控制面。
      */
-    @ToString.Exclude
-    @JSONField(serialize = false)
+    public synchronized RunControl control() {
+        if (control == null) {
+            control = new RunControl();
+        }
+        return control;
+    }
+
+    /**
+     * 会话级共享控制面：Todo 任务列表与后台任务注册表。
+     *
+     * <p><b>父子 Agent 共享同一实例</b>（TaskStop / TaskOutput / TaskCreate 必须命中子
+     * Agent），由 spawn 方在 {@code SubAgentContextFactory} 用父 sessionKey eager 物化——
+     * 子 Agent 的 sessionId 是 {@code sub_<agentId>}，惰性补建会把子 key 绑进共享面。</p>
+     */
     @Builder.Default
-    ConcurrentLinkedQueue<PendingInjectMessage> pendingInjects = new ConcurrentLinkedQueue<>();
+    @JSONField(serialize = false)
+    SessionControl sessionControl = new SessionControl();
+
+    /**
+     * 获取或懒创建会话级共享控制面。并发约束见 {@link SessionControl}（以其实例为 monitor）。
+     */
+    public synchronized SessionControl sessionControl() {
+        if (sessionControl == null) {
+            sessionControl = new SessionControl();
+        }
+        return sessionControl;
+    }
 
     /**
      * 获取或创建会话 Todo 列表（listId 优先 sessionId）。
+     * 绑定与补建以 {@link SessionControl} 实例为 monitor（父子是不同 AgentContext，
+     * 本类的 monitor 不能保护共享面）。
      */
-    public synchronized SessionTaskListStore requireSessionTaskList() {
+    public SessionTaskListStore requireSessionTaskList() {
         // Todo 列表按 sessionId 建立稳定归属；没有会话 ID 时退回 requestId，保证
         // 临时/测试上下文也不会共享默认列表。
-        if (sessionTaskList == null) {
-            String listId = sessionId != null && !sessionId.isBlank() ? sessionId : requestId;
-            if (listId == null || listId.isBlank()) {
-                listId = "default";
-            }
-            TasklistPersistencePort port = resolveTasklistPersistence();
-            sessionTaskList = new SessionTaskListStore(listId, port);
+        String listId = sessionId != null && !sessionId.isBlank() ? sessionId : requestId;
+        if (listId == null || listId.isBlank()) {
+            listId = "default";
         }
-        return sessionTaskList;
+        return sessionControl().requireSessionTaskList(listId, resolveTasklistPersistence());
     }
 
-    public synchronized RuntimeBackgroundTaskRegistry requireBackgroundTasks() {
+    public RuntimeBackgroundTaskRegistry requireBackgroundTasks() {
         // 进程内按 session 共享 registry，保证跨轮 TaskOutput 能命中仍在跑的后台任务。
-        if (backgroundTasks == null) {
-            String sid = sessionId != null && !sessionId.isBlank() ? sessionId : requestId;
-            if (sid == null || sid.isBlank()) {
-                sid = "default";
-            }
-            backgroundTasks = SessionBackgroundTaskHub.getOrCreate(sid, resolveTasklistPersistence());
+        String sid = sessionId != null && !sessionId.isBlank() ? sessionId : requestId;
+        if (sid == null || sid.isBlank()) {
+            sid = "default";
         }
-        return backgroundTasks;
+        return sessionControl().requireBackgroundTasks(sid, resolveTasklistPersistence());
     }
 
     private TasklistPersistencePort resolveTasklistPersistence() {
@@ -431,6 +392,88 @@ public class AgentContext {
             return null;
         }
         return runtimeDependencies.getOptionalTasklistPersistencePort();
+    }
+
+    // ---- 白名单 setter：仅 run 内确实需要演化的字段 ----
+    // 这里刻意不提供 requestId / query / basePrompt / dateInfo / agentType /
+    // disabledSkillNames / disabledMcpIds / toolDispatchWhitelist 等构造期字段的 setter：
+    // 它们在装配完成后不应再被改写。
+    // 新增字段若确需运行期可变，必须先确认其生命周期归属，再在此登记。
+
+    /** 装配期绑定主工具池（builder 之后，工具池构造依赖 context 自身，无法在 builder 内完成）。 */
+    public void setToolCollection(ToolCollection toolCollection) {
+        this.toolCollection = toolCollection;
+    }
+
+    /** 装配期绑定子 Agent 完整工具池（PlanSolve 双池形态）。 */
+    public void setSubAgentToolCollection(ToolCollection subAgentToolCollection) {
+        this.subAgentToolCollection = subAgentToolCollection;
+    }
+
+    /** resume 路径把 hydrate 出的历史消息注入子 Agent。 */
+    public void setWorkingMemoryMessages(List<Message> workingMemoryMessages) {
+        this.workingMemoryMessages = workingMemoryMessages;
+    }
+
+    /** LTM bootstrap 在 run 前注入围栏文本（可为 null 清除）。 */
+    public void setLtmMemoryContext(String ltmMemoryContext) {
+        this.ltmMemoryContext = ltmMemoryContext;
+    }
+
+    /** LTM bootstrap 注入用户级记忆归属。 */
+    public void setLtmOwner(LtmOwner ltmOwner) {
+        this.ltmOwner = ltmOwner;
+    }
+
+    /** 工具装配期懒解析工作区根（resolveAndEnsureRoot 依赖 sessionId）。 */
+    public void setWorkspaceRoot(String workspaceRoot) {
+        this.workspaceRoot = workspaceRoot;
+    }
+
+    /** resume 需要唯一 requestId，否则 working_memory persist 幂等跳过。 */
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
+    }
+
+    /** 子 Agent 的 working_memory 投影作用域。 */
+    public void setMemoryScope(String memoryScope) {
+        this.memoryScope = memoryScope;
+    }
+
+    /** 测试与装配路径补齐运行时依赖。 */
+    public void setRuntimeDependencies(CuteRuntimeDependencies runtimeDependencies) {
+        this.runtimeDependencies = runtimeDependencies;
+    }
+
+    /** 测试与装配路径补齐用户身份。 */
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    /** 测试路径替换 run 级状态（独立 ledger 视图）。 */
+    public void setAgentRunState(AgentRunState agentRunState) {
+        this.agentRunState = agentRunState;
+    }
+
+    /** 测试路径构造差集禁用清单。 */
+    public void setDisabledMcpIds(java.util.Set<String> disabledMcpIds) {
+        this.disabledMcpIds = disabledMcpIds;
+    }
+
+    /**
+     * React 主 Agent 在未显式设置时兜底为 {@code agent_stream}。
+     * 只在 blank 时写入，子 Agent / LTM fork 预先设的值不会被覆盖。
+     */
+    public void setStreamMessageType(String streamMessageType) {
+        this.streamMessageType = streamMessageType;
+    }
+
+    /**
+     * 当前 Agent 执行的具体任务（结构化 query）。
+     * 并行子任务与 PlanSolve 分步都会在 run 内改写，因此不是构造期字段。
+     */
+    public void setTask(String task) {
+        this.task = task;
     }
 
     public PlanModeState requirePlanModeState() {
@@ -446,58 +489,52 @@ public class AgentContext {
         return subAgentId != null && !subAgentId.isBlank();
     }
 
+    // ---- 控制面 facade：委托给 {@link RunControl}，保持调用方签名不变 ----
+
     public void markTurnClosed() {
-        if (turnClosed == null) {
-            turnClosed = new AtomicBoolean(true);
-            return;
-        }
-        turnClosed.set(true);
+        control().markTurnClosed();
     }
 
     public boolean isTurnClosed() {
-        return turnClosed != null && turnClosed.get();
+        return control().isTurnClosed();
     }
 
     public boolean isRunCancelled() {
-        return runCancellation != null && runCancellation.isCancelled();
+        return control().isCancelled();
     }
 
     public String getRunCancelReason() {
-        return runCancellation == null ? null : runCancellation.getReason();
+        return control().getCancelReason();
+    }
+
+    public RunCancellation getRunCancellation() {
+        return control().getCancellation();
     }
 
     /**
      * 把在途模型请求或阻塞调用挂到本轮取消令牌上。没有令牌时返回空注销句柄。
      */
     public Runnable registerRunAbort(Runnable hook) {
-        if (runCancellation == null || hook == null) {
+        if (hook == null) {
             return () -> {
             };
         }
-        return runCancellation.registerAbort(hook);
+        return control().registerAbort(hook);
     }
 
     /**
      * 绑定与 ActiveRun 共享的 inject 队列（控制面，不 begin 新 run）。
      */
     public void bindPendingInjectQueue(ConcurrentLinkedQueue<PendingInjectMessage> queue) {
-        if (queue != null) {
-            this.pendingInjects = queue;
-        }
+        control().bindPendingInjectQueue(queue);
     }
 
     public ConcurrentLinkedQueue<PendingInjectMessage> requirePendingInjects() {
-        if (pendingInjects == null) {
-            pendingInjects = new ConcurrentLinkedQueue<>();
-        }
-        return pendingInjects;
+        return control().requirePendingInjects();
     }
 
     public void offerInject(PendingInjectMessage message) {
-        if (message == null || message.getText() == null || message.getText().isBlank()) {
-            return;
-        }
-        requirePendingInjects().offer(message);
+        control().offerInject(message);
     }
 
     /**
@@ -657,7 +694,6 @@ public class AgentContext {
                 .workspaceReadStateByPath(new ConcurrentHashMap<>())
                 .isStream(isStream)
                 .streamMessageType(streamMessageType)
-                .sopPrompt(sopPrompt)
                 .basePrompt(basePrompt)
                 .workingMemoryMessages(workingMemoryMessages)
                 .agentType(agentType)
@@ -665,12 +701,11 @@ public class AgentContext {
                 .currentToolArtifactSourceHolder(new ThreadLocal<>())
                 .executionRecorder(executionRecorder)
                 .agentRunState(agentRunState)
-                .templateType(templateType)
-                // 并行 fork 必须共享后台任务表，否则 TaskOutput 在子上下文里 not_found
-                .backgroundTasks(requireBackgroundTasks())
-                .sessionTaskList(sessionTaskList != null ? sessionTaskList : null)
                 .planModeState(planModeState)
-                .runCancellation(runCancellation)
+                // 并行 fork 必须共享控制面：否则 TaskOutput 在子上下文里 not_found，
+                // 且 /stop 杀不到并发子任务。run 级与会话级控制面都共享。
+                .control(control())
+                .sessionControl(sessionControl())
                 .build();
     }
 
@@ -699,6 +734,12 @@ public class AgentContext {
         return sourceFiles == null ? new ArrayList<>() : new ArrayList<>(sourceFiles);
     }
 
+    /**
+     * 刻意只拼请求身份与轻量字段。不改为 {@code @ToString}：
+     * control（取消令牌/注入队列/任务表）、运行时依赖、工具池这些字段
+     * 要么体量大要么可变，进日志只会产生噪音和误导。
+     * 新增字段时若属排查必需，在此显式追加，不要全量拼接。
+     */
     @Override
     public String toString() {
         return "AgentContext(" +
@@ -711,7 +752,6 @@ public class AgentContext {
                 ", isStream=" + isStream +
                 ", streamMessageType='" + streamMessageType + '\'' +
                 ", agentType=" + agentType +
-                ", templateType='" + templateType + '\'' +
                 ')';
     }
 }

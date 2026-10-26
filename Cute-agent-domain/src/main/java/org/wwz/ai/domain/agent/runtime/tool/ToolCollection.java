@@ -164,21 +164,31 @@ public class ToolCollection {
      *         - 工具不存在：返回null。
      */
     public Object execute(String name, Object toolInput) {
+        return execute(name, toolInput, agentContext);
+    }
+
+    /**
+     * 统一执行工具，并显式传入本次调用的上下文。
+     * <p>
+     * context 为空时沿用实例上绑定的 {@code agentContext}，保证后台与测试路径行为不变。
+     */
+    public Object execute(String name, Object toolInput, AgentContext context) {
+        AgentContext effective = context != null ? context : agentContext;
         if (McpToolNames.TOOL_CALL.equals(name)) {
             DeferredToolCall.Result resolved = DeferredToolCall.resolve(this, toolInput);
             if (!resolved.ok()) {
                 return resolved.errorPayload();
             }
-            return executeResolved(resolved.name(), resolved.arguments());
+            return executeResolved(resolved.name(), resolved.arguments(), effective);
         }
         if (deferredToolCatalog != null && deferredToolCatalog.contains(name)
                 && (mcpToolMap == null || !mcpToolMap.containsKey(name))) {
             String hint = "Error: Tool " + name + " is deferred. Invoke it via ToolCall "
                     + "(name + arguments), not as a direct function call.";
-            log.warn("requestId:{} {}", agentContext == null ? "unknown" : agentContext.getRequestId(), hint);
+            log.warn("requestId:{} {}", effective == null ? "unknown" : effective.getRequestId(), hint);
             return hint;
         }
-        return executeResolved(name, toolInput);
+        return executeResolved(name, toolInput, effective);
     }
 
     /**
@@ -186,13 +196,23 @@ public class ToolCollection {
      * pipeline 解包后走这里，避免再次命中 deferred 拒绝或二次 ToolCall 解包。
      */
     public Object executeResolved(String name, Object toolInput) {
+        return executeResolved(name, toolInput, agentContext);
+    }
+
+    /**
+     * 执行已解析的真实工具名，并显式传入本次调用的上下文。
+     * <p>
+     * 无状态工具通过 {@link BaseTool#execute(Object, AgentContext)} 拿到上下文，
+     * 不再依赖实例字段绑定；尚未迁移的工具仍回落旧签名，行为不变。
+     */
+    public Object executeResolved(String name, Object toolInput, AgentContext context) {
         String deny = denyIfNotWhitelisted(name);
         if (deny != null) {
             return deny;
         }
         if (toolMap != null && toolMap.containsKey(name)) {
             BaseTool tool = getTool(name);
-            return tool.execute(toolInput);
+            return tool.execute(toolInput, context);
         }
         McpToolInfo toolInfo = mcpToolMap == null ? null : mcpToolMap.get(name);
         if (toolInfo != null) {
@@ -207,7 +227,7 @@ public class ToolCollection {
         DeferredToolEntry deferred = deferredToolCatalog == null ? null : deferredToolCatalog.get(name);
         if (deferred != null) {
             if (deferred.getSource() == DeferredToolSource.LOCAL) {
-                return deferred.getLocalTool().execute(toolInput);
+                return deferred.getLocalTool().execute(toolInput, context);
             }
             McpToolExecutor executor = mcpToolExecutor;
             if (executor == null) {

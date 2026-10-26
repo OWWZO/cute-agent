@@ -249,7 +249,7 @@ public abstract class ReActAgent extends BaseAgent {
             if (tool == null) {
                 continue;
             }
-            String summarizedDescription = summarizeToolDescription(tool.getDescription());
+            String summarizedDescription = summarizeToolDescription(tool.getDescription(context));
             String toolLine = String.format("工具名：%s 工具描述：%s%n", tool.getName(), summarizedDescription);
             if (toolPrompt.length() + toolLine.length() > DIGITAL_EMPLOYEE_TOOL_PROMPT_MAX_LEN) {
                 toolPrompt.append("[工具描述已截断，保留核心工具摘要]");

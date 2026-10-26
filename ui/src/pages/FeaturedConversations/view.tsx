@@ -36,14 +36,14 @@ export function FeaturedConversationsView(
       <div className="mx-auto w-full max-w-[1080px] px-5 pb-16 pt-10 sm:px-8 sm:pt-14">
         <div className="mb-8 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-2.5 py-1 text-[12px] text-[var(--chat-text-muted)]">
+            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-2.5 py-1 text-ui-sm text-[var(--chat-text-muted)]">
               <Sparkles className="h-3.5 w-3.5" />
               公开案例库
             </div>
-            <h1 className="text-[36px] font-semibold tracking-tight text-[var(--chat-text)] sm:text-[42px]">
+            <h1 className="text-display-lg font-semibold tracking-[-0.02em] text-[var(--chat-text)] sm:text-display-2xl">
               精品对话
             </h1>
-            <p className="mt-2 max-w-[48ch] text-[14px] leading-7 text-[var(--chat-text-muted)]">
+            <p className="mt-2 max-w-[48ch] text-ui-base leading-7 text-[var(--chat-text-muted)]">
               浏览管理员公开发布的高质量会话回放，直接查看完整过程与结论。
             </p>
           </div>
@@ -53,7 +53,7 @@ export function FeaturedConversationsView(
               to={ROUTES.HOME}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3.5 text-[13px] font-medium text-[var(--chat-text-soft)] transition hover:text-[var(--chat-text)]"
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition hover:text-[var(--chat-text)]"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>返回首页</span>
@@ -62,14 +62,14 @@ export function FeaturedConversationsView(
         </div>
 
         {hasCards && !props.loading ? (
-          <div className="mb-5 flex items-center justify-between gap-3 text-[12px] text-[var(--chat-text-muted)]">
+          <div className="mb-5 flex items-center justify-between gap-3 text-ui-sm text-[var(--chat-text-muted)]">
             <span>共 {featuredCount} 个案例</span>
             <span>点击卡片查看完整回放</span>
           </div>
         ) : null}
 
         {props.loading ? (
-          <div className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-[var(--chat-border)] bg-[var(--chat-surface)]">
+          <div className="flex min-h-[360px] items-center justify-center rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)]">
             <Spinner className="size-8" />
           </div>
         ) : hasCards ? (
@@ -134,7 +134,7 @@ export function FeaturedConversationsView(
             ) : null}
           </>
         ) : (
-          <div className="rounded-[28px] border border-dashed border-[var(--chat-border)] bg-[var(--chat-surface)]/70 py-20">
+          <div className="rounded-3xl border border-dashed border-[var(--chat-border)] bg-[var(--chat-surface)]/70 py-20">
             <EmptyState title="暂无已发布的精品对话" />
           </div>
         )}

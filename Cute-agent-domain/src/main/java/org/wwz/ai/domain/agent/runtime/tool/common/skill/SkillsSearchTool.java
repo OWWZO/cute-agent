@@ -32,12 +32,6 @@ public class SkillsSearchTool implements BaseTool {
 
     private final SkillCatalog skillCatalog;
 
-    private AgentContext agentContext;
-
-    public void setAgentContext(AgentContext agentContext) {
-        this.agentContext = agentContext;
-    }
-
     @Override
     public String getName() {
         return NAME;
@@ -76,6 +70,12 @@ public class SkillsSearchTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             if (!(input instanceof Map<?, ?> rawInput)) {
                 return ToolResultPayload.failureFrom("skills_search 参数格式错误，必须传入对象类型参数。", null);
@@ -88,7 +88,7 @@ public class SkillsSearchTool implements BaseTool {
                     .text(text)
                     .category(readString(rawInput, "category"))
                     .limit(readInt(rawInput.get("limit")))
-                    .disabledNames(disabledNames())
+                    .disabledNames(disabledNames(context))
                     .tags(new LinkedHashSet<>())
                     .build();
             List<SkillSearchHit> hits = skillCatalog.search(query);
@@ -114,18 +114,18 @@ public class SkillsSearchTool implements BaseTool {
             return ToolResultPayload.fromData(data);
         } catch (Exception e) {
             log.error("{} skills_search execute error, input={}",
-                    agentContext == null ? "unknown" : agentContext.getRequestId(),
+                    context == null ? "unknown" : context.getRequestId(),
                     input,
                     e);
             return ToolResultPayload.failureFrom("skills_search execute failed", null);
         }
     }
 
-    private Set<String> disabledNames() {
-        if (agentContext == null || agentContext.getDisabledSkillNames() == null) {
+    private Set<String> disabledNames(AgentContext context) {
+        if (context == null || context.getDisabledSkillNames() == null) {
             return Set.of();
         }
-        return agentContext.getDisabledSkillNames();
+        return context.getDisabledSkillNames();
     }
 
     private static String readString(Map<?, ?> rawInput, String key) {

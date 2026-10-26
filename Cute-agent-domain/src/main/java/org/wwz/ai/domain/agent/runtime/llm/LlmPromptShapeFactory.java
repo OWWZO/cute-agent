@@ -74,10 +74,10 @@ public final class LlmPromptShapeFactory {
                 }
                 Map<String, Object> functionMap = new LinkedHashMap<>();
                 functionMap.put("name", tool.getName());
-                functionMap.put("description", tool.getDescription());
+                functionMap.put("description", tool.getDescription(tools.getAgentContext()));
                 functionMap.put("parameters",
                         addFunctionNameParam(
-                                ToolSchemaNormalizer.normalizeSchema(tool.toParams(), tool.getName()),
+                                ToolSchemaNormalizer.normalizeSchema(tool.toParams(tools.getAgentContext()), tool.getName()),
                                 tool.getName()));
                 prompt.append(String.format("- `%s`%n```json %s ```%n",
                         tool.getName(), JSON.toJSONString(functionMap)));

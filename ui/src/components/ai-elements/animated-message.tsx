@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { DURATION, EASE_OUT, useMotionConfig } from "@/lib/motion";
+import { DURATION, EASE_OUT, PULSE_LOOP, useMotionConfig } from "@/lib/motion";
 
 interface AnimatedMessageListProps {
   children: React.ReactNode;
@@ -107,11 +107,7 @@ export const StreamingContent: React.FC<StreamingContentProps> = ({
       }
       transition={
         isStreaming && !reduce
-          ? {
-            duration: 2,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }
+          ? PULSE_LOOP
           : { duration: DURATION.reduced }
       }
     >
@@ -164,7 +160,7 @@ export const FadeIn: React.FC<FadeInProps> = ({
         y: 0
       }}
       transition={{
-        duration: reduce ? DURATION.reduced : Math.min(duration, 0.28),
+        duration: reduce ? DURATION.reduced : Math.min(duration, DURATION.modal),
         delay: reduce ? 0 : delay,
         ease: EASE_OUT,
       }}
@@ -195,11 +191,7 @@ export const Pulse: React.FC<PulseProps> = ({ children, isActive = true }) => {
           }
           : {}
       }
-      transition={{
-        duration: 2,
-        repeat: Infinity,
-        ease: "easeInOut",
-      }}
+      transition={PULSE_LOOP}
     >
       {children}
     </motion.div>
@@ -263,7 +255,7 @@ export const StaggerItem: React.FC<StaggerItemProps> = ({ children, className })
           opacity: 1,
           y: 0,
           transition: {
-            duration: reduce ? DURATION.reduced : 0.22,
+            duration: reduce ? DURATION.reduced : DURATION.message,
             ease: EASE_OUT,
           },
         },

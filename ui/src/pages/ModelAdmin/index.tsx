@@ -489,7 +489,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                           </span>
                           <Badge
                             variant="secondary"
-                            className="ml-auto text-[10.5px]"
+                            className="ml-auto text-ui-xs"
                           >
                             {isFallback ? "备用" : "Chat"}
                           </Badge>
@@ -599,7 +599,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                           value={editor.baseUrl}
                           readOnly={editorLocked || editor.providerId !== "custom"}
                           className={cn(
-                            "font-mono text-[12.5px]",
+                            "font-mono text-ui-caption",
                             editor.providerId !== "custom" &&
                               "bg-[var(--color-surface-sunken)] text-[var(--color-text-muted)]",
                           )}
@@ -619,7 +619,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                         <Input
                           value={editor.modelName}
                           disabled={editorLocked}
-                          className="font-mono text-[12.5px]"
+                          className="font-mono text-ui-caption"
                           placeholder="gpt-4o / claude-3-5-sonnet"
                           onChange={(e) =>
                             patchEditor({
@@ -633,7 +633,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                         <Input
                           value={editor.modelId}
                           disabled
-                          className="bg-[var(--color-surface-sunken)] font-mono text-[12.5px] text-[var(--color-text-muted)]"
+                          className="bg-[var(--color-surface-sunken)] font-mono text-ui-caption text-[var(--color-text-muted)]"
                         />
                       </Field>
                       <Field
@@ -644,7 +644,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                           type="password"
                           value={editor.apiKey}
                           disabled={editorLocked}
-                          className="font-mono text-[12.5px]"
+                          className="font-mono text-ui-caption"
                           placeholder="sk-…"
                           onChange={(e) =>
                             patchEditor({ apiKey: e.target.value })
@@ -655,7 +655,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                         <Input
                           value={editor.completionsPath}
                           disabled={editorLocked}
-                          className="font-mono text-[12.5px]"
+                          className="font-mono text-ui-caption"
                           onChange={(e) =>
                             patchEditor({ completionsPath: e.target.value })
                           }
@@ -665,7 +665,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                         <Input
                           value={editor.modelType}
                           disabled={editorLocked}
-                          className="text-[13px]"
+                          className="text-ui-caption"
                           placeholder="openai / deepseek / claude"
                           onChange={(e) =>
                             patchEditor({ modelType: e.target.value })
@@ -680,7 +680,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                             patchEditor({ supportsThinking: checked ? 1 : 0 })
                           }
                         />
-                        <span className="text-[13px] text-[var(--color-text)]">
+                        <span className="text-ui-caption text-[var(--color-text)]">
                           支持深度思考
                         </span>
                       </div>
@@ -700,7 +700,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                           type="number"
                           value={editor.contextWindow ?? ""}
                           disabled={editorLocked}
-                          className="text-[13px]"
+                          className="text-ui-caption"
                           placeholder="如 128000"
                           onChange={(e) => {
                             const raw = e.target.value.trim();
@@ -736,7 +736,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                       </span>
                     ) : null}
                     {testResult && !testResult.ok ? (
-                      <span className="max-w-md truncate text-[12.5px] font-medium text-[var(--color-danger)]">
+                      <span className="max-w-md truncate text-ui-caption font-medium text-[var(--color-danger)]">
                         {testResult.message ?? "连接失败"}
                       </span>
                     ) : null}
@@ -785,7 +785,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                 value={addForm.baseUrl}
                 readOnly={addForm.providerId !== "custom"}
                 className={cn(
-                  "font-mono text-[12.5px]",
+                  "font-mono text-ui-caption",
                   addForm.providerId !== "custom" &&
                     "bg-[var(--color-surface-sunken)]",
                 )}
@@ -800,7 +800,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
             <Field label="模型标识（上游 model）" required>
               <Input
                 value={addForm.modelName}
-                className="font-mono text-[12.5px]"
+                className="font-mono text-ui-caption"
                 placeholder="与厂商文档逐字一致"
                 onChange={(e) => {
                   const modelName = e.target.value;
@@ -815,7 +815,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
             <Field label="模型 ID" required>
               <Input
                 value={addForm.modelId}
-                className="font-mono text-[12.5px]"
+                className="font-mono text-ui-caption"
                 placeholder="业务主键，对话可引用"
                 onChange={(e) =>
                   setAddForm((f) => ({
@@ -829,7 +829,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
               <Input
                 type="password"
                 value={addForm.apiKey}
-                className="font-mono text-[12.5px]"
+                className="font-mono text-ui-caption"
                 placeholder="sk-…"
                 onChange={(e) =>
                   setAddForm((f) => ({
@@ -859,7 +859,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
             <Field label="Completions 路径">
               <Input
                 value={addForm.completionsPath}
-                className="font-mono text-[12.5px]"
+                className="font-mono text-ui-caption"
                 onChange={(e) =>
                   setAddForm((f) => ({
                     ...f,

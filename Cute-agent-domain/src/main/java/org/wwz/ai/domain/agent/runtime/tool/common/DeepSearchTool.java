@@ -3,7 +3,6 @@ package org.wwz.ai.domain.agent.runtime.tool.common;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamListener;
@@ -17,7 +16,6 @@ import org.wwz.ai.domain.agent.runtime.dto.DeepSearchRequest;
 import org.wwz.ai.domain.agent.runtime.dto.DeepSearchrResponse;
 import org.wwz.ai.domain.agent.runtime.dto.FileRequest;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
-import org.wwz.ai.domain.agent.runtime.tool.ContextIsolatableTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.util.StringUtil;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
@@ -41,8 +39,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * 这样用户取消或超时时可以主动中断上游连接。
  */
 @Slf4j
-@Data
-public class DeepSearchTool implements ContextIsolatableTool {
+public class DeepSearchTool implements BaseTool {
 
     private static final String DESCRIPTION = "这是一个搜索工具，可以搜索各种互联网知识";
 
@@ -58,18 +55,6 @@ public class DeepSearchTool implements ContextIsolatableTool {
      * deep_search HTTP 读写超时时间。
      */
     private static final long DEEP_SEARCH_IO_TIMEOUT_MINUTES = 20L;
-
-    private AgentContext agentContext;
-
-    @Override
-    public BaseTool isolateFor(AgentContext context) {
-        if (context == null) {
-            throw new IllegalArgumentException("DeepSearchTool.isolateFor context 不能为空");
-        }
-        DeepSearchTool copy = new DeepSearchTool();
-        copy.setAgentContext(context);
-        return copy;
-    }
 
     @Override
     public String getName() {
@@ -102,8 +87,15 @@ public class DeepSearchTool implements ContextIsolatableTool {
 
     @Override
     public Object execute(Object input) {
-        // 单次执行捕获 context，避免并发 rebind 影响回调
-        final AgentContext ctx = requireAgentContext();
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext ctx) {
+        if (ctx == null) {
+            return buildFailurePayload("deep_search执行失败：缺少 AgentContext");
+        }
         final AtomicReference<RemoteStreamSession> streamSession = new AtomicReference<>();
 
         try {
@@ -150,11 +142,6 @@ public class DeepSearchTool implements ContextIsolatableTool {
     /**
      * 调用 DeepSearch；流会话仅存于本次调用的 streamSession，不写入实例字段。
      */
-    public CompletableFuture<ToolResultPayload> callDeepSearchStream(DeepSearchRequest searchRequest,
-                                                                     ToolArtifactSource artifactSource) {
-        return callDeepSearchStream(requireAgentContext(), searchRequest, artifactSource, new AtomicReference<>());
-    }
-
     private CompletableFuture<ToolResultPayload> callDeepSearchStream(AgentContext ctx,
                                                                        DeepSearchRequest searchRequest,
                                                                        ToolArtifactSource artifactSource,
@@ -399,17 +386,6 @@ public class DeepSearchTool implements ContextIsolatableTool {
                 DeepSearchToolOutput.of("", message, null),
                 message
         );
-    }
-
-    private AgentContext requireAgentContext() {
-        if (agentContext == null) {
-            throw new IllegalStateException("DeepSearchTool 缺少 AgentContext");
-        }
-        return agentContext;
-    }
-
-    private CuteConfig requireCuteConfig() {
-        return requireCuteConfig(requireAgentContext());
     }
 
     private CuteConfig requireCuteConfig(AgentContext ctx) {

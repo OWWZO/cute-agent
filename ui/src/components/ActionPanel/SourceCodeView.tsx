@@ -123,7 +123,7 @@ const SourceCodeView: CuteType.FC<SourceCodeViewProps> = (props) => {
           </Alert>
           <pre
             className={cn(
-              "px-2 py-1 font-mono text-[13px] leading-[1.7]",
+              "px-2 py-1 font-mono text-ui-caption leading-[1.7]",
               resolvedWrap ? "whitespace-pre-wrap break-words" : "w-max min-w-full whitespace-pre"
             )}
           >

@@ -162,7 +162,7 @@ const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
     return (
       <div
         className={cn(
-          "flex h-full min-h-[320px] items-center justify-center p-6 text-red-500",
+          "flex h-full min-h-[320px] items-center justify-center p-6 text-[var(--color-danger)]",
           className
         )}
       >
@@ -175,7 +175,7 @@ const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
     return (
       <div
         className={cn(
-          "flex h-full min-h-[320px] items-center justify-center p-6 text-red-500",
+          "flex h-full min-h-[320px] items-center justify-center p-6 text-[var(--color-danger)]",
           className
         )}
       >

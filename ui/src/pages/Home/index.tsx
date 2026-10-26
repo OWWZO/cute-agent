@@ -55,7 +55,7 @@ import {
   mergeConversationHistoryPage,
   mergeRunReplayIntoConversation,
 } from "@/utils/conversationHistory";
-import { restoreHitlForSession } from "@/utils/hitlRestore";
+import { applySessionHitlPending, restoreHitlForSession } from "@/utils/hitlRestore";
 import { readActiveRun } from "@/utils/activeRunStorage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -118,7 +118,7 @@ const LazyFeaturedConversations = lazy(
 );
 
 const WorkspaceLoading: CuteType.FC = () => (
-  <Loading loading className="h-full min-h-[240px]" />
+  <Loading loading branded className="h-full min-h-[240px]" />
 );
 
 const WorkspaceContent: CuteType.FC<{ children: ReactNode }> = ({ children }) =>
@@ -655,14 +655,24 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
         return;
       }
 
-      void loadSessionWorkspaceFiles(session.sessionId);
       // 切换已有会话始终从后端读取最新详情，避免用前端流式缓存覆盖已完成状态。
       conversationHistoryApi
-        .getSessionDetail(session.sessionId, { limit: HISTORY_PAGE_SIZE })
-        .then(async (detail) => {
+        .getSessionBootstrap(session.sessionId, { limit: HISTORY_PAGE_SIZE })
+        .then(async (bootstrap) => {
           if (selectionVersion !== sessionSelectionVersionRef.current) {
             return;
           }
+          // bootstrap 已带回文件清单：灌进缓存，后续 loadSessionWorkspaceFiles 命中缓存不再发请求。
+          const bootstrapFiles = normalizeSessionArtifactFiles(
+            bootstrap?.files || [],
+            session.sessionId
+          );
+          sessionWorkspaceFilesCacheRef.current.set(session.sessionId, bootstrapFiles);
+          setSessionWorkspaceFilesState({
+            sessionId: session.sessionId,
+            files: bootstrapFiles,
+          });
+          const detail = bootstrap?.detail;
           if (!detail || isHistoryDetailEmpty(detail)) {
             if (localSelection.localConversation) {
               setCurrentConversation(localSelection.localConversation);
@@ -674,7 +684,11 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
             (requestId) => loadRunReplay(session.sessionId, requestId),
             reportRunningReplayError
           );
-          const restored = await restoreHitlForSession(hydrated);
+          const restored = applySessionHitlPending(hydrated, {
+            askUser: bootstrap.askUser || [],
+            desktopControl: bootstrap.desktopControl || [],
+            planApproval: bootstrap.planApproval || [],
+          });
           if (selectionVersion !== sessionSelectionVersionRef.current) {
             return;
           }
@@ -1196,7 +1210,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <div className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em] text-[var(--chat-text)]">
+              <div className="min-w-0 flex-1 truncate text-[length:var(--content-font-size)] font-semibold tracking-[-0.01em] text-[var(--chat-text)]">
                 Cute
               </div>
               <button
@@ -1207,7 +1221,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
                   setWorkspaceImmersive(false);
                   createNewChat();
                 }}
-                className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-[var(--chat-text-soft)] transition-colors hover:bg-black/5 hover:text-[var(--chat-text)]"
+                className="rounded-lg px-2.5 py-1.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition-colors hover:bg-black/5 hover:text-[var(--chat-text)]"
               >
                 新建
               </button>

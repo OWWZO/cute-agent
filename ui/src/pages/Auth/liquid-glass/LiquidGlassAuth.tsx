@@ -45,7 +45,7 @@ export default function LiquidGlassAuth({ mode }: LiquidGlassAuthProps) {
   const returnUrl = normalizeReturnUrl(searchParams.get("returnUrl"));
 
   const inputClassName =
-    "border-white/40 bg-white/10 placeholder:text-card-foreground/50 text-card-foreground py-3 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:bg-white/15 transition-all duration-200";
+    "border-white/40 bg-white/10 placeholder:text-card-foreground/50 text-card-foreground py-3 focus:ring-2 focus:ring-[var(--chat-accent)]/40 focus:border-[var(--chat-accent)] focus:bg-white/15 transition-all duration-200";
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

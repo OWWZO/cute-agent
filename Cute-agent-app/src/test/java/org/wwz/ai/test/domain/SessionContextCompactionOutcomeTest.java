@@ -32,6 +32,41 @@ import static org.mockito.Mockito.verify;
 
 public class SessionContextCompactionOutcomeTest {
 
+    /**
+     * 守卫：CompactionProperties 的字段初始值必须与 CompactionBudget.defaults() 一致。
+     * 两者是同一份压缩配置的两个载体（前者绑 yml，后者是 domain 值对象），漂移即配置错乱。
+     */
+    @Test
+    public void compactionPropertiesDefaultsMatchBudgetDefaults() {
+        org.wwz.ai.config.cute.CompactionProperties props = new org.wwz.ai.config.cute.CompactionProperties();
+        CompactionBudget defaults = CompactionBudget.defaults();
+        Assert.assertEquals(props.isEnabled(), defaults.isEnabled());
+        Assert.assertEquals(props.isLlmEnabled(), defaults.isLlmEnabled());
+        Assert.assertEquals(props.isMicroEnabled(), defaults.isMicroEnabled());
+        Assert.assertEquals(props.isSessionMemoryEnabled(), defaults.isSessionMemoryEnabled());
+        Assert.assertEquals(props.getThresholdPercent(), defaults.getThresholdPercent(), 0.0d);
+        Assert.assertEquals(props.getKeepMinTokens(), defaults.getKeepMinTokens());
+        Assert.assertEquals(props.getKeepMinTextMessages(), defaults.getKeepMinTextMessages());
+        Assert.assertEquals(props.getKeepMaxTokens(), defaults.getKeepMaxTokens());
+        Assert.assertEquals(props.getMaxConsecutiveFailures(), defaults.getMaxConsecutiveFailures());
+        Assert.assertEquals(props.getTemperature(), defaults.getTemperature(), 0.0d);
+        Assert.assertEquals(props.getMessageContentCharLimit(), defaults.getMessageContentCharLimit());
+        Assert.assertEquals(props.getMicroKeepRecentToolResults(), defaults.getMicroKeepRecentToolResults());
+        Assert.assertEquals(props.getMicroToolResultMaxChars(), defaults.getMicroToolResultMaxChars());
+        Assert.assertEquals(props.getSummaryTargetRatio(), defaults.getSummaryTargetRatio(), 0.0d);
+        Assert.assertEquals(props.getProtectFirstN(), defaults.getProtectFirstN());
+        Assert.assertEquals(props.getProtectLastN(), defaults.getProtectLastN());
+        Assert.assertEquals(props.getContentMaxChars(), defaults.getContentMaxChars());
+        Assert.assertEquals(props.getContentHeadChars(), defaults.getContentHeadChars());
+        Assert.assertEquals(props.getContentTailChars(), defaults.getContentTailChars());
+        Assert.assertEquals(props.getSummaryInputMaxChars(), defaults.getSummaryInputMaxChars());
+        Assert.assertEquals(props.getSummarizerTimeoutSeconds(), defaults.getSummarizerTimeoutSeconds());
+        Assert.assertEquals(props.isMidRunEnabled(), defaults.isMidRunEnabled());
+        Assert.assertEquals(props.isPersistProjection(), defaults.isPersistProjection());
+        Assert.assertEquals(props.isAuditEnabled(), defaults.isAuditEnabled());
+        Assert.assertEquals(props.isAuditStoreMessages(), defaults.isAuditStoreMessages());
+    }
+
     @Test
     public void structuredCheckpointAndFailureFallbackAreStable() {
         Assert.assertTrue(CompactionPrompt.getCompactPrompt().contains("## Historical Task Snapshot"));
@@ -209,10 +244,13 @@ public class SessionContextCompactionOutcomeTest {
                 RecordingService.nullProvider(),
                 workingMemory,
                 dao,
-                true, true, false, false,
-                0.50d, 20, 1, 200,
-                3, 0.2d, 4000, 5, 8000,
-                true, true, false, true);
+                CompactionBudget.defaults().toBuilder()
+                        .microEnabled(false)
+                        .keepMinTokens(20)
+                        .keepMinTextMessages(1)
+                        .keepMaxTokens(200)
+                        .auditStoreMessages(false)
+                        .build());
         List<Message> small = List.of(Message.userMessage("hi", null));
         PromptShape shape = PromptShape.text(null, small);
         service.applyIfNeededMidRun("s-mem", "main", "req-mem", small, null, shape, null);
@@ -312,10 +350,15 @@ public class SessionContextCompactionOutcomeTest {
                                  boolean microEnabled,
                                  int microKeepRecentToolResults) {
             super(nullProvider(), workingMemory, recordingDao(audited),
-                    true, true, microEnabled, false,
-                    0.50d, 20, 1, 200,
-                    3, 0.2d, 4000, microKeepRecentToolResults, 8000,
-                    persistProjection, true, false, true);
+                    CompactionBudget.defaults().toBuilder()
+                            .microEnabled(microEnabled)
+                            .keepMinTokens(20)
+                            .keepMinTextMessages(1)
+                            .keepMaxTokens(200)
+                            .microKeepRecentToolResults(microKeepRecentToolResults)
+                            .persistProjection(persistProjection)
+                            .auditStoreMessages(false)
+                            .build());
             this.audited = audited;
             this.compactResult = compactResult;
             this.failWith = failWith;

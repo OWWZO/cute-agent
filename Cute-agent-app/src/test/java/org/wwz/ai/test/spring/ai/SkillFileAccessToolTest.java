@@ -68,13 +68,12 @@ public class SkillFileAccessToolTest {
     @Test
     public void shouldReadSkillFilesViaWorkspaceTools() {
         WorkspaceReadTool readTool = new WorkspaceReadTool(workspaceService, workspaceOptions);
-        readTool.setAgentContext(agentContext);
 
         String result = String.valueOf(readTool.execute(Map.of(
                 "path", metricsFile.toString(),
                 "start_line", 1,
                 "line_count", 20
-        )));
+        ), agentContext));
         Assert.assertTrue(result.contains("路径") || result.contains(metricsFile.getFileName().toString()) || result.length() > 0);
         Assert.assertFalse(result.contains("outside allowed roots"));
     }
@@ -82,34 +81,30 @@ public class SkillFileAccessToolTest {
     @Test
     public void shouldListGlobGrepSkillDirectoryViaWorkspaceTools() {
         WorkspaceListTool listTool = new WorkspaceListTool(workspaceService, workspaceOptions);
-        listTool.setAgentContext(agentContext);
         WorkspaceGlobTool globTool = new WorkspaceGlobTool(workspaceService, workspaceOptions);
-        globTool.setAgentContext(agentContext);
         WorkspaceGrepTool grepTool = new WorkspaceGrepTool(workspaceService, workspaceOptions);
-        grepTool.setAgentContext(agentContext);
 
-        Assert.assertTrue(String.valueOf(listTool.execute(Map.of("path", scriptsDirectory.toString(), "max_depth", 2)))
+        Assert.assertTrue(String.valueOf(listTool.execute(Map.of("path", scriptsDirectory.toString(), "max_depth", 2), agentContext))
                 .contains("summarize.py"));
         Assert.assertTrue(String.valueOf(globTool.execute(Map.of(
                 "path", skillRoot.toString(),
                 "pattern", "references/**/*.md"
-        ))).contains("references/metrics.md"));
+        ), agentContext)).contains("references/metrics.md"));
         Assert.assertTrue(String.valueOf(grepTool.execute(Map.of(
                 "path", skillRoot.toString(),
                 "pattern", "gross_margin"
-        ))).contains("metrics.md"));
+        ), agentContext)).contains("metrics.md"));
     }
 
     @Test
     public void shouldRejectWriteIntoSkillDirectory() throws Exception {
         Path skillFile = skillRoot.resolve("should-not-write.md");
         WorkspaceWriteTool writeTool = new WorkspaceWriteTool(workspaceService, workspaceOptions);
-        writeTool.setAgentContext(agentContext);
 
         String result = String.valueOf(writeTool.execute(Map.of(
                 "path", skillFile.toString(),
                 "content", "nope"
-        )));
+        ), agentContext));
         Assert.assertTrue(result.contains("outside allowed roots") || result.contains("outside workspace"));
         Assert.assertFalse(Files.exists(skillFile));
     }
@@ -119,8 +114,7 @@ public class SkillFileAccessToolTest {
         Path outside = Files.createTempFile("outside-skill-ws", ".md");
         Files.writeString(outside, "outside", StandardCharsets.UTF_8);
         WorkspaceReadTool readTool = new WorkspaceReadTool(workspaceService, workspaceOptions);
-        readTool.setAgentContext(agentContext);
-        Assert.assertTrue(String.valueOf(readTool.execute(Map.of("path", outside.toString())))
+        Assert.assertTrue(String.valueOf(readTool.execute(Map.of("path", outside.toString()), agentContext))
                 .contains("outside allowed roots"));
     }
 

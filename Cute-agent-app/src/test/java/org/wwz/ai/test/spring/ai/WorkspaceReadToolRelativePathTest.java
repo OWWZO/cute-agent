@@ -39,13 +39,13 @@ public class WorkspaceReadToolRelativePathTest {
                     null,
                     new SkillVirtualPaths(SkillRuntimeOptions.builder().enabled(false).build()));
             WorkspaceReadTool readTool = new WorkspaceReadTool(service, options);
-            readTool.setAgentContext(AgentContext.builder()
-                    .requestId("req-rel")
-                    .sessionId("sess-rel")
-                    .workspaceRoot(workspaceRoot.toString())
-                    .build());
 
-            ToolResultPayload payload = (ToolResultPayload) readTool.execute(Map.of("path", "note.txt"));
+            ToolResultPayload payload = (ToolResultPayload) readTool.execute(
+                    Map.of("path", "note.txt"), AgentContext.builder()
+                            .requestId("req-rel")
+                            .sessionId("sess-rel")
+                            .workspaceRoot(workspaceRoot.toString())
+                            .build());
             Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
             Assert.assertTrue(String.valueOf(payload.getLlmData()).contains("hello-rel")
                     || String.valueOf(payload).contains("hello-rel"));

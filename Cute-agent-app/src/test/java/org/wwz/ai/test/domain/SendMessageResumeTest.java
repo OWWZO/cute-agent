@@ -2,7 +2,9 @@ package org.wwz.ai.test.domain;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
@@ -21,6 +23,8 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
+import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 
 /**
  * SendMessage：运行中只注入；已结束后台续跑。Agent(resume_agent_id) 失败。
@@ -30,14 +34,15 @@ public class SendMessageResumeTest {
     @Test
     public void agentResumeAgentIdFailsWithoutStartingChild() {
         CapturingRunner runner = new CapturingRunner(true);
-        AgentDispatchTool tool = new AgentDispatchTool(runner, new SubAgentRegistry());
-        tool.setAgentContext(parentContext("sess-reject-resume", new RuntimeBackgroundTaskRegistry()));
+        AgentDispatchTool tool = new AgentDispatchTool();
+        AgentContext dispatchContext = parentContext("sess-reject-resume",
+                new RuntimeBackgroundTaskRegistry(), runner, null);
 
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("description", "续跑");
         input.put("prompt", "continue");
         input.put("resume_agent_id", "agent-old");
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(input);
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(input, dispatchContext);
 
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertTrue(payload.getToolResult().contains("SendMessage"));
@@ -55,13 +60,13 @@ public class SendMessageResumeTest {
         SessionAgentMailboxHub.queue(sessionId, "agent-live");
 
         CapturingRunner runner = new CapturingRunner(true);
-        SendMessageTool tool = new SendMessageTool(runner, null);
-        tool.setAgentContext(parentContext(sessionId, registry));
+        SendMessageTool tool = new SendMessageTool();
+        AgentContext injectContext = parentContext(sessionId, registry, runner, null);
 
         int runningBefore = registry.listRunning().size();
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "to", "agent-live",
-                "message", "先列目录"));
+                "message", "先列目录"), injectContext);
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
 
@@ -86,19 +91,18 @@ public class SendMessageResumeTest {
                 .build());
 
         CapturingRunner runner = new CapturingRunner(true);
-        SendMessageTool tool = new SendMessageTool(runner, null);
-        AgentContext parent = parentContext(sessionId, registry);
+        SendMessageTool tool = new SendMessageTool();
+        AgentContext parent = parentContext(sessionId, registry, runner, null);
         parent.bindCurrentToolArtifactSource(ToolArtifactSource.builder()
                 .sessionId(sessionId)
                 .requestId("req-resume")
                 .toolCallId("sm-1")
                 .toolName(TaskToolNames.SEND_MESSAGE)
                 .build());
-        tool.setAgentContext(parent);
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "to", "agent-done",
-                "message", "继续写报告"));
+                "message", "继续写报告"), parent);
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
 
@@ -127,13 +131,13 @@ public class SendMessageResumeTest {
                 .build());
 
         CapturingRunner runner = new CapturingRunner(false);
-        SendMessageTool tool = new SendMessageTool(runner, null);
-        tool.setAgentContext(parentContext(sessionId, registry));
+        SendMessageTool tool = new SendMessageTool();
+        AgentContext injectContext = parentContext(sessionId, registry, runner, null);
 
         int runningBefore = registry.listRunning().size();
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "to", "agent-empty",
-                "message", "再来一次"));
+                "message", "再来一次"), injectContext);
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
 
@@ -144,11 +148,22 @@ public class SendMessageResumeTest {
     }
 
     private static AgentContext parentContext(String sessionId, RuntimeBackgroundTaskRegistry registry) {
+        return parentContext(sessionId, registry, null, null);
+    }
+
+    private static AgentContext parentContext(String sessionId,
+                                              RuntimeBackgroundTaskRegistry registry,
+                                              SubAgentRunner subAgentRunner,
+                                              ActiveAgentRunRegistry activeAgentRunRegistry) {
         return AgentContext.builder()
                 .requestId("req-" + sessionId)
                 .sessionId(sessionId)
                 .query("q")
-                .backgroundTasks(registry)
+                .sessionControl(new SessionControl().withBackgroundTasks(registry))
+                .runtimeDependencies(CuteRuntimeDependencies.builder()
+                        .subAgentRunner(subAgentRunner)
+                        .activeAgentRunRegistry(activeAgentRunRegistry)
+                        .build())
                 .build();
     }
 

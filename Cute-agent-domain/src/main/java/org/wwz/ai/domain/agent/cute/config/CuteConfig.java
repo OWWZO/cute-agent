@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.cute.config;
 
-
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import lombok.Getter;
@@ -164,85 +163,8 @@ public class CuteConfig {
     @Value("${autobots.autoagent.llm_proxy:}")
     private String llmProxy;
 
-    /**
-     * WebSearch 模式：auto | gpt | grok | exa | tavily | brave | disabled。
-     * auto 时优先 Grok/xAI 原生搜索，其次 GPT/OpenAI Responses API、Exa、Tavily、Brave。
-     */
-    @Value("${autobots.autoagent.web_search.mode:auto}")
-    private String webSearchMode;
-
-    /**
-     * Grok/xAI 原生搜索凭证；为空时回退 llm.default / llm.settings。
-     */
-    @Value("${autobots.autoagent.web_search.grok_api_key:}")
-    private String webSearchGrokApiKey;
-
-    @Value("${autobots.autoagent.web_search.grok_base_url:}")
-    private String webSearchGrokBaseUrl;
-
-    @Value("${autobots.autoagent.web_search.grok_model:}")
-    private String webSearchGrokModel;
-
-    @Value("${autobots.autoagent.web_search.grok_interface_url:/v1/chat/completions}")
-     private String webSearchGrokInterfaceUrl;
-
-     /**
-      * OpenAI Responses API 搜索凭证；支持官方 OpenAI 或兼容 Responses API 的代理。
-      */
-     @Value("${autobots.autoagent.web_search.gpt_api_key:}")
-     private String webSearchGptApiKey;
-
-     @Value("${autobots.autoagent.web_search.gpt_base_url:https://api.openai.com/v1}")
-     private String webSearchGptBaseUrl;
-
-     @Value("${autobots.autoagent.web_search.gpt_model:gpt-4.1}")
-     private String webSearchGptModel;
-
-     @Value("${autobots.autoagent.web_search.gpt_interface_url:/responses}")
-     private String webSearchGptInterfaceUrl;
-
-    @Value("${autobots.autoagent.web_search.exa_api_key:}")
-    private String webSearchExaApiKey;
-
-    @Value("${autobots.autoagent.web_search.exa_search_url:https://api.exa.ai/search}")
-    private String webSearchExaSearchUrl;
-
-    @Value("${autobots.autoagent.web_search.tavily_api_key:}")
-    private String webSearchTavilyApiKey;
-
-    @Value("${autobots.autoagent.web_search.brave_api_key:}")
-    private String webSearchBraveApiKey;
-
     @Value("${autobots.autoagent.multimodalagent_url:}")
     private String multiModalAgentUrl;
-
-    /**
-     * 兼容旧配置：历史上指向 cute-tool 的 image_generation 代理地址。
-     * Java 直连上游后不再作为主配置，仅作 base_url 兜底。
-     */
-    @Value("${autobots.autoagent.image_generation_url:}")
-    private String imageGenerationUrl;
-
-    /**
-     * 图片上游 base URL（OpenAI 兼容），由部署环境配置。
-     */
-    @Value("${autobots.autoagent.image_generation.base_url:}")
-    private String imageGenerationBaseUrl;
-
-    @Value("${autobots.autoagent.image_generation.api_key:}")
-    private String imageGenerationApiKey;
-
-    @Value("${autobots.autoagent.image_generation.model:gpt-image-2.5-flare}")
-    private String imageGenerationModel;
-
-    @Value("${autobots.autoagent.image_generation.grok_base_url:}")
-    private String imageGenerationGrokBaseUrl;
-
-    @Value("${autobots.autoagent.image_generation.grok_api_key:}")
-    private String imageGenerationGrokApiKey;
-
-    @Value("${autobots.autoagent.image_generation.grok_model:grok-imagine-image-lite}")
-    private String imageGenerationGrokModel;
 
     @Value("${autobots.autoagent.mcp_client_url:}")
     private String mcpClientUrl;
@@ -270,24 +192,6 @@ public class CuteConfig {
 
     @Value("${autobots.autoagent.summary.message_size_limit:1000}")
     private Integer messageSizeLimit;
-
-    /**
-     * skill 在 ReAct 链路中的启用开关，主要用于日志观测与排障。
-     */
-    @Value("${autobots.autoagent.skill.react-enabled:true}")
-    private Boolean skillReactEnabled;
-
-    /**
-     * skill 在 PlanSolve 链路中的启用开关，主要用于日志观测与排障。
-     */
-    @Value("${autobots.autoagent.skill.plan-solve-enabled:true}")
-    private Boolean skillPlanSolveEnabled;
-
-    /**
-     * skill 文本读取上限，便于和 read_tool / skill_view 的截断行为联动排查。
-     */
-    @Value("${autobots.autoagent.skill.max-read-chars:12000}")
-    private Integer skillMaxReadChars;
 
     private Map<String, String> sensitivePatterns = new HashMap<>();
     @Value("${autobots.autoagent.sensitive_patterns:{}}")

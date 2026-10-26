@@ -3,7 +3,6 @@ package org.wwz.ai.domain.agent.runtime.tool.common;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
-import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.memory.ltm.CuratedMemoryScope;
 import org.wwz.ai.domain.agent.memory.ltm.CuratedMemoryStore;
@@ -26,12 +25,9 @@ import java.util.Map;
 /**
  * Memory tool：add/replace/remove（可选 batch operations）。
  */
-@Data
 public class MemoryTool implements BaseTool {
 
     public static final String TOOL_NAME = "memory";
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -95,20 +91,26 @@ public class MemoryTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
-        if (LtmMemoryGuard.isSkipMemory(agentContext)) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
+        if (LtmMemoryGuard.isSkipMemory(context)) {
             return resultPayload(false, false, LtmMemoryGuard.deniedMessage(), 0, 0);
         }
-        CuratedMemoryStore store = resolveStore();
+        CuratedMemoryStore store = resolveStore(context);
         if (store == null) {
             return resultPayload(false, false, "curated memory store unavailable", 0, 0);
         }
-        LtmOwner owner = agentContext != null && agentContext.getLtmOwner() != null
-                ? agentContext.getLtmOwner()
+        LtmOwner owner = context != null && context.getLtmOwner() != null
+                ? context.getLtmOwner()
                 : LtmOwnerResolver.resolve(null, null);
-        String sessionId = agentContext == null ? null : agentContext.getSessionId();
-        String requestId = agentContext == null ? null : agentContext.getRequestId();
+        String sessionId = context == null ? null : context.getSessionId();
+        String requestId = context == null ? null : context.getRequestId();
 
         Map<String, Object> args = normalizeInput(input);
         Object ops = args.get("operations");
@@ -119,7 +121,7 @@ public class MemoryTool implements BaseTool {
                 Map<String, Object> op = item instanceof Map<?, ?> m
                         ? (Map<String, Object>) m
                         : JSON.parseObject(JSON.toJSONString(item), Map.class);
-                CuratedMemoryWriteResult one = applyOne(store, owner, op, sessionId, requestId);
+                CuratedMemoryWriteResult one = applyOne(store, owner, op, sessionId, requestId, context);
                 results.add(toJson(one));
                 if (!one.isSuccess()) {
                     allOk = false;
@@ -132,7 +134,7 @@ public class MemoryTool implements BaseTool {
             batch.put("results", results);
             return ToolResultPayload.fromData(batch);
         }
-        CuratedMemoryWriteResult result = applyOne(store, owner, args, sessionId, requestId);
+        CuratedMemoryWriteResult result = applyOne(store, owner, args, sessionId, requestId, context);
         JSONObject json = toJson(result);
         json.put("store", store.getClass().getSimpleName());
         json.put("owner_type", owner.getType().name());
@@ -148,7 +150,8 @@ public class MemoryTool implements BaseTool {
                                               LtmOwner owner,
                                               Map<String, Object> args,
                                               String sessionId,
-                                              String requestId) {
+                                              String requestId,
+                                              AgentContext context) {
         String action = str(args.get("action")).toLowerCase();
         CuratedMemoryScope scope = CuratedMemoryScope.fromCode(str(args.get("target")));
         String content = str(args.get("content"));
@@ -160,11 +163,11 @@ public class MemoryTool implements BaseTool {
             case "remove" -> result = store.remove(owner, scope, oldText, sessionId, requestId, "assistant_tool");
             default -> result = CuratedMemoryWriteResult.fail("unknown action: " + action, 0, 0);
         }
-        if (result.isSuccess() && !result.isStaged() && agentContext != null
-                && !LtmMemoryGuard.isSkipMemory(agentContext)
-                && !LtmMemoryGuard.isSideEffectsDisabled(agentContext)
-                && agentContext.getRuntimeDependencies() != null) {
-            LtmManager manager = agentContext.getRuntimeDependencies().getOptionalLtmManager();
+        if (result.isSuccess() && !result.isStaged() && context != null
+                && !LtmMemoryGuard.isSkipMemory(context)
+                && !LtmMemoryGuard.isSideEffectsDisabled(context)
+                && context.getRuntimeDependencies() != null) {
+            LtmManager manager = context.getRuntimeDependencies().getOptionalLtmManager();
             if (manager != null) {
                 Map<String, Object> meta = new HashMap<>();
                 meta.put("session_id", sessionId);
@@ -179,11 +182,11 @@ public class MemoryTool implements BaseTool {
         return result;
     }
 
-    private CuratedMemoryStore resolveStore() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private CuratedMemoryStore resolveStore(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             return null;
         }
-        return agentContext.getRuntimeDependencies().getOptionalCuratedMemoryStore();
+        return context.getRuntimeDependencies().getOptionalCuratedMemoryStore();
     }
 
     private static Map<String, Object> normalizeInput(Object input) {

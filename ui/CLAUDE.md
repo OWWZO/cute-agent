@@ -4,6 +4,27 @@
 
 ---
 
+## 设计规范（唯一来源）
+
+**所有 UI 改动前先读根目录 [`../DESIGN.md`](../DESIGN.md)。** 它是本项目设计规范的唯一来源，
+包含排版、色彩、分层、阴影、圆角、间距、动效、无障碍的完整规则，以及
+「适配决策记录」——明确列出哪些 Apple 做法采纳、哪些弃用及理由。
+
+改设计前必须核对的三条硬约束：
+
+1. **颜色/圆角/阴影只来自语义 token** —— 禁 Tailwind 调色板（`slate/sky/rose/emerald`…）与裸 hex；
+   由 `pnpm check:tokens` 自动拦截。
+2. **动效参数只来自 `src/lib/motion.ts`** —— 禁 `duration-[160ms]`、`ease-[cubic-bezier(...)]`、
+   内联 `transition={{ duration: 0.18 }}`；同样由 `check:tokens` 拦截。
+3. **结构面不加半透明** —— 侧栏、主内容区、卡片用实色；毛玻璃只给真浮层（抽屉、sticky 栏、下拉）。
+
+进度以 [`APPLE-GRADE-CHECKLIST.md`](./APPLE-GRADE-CHECKLIST.md) 为准：每轮只推进一个界面，
+改完即更新状态（待办 / 进行中 / 已验收）。
+
+> 用户已认可的配色不要单独"优化"。除非能说清解决了什么具体问题，否则不动。
+
+---
+
 ## 项目愿景
 
 打造一个支持多 Agent 协作、深度研究、数据分析对话的 AI Agent 交互界面，通过 SSE（Server-Sent Events）流式协议与后端 Agent 服务实时通信，提供流畅的对话体验和丰富的可视化展示。

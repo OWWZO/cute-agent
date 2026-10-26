@@ -32,6 +32,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
 
 /**
  * LLM 调用账本写入路径的契约回归。
@@ -206,7 +207,7 @@ public class LlmInvocationLedgerTest {
                     .sessionId("session-llm-ledger")
                     .executionRecorder(recorder)
                     .agentRunState(runState)
-                    .runCancellation(new RunCancellation())
+                    .control(new RunControl().withCancellation(new RunCancellation()))
                     .runtimeDependencies(runtimeDependencies(cuteConfig, this))
                     .build();
             llm = new LLM(MODEL, "erp", context.getRuntimeDependencies());

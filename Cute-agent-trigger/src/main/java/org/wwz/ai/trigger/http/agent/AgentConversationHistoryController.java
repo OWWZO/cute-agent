@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.wwz.ai.api.response.Response;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
+import org.wwz.ai.application.agent.query.ConversationSessionBootstrapApplicationService;
+import org.wwz.ai.application.agent.query.ConversationSessionBootstrapApplicationService.ConversationSessionBootstrap;
 import org.wwz.ai.application.agent.stream.AgentStreamFrameMapper;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
@@ -24,6 +26,7 @@ import org.wwz.ai.domain.agent.ledger.replay.ConversationHistoryReplayService;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
 import org.wwz.ai.trigger.http.agent.vo.ArtifactReferenceRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationHistoryPageRespVO;
+import org.wwz.ai.trigger.http.agent.vo.ConversationSessionBootstrapRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationRunReplayRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationRunSummaryRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionPageRespVO;
@@ -58,6 +61,38 @@ public class AgentConversationHistoryController {
 
     @Resource
     private ConversationSessionAuthorizationService conversationSessionAuthorizationService;
+
+    @Resource
+    private ConversationSessionBootstrapApplicationService conversationSessionBootstrapApplicationService;
+
+    /**
+     * 会话切换 bootstrap：一次返回恢复会话所需的全部数据，替代 detail + files + 三类 HITL pending 五个串行请求。
+     */
+    @GetMapping("/sessions/{sessionId}/bootstrap")
+    public Response<ConversationSessionBootstrapRespVO> bootstrap(
+            @PathVariable("sessionId") String sessionId,
+            @RequestParam(name = "limit", defaultValue = "20") Integer limit,
+            @RequestParam(name = "after", required = false) String after) {
+        try {
+            // 鉴权统一在聚合入口完成：detail / files 原有接口各自校验，三个 pending 原先没有校验。
+            conversationSessionAuthorizationService.ensureExistingSessionAccessible(
+                    UserRequestContext.requireUserId(),
+                    sessionId
+            );
+            ConversationSessionBootstrap bootstrap = conversationSessionBootstrapApplicationService
+                    .queryBootstrap(sessionId, limit, after);
+            return Response.<ConversationSessionBootstrapRespVO>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(toBootstrapRespVO(bootstrap))
+                    .build();
+        } catch (Exception e) {
+            return Response.<ConversationSessionBootstrapRespVO>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info(e.getMessage())
+                    .build();
+        }
+    }
 
     @GetMapping("/sessions")
     public Response<ConversationSessionPageRespVO> list(
@@ -274,6 +309,25 @@ public class AgentConversationHistoryController {
                 .map(agentStreamFrameMapper::toFrame)
                 .map(agentStreamResponseMapper::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    private ConversationSessionBootstrapRespVO toBootstrapRespVO(ConversationSessionBootstrap bootstrap) {
+        if (bootstrap == null) {
+            return null;
+        }
+        return ConversationSessionBootstrapRespVO.builder()
+                .detail(toPageRespVO(bootstrap.getDetail()))
+                .files(bootstrap.getFiles() == null ? List.of() : bootstrap.getFiles().stream()
+                        .map(this::toArtifactReferenceRespVO)
+                        .collect(Collectors.toList()))
+                .askUser(emptyIfNull(bootstrap.getAskUser()))
+                .desktopControl(emptyIfNull(bootstrap.getDesktopControl()))
+                .planApproval(emptyIfNull(bootstrap.getPlanApproval()))
+                .build();
+    }
+
+    private <T> List<T> emptyIfNull(List<T> list) {
+        return list == null ? List.of() : list;
     }
 
     private ArtifactReferenceRespVO toArtifactReferenceRespVO(ArtifactView artifact) {

@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.mcp;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
@@ -16,10 +15,7 @@ import java.util.Map;
  * 延迟本地/MCP 工具的 invoke 入口。生产主路径由 pipeline 解包；此处仅防漏解包。
  */
 @Slf4j
-@Data
 public class ToolCallTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -56,8 +52,14 @@ public class ToolCallTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
-            ToolCollection collection = agentContext == null ? null : agentContext.getToolCollection();
+            ToolCollection collection = context == null ? null : context.getToolCollection();
             DeferredToolCall.Result result = DeferredToolCall.resolve(collection, input);
             if (!result.ok()) {
                 return result.errorPayload();

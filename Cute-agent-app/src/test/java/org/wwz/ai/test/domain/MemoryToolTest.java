@@ -36,12 +36,11 @@ public class MemoryToolTest {
                         .build())
                 .build();
         MemoryTool tool = new MemoryTool();
-        tool.setAgentContext(ctx);
 
         ToolResultPayload add = (ToolResultPayload) tool.execute(Map.of(
                 "action", "add",
                 "target", "user",
-                "content", "prefers concise Chinese"));
+                "content", "prefers concise Chinese"), ctx);
         Assert.assertTrue(add.getLlmData() instanceof Map<?, ?>);
         Assert.assertTrue(Boolean.TRUE.equals(((Map<?, ?>) add.getLlmData()).get("success")));
 
@@ -49,13 +48,13 @@ public class MemoryToolTest {
                 "action", "replace",
                 "target", "user",
                 "old_text", "concise",
-                "content", "prefers brief Chinese answers"));
+                "content", "prefers brief Chinese answers"), ctx);
         Assert.assertTrue(Boolean.TRUE.equals(((Map<?, ?>) replace.getLlmData()).get("success")));
 
         ToolResultPayload remove = (ToolResultPayload) tool.execute(Map.of(
                 "action", "remove",
                 "target", "user",
-                "old_text", "brief"));
+                "old_text", "brief"), ctx);
         Assert.assertTrue(Boolean.TRUE.equals(((Map<?, ?>) remove.getLlmData()).get("success")));
         Assert.assertTrue(store.listActive(LtmOwner.user("u1"),
                 org.wwz.ai.domain.agent.memory.ltm.CuratedMemoryScope.USER).isEmpty());

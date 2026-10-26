@@ -48,7 +48,7 @@ const SessionTaskComposerBar: FC<SessionTaskComposerBarProps> = memo(
     }`;
 
     return (
-      <div className="mb-2 overflow-hidden rounded-2xl border border-[var(--chat-border)]/45 bg-[var(--chat-surface)]/95 shadow-[var(--shadow-sm)]">
+      <div className="mb-2 overflow-hidden rounded-2xl bg-[var(--chat-surface)]/95 shadow-[var(--shadow-sm)]">
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}

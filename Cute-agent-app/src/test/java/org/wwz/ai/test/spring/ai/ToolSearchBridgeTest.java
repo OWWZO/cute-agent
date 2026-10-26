@@ -50,8 +50,7 @@ public class ToolSearchBridgeTest {
     public void describeReturnsParameters() {
         Fixture fx = fixture();
         ToolDescribeTool describe = new ToolDescribeTool();
-        describe.setAgentContext(fx.context);
-        Object result = describe.execute(Map.of("name", "mcp__demo__remote_tool"));
+        Object result = describe.execute(Map.of("name", "mcp__demo__remote_tool"), fx.context);
         Map<String, Object> data = llmData(result);
         Assert.assertEquals("mcp__demo__remote_tool", data.get("name"));
         Assert.assertTrue(data.get("parameters") instanceof Map);
@@ -100,9 +99,8 @@ public class ToolSearchBridgeTest {
     public void toolSearchDescriptionIsStableAndContainsListing() {
         Fixture fx = fixture();
         ToolSearchTool search = new ToolSearchTool();
-        search.setAgentContext(fx.context);
-        String first = search.getDescription();
-        String second = search.getDescription();
+        String first = search.getDescription(fx.context);
+        String second = search.getDescription(fx.context);
         Assert.assertEquals(first, second);
         Assert.assertTrue(first.contains("mcp__demo__remote_tool"));
         Assert.assertTrue(first.contains("ToolDescribe"));
@@ -155,8 +153,7 @@ public class ToolSearchBridgeTest {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> executeSearch(Fixture fx, String query) {
         ToolSearchTool search = new ToolSearchTool();
-        search.setAgentContext(fx.context);
-        Object result = search.execute(Map.of("query", query));
+        Object result = search.execute(Map.of("query", query), fx.context);
         return llmData(result);
     }
 
@@ -169,21 +166,15 @@ public class ToolSearchBridgeTest {
     }
 
     private static ToolSearchTool searchTool(AgentContext context) {
-        ToolSearchTool tool = new ToolSearchTool();
-        tool.setAgentContext(context);
-        return tool;
+        return new ToolSearchTool();
     }
 
     private static ToolDescribeTool describeTool(AgentContext context) {
-        ToolDescribeTool tool = new ToolDescribeTool();
-        tool.setAgentContext(context);
-        return tool;
+        return new ToolDescribeTool();
     }
 
     private static ToolCallTool callTool(AgentContext context) {
-        ToolCallTool tool = new ToolCallTool();
-        tool.setAgentContext(context);
-        return tool;
+        return new ToolCallTool();
     }
 
     private static Fixture fixture() {

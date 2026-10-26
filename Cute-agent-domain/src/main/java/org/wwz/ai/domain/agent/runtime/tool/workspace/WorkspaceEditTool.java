@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 
 /**
  * 局部替换编辑工作区文件。
@@ -55,21 +56,26 @@ public class WorkspaceEditTool extends AbstractWorkspacePathTool {
 
     @Override
     public Object execute(Object input) {
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = requireInputMap(input);
-            Path filePath = requireWritablePath(params);
+            Path filePath = requireWritablePath(params, context);
             if (!Files.isRegularFile(filePath)) {
-                return failResult("workspace_edit 只支持已存在的文件路径: " + toAgentPath(filePath));
+                return failResult("workspace_edit 只支持已存在的文件路径: " + toAgentPath(filePath, context));
             }
 
             String absolutePath = filePath.toAbsolutePath().normalize().toString();
-            if (agentContext == null) {
+            if (context == null) {
                 return failResult("workspace_edit requires agent context");
             }
-            WorkspaceFileReadState readState = agentContext.getWorkspaceFileReadState(absolutePath);
+            WorkspaceFileReadState readState = context.getWorkspaceFileReadState(absolutePath);
             if (readState == null) {
                 return failResult("You must use workspace_read at least once on this file before editing: "
-                        + toAgentPath(filePath));
+                        + toAgentPath(filePath, context));
             }
             long mtimeMs = Files.getLastModifiedTime(filePath).toMillis();
             String currentContent = Files.readString(filePath, StandardCharsets.UTF_8);
@@ -124,7 +130,7 @@ public class WorkspaceEditTool extends AbstractWorkspacePathTool {
             Files.writeString(filePath, updated, StandardCharsets.UTF_8);
             // 编辑后刷新 readState，允许连续 edit
             long newMtime = Files.getLastModifiedTime(filePath).toMillis();
-            agentContext.markWorkspaceFileRead(WorkspaceFileReadState.builder()
+            context.markWorkspaceFileRead(WorkspaceFileReadState.builder()
                     .absolutePath(absolutePath)
                     .mtimeMs(newMtime)
                     .startLine(1)
@@ -132,32 +138,32 @@ public class WorkspaceEditTool extends AbstractWorkspacePathTool {
                     .contentHash(WorkspaceReadStateStore.sha256Hex(updated))
                     .build());
 
-            Path workspaceRoot = requireWorkspaceRoot();
+            Path workspaceRoot = requireWorkspaceRoot(context);
             String relativePath = toRelativePath(workspaceRoot, filePath);
             WorkspaceFileRegistration.registerLocalFile(
-                    agentContext, relativePath, filePath, "编辑文件");
+                    context, relativePath, filePath, "编辑文件");
 
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("path", toAgentPath(filePath));
+            data.put("path", toAgentPath(filePath, context));
             data.put("replacements", replaceAll ? occurrences : 1);
             data.put("charsBefore", original.length());
             data.put("charsAfter", updated.length());
             // 带真实行号与上下文的 unified diff：前端内联预览与右侧 PatchDiff 共用。
             // 生成失败（片段过大等）时不落字段，前端退回自己的 LCS 合成。
             String diff = UnifiedDiffBuilder.build(
-                    toAgentPath(filePath), original, oldString, newString, replaceAll);
+                    toAgentPath(filePath, context), original, oldString, newString, replaceAll);
             if (diff != null) {
                 data.put("diff", diff);
             }
             return okResult(data);
         } catch (WorkspaceAccessException e) {
-            log.warn("{} workspace_edit failed, input={}", requestId(), input, e);
+            log.warn("{} workspace_edit failed, input={}", requestId(context), input, e);
             return failResult(e.getMessage());
         } catch (IOException e) {
-            log.error("{} workspace_edit io error, input={}", requestId(), input, e);
+            log.error("{} workspace_edit io error, input={}", requestId(context), input, e);
             return failResult("workspace_edit failed to edit file");
         } catch (Exception e) {
-            log.error("{} workspace_edit error, input={}", requestId(), input, e);
+            log.error("{} workspace_edit error, input={}", requestId(context), input, e);
             return failResult("workspace_edit execute failed");
         }
     }

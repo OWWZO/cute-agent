@@ -61,7 +61,7 @@ const SearchListItemComponent: CuteType.FC<SearchListItem & { index: number }> =
         className={cn(
           "group rounded-2xl border border-[var(--chat-border)]/50 bg-white px-4 py-4 transition-colors duration-200",
           clickable
-            ? "cursor-pointer hover:bg-[#fafafa]"
+            ? "cursor-pointer hover:bg-[var(--chat-surface-soft)]"
             : "cursor-default"
         )}
         onClick={() => {
@@ -83,7 +83,7 @@ const SearchListItemComponent: CuteType.FC<SearchListItem & { index: number }> =
       >
         <div className="flex gap-3.5">
           <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--chat-border)]/40 bg-[#f5f5f7] text-[var(--chat-text-muted)]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--chat-border)]/40 bg-[var(--chat-surface-muted)] text-[var(--chat-text-muted)]"
             aria-hidden
           >
             {kind === "query" ? (
@@ -93,21 +93,21 @@ const SearchListItemComponent: CuteType.FC<SearchListItem & { index: number }> =
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-[15px] font-medium leading-snug tracking-[-0.01em] text-[var(--chat-text)] transition-colors duration-200 group-hover:text-[#1d1d1f]">
+            <h3 className="text-[length:var(--content-font-size)] font-medium leading-snug tracking-[-0.01em] text-[var(--chat-text)] transition-colors duration-200 group-hover:text-[var(--chat-text)]">
               {name || "未命名来源"}
             </h3>
             {snippet ? (
-              <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-[var(--chat-text-soft)]">
+              <p className="mt-2 line-clamp-3 text-ui-caption leading-relaxed text-[var(--chat-text-soft)]">
                 {snippet}
               </p>
             ) : null}
             {host ? (
-              <div className="mt-3 flex items-center gap-1.5 font-mono text-[11px] tracking-tight text-[var(--chat-text-muted)]">
+              <div className="mt-3 flex items-center gap-1.5 font-mono text-ui-sm text-[var(--chat-text-muted)]">
                 <ExternalLink className="h-3 w-3 shrink-0 opacity-70" strokeWidth={2} />
                 <span className="truncate">{host}</span>
               </div>
             ) : metaLabel ? (
-              <div className="mt-3 inline-flex items-center rounded-full bg-[var(--chat-surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--chat-text-muted)]">
+              <div className="mt-3 inline-flex items-center rounded-full bg-[var(--chat-surface)] px-2.5 py-1 text-ui-sm font-medium text-[var(--chat-text-muted)]">
                 {metaLabel}
               </div>
             ) : null}
@@ -153,8 +153,8 @@ const SearchListRenderer: CuteType.FC<SearchListRendererProps> = React.memo(({
             <Search className="h-6 w-6" strokeWidth={1.5} />
           )}
         </div>
-        <p className="text-[15px] font-medium text-[var(--chat-text)]">{emptyTitle}</p>
-        <p className="mt-1 max-w-[280px] text-[13px] leading-relaxed text-[var(--chat-text-soft)]">
+        <p className="text-[length:var(--content-font-size)] font-medium text-[var(--chat-text)]">{emptyTitle}</p>
+        <p className="mt-1 max-w-[280px] text-ui-caption leading-relaxed text-[var(--chat-text-soft)]">
           {emptyDescription}
         </p>
       </div>
@@ -164,7 +164,7 @@ const SearchListRenderer: CuteType.FC<SearchListRendererProps> = React.memo(({
   return (
     <div className={cn("mx-auto w-full max-w-2xl px-1 pb-8 pt-2", className)}>
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--chat-border)]/50 bg-[#f5f5f7] text-[var(--chat-text-muted)]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--chat-border)]/50 bg-[var(--chat-surface-muted)] text-[var(--chat-text-muted)]">
           {loading ? (
             <LoaderCircle className="h-5 w-5 animate-spin" strokeWidth={1.75} />
           ) : (
@@ -173,17 +173,17 @@ const SearchListRenderer: CuteType.FC<SearchListRendererProps> = React.memo(({
         </div>
         <div className="min-w-0 flex-1">
           <p
-            className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]"
+            className="text-ui-xs font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]"
             style={{ fontFamily: "var(--font-sans)" }}
           >
             {eyebrow}
           </p>
-          <p className="mt-0.5 text-[15px] font-medium tracking-[-0.02em] text-[var(--chat-text)]">
+          <p className="mt-0.5 text-[length:var(--content-font-size)] font-medium tracking-[-0.02em] text-[var(--chat-text)]">
             {title}
           </p>
         </div>
         {resolvedSubtitle ? (
-          <Badge variant="secondary" className="h-6 shrink-0 px-2.5 text-[11px] font-medium">
+          <Badge variant="secondary" className="h-6 shrink-0 px-2.5 text-ui-sm font-medium">
             {resolvedSubtitle}
           </Badge>
         ) : null}

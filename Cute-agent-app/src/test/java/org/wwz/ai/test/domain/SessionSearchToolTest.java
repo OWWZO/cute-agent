@@ -33,8 +33,7 @@ public class SessionSearchToolTest {
                         .build())
                 .build();
         SessionSearchTool tool = new SessionSearchTool();
-        tool.setAgentContext(ctx);
-        Object out = tool.execute(Map.of("query", "小猫", "limit", 5));
+        Object out = tool.execute(Map.of("query", "小猫", "limit", 5), ctx);
         Assert.assertTrue(out instanceof ToolResultPayload);
         ToolResultPayload payload = (ToolResultPayload) out;
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
@@ -50,9 +49,9 @@ public class SessionSearchToolTest {
     @Test
     public void unavailableSearchReturnsStructuredFailure() {
         SessionSearchTool tool = new SessionSearchTool();
-        tool.setAgentContext(AgentContext.builder().sessionId("sess-1").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "小猫"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(
+                Map.of("query", "小猫"), AgentContext.builder().sessionId("sess-1").build());
 
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertTrue(payload.getLlmData() instanceof Map<?, ?>);
@@ -76,8 +75,7 @@ public class SessionSearchToolTest {
                         .build())
                 .build();
         SessionSearchTool tool = new SessionSearchTool();
-        tool.setAgentContext(ctx);
-        tool.execute(Map.of("query", "x", "scope", "session"));
+        tool.execute(Map.of("query", "x", "scope", "session"), ctx);
         Assert.assertEquals("session", capturedScope.get());
     }
 
@@ -121,8 +119,7 @@ public class SessionSearchToolTest {
                         .build())
                 .build();
         SessionSearchTool tool = new SessionSearchTool();
-        tool.setAgentContext(ctx);
-        tool.execute(Map.of("query", "GenUI", "role_filter", "user,assistant,tool"));
+        tool.execute(Map.of("query", "GenUI", "role_filter", "user,assistant,tool"), ctx);
         Assert.assertEquals("user,assistant,tool", capturedRoleFilter.get());
     }
 
@@ -137,9 +134,8 @@ public class SessionSearchToolTest {
                         .build())
                 .build();
         SessionSearchTool tool = new SessionSearchTool();
-        tool.setAgentContext(ctx);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of());
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(), ctx);
         Map<?, ?> data = (Map<?, ?>) payload.getLlmData();
         Assert.assertEquals("browse", data.get("mode"));
         Assert.assertEquals(0, data.get("count"));

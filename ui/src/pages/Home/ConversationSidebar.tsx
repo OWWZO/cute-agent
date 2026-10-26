@@ -1,7 +1,7 @@
 import { memo, useState, useCallback, useRef } from "react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
-import { EASE_OUT, useMotionConfig } from "@/lib/motion";
+import { SPRING_SOFT, useMotionConfig } from "@/lib/motion";
 import {
   Blocks,
   Bot,
@@ -89,7 +89,7 @@ function AccountSummary(props: {
     return (
       <Link
         to={ROUTES.LOGIN}
-        className="flex h-9 items-center px-2.5 text-[13px] font-medium text-[var(--chat-text-soft)] hover:text-[var(--chat-text)]"
+        className="flex h-9 items-center px-2.5 text-ui-caption font-medium text-[var(--chat-text-soft)] hover:text-[var(--chat-text)]"
       >
         登录 / 注册
       </Link>
@@ -102,15 +102,15 @@ function AccountSummary(props: {
 
   return (
     <div className="flex min-w-0 items-center gap-2.5 px-2.5 py-1.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--chat-accent)] text-[12px] font-semibold text-white">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--chat-accent)] text-ui-sm font-semibold text-white">
         {displayName.slice(0, 1).toUpperCase()}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium text-[var(--chat-text)]">
+        <div className="truncate text-ui-caption font-medium text-[var(--chat-text)]">
           {displayName}
         </div>
         {account && account !== displayName ? (
-          <div className="truncate text-[11px] text-[var(--chat-text-muted)]">
+          <div className="truncate text-ui-sm text-[var(--chat-text-muted)]">
             {account}
           </div>
         ) : null}
@@ -271,10 +271,13 @@ const ConversationSidebar = memo(function ConversationSidebar(
   const isTaskFilesPanel = sidebarPanel === "task-files";
 
   return (
+    // 侧栏用 --chat-nav 实色：它是与内容区并列的结构面，不是浮层。
+    // 半透明 + 模糊只在真正浮起的层（移动端抽屉遮罩）上才有意义；
+    // 侧栏套材质会因 --page-gradient 是纯白而糊成一片，丢掉与主区的层次。
     <div className="flex h-full w-full min-w-0 flex-col bg-[var(--chat-nav)]">
       {/* 顶部操作区 — Manus 侧栏风格 */}
       <div className="flex h-14 shrink-0 items-center justify-between px-3.5">
-        <div className="text-[18px] font-semibold tracking-[-0.02em] text-[var(--chat-text)]">
+        <div className="text-ui-xl font-semibold tracking-[-0.02em] text-[var(--chat-text)]">
           Cute
         </div>
         <div className="flex items-center gap-0.5">
@@ -316,7 +319,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
           <button
             type="button"
             onClick={onNewChat}
-            className="flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-[14px] font-medium text-[var(--chat-text)] transition-colors hover:bg-black/[0.04]"
+            className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui-base font-medium text-[var(--chat-text)] transition-colors hover:bg-black/[0.04]"
           >
             <SquarePen className="h-[18px] w-[18px]" />
             <span>新建任务</span>
@@ -329,7 +332,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
                 ? searchOpen
                   ? "grid-rows-[1fr] opacity-100"
                   : "grid-rows-[0fr] opacity-0"
-                : "transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
+                : "transition-[grid-template-rows,opacity] duration-[var(--duration-dropdown)] ease-[var(--ease-out)]",
               !reduce &&
                 (searchOpen
                   ? "grid-rows-[1fr] opacity-100"
@@ -350,7 +353,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
                   placeholder="搜索会话..."
                   autoFocus={searchOpen}
                   tabIndex={searchOpen ? 0 : -1}
-                  className="w-full rounded-[10px] border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 py-2 pr-8 text-[13px] text-[var(--chat-text)] outline-none transition-colors placeholder:text-[var(--chat-text-muted)] focus:border-[#0000004d]"
+                  className="w-full rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 py-2 pr-8 text-ui-caption text-[var(--chat-text)] outline-none transition-colors placeholder:text-[var(--chat-text-muted)] focus:border-[var(--chat-border-strong)]"
                 />
                 {searchQuery ? (
                   <button
@@ -394,7 +397,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
                   type="button"
                   onClick={() => onChangeView(item.key)}
                   className={cn(
-                    "flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-[14px] font-medium transition-colors",
+                    "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui-base font-medium transition-colors",
                     isActive
                       ? "bg-black/[0.08] text-[var(--chat-text)]"
                       : "text-[var(--chat-text)] hover:bg-black/[0.04]"
@@ -410,11 +413,11 @@ const ConversationSidebar = memo(function ConversationSidebar(
           {/* 最近会话 */}
           <div className="flex min-h-0 flex-1 flex-col px-2 pt-3">
             <div className="mb-1.5 flex items-center justify-between px-2.5">
-              <span className="text-[12px] font-medium text-[var(--chat-text-muted)]">
+              <span className="text-ui-sm font-medium text-[var(--chat-text-muted)]">
                 任务
               </span>
               {recentSessionsLoading && (
-                <span className="text-[11px] text-[var(--chat-text-muted)]">
+                <span className="text-ui-sm text-[var(--chat-text-muted)]">
                   加载中...
                 </span>
               )}
@@ -427,7 +430,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
               className="flex-1 overflow-y-auto scrollbar-thin"
             >
               {filteredSessions.length === 0 ? (
-                <div className="px-2.5 py-4 text-center text-[12px] text-[var(--chat-text-muted)]">
+                <div className="px-2.5 py-4 text-center text-ui-sm text-[var(--chat-text-muted)]">
                   {searchQuery.trim() ? "未找到匹配的会话" : "暂无会话"}
                 </div>
               ) : (
@@ -447,18 +450,18 @@ const ConversationSidebar = memo(function ConversationSidebar(
                         {isActive ? (
                           <motion.div
                             layoutId={reduce ? undefined : "sidebar-active"}
-                            className="pointer-events-none absolute inset-0 rounded-[10px] bg-black/[0.08]"
-                            transition={{
-                              duration: reduce ? 0 : 0.2,
-                              ease: EASE_OUT,
-                            }}
+                            className="pointer-events-none absolute inset-0 rounded-lg bg-black/[0.08]"
+                            // 选中块在列表间「滑」过去而不是淡入淡出：弹簧给位移一点
+                            // 轻微回弹，手感接近原生列表选择器。reduced 时仍渲染高亮，
+                            // 只是瞬时切换，不做可感知位移。
+                            transition={reduce ? { duration: 0 } : SPRING_SOFT}
                           />
                         ) : null}
                         <button
                           type="button"
                           onClick={() => onSelectSession(session)}
                           className={cn(
-                            "group relative z-[1] flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left transition-colors",
+                            "group relative z-[1] flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors",
                             isActive
                               ? "text-[var(--chat-text)]"
                               : "text-[var(--chat-text)] hover:bg-black/[0.04]"
@@ -473,7 +476,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
                             )}
                             aria-hidden
                           />
-                          <span className="min-w-0 flex-1 truncate text-[14px] font-medium">
+                          <span className="min-w-0 flex-1 truncate text-ui-base font-medium">
                             {session.title || "未命名会话"}
                           </span>
                           <span
@@ -519,7 +522,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
               {recentSessionsLoadingMore ? (
                 <div
                   role="status"
-                  className="px-2.5 py-2 text-center text-[11px] text-[var(--chat-text-muted)]"
+                  className="px-2.5 py-2 text-center text-ui-sm text-[var(--chat-text-muted)]"
                 >
                   加载中...
                 </div>
@@ -533,7 +536,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
               onClick={() => onOpenTaskFiles?.()}
               disabled={activeView !== "chat"}
               className={cn(
-                "flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-[14px] font-medium transition-colors",
+                "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui-base font-medium transition-colors",
                 activeView === "chat"
                   ? "text-[var(--chat-text)] hover:bg-black/[0.04]"
                   : "cursor-not-allowed text-[var(--chat-text-muted)] opacity-50"

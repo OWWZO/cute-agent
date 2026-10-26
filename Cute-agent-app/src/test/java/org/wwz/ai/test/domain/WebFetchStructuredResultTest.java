@@ -62,16 +62,15 @@ public class WebFetchStructuredResultTest {
         CuteConfig config = new CuteConfig();
         ReflectionTestUtils.setField(config, "webFetchUrl", "http://cute-tool:1601");
         WebFetchTool tool = new WebFetchTool();
-        tool.setAgentContext(AgentContext.builder()
-                .requestId("req-web-fetch-proxy")
-                .sessionId("session-web-fetch-proxy")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
-                .build());
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "url", "https://example.com/article",
                 "prompt", "extract the title"
-        ));
+        ), AgentContext.builder()
+                .requestId("req-web-fetch-proxy")
+                .sessionId("session-web-fetch-proxy")
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .build());
 
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertNotNull(captured.get());
@@ -106,16 +105,15 @@ public class WebFetchStructuredResultTest {
         CuteConfig config = new CuteConfig();
         ReflectionTestUtils.setField(config, "webFetchUrl", "http://cute-tool:1601");
         WebFetchTool tool = new WebFetchTool();
-        tool.setAgentContext(AgentContext.builder()
-                .requestId("req-web-fetch-404")
-                .sessionId("session-web-fetch-404")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
-                .build());
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "url", "https://example.com/missing",
                 "prompt", "extract the title"
-        ));
+        ), AgentContext.builder()
+                .requestId("req-web-fetch-404")
+                .sessionId("session-web-fetch-404")
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .build());
 
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertTrue(payload.getLlmData() instanceof Map<?, ?>);

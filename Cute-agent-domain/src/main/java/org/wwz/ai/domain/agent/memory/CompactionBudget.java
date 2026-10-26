@@ -10,7 +10,7 @@ import lombok.Value;
  *（system + tools + messages），不再扣 max_tokens / buffer / output-reserve。</p>
  */
 @Value
-@Builder
+@Builder(toBuilder = true)
 public class CompactionBudget {
 
     public static final double DEFAULT_THRESHOLD_PERCENT = 0.50d;
@@ -54,6 +54,22 @@ public class CompactionBudget {
     int microKeepRecentToolResults;
     int microToolResultMaxChars;
 
+    /** mid-run（流式中途）是否允许触发压缩；与 @Value 时代 SessionContextCompactionServiceImpl 的同名开关同义。 */
+    @Builder.Default
+    boolean midRunEnabled = true;
+
+    /** 压缩结果是否回写 working memory 投影；false 只产出审计事件。 */
+    @Builder.Default
+    boolean persistProjection = true;
+
+    /** 是否写 ai_agent_working_memory_compaction 审计表。 */
+    @Builder.Default
+    boolean auditEnabled = true;
+
+    /** 审计事件是否携带压缩前后的完整消息 JSON。 */
+    @Builder.Default
+    boolean auditStoreMessages = true;
+
     public int threshold() {
         int window = Math.max(contextWindow, 0);
         if (window <= 0) {
@@ -95,6 +111,10 @@ public class CompactionBudget {
                 .summarizerTimeoutSeconds(120)
                 .microKeepRecentToolResults(DEFAULT_MICRO_KEEP_RECENT_TOOL_RESULTS)
                 .microToolResultMaxChars(DEFAULT_MICRO_TOOL_RESULT_MAX_CHARS)
+                .midRunEnabled(true)
+                .persistProjection(true)
+                .auditEnabled(true)
+                .auditStoreMessages(true)
                 .build();
     }
 }

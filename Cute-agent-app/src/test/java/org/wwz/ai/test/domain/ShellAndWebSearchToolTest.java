@@ -14,6 +14,7 @@ import org.wwz.ai.domain.agent.runtime.tool.common.shell.BashTool;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillRuntimeOptions;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillVirtualPaths;
 import org.wwz.ai.domain.agent.runtime.tool.common.WebSearchTool;
+import org.wwz.ai.types.agent.config.WebSearchProperties;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.test.domain.support.CuteRuntimeTestSupport;
 
@@ -65,7 +66,6 @@ public class ShellAndWebSearchToolTest {
 
         SkillRuntimeOptions skillOptions = SkillRuntimeOptions.builder().enabled(false).build();
         BashTool tool = new BashTool(skillOptions, new SkillVirtualPaths(skillOptions));
-        tool.setAgentContext(context);
 
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()
                 .sessionId(context.getSessionId())
@@ -76,7 +76,7 @@ public class ShellAndWebSearchToolTest {
         ToolResultPayload payload;
         context.bindCurrentToolArtifactSource(artifactSource);
         try {
-            payload = (ToolResultPayload) tool.execute(Map.of("command", "echo ok"));
+            payload = (ToolResultPayload) tool.execute(Map.of("command", "echo ok"), context);
         } finally {
             context.clearCurrentToolArtifactSource();
         }
@@ -121,9 +121,8 @@ public class ShellAndWebSearchToolTest {
                 .build();
         SkillRuntimeOptions skillOptions = SkillRuntimeOptions.builder().enabled(false).build();
         BashTool tool = new BashTool(skillOptions, new SkillVirtualPaths(skillOptions));
-        tool.setAgentContext(context);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("command", "run"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("command", "run"), context);
         Map<?, ?> data = (Map<?, ?>) payload.getLlmData();
 
         Assert.assertEquals(windowsPath, data.get("stdout"));
@@ -155,9 +154,8 @@ public class ShellAndWebSearchToolTest {
                 .build();
         SkillRuntimeOptions skillOptions = SkillRuntimeOptions.builder().enabled(false).build();
         BashTool tool = new BashTool(skillOptions, new SkillVirtualPaths(skillOptions));
-        tool.setAgentContext(context);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("command", "echo ok"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("command", "echo ok"), context);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         com.alibaba.fastjson.JSONObject request = JSON.parseObject(capturedBody.get());
         Assert.assertEquals(workspaceRoot, request.getString("workspaceRoot"));
@@ -185,9 +183,8 @@ public class ShellAndWebSearchToolTest {
                 .build();
         SkillRuntimeOptions skillOptions = SkillRuntimeOptions.builder().enabled(false).build();
         BashTool tool = new BashTool(skillOptions, new SkillVirtualPaths(skillOptions));
-        tool.setAgentContext(context);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("command", "echo ok"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("command", "echo ok"), context);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertEquals("user:v1", JSON.parseObject(capturedBody.get()).getString("ownerKey"));
     }
@@ -210,31 +207,29 @@ public class ShellAndWebSearchToolTest {
                 .userId("v1")
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
-        tool.setAgentContext(userContext);
-        tool.execute(Map.of("command", "echo ok"));
+        tool.execute(Map.of("command", "echo ok"), userContext);
         Assert.assertEquals("user:v1", JSON.parseObject(capturedBody.get()).getString("ownerKey"));
 
         AgentContext ltmOwnerContext = AgentContext.builder()
                 .requestId("req-bash-user")
                 .sessionId("session-bash-user")
                 .ltmOwner(LtmOwner.user("erp-1"))
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
                 .build();
-        tool.setAgentContext(ltmOwnerContext);
-        tool.execute(Map.of("command", "echo ok"));
+        tool.execute(Map.of("command", "echo ok"), ltmOwnerContext);
         Assert.assertEquals("user:erp-1", JSON.parseObject(capturedBody.get()).getString("ownerKey"));
     }
 
     @Test
     public void webSearchShouldFailWhenNoApiKey() {
         CuteConfig config = new CuteConfig();
-        ReflectionTestUtils.setField(config, "webSearchMode", "auto");
-        ReflectionTestUtils.setField(config, "webSearchGrokApiKey", "");
-        ReflectionTestUtils.setField(config, "webSearchGrokBaseUrl", "");
-        ReflectionTestUtils.setField(config, "webSearchGrokModel", "");
-        ReflectionTestUtils.setField(config, "webSearchExaApiKey", "");
-        ReflectionTestUtils.setField(config, "webSearchTavilyApiKey", "");
-        ReflectionTestUtils.setField(config, "webSearchBraveApiKey", "");
+        WebSearchProperties webSearch = webSearchProperties(b -> b
+                .grokApiKey("")
+                .grokBaseUrl("")
+                .grokModel("")
+                .exaApiKey("")
+                .tavilyApiKey("")
+                .braveApiKey(""));
 
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-001")
@@ -242,9 +237,8 @@ public class ShellAndWebSearchToolTest {
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config))
                 .build();
         WebSearchTool tool = new WebSearchTool();
-        tool.setAgentContext(context);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "Spring AI"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "Spring AI"), context);
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertTrue(payload.getErrorMsg().contains("未配置")
                 || payload.getLlmObservation().contains("未配置"));
@@ -253,13 +247,13 @@ public class ShellAndWebSearchToolTest {
     @Test
     public void webSearchShouldPreferGrokThenParseCitations() {
         CuteConfig config = new CuteConfig();
-        ReflectionTestUtils.setField(config, "webSearchMode", "auto");
-        ReflectionTestUtils.setField(config, "webSearchGrokApiKey", "grok-key");
-        ReflectionTestUtils.setField(config, "webSearchGrokBaseUrl", "https://api.x.ai");
-        ReflectionTestUtils.setField(config, "webSearchGrokModel", "grok-4");
-        ReflectionTestUtils.setField(config, "webSearchGrokInterfaceUrl", "/v1/chat/completions");
-        ReflectionTestUtils.setField(config, "webSearchTavilyApiKey", "tavily-should-not-use");
-        ReflectionTestUtils.setField(config, "webSearchBraveApiKey", "");
+        WebSearchProperties webSearch = webSearchProperties(b -> b
+                .grokApiKey("grok-key")
+                .grokBaseUrl("https://api.x.ai")
+                .grokModel("grok-4")
+                .grokInterfaceUrl("/v1/chat/completions")
+                .tavilyApiKey("tavily-should-not-use")
+                .braveApiKey(""));
 
         RemoteHttpPort httpPort = request -> {
             Assert.assertEquals("POST", request.getMethod());
@@ -286,12 +280,11 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-grok")
                 .sessionId("session-ws-grok")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
-        tool.setAgentContext(context);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "Spring AI"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "Spring AI"), context);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         String data = JSON.toJSONString(payload.getLlmData());
         Assert.assertTrue(data.contains("grok"));
@@ -302,12 +295,12 @@ public class ShellAndWebSearchToolTest {
     @Test
     public void webSearchShouldFallbackToTavilyWhenGrokFails() {
         CuteConfig config = new CuteConfig();
-        ReflectionTestUtils.setField(config, "webSearchMode", "auto");
-        ReflectionTestUtils.setField(config, "webSearchGrokApiKey", "grok-key");
-        ReflectionTestUtils.setField(config, "webSearchGrokBaseUrl", "https://api.x.ai");
-        ReflectionTestUtils.setField(config, "webSearchGrokModel", "grok-4");
-        ReflectionTestUtils.setField(config, "webSearchTavilyApiKey", "tavily-key");
-        ReflectionTestUtils.setField(config, "webSearchBraveApiKey", "");
+        WebSearchProperties webSearch = webSearchProperties(b -> b
+                .grokApiKey("grok-key")
+                .grokBaseUrl("https://api.x.ai")
+                .grokModel("grok-4")
+                .tavilyApiKey("tavily-key")
+                .braveApiKey(""));
 
         java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
         RemoteHttpPort httpPort = request -> {
@@ -328,12 +321,11 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-fallback")
                 .sessionId("session-ws-fallback")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
-        tool.setAgentContext(context);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "example search"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "example search"), context);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         String data = JSON.toJSONString(payload.getLlmData());
         Assert.assertTrue(data.contains("tavily"));
@@ -366,9 +358,8 @@ public class ShellAndWebSearchToolTest {
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         WebSearchTool tool = new WebSearchTool();
-        tool.setAgentContext(context);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "example search"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "example search"), context);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         String data = JSON.toJSONString(payload.getLlmData());
         Assert.assertTrue(data.contains("Example Title"));
@@ -418,12 +409,11 @@ public class ShellAndWebSearchToolTest {
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         WebSearchTool tool = new WebSearchTool();
-        tool.setAgentContext(context);
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "query", "latest Spring AI docs",
                 "allowed_domains", java.util.List.of("spring.io")
-        ));
+        ), context);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         String data = JSON.toJSONString(payload.getLlmData());
         Assert.assertTrue(data.contains("gpt"));
@@ -462,9 +452,8 @@ public class ShellAndWebSearchToolTest {
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         WebSearchTool tool = new WebSearchTool();
-        tool.setAgentContext(context);
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "exa semantic search"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("query", "exa semantic search"), context);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         String data = JSON.toJSONString(payload.getLlmData());
         Assert.assertTrue(data.contains("exa"));

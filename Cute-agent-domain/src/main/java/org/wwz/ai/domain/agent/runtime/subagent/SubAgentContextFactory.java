@@ -4,6 +4,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.AgentRunState;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
+import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanModeState;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
@@ -23,8 +25,11 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>{@code agentRunState} 使用<b>全新实例</b>，runId / LLM 序号 / toolCallId 映射都与父 run 解耦，
  *       否则子 Agent 的调用会计进父 run 计数。</li>
  * </ul>
- * 注意：executionRecorder 仍共享父实例（无状态账本写入服务），Todo 列表与后台任务注册表
- * 继续沿用父引用——它们是父会话控制面，TaskStop / TaskOutput 必须能命中子 Agent。
+ * 注意：executionRecorder 仍共享父实例（无状态账本写入服务）。控制面按生命周期拆分：
+ * Todo 列表与后台任务注册表是会话级共享（{@code SessionControl}，spawn 时 eager 物化）；
+ * 取消令牌 / turnClosed / 注入队列是 run 级独占（新 {@code RunControl}，父令牌经
+ * {@code parentCancellation} 透传），TaskStop / TaskOutput 必须能命中子 Agent，
+ * 但子 finishRun 不得关闭父回合。
  */
 public final class SubAgentContextFactory {
 
@@ -101,9 +106,17 @@ public final class SubAgentContextFactory {
                 // 独立 AgentRunState：不传父实例，走 builder 默认值拿到全新 run 级状态
                 .agentRunState(new AgentRunState())
                 .toolArtifactRegistry(parent.getToolArtifactRegistry())
-                // 与主 Agent 共享 todo 列表 / 后台任务注册表；plan mode 只约束主 Agent
-                .sessionTaskList(parent.requireSessionTaskList())
-                .backgroundTasks(parent.requireBackgroundTasks())
+                // 会话级控制面：spawn 时就用父 sessionKey eager 物化 Todo 列表与后台任务表——
+                // 子 sessionId 是 sub_<agentId>，等子 Agent 首次读取时惰性补建会把子 key
+                // 绑进共享面，父侧 TaskList / TaskOutput 从此全部 miss。
+                // run 级控制面必须独立：turnClosed / inject 队列是 run 的事实，子 finishRun
+                // 不得关闭父回合；父取消令牌经 parentCancellation 只读透传，/stop 杀得到子
+                // Agent，子 Agent 的任务级令牌（TaskStop）也不会误伤父。
+                // plan mode 只约束主 Agent，故单独新建。
+                .sessionControl(new SessionControl()
+                        .withSessionTaskList(parent.requireSessionTaskList())
+                        .withBackgroundTasks(parent.requireBackgroundTasks()))
+                .control(new RunControl().withParentCancellation(parent.getRunCancellation()))
                 .planModeState(PlanModeState.builder().build())
                 .workspaceRoot(parent.getWorkspaceRoot())
                 // 子 Agent 必须自己读取文件，不能复用主 Agent 的 unchanged 判定。
@@ -113,17 +126,13 @@ public final class SubAgentContextFactory {
                 // 过程文仍由 SubAgentPrinter 折叠，不刷主时间线。
                 .isStream(Boolean.TRUE)
                 .streamMessageType(null)
-                .sopPrompt(null)
                 .basePrompt(null)
                 .workingMemoryMessages(null)
-                // 共享父取消令牌，否则 /stop 杀不到嵌套子 Agent
-                .runCancellation(parent.getRunCancellation())
                 // 子代理不参与长期记忆；仅保留独立 working_memory 投影用于 resume。
                 .skipMemory(Boolean.TRUE)
                 .ltmOwner(null)
                 .ltmMemoryContext(null)
                 .agentType(parent.getAgentType())
-                .templateType(parent.getTemplateType())
                 .productFiles(parent.getProductFiles() == null ? new ArrayList<>() : new ArrayList<>(parent.getProductFiles()))
                 // 账本 + 重放：与 SubAgentPrinter SSE 标签同契约
                 .parentToolUseId(parentToolUseId)
@@ -133,8 +142,6 @@ public final class SubAgentContextFactory {
                 // 确定性子会话 ID：与 SubAgentRunner 落库用的 childSessionId 必须一致
                 .subAgentChildSessionId(newChildSessionId(agentId))
                 .build();
-        // 显式再钉一次，避免 builder 默认值路径漏传 skipMemory
-        child.setSkipMemory(Boolean.TRUE);
         if (childTools != null) {
             childTools.setAgentContext(child);
         }

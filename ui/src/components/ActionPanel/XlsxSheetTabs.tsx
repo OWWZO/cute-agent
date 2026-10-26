@@ -82,7 +82,7 @@ export function XlsxSheetTabs({ controller, label }: XlsxSheetTabsProps) {
           <button
             aria-selected={isActive}
             className={cn(
-              "h-7 max-w-48 shrink-0 truncate rounded-md px-2 text-[12px] transition-colors",
+              "h-7 max-w-48 shrink-0 truncate rounded-md px-2 text-ui-sm transition-colors",
               isActive
                 ? "bg-[var(--chat-surface-muted)] font-medium text-[var(--chat-text)]"
                 : "text-[var(--chat-text-soft)] hover:bg-[var(--chat-surface-muted)] hover:text-[var(--chat-text)]"

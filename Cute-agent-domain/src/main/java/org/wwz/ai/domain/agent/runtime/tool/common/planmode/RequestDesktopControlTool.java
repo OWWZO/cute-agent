@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.memory.ltm.LtmOwner;
 import org.wwz.ai.domain.agent.memory.ltm.LtmOwnerResolver;
@@ -17,12 +16,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-@Data
 public class RequestDesktopControlTool implements BaseTool {
 
     public static final String NAME = "RequestDesktopControl";
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -56,13 +52,19 @@ public class RequestDesktopControlTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
-        if (agentContext == null) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
+        if (context == null) {
             return fail("RequestDesktopControl 未正确装配");
         }
-        if (agentContext.getRequestId() != null && agentContext.getRequestId().contains(":sub:")) {
+        if (context.getRequestId() != null && context.getRequestId().contains(":sub:")) {
             return fail("RequestDesktopControl 不能在子 Agent 中使用");
         }
-        if (agentContext.getRuntimeDependencies() == null) {
+        if (context.getRuntimeDependencies() == null) {
             return fail("RequestDesktopControl 未正确装配");
         }
         Map<String, Object> params = ToolArgs.mapStrict(input);
@@ -71,19 +73,19 @@ public class RequestDesktopControlTool implements BaseTool {
             return fail("reason 不能为空");
         }
         String toolCallId = null;
-        ToolArtifactSource source = agentContext.getCurrentToolArtifactSource();
+        ToolArtifactSource source = context.getCurrentToolArtifactSource();
         if (source != null) {
             toolCallId = source.getToolCallId();
         }
         try {
-            CuteConfig config = agentContext.getRuntimeDependencies().requireCuteConfig();
-            String sessionId = StringUtils.defaultIfBlank(agentContext.getSessionId(), agentContext.getRequestId());
+            CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
+            String sessionId = StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId());
             DesktopSessionRemote.OpenResult opened = DesktopSessionRemote.open(
-                    agentContext.getRuntimeDependencies().requireRemoteHttpPort(),
+                    context.getRuntimeDependencies().requireRemoteHttpPort(),
                     config,
-                    agentContext.getRequestId(),
+                    context.getRequestId(),
                     sessionId,
-                    resolveOwnerKey(),
+                    resolveOwnerKey(context),
                     DesktopSessionRemote.DEFAULT_TTL_SECONDS);
             throw new DesktopControlRequiredException(reason, opened.getUrl(), opened.getHoldUntil(), toolCallId);
         } catch (DesktopControlRequiredException yield) {
@@ -93,10 +95,10 @@ public class RequestDesktopControlTool implements BaseTool {
         }
     }
 
-    private String resolveOwnerKey() {
-        LtmOwner owner = agentContext.getLtmOwner();
+    private String resolveOwnerKey(AgentContext context) {
+        LtmOwner owner = context.getLtmOwner();
         if (owner == null) {
-            owner = LtmOwnerResolver.resolve(agentContext.getUserId(), null);
+            owner = LtmOwnerResolver.resolve(context.getUserId(), null);
         }
         return owner.asOwnerKey();
     }

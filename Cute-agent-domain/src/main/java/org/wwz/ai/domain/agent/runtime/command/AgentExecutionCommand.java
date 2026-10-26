@@ -27,7 +27,6 @@ public class AgentExecutionCommand {
     private Integer agentType;
     private String outputStyle;
     private String basePrompt;
-    private String sopPrompt;
     private List<org.wwz.ai.domain.agent.runtime.dto.Message> workingMemoryMessages;
     private Boolean isStream;
     private List<Message> messages;

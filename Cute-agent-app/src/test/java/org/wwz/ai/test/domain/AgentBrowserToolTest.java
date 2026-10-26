@@ -53,8 +53,8 @@ public class AgentBrowserToolTest {
 
         AgentBrowserTool tool = new AgentBrowserTool();
         AgentContext context = context(cli, sessionPort);
-        tool.setAgentContext(context);
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("args", List.of("browser", "list")));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(
+                Map.of("args", List.of("browser", "list")), context);
 
         Assert.assertEquals("agent_browser", tool.getName());
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
@@ -85,8 +85,9 @@ public class AgentBrowserToolTest {
                 .build());
 
         AgentBrowserTool tool = new AgentBrowserTool();
-        tool.setAgentContext(context(cli, sessionPort));
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("args", List.of("browser", "list")));
+        AgentContext context = context(cli, sessionPort);
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(
+                Map.of("args", List.of("browser", "list")), context);
 
         Assert.assertTrue(ToolObservationSerializer.serializePayload(payload)
                 .contains("Agent 浏览器已重建，之前的页面状态已丢失。"));
@@ -131,13 +132,13 @@ public class AgentBrowserToolTest {
         }).when(cli).exec(Mockito.any(CliInvocation.class));
 
         AgentBrowserTool tool = new AgentBrowserTool();
-        tool.setAgentContext(context(cli, sessionPort));
+        AgentContext context = context(cli, sessionPort);
         Map<String, Object> input = Map.of("args", List.of("browser", "list"));
-        CompletableFuture<Object> first = CompletableFuture.supplyAsync(() -> tool.execute(input));
+        CompletableFuture<Object> first = CompletableFuture.supplyAsync(() -> tool.execute(input, context));
         CompletableFuture<Object> second = null;
         try {
             Assert.assertTrue(firstEntered.await(1, TimeUnit.SECONDS));
-            second = CompletableFuture.supplyAsync(() -> tool.execute(input));
+            second = CompletableFuture.supplyAsync(() -> tool.execute(input, context));
             Assert.assertTrue(secondEntered.await(1, TimeUnit.SECONDS));
         } finally {
             release.countDown();
@@ -167,10 +168,9 @@ public class AgentBrowserToolTest {
             AgentBrowserTool tool = new AgentBrowserTool();
             AgentContext context = context(cli, sessionPort(cdpWsUrl, false), workspace,
                     artifactPort(), "call-1");
-            tool.setAgentContext(context);
 
             ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("args",
-                    List.of("xiaohongshu", "download", "https://x.test/note", "--output", "./xhs")));
+                    List.of("xiaohongshu", "download", "https://x.test/note", "--output", "./xhs")), context);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -221,10 +221,7 @@ public class AgentBrowserToolTest {
             FileArtifactPort port = artifactPort();
             AgentContext first = context(cli, sessionPort, workspace, port, "call-1");
             AgentContext second = context(cli, sessionPort, workspace, port, "call-2");
-            AgentBrowserTool firstTool = new AgentBrowserTool();
-            firstTool.setAgentContext(first);
-            AgentBrowserTool secondTool = new AgentBrowserTool();
-            secondTool.setAgentContext(second);
+            AgentBrowserTool tool = new AgentBrowserTool();
 
             Map<String, Object> firstInput = Map.of("args",
                     List.of("xiaohongshu", "download", "https://x.test/a", "--output", "./out-a"));
@@ -235,11 +232,11 @@ public class AgentBrowserToolTest {
             // ToolArtifactSource 是 ThreadLocal：必须在工作线程内绑定，否则产物不会挂到 toolCallId
             Thread firstThread = new Thread(() -> {
                 first.bindCurrentToolArtifactSource(artifactSource("call-1"));
-                firstCall.complete(firstTool.execute(firstInput));
+                firstCall.complete(tool.execute(firstInput, first));
             });
             Thread secondThread = new Thread(() -> {
                 second.bindCurrentToolArtifactSource(artifactSource("call-2"));
-                secondCall.complete(secondTool.execute(secondInput));
+                secondCall.complete(tool.execute(secondInput, second));
             });
             firstThread.start();
             secondThread.start();
@@ -279,10 +276,9 @@ public class AgentBrowserToolTest {
             AgentContext context = context(cli,
                     sessionPort("wss://proxy.kernel.example/browser/injected", false),
                     workspace, artifactPort(), "call-1");
-            tool.setAgentContext(context);
 
             ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
-                    "args", List.of("xiaohongshu", "download", "<signed-note-url>")));
+                    "args", List.of("xiaohongshu", "download", "<signed-note-url>")), context);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) payload.getLlmData();

@@ -2,7 +2,6 @@ package org.wwz.ai.domain.agent.runtime.tool.common;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.CollectionUtils;
@@ -26,7 +25,6 @@ import java.util.stream.Collectors;
  * 图片生成工具，负责把文生图 / 图生图请求转发到 cute-tool。
  */
 @Slf4j
-@Data
 public class ImageGenerationTool implements BaseTool {
 
     private static final String DESCRIPTION = "本工具用于文生图和图生图。用户要求基于当前轮上传图片修改、换风格、扩图时应优先调用它；未显式传 fileNames 时系统可自动复用当前轮上传图片，输出图片会自动保存为当前会话产物。";
@@ -37,8 +35,6 @@ public class ImageGenerationTool implements BaseTool {
     private static final String MODE_IMAGES = "images";
     private static final String MODE_EDITS = "edits";
     private static final int DEFAULT_TIMEOUT_SECONDS = 900;
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -56,8 +52,14 @@ public class ImageGenerationTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
         try {
             // 工具调用分为四个阶段：校验 prompt、解析当前会话中的输入图片引用、
             // 委托执行内核生成产物、再把同一批文件分别登记到 artifact 和 SSE 文件事件。
@@ -72,16 +74,16 @@ public class ImageGenerationTool implements BaseTool {
             List<String> fileNames = toStringList(params.get("fileNames"));
             // 仅在未显式要求文生图时，才兜底复用当前轮图片，避免误伤明确的 images 模式。
             if (fileNames.isEmpty() && shouldReuseContextImages(mode)) {
-                fileNames = collectContextImageFileNames();
+                fileNames = collectContextImageFileNames(context);
             } else {
                 // Agent 常传裸文件名；先映射到 productFiles 里的可访问 URL，避免按 sessionId 重拼 preview 导致 404。
-                fileNames = resolveReferenceList(fileNames);
+                fileNames = resolveReferenceList(fileNames, context);
             }
-            List<String> maskFileNames = resolveReferenceList(toStringList(params.get("maskFileNames")));
-            ToolArtifactSource artifactSource = agentContext.requireCurrentToolArtifactSource(getName());
-            ImageGenerationExecutionResult result = requireKernel().execute(ImageGenerationExecuteCommand.builder()
+            List<String> maskFileNames = resolveReferenceList(toStringList(params.get("maskFileNames")), context);
+            ToolArtifactSource artifactSource = context.requireCurrentToolArtifactSource(getName());
+            ImageGenerationExecutionResult result = requireKernel(context).execute(ImageGenerationExecuteCommand.builder()
                     // 图片产物目录按 session 归档，和其他工具保持一致，便于会话内统一查看文件。
-                    .requestId(agentContext.getSessionId())
+                    .requestId(context.getSessionId())
                     .prompt(prompt)
                     .mode(StringUtils.isBlank(mode) ? null : mode)
                     .fileNames(fileNames)
@@ -92,23 +94,23 @@ public class ImageGenerationTool implements BaseTool {
                     .n(resolveInteger(params.get("n"), 1))
                     .timeoutSeconds(DEFAULT_TIMEOUT_SECONDS)
                     .build());
-            appendGeneratedArtifacts(result, artifactSource);
-            emitFileMessage(result, artifactSource);
+            appendGeneratedArtifacts(result, artifactSource, context);
+            emitFileMessage(result, artifactSource, context);
             return buildSuccessPayload(result);
         } catch (Exception e) {
-            log.error("{} image_generation_tool error, input={}", agentContext.getRequestId(), input, e);
+            log.error("{} image_generation_tool error, input={}", context.getRequestId(), input, e);
             return buildFailurePayload("image_generation_tool 执行失败：" + e.getMessage());
         }
     }
 
-    private IImageGenerationExecutionKernel requireKernel() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private IImageGenerationExecutionKernel requireKernel(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             throw new IllegalStateException("ImageGenerationTool 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireImageGenerationExecutionKernel();
+        return context.getRuntimeDependencies().requireImageGenerationExecutionKernel();
     }
 
-    private void appendGeneratedArtifacts(ImageGenerationExecutionResult result, ToolArtifactSource artifactSource) {
+    private void appendGeneratedArtifacts(ImageGenerationExecutionResult result, ToolArtifactSource artifactSource, AgentContext context) {
         // artifact registry 是 ledger 可追踪文件引用的入口；这里登记的是生成结果，
         // 不是模型原始 URL，后续历史回放和前端预览都依赖这一稳定引用。
         if (result == null || CollectionUtils.isEmpty(result.getFiles())) {
@@ -123,11 +125,11 @@ public class ImageGenerationTool implements BaseTool {
                     .description(result.getSummary())
                     .isInternalFile(false)
                     .build();
-            agentContext.registerGeneratedArtifact(artifactSource, file);
+            context.registerGeneratedArtifact(artifactSource, file);
         }
     }
 
-    private void emitFileMessage(ImageGenerationExecutionResult result, ToolArtifactSource artifactSource) {
+    private void emitFileMessage(ImageGenerationExecutionResult result, ToolArtifactSource artifactSource, AgentContext context) {
         // SSE 文件事件服务于当前轮即时展示，不能替代 artifact 持久化；因此即使
         // 前端事件发送失败，typed tool result 仍由 execute 的返回值负责闭环。
         if (result == null || CollectionUtils.isEmpty(result.getFiles())) {
@@ -141,15 +143,15 @@ public class ImageGenerationTool implements BaseTool {
             resultMap.put("toolName", artifactSource.getToolName());
         }
         String messageId = StringUtil.getUUID();
-        String digitalEmployee = agentContext.getToolCollection().getDigitalEmployee(getName());
-        agentContext.getPrinter().send(messageId, "file", resultMap, digitalEmployee, true);
+        String digitalEmployee = context.getToolCollection().getDigitalEmployee(getName());
+        context.getPrinter().send(messageId, "file", resultMap, digitalEmployee, true);
     }
 
-    private List<String> collectContextImageFileNames() {
-        if (agentContext.getProductFiles() == null) {
+    private List<String> collectContextImageFileNames(AgentContext context) {
+        if (context.getProductFiles() == null) {
             return Collections.emptyList();
         }
-        return agentContext.getProductFiles().stream()
+        return context.getProductFiles().stream()
                 .filter(Objects::nonNull)
                 .filter(this::isImageFile)
                 .map(this::resolveImageReference)
@@ -190,7 +192,7 @@ public class ImageGenerationTool implements BaseTool {
      * 把 agent 传入的 fileNames/maskFileNames 解析为可下载引用。
      * 优先保留 http(s)/data URL；裸文件名则匹配会话 productFiles 的 domainUrl/ossUrl。
      */
-    private List<String> resolveReferenceList(List<String> refs) {
+    private List<String> resolveReferenceList(List<String> refs, AgentContext context) {
         if (refs == null || refs.isEmpty()) {
             return new ArrayList<>();
         }
@@ -204,7 +206,7 @@ public class ImageGenerationTool implements BaseTool {
                 resolved.add(value);
                 continue;
             }
-            String mapped = findProductFileUrl(value);
+            String mapped = findProductFileUrl(value, context);
             if (StringUtils.isNotBlank(mapped)) {
                 resolved.add(mapped);
             } else {
@@ -224,15 +226,15 @@ public class ImageGenerationTool implements BaseTool {
                 || lower.contains("/download/");
     }
 
-    private String findProductFileUrl(String fileNameOrPath) {
-        if (agentContext == null || agentContext.getProductFiles() == null) {
+    private String findProductFileUrl(String fileNameOrPath, AgentContext context) {
+        if (context == null || context.getProductFiles() == null) {
             return null;
         }
         String wanted = basename(fileNameOrPath);
         if (StringUtils.isBlank(wanted)) {
             return null;
         }
-        for (File file : agentContext.getProductFiles()) {
+        for (File file : context.getProductFiles()) {
             if (file == null || StringUtils.isBlank(file.getFileName())) {
                 continue;
             }
@@ -244,7 +246,7 @@ public class ImageGenerationTool implements BaseTool {
                 return url;
             }
         }
-        for (File file : agentContext.getProductFiles()) {
+        for (File file : context.getProductFiles()) {
             if (file == null) {
                 continue;
             }

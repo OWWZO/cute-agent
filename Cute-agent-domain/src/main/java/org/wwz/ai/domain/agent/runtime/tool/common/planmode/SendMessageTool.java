@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -23,20 +22,7 @@ import java.util.Optional;
  * 主 Agent → 子 Agent：运行中注入 mailbox；已结束则后台续跑。
  */
 @Slf4j
-@Data
 public class SendMessageTool implements BaseTool {
-
-    private AgentContext agentContext;
-    private SubAgentRunner subAgentRunner;
-    private ActiveAgentRunRegistry activeAgentRunRegistry;
-
-    public SendMessageTool() {
-    }
-
-    public SendMessageTool(SubAgentRunner subAgentRunner, ActiveAgentRunRegistry activeAgentRunRegistry) {
-        this.subAgentRunner = subAgentRunner;
-        this.activeAgentRunRegistry = activeAgentRunRegistry;
-    }
 
     @Override
     public String getName() {
@@ -79,6 +65,12 @@ public class SendMessageTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext agentContext) {
         try {
             if (agentContext == null) {
                 return ToolResultPayload.failure(
@@ -100,7 +92,7 @@ public class SendMessageTool implements BaseTool {
             }
 
             String sessionId = StringUtils.defaultIfBlank(agentContext.getSessionId(), agentContext.getRequestId());
-            ResolvedTarget target = resolveTarget(sessionId, to);
+            ResolvedTarget target = resolveTarget(agentContext, sessionId, to);
             if (target == null || StringUtils.isBlank(target.agentId)) {
                 return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, Map.of(
                         "ok", false,
@@ -111,10 +103,10 @@ public class SendMessageTool implements BaseTool {
             }
 
             if (SessionAgentMailboxHub.isActive(sessionId, target.agentId)
-                    || isBackgroundRunning(target)) {
-                return injectRunning(sessionId, to, target, message, summary);
+                    || isBackgroundRunning(agentContext, target)) {
+                return injectRunning(agentContext, sessionId, to, target, message, summary);
             }
-            return resumeStopped(to, target, message, summary);
+            return resumeStopped(agentContext, to, target, message, summary);
         } catch (Exception e) {
             log.warn("SendMessage failed", e);
             String msg = "SendMessage 失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
@@ -122,7 +114,7 @@ public class SendMessageTool implements BaseTool {
         }
     }
 
-    private ResolvedTarget resolveTarget(String sessionId, String to) {
+    private ResolvedTarget resolveTarget(AgentContext agentContext, String sessionId, String to) {
         // 先按 task_id 查后台任务
         Optional<RuntimeBackgroundTask> byTask = agentContext.requireBackgroundTasks().get(to);
         if (byTask.isPresent()) {
@@ -151,7 +143,8 @@ public class SendMessageTool implements BaseTool {
         return new ResolvedTarget(to, null, null);
     }
 
-    private Object injectRunning(String sessionId,
+    private Object injectRunning(AgentContext agentContext,
+                                  String sessionId,
                                  String to,
                                  ResolvedTarget target,
                                  String message,
@@ -184,7 +177,10 @@ public class SendMessageTool implements BaseTool {
         return ToolResultPayload.okData(TaskToolNames.SEND_MESSAGE, fields);
     }
 
-    private Object resumeStopped(String to, ResolvedTarget target, String message, String summary) {
+    private Object resumeStopped(AgentContext agentContext, String to, ResolvedTarget target,
+                                 String message, String summary) {
+        SubAgentRunner subAgentRunner = resolveSubAgentRunner(agentContext);
+        ActiveAgentRunRegistry activeAgentRunRegistry = resolveActiveAgentRunRegistry(agentContext);
         if (subAgentRunner == null) {
             return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, Map.of(
                     "ok", false,
@@ -226,7 +222,7 @@ public class SendMessageTool implements BaseTool {
                 TaskToolNames.SEND_MESSAGE);
     }
 
-    private boolean isBackgroundRunning(ResolvedTarget target) {
+    private boolean isBackgroundRunning(AgentContext agentContext, ResolvedTarget target) {
         if (target.task != null) {
             return RuntimeBackgroundTask.STATUS_RUNNING.equals(target.task.getStatus());
         }
@@ -242,6 +238,22 @@ public class SendMessageTool implements BaseTool {
     }
 
     private record ResolvedTarget(String agentId, String taskId, RuntimeBackgroundTask task) {
+    }
+
+    /** 子 Agent 执行器与 context 同源：装配期已挂到运行时依赖上。 */
+    private static SubAgentRunner resolveSubAgentRunner(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return null;
+        }
+        return context.getRuntimeDependencies().getOptionalSubAgentRunner();
+    }
+
+    /** 活跃 run 登记表与 context 同源：装配期已挂到运行时依赖上。 */
+    private static ActiveAgentRunRegistry resolveActiveAgentRunRegistry(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return null;
+        }
+        return context.getRuntimeDependencies().getOptionalActiveAgentRunRegistry();
     }
 
 

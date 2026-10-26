@@ -11,6 +11,7 @@ import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, memo, useContext, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
+import { DURATION_QUICK, DURATION_MODAL } from "@/lib/motion";
 import { MessageResponse } from "./message";
 import { normalizeThinkingText } from "@/utils/markdown";
 
@@ -97,7 +98,7 @@ export const Reasoning = memo(
         <motion.div
           initial={{ opacity: 1, y: 3 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
+          transition={DURATION_QUICK}
         >
           <Collapsible
             className={cn("not-prose mb-4", className)}
@@ -119,7 +120,7 @@ export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger> & 
 
 // 动态思考指示器：与步骤执行共用 thinking-shimmer 节奏
 const ThinkingIndicator = memo(() => (
-  <span className="thinking-shimmer text-[13px] font-medium tracking-[0.02em]">
+  <span className="thinking-shimmer text-ui-caption font-medium tracking-[0.02em]">
     正在理解问题…
   </span>
 ));
@@ -131,9 +132,9 @@ const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number) => {
     return <ThinkingIndicator />;
   }
   if (duration === undefined || duration === 0) {
-    return <span className="text-[13px] text-muted-foreground/80">思考完成</span>;
+    return <span className="text-ui-caption text-muted-foreground/80">思考完成</span>;
   }
-  return <span className="text-[13px] text-muted-foreground/80">已思考 {duration} 秒</span>;
+  return <span className="text-ui-caption text-muted-foreground/80">已思考 {duration} 秒</span>;
 };
 
 export const ReasoningTrigger = memo(
@@ -143,7 +144,7 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-2 rounded-md p-1.5 -m-1.5 text-[13px] text-muted-foreground/88 transition-colors hover:bg-muted/25 hover:text-foreground/82",
+          "flex w-full items-center gap-2 rounded-md p-1.5 -m-1.5 text-ui-caption text-muted-foreground/88 transition-colors hover:bg-muted/25 hover:text-foreground/82",
           className
         )}
         {...props}
@@ -155,7 +156,7 @@ export const ReasoningTrigger = memo(
             </div>
             <motion.div
               animate={{ rotate: isOpen ? 180 : 0 }}
-              transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+              transition={DURATION_MODAL}
             >
               <ChevronDownIcon className="size-4" />
             </motion.div>
@@ -190,7 +191,7 @@ export const ReasoningContent = memo(
             isStreaming={isStreaming}
             animateByChars={false}
             showStreamingCursor={false}
-            className="text-[13px] leading-6 tracking-[-0.01em] text-foreground/68 [&_p]:text-[13px] [&_p]:leading-6 [&_li]:text-[13px] [&_li]:leading-6 [&_ol]:leading-6 [&_ul]:leading-6 [&_h1]:text-[14px] [&_h2]:text-[13px] [&_h3]:text-[13px] [&_blockquote]:text-foreground/56 [&_code]:text-[12px]"
+            className="text-ui-caption leading-6 tracking-[-0.01em] text-foreground/68 [&_p]:text-ui-caption [&_p]:leading-6 [&_li]:text-ui-caption [&_li]:leading-6 [&_ol]:leading-6 [&_ul]:leading-6 [&_h1]:text-ui-base [&_h2]:text-ui-caption [&_h3]:text-ui-caption [&_blockquote]:text-foreground/56 [&_code]:text-ui-sm"
           >
             {normalizedChildren}
           </MessageResponse>

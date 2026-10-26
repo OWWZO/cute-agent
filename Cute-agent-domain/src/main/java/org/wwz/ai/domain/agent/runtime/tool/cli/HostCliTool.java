@@ -16,13 +16,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-@Setter
+/**
+ * 在会话 workspace 里调用宿主机已装 CLI，不经 shell。
+ *
+ * <p>无状态实现：context 由 {@link #execute(Object, AgentContext)} 显式传入，
+ * 只有 {@code availableTools} 是构造期白名单。</p>
+ */
 public class HostCliTool implements BaseTool {
 
     public static final String TOOL_NAME = "host_cli";
 
     private final List<String> availableTools;
-    private AgentContext agentContext;
 
     public HostCliTool(List<String> availableTools) {
         this.availableTools = availableTools == null ? List.of() : List.copyOf(availableTools);
@@ -64,8 +68,14 @@ public class HostCliTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
         Map<String, Object> params = input instanceof Map<?, ?> map
                 ? new LinkedHashMap<>((Map<String, Object>) map)
                 : new LinkedHashMap<>();
@@ -85,20 +95,20 @@ public class HostCliTool implements BaseTool {
                     null,
                     "host_cli_denied");
         }
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             return ToolResultPayload.failure("运行时未装配", "运行时未装配", null, "runtime_unavailable");
         }
-        CuteRuntimeDependencies deps = agentContext.getRuntimeDependencies();
+        CuteRuntimeDependencies deps = context.getRuntimeDependencies();
         CliExecutionPort cli = deps.getOptionalCliExecutionPort();
         HostCliProperties properties = deps.getHostCliProperties();
         if (cli == null || properties == null || !properties.isEnabled() || !cli.isResolvable(tool)) {
             return ToolResultPayload.failure("CLI 不可用: " + tool, "CLI 不可用: " + tool, null, "host_cli_unavailable");
         }
-        String cwd = agentContext.getWorkspaceRoot();
+        String cwd = context.getWorkspaceRoot();
         long timeoutMs = HostCliPolicy.resolveTimeout(
                 params.get("timeout_ms"), properties.getDefaultTimeoutMs(), properties.getMaxTimeoutMs());
         String proxy = StringUtils.trimToNull(deps.requireCuteConfig().getWebFetchProxy());
-        String captureId = StringUtils.defaultIfBlank(agentContext.getRequestId(), "host-cli");
+        String captureId = StringUtils.defaultIfBlank(context.getRequestId(), "host-cli");
         try (CliArtifactCaptureLease ignored =
                      CliArtifactCaptureCoordinator.acquireWorkspaceDiffLease(cwd, captureId)) {
             // 前后快照只是 host_cli 的兼容兜底；workspace 级 lease 防止并发调用互相捕获文件。
@@ -118,7 +128,7 @@ public class HostCliTool implements BaseTool {
             } catch (RuntimeException e) {
                 CliArtifactMaterialization partial = CliArtifactMaterializer.materialize(
                         CliArtifactMaterializeCommand.builder()
-                                .agentContext(agentContext)
+                                .agentContext(context)
                                 .workspaceRoot(cwd)
                                 .commandLabel("host_cli 执行产物")
                                 .baselineFiles(before)
@@ -130,7 +140,7 @@ public class HostCliTool implements BaseTool {
             }
             CliArtifactMaterialization materialization = CliArtifactMaterializer.materialize(
                     CliArtifactMaterializeCommand.builder()
-                            .agentContext(agentContext)
+                            .agentContext(context)
                             .workspaceRoot(cwd)
                             .reportedArtifacts(result.getArtifacts())
                             .commandLabel("host_cli 执行产物")

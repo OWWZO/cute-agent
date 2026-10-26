@@ -573,7 +573,7 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
                 size="icon-sm"
                 variant="ghost"
                 disabled={disabled}
-                className="cute-composer-icon-button h-8 w-8 rounded-md border-0 bg-transparent text-foreground-subtle shadow-none ring-0 hover:bg-hover hover:text-foreground focus-visible:ring-0"
+                className="cute-composer-icon-button h-8 w-8 rounded-md border-0 bg-transparent text-foreground-subtle shadow-none ring-0 hover:bg-hover hover:text-foreground focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
               />
 
               <BrowserRelayChip disabled={disabled} />
@@ -736,7 +736,7 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
                       }}
                       aria-label="停止"
                     >
-                      <span className="block size-2.5 rounded-[2px] bg-current" />
+                      <span className="block size-2.5 rounded-xs bg-current" />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent className={AI_CHAT_FLOATING_CLASS} side="top">

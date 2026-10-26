@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.tool.workspace;
 
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 
 import java.io.BufferedReader;
@@ -65,16 +66,21 @@ public class WorkspaceReadTool extends AbstractWorkspacePathTool {
 
     @Override
     public Object execute(Object input) {
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = requireInputMap(input);
-            Path filePath = requireAllowedPath(params);
+            Path filePath = requireAllowedPath(params, context);
             if (!isReadableFile(filePath)) {
-                return failResult("workspace_read 只支持读取文件路径: " + toAgentPath(filePath));
+                return failResult("workspace_read 只支持读取文件路径: " + toAgentPath(filePath, context));
             }
 
             if (isImage(filePath)) {
                 // 图片不走文本截断；返回文件内容引用，文本读取状态仅用于后续可编辑文件的并发检查。
-                return readImage(filePath);
+                return readImage(filePath, context);
             }
 
             int startLine = Math.max(1, readInt(params, "start_line", readInt(params, "offset", 1)));
@@ -86,13 +92,13 @@ public class WorkspaceReadTool extends AbstractWorkspacePathTool {
             String contentHash = snapshot.contentHash();
             // 读取状态绑定 mtime、范围和内容 hash，workspace_edit 据此拒绝基于过期内容的覆盖写。
 
-            if (agentContext != null) {
-                WorkspaceFileReadState existing = agentContext.getWorkspaceFileReadState(absolutePath);
+            if (context != null) {
+                WorkspaceFileReadState existing = context.getWorkspaceFileReadState(absolutePath);
                 if (existing != null
                         && existing.getStartLine() == startLine
                         && existing.getLineCount() == lineCount
                         && isUnchanged(existing, mtimeMs, contentHash)) {
-                    String agentPath = toAgentPath(filePath);
+                    String agentPath = toAgentPath(filePath, context);
                     Map<String, Object> unchanged = new LinkedHashMap<>();
                     unchanged.put("type", "file_unchanged");
                     unchanged.put("unchanged", Boolean.TRUE);
@@ -107,8 +113,8 @@ public class WorkspaceReadTool extends AbstractWorkspacePathTool {
             String body = snapshot.body();
             boolean truncated = snapshot.truncated();
 
-            if (agentContext != null) {
-                agentContext.markWorkspaceFileRead(WorkspaceFileReadState.builder()
+            if (context != null) {
+                context.markWorkspaceFileRead(WorkspaceFileReadState.builder()
                         .absolutePath(absolutePath)
                         .mtimeMs(mtimeMs)
                         .startLine(startLine)
@@ -116,7 +122,7 @@ public class WorkspaceReadTool extends AbstractWorkspacePathTool {
                         .contentHash(contentHash)
                         .build());
             }
-            String agentPath = toAgentPath(filePath);
+            String agentPath = toAgentPath(filePath, context);
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("type", "text");
             data.put("path", agentPath);
@@ -130,20 +136,20 @@ public class WorkspaceReadTool extends AbstractWorkspacePathTool {
             }
             return okResult(data);
         } catch (WorkspaceAccessException e) {
-            log.warn("{} workspace_read failed, input={}", requestId(), input, e);
+            log.warn("{} workspace_read failed, input={}", requestId(context), input, e);
             return failResult(e.getMessage());
         } catch (IOException e) {
-            log.error("{} workspace_read io error, input={}", requestId(), input, e);
+            log.error("{} workspace_read io error, input={}", requestId(context), input, e);
             return failResult("workspace_read failed to read file");
         } catch (Exception e) {
-            log.error("{} workspace_read error, input={}", requestId(), input, e);
+            log.error("{} workspace_read error, input={}", requestId(context), input, e);
             return failResult("workspace_read execute failed");
         }
     }
 
-    private ToolResultPayload readImage(Path filePath) throws IOException {
+    private ToolResultPayload readImage(Path filePath, AgentContext context) throws IOException {
         long size = Files.size(filePath);
-        String agentPath = toAgentPath(filePath);
+        String agentPath = toAgentPath(filePath, context);
         // 图片走多模态而不是文本截断，所以体积必须自己把关：整图 base64 会放大 4/3，
         // 供应商请求体上限和 working_memory_message.base64_image（MEDIUMTEXT）都扛不住超大图。
         if (size > maxImageBytes()) {

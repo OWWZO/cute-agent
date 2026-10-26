@@ -1012,8 +1012,6 @@ public class AgentToolCollectionFactoryTest {
                                                   SkillRuntimeOptions skillRuntimeOptions,
                                                   WorkspaceService workspaceService,
                                                   WorkspaceRuntimeOptions workspaceRuntimeOptions) {
-        SubAgentRegistry subAgentRegistry = new SubAgentRegistry();
-        SubAgentRunner subAgentRunner = new SubAgentRunner(subAgentRegistry);
          org.wwz.ai.domain.agent.runtime.tool.skill.SkillRuntimeLayout layout =
                  new org.wwz.ai.domain.agent.runtime.tool.skill.SkillRuntimeLayout(skillRuntimeOptions);
          org.wwz.ai.domain.agent.runtime.tool.skill.SkillVirtualPaths virtualPaths =
@@ -1038,12 +1036,8 @@ public class AgentToolCollectionFactoryTest {
                   virtualPaths,
                  workspaceService,
                 workspaceRuntimeOptions,
-                subAgentRunner,
-                subAgentRegistry,
-                Mockito.mock(org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry.class),
                 Mockito.mock(org.wwz.ai.domain.agent.runtime.askuser.PendingUserQuestionRegistry.class),
-                Mockito.mock(org.wwz.ai.domain.agent.runtime.planmode.PendingPlanApprovalRegistry.class),
-                Mockito.mock(org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore.class)
+                Mockito.mock(org.wwz.ai.domain.agent.runtime.planmode.PendingPlanApprovalRegistry.class)
         );
     }
 
@@ -1123,7 +1117,17 @@ public class AgentToolCollectionFactoryTest {
     }
 
     private AgentContext buildAgentContext() {
-        CuteRuntimeDependencies runtimeDependencies = CuteRuntimeTestSupport.runtimeDependencies(buildCuteConfig());
+        // 子 Agent 依赖现在由 runtimeDependencies 承载，工具从 context 取。
+        SubAgentRegistry subAgentRegistry = new SubAgentRegistry();
+        CuteRuntimeDependencies runtimeDependencies = CuteRuntimeTestSupport.runtimeDependencies(buildCuteConfig())
+                .toBuilder()
+                .subAgentRegistry(subAgentRegistry)
+                .subAgentRunner(new SubAgentRunner(subAgentRegistry))
+                .activeAgentRunRegistry(Mockito.mock(
+                        org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry.class))
+                .planArtifactStore(Mockito.mock(
+                        org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore.class))
+                .build();
         return AgentContext.builder()
                 .requestId("req-001")
                 .sessionId("session-001")
@@ -1133,7 +1137,6 @@ public class AgentToolCollectionFactoryTest {
                 .productFiles(new ArrayList<>())
                 .runtimeDependencies(runtimeDependencies)
                 .basePrompt("")
-                .sopPrompt("")
                 .dateInfo("2026-05-10")
                 .build();
     }

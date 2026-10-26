@@ -33,10 +33,10 @@ public class BrowserToolBskBackendTest {
     public void shouldInjectBskGatewayEnvironmentInsteadOfLegacyRelayUrl() {
         CliExecutionPort cli = successfulCli();
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(cli, onlineBskPort()));
+        AgentContext context = context(cli, onlineBskPort());
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(
-                Map.of("args", List.of("bilibili", "hot", "--limit", "1")));
+                Map.of("args", List.of("bilibili", "hot", "--limit", "1")), context);
 
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         ArgumentCaptor<CliInvocation> captor = ArgumentCaptor.forClass(CliInvocation.class);
@@ -58,9 +58,9 @@ public class BrowserToolBskBackendTest {
         OpenCliProperties properties = bskProperties();
         properties.setBskRelayUrl("wss://gw.test/api/agent/browser/bsk-cli");
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(cli, onlineBskPort(), properties));
+        AgentContext context = context(cli, onlineBskPort(), properties);
 
-        tool.execute(Map.of("args", List.of("bilibili", "hot")));
+        tool.execute(Map.of("args", List.of("bilibili", "hot")), context);
 
         ArgumentCaptor<CliInvocation> captor = ArgumentCaptor.forClass(CliInvocation.class);
         Mockito.verify(cli).exec(captor.capture());
@@ -72,10 +72,10 @@ public class BrowserToolBskBackendTest {
     public void shouldRejectCallWhenBskExtensionIsOffline() {
         CliExecutionPort cli = successfulCli();
         BrowserTool tool = new BrowserTool();
-        tool.setAgentContext(context(cli, offlineBskPort()));
+        AgentContext context = context(cli, offlineBskPort());
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(
-                Map.of("args", List.of("bilibili", "hot")));
+                Map.of("args", List.of("bilibili", "hot")), context);
 
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertEquals("browser_offline", payload.getErrorMsg());

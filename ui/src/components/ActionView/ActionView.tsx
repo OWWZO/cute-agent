@@ -784,8 +784,10 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       )}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
+      // 面板入场是纯透明度变化，弹簧对 opacity 没有意义（无位移可回弹），
+      // 这里继续用短 ease-out；真正需要物理感的是 tab 高亮与卡片浮起。
       transition={{
-        duration: reduce ? DURATION.reduced : 0.22,
+        duration: reduce ? DURATION.reduced : DURATION.message,
         ease: EASE_OUT,
       }}
     >

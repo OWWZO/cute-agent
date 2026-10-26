@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 
 /**
  * 列出工作区目录。
@@ -42,17 +43,22 @@ public class WorkspaceListTool extends AbstractWorkspacePathTool {
 
     @Override
     public Object execute(Object input) {
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = requireInputMap(input == null ? Map.of() : input);
             Path directoryPath;
             Object pathValue = params.get("path");
             if (pathValue == null || String.valueOf(pathValue).isBlank()) {
-                directoryPath = requireWorkspaceRoot();
+                directoryPath = requireWorkspaceRoot(context);
             } else {
-                directoryPath = requireAllowedPath(params);
+                directoryPath = requireAllowedPath(params, context);
             }
             if (!Files.isDirectory(directoryPath)) {
-                return failResult("workspace_list 只支持目录路径: " + toAgentPath(directoryPath));
+                return failResult("workspace_list 只支持目录路径: " + toAgentPath(directoryPath, context));
             }
 
             int maxDepth = Math.max(1, readInt(params, "max_depth", 2));
@@ -80,20 +86,20 @@ public class WorkspaceListTool extends AbstractWorkspacePathTool {
                 }
             }
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("path", toAgentPath(directoryPath));
+            data.put("path", toAgentPath(directoryPath, context));
             data.put("entries", entriesOut);
             if (truncated) {
                 data.put("truncated", Boolean.TRUE);
             }
             return okResult(data);
         } catch (WorkspaceAccessException e) {
-            log.warn("{} workspace_list failed, input={}", requestId(), input, e);
+            log.warn("{} workspace_list failed, input={}", requestId(context), input, e);
             return failResult(e.getMessage());
         } catch (IOException e) {
-            log.error("{} workspace_list io error, input={}", requestId(), input, e);
+            log.error("{} workspace_list io error, input={}", requestId(context), input, e);
             return failResult("workspace_list execute failed");
         } catch (Exception e) {
-            log.error("{} workspace_list error, input={}", requestId(), input, e);
+            log.error("{} workspace_list error, input={}", requestId(context), input, e);
             return failResult("workspace_list execute failed");
         }
     }

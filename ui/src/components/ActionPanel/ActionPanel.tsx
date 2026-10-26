@@ -168,7 +168,7 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
                 <iframe
                   title="用户桌面"
                   src={streamUrl}
-                  className="min-h-0 flex-1 w-full rounded-[8px] border border-[var(--color-line)] bg-black"
+                  className="min-h-0 flex-1 w-full rounded-lg border border-[var(--color-line)] bg-black"
                 />
               ) : (
                 <div className="kimi-ui-card kimi-qcard">

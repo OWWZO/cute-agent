@@ -84,10 +84,10 @@ export default function FeaturedConversationCard(
       <CardShell
         href={href}
         onSelect={handleSelect}
-        className="group flex w-full items-stretch gap-4 rounded-[22px] border border-[var(--chat-border)] bg-[var(--chat-surface)] p-3 text-left transition duration-200 hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)]/50 hover:shadow-[var(--shadow-sm)] sm:gap-5 sm:p-4"
+        className="group flex w-full items-stretch gap-4 rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-3 text-left transition duration-200 hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)]/50 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:transform-none sm:gap-5 sm:p-4"
       >
         <div
-          className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-[16px] bg-gradient-to-br sm:h-24 sm:w-28 ${accent}`}
+          className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br sm:h-24 sm:w-28 ${accent}`}
         >
           {card.coverUrl ? (
             <img
@@ -97,7 +97,7 @@ export default function FeaturedConversationCard(
             />
           ) : (
             <div className="flex h-full items-end p-3">
-              <span className="text-[11px] font-medium text-[var(--chat-text-soft)]">
+              <span className="text-ui-sm font-medium text-[var(--chat-text-soft)]">
                 案例
               </span>
             </div>
@@ -106,25 +106,25 @@ export default function FeaturedConversationCard(
 
         <div className="min-w-0 flex-1 py-0.5">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="line-clamp-1 text-[16px] font-semibold tracking-tight text-[var(--chat-text)]">
+            <h3 className="line-clamp-1 text-ui-lg font-semibold tracking-[-0.02em] text-[var(--chat-text)]">
               {card.title}
             </h3>
             <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--chat-text-muted)] opacity-0 transition group-hover:opacity-100" />
           </div>
-          <p className="mt-1.5 line-clamp-2 text-[13px] leading-6 text-[var(--chat-text-muted)]">
+          <p className="mt-1.5 line-clamp-2 text-ui-caption leading-6 text-[var(--chat-text-muted)]">
             {card.summary}
           </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             {tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="rounded-full bg-[var(--chat-surface-soft)] px-2 py-0.5 text-[11px] text-[var(--chat-text-soft)]"
+                className="rounded-full bg-[var(--chat-surface-soft)] px-2 py-0.5 text-ui-sm text-[var(--chat-text-soft)]"
               >
                 {tag}
               </span>
             ))}
             {publishedLabel ? (
-              <span className="text-[11px] text-[var(--chat-text-muted)]">
+              <span className="text-ui-sm text-[var(--chat-text-muted)]">
                 {publishedLabel}
               </span>
             ) : null}
@@ -138,7 +138,7 @@ export default function FeaturedConversationCard(
     <CardShell
       href={href}
       onSelect={handleSelect}
-      className="group flex h-full w-full flex-col overflow-hidden rounded-[24px] border border-[var(--chat-border)] bg-[var(--chat-surface)] text-left transition duration-200 hover:-translate-y-0.5 hover:border-[var(--chat-border-strong)] hover:shadow-[var(--shadow-md)]"
+      className="group flex h-full w-full flex-col overflow-hidden rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] text-left transition duration-200 hover:-translate-y-0.5 hover:border-[var(--chat-border-strong)] hover:shadow-[var(--shadow-md)] motion-reduce:transform-none"
     >
       <div
         className={`relative aspect-[16/10] overflow-hidden bg-gradient-to-br ${accent}`}
@@ -151,7 +151,7 @@ export default function FeaturedConversationCard(
           />
         ) : (
           <div className="flex h-full items-end p-5">
-            <span className="inline-flex w-fit rounded-full bg-[var(--chat-surface)]/80 px-2.5 py-1 text-[11px] font-medium text-[var(--chat-text-soft)] backdrop-blur-sm">
+            <span className="inline-flex w-fit rounded-full bg-[var(--chat-surface)]/80 px-2.5 py-1 text-ui-sm font-medium text-[var(--chat-text-soft)] backdrop-blur-sm">
               精品案例
             </span>
           </div>
@@ -161,12 +161,12 @@ export default function FeaturedConversationCard(
       <div className="flex flex-1 flex-col gap-3 p-5">
         <div className="space-y-2">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="line-clamp-2 text-[16px] font-semibold leading-snug tracking-tight text-[var(--chat-text)]">
+            <h3 className="line-clamp-2 text-ui-lg font-semibold leading-snug tracking-[-0.02em] text-[var(--chat-text)]">
               {card.title}
             </h3>
             <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--chat-text-muted)] opacity-0 transition group-hover:opacity-100" />
           </div>
-          <p className="line-clamp-3 text-[13px] leading-6 text-[var(--chat-text-muted)]">
+          <p className="line-clamp-3 text-ui-caption leading-6 text-[var(--chat-text-muted)]">
             {card.summary}
           </p>
         </div>
@@ -175,13 +175,13 @@ export default function FeaturedConversationCard(
           {tags.slice(0, 3).map((tag) => (
             <span
               key={tag}
-              className="rounded-full bg-[var(--chat-surface-soft)] px-2.5 py-1 text-[11px] text-[var(--chat-text-soft)]"
+              className="rounded-full bg-[var(--chat-surface-soft)] px-2.5 py-1 text-ui-sm text-[var(--chat-text-soft)]"
             >
               {tag}
             </span>
           ))}
           {publishedLabel ? (
-            <span className="ml-auto text-[11px] text-[var(--chat-text-muted)]">
+            <span className="ml-auto text-ui-sm text-[var(--chat-text-muted)]">
               {publishedLabel}
             </span>
           ) : null}

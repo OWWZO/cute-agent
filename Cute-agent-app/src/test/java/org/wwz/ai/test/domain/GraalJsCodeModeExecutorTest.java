@@ -2,6 +2,7 @@ package org.wwz.ai.test.domain;
 
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -22,6 +23,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
 
 /**
  * GraalJS Code Mode 执行器：入口约定、Promise、Context 权限、workspace 编排、
@@ -329,7 +331,7 @@ public class GraalJsCodeModeExecutorTest {
                 .sessionId("sess-cancel")
                 .userId("user-exec")
                 .workspaceRoot(workspace.toAbsolutePath().normalize().toString())
-                .runCancellation(cancellation)
+                .control(new RunControl().withCancellation(cancellation))
                 .build();
         CodeModeResult result = executor.execute(CodeModeRequest.builder()
                 .source("async function main(){ return 1; }")
@@ -408,6 +410,19 @@ public class GraalJsCodeModeExecutorTest {
                 rejected.getErrorMessage().contains("冷却"));
     }
 
+    /**
+     * OOM 归类：堆耗尽必须报 {@code CODE_MODE_MEMORY_LIMIT} 而不是 RUNTIME_ERROR。
+     *
+     * <p><b>默认环境下跳过。</b>验证它必须真的把堆打穿（GraalJS 冒泡的消息固定为
+     * {@code Java heap space}），而 surefire 2.6 用 {@code reuseForks=true} 让全部
+     * 用例共用一个 JVM：打穿 4GB 堆会连带把同批无关测试压成
+     * {@code CODE_MODE_MEMORY_LIMIT} 误报。此前按 {@code maxMemory() * 2} 放大分配量，
+     * 理论峰值数十 GB，正是这个抖动的来源。</p>
+     *
+     * <p>需要验证时用受控小堆单独跑：
+     * {@code mvn -pl Cute-agent-app -am test -Dtest=GraalJsCodeModeExecutorTest
+     * -DargLine="-Xmx384m"}。</p>
+     */
     @Test
     public void reportsHeapExhaustionAsMemoryLimit() {
         CodeModeProperties properties = new CodeModeProperties();
@@ -416,12 +431,25 @@ public class GraalJsCodeModeExecutorTest {
         properties.setMaxTimeoutMs(120_000L);
         GraalJsCodeModeExecutor unguarded = executor(properties);
 
-        // 按当前最大堆动态估算需要分配的量，避免测试 JVM 堆大时打不穿
+        // CodeModeHeapGuard 是进程级单例，前一个用例（水位熔断）会留下 60s 冷却，
+        // 不重置的话本用例命中的是「冷却中」分支，根本没验证 OOM 归类。
+        CodeModeHeapGuard.shared().reset();
+
         long heapMb = Runtime.getRuntime().maxMemory() / (1024 * 1024);
-        long outer = Math.max(600L, heapMb * 2);
+        Assume.assumeTrue(
+                "跳过：需要 -Xmx≤512m 的受控堆才能安全打穿，当前 " + heapMb + "MB",
+                heapMb <= 512L);
+
+        // 小堆下 512MB 必然打穿，且不会波及同批测试。
         CodeModeResult result = unguarded.execute(CodeModeRequest.builder()
-                .source("async function main(){ const x = []; for (let i = 0; i < " + outer
-                        + "; i++) x.push(new Array(1e6).fill(i)); return x.length; }")
+                .source("""
+                        async function main() {
+                          const keep = [];
+                          const chunk = 8 * 1024 * 1024 / 8;
+                          for (let i = 0; i < 64; i++) { keep.push(new Float64Array(chunk)); }
+                          return { blocks: keep.length };
+                        }
+                        """)
                 .timeoutMs(90_000L)
                 .build(), agentContext);
         assertFailure(result, "CODE_MODE_MEMORY_LIMIT");

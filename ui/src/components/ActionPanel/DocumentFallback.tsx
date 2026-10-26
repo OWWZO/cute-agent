@@ -57,7 +57,7 @@ const DocumentFallback: CuteType.FC<DocumentFallbackProps> = React.memo(
           canDownload ? (
             <button
               type="button"
-              className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-ui-caption text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={() => downloadFile(downloadUrl, fileName)}
             >
               <Download className="h-3.5 w-3.5" />
@@ -73,7 +73,7 @@ const DocumentFallback: CuteType.FC<DocumentFallbackProps> = React.memo(
           {canDownload ? (
             <button
               type="button"
-              className="mt-2 inline-flex h-8 items-center rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              className="mt-2 inline-flex h-8 items-center rounded-md bg-primary px-3 text-ui-caption font-medium text-primary-foreground transition-opacity hover:opacity-90"
               onClick={() => downloadFile(downloadUrl, fileName)}
             >
               下载原件

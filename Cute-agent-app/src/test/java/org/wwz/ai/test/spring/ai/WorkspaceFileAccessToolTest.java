@@ -55,43 +55,38 @@ public class WorkspaceFileAccessToolTest {
     @Test
     public void shouldReadAndWriteWithinWorkspace() {
         WorkspaceReadTool readTool = new WorkspaceReadTool(workspaceService, options);
-        readTool.setAgentContext(agentContext);
         WorkspaceWriteTool writeTool = new WorkspaceWriteTool(workspaceService, options);
-        writeTool.setAgentContext(agentContext);
 
         String writeResult = String.valueOf(writeTool.execute(Map.of(
                 "path", "out/report.md",
                 "content", "generated content"
-        )));
+        ), agentContext));
         Assert.assertTrue(writeResult.contains("已写入文件"));
 
         String readResult = String.valueOf(readTool.execute(Map.of(
                 "path", "notes.md",
                 "start_line", 1,
                 "line_count", 10
-        )));
+        ), agentContext));
         Assert.assertTrue(readResult.contains("1 | hello workspace"));
     }
 
     @Test
     public void shouldListGlobAndGrepWithinWorkspace() {
         WorkspaceListTool listTool = new WorkspaceListTool(workspaceService, options);
-        listTool.setAgentContext(agentContext);
         WorkspaceGlobTool globTool = new WorkspaceGlobTool(workspaceService, options);
-        globTool.setAgentContext(agentContext);
         WorkspaceGrepTool grepTool = new WorkspaceGrepTool(workspaceService, options);
-        grepTool.setAgentContext(agentContext);
 
-        Assert.assertTrue(String.valueOf(listTool.execute(Map.of("path", workspaceRoot.toString(), "max_depth", 2)))
+        Assert.assertTrue(String.valueOf(listTool.execute(Map.of("path", workspaceRoot.toString(), "max_depth", 2), agentContext))
                 .contains("notes.md"));
         Assert.assertTrue(String.valueOf(globTool.execute(Map.of(
                 "path", workspaceRoot.toString(),
                 "pattern", "**/*.md"
-        ))).contains("docs/readme.md"));
+        ), agentContext)).contains("docs/readme.md"));
         Assert.assertTrue(String.valueOf(grepTool.execute(Map.of(
                 "path", workspaceRoot.toString(),
                 "pattern", "gross_margin"
-        ))).contains("notes.md"));
+        ), agentContext)).contains("notes.md"));
     }
 
     @Test
@@ -100,16 +95,14 @@ public class WorkspaceFileAccessToolTest {
         Files.writeString(outside, "secret", StandardCharsets.UTF_8);
 
         WorkspaceReadTool readTool = new WorkspaceReadTool(workspaceService, options);
-        readTool.setAgentContext(agentContext);
         WorkspaceWriteTool writeTool = new WorkspaceWriteTool(workspaceService, options);
-        writeTool.setAgentContext(agentContext);
 
-        Assert.assertTrue(String.valueOf(readTool.execute(Map.of("path", outside.toString())))
+        Assert.assertTrue(String.valueOf(readTool.execute(Map.of("path", outside.toString()), agentContext))
                 .contains("outside allowed roots"));
         Assert.assertTrue(String.valueOf(writeTool.execute(Map.of(
                 "path", outside.toString(),
                 "content", "x"
-        ))).contains("outside allowed roots"));
+        ), agentContext)).contains("outside allowed roots"));
     }
 
     @Test
@@ -121,14 +114,12 @@ public class WorkspaceFileAccessToolTest {
         Files.writeString(workspaceRoot.resolve("a/b/two.txt"), "nothing\n", StandardCharsets.UTF_8);
 
         WorkspaceGlobTool globTool = new WorkspaceGlobTool(workspaceService, options);
-        globTool.setAgentContext(agentContext);
         WorkspaceGrepTool grepTool = new WorkspaceGrepTool(workspaceService, options);
-        grepTool.setAgentContext(agentContext);
 
         Assert.assertTrue(String.valueOf(globTool.execute(Map.of(
-                "path", workspaceRoot.toString(), "pattern", "**/*.java"))).contains("truncated"));
+                "path", workspaceRoot.toString(), "pattern", "**/*.java"), agentContext)).contains("truncated"));
         Assert.assertTrue(String.valueOf(grepTool.execute(Map.of(
-                "path", workspaceRoot.toString(), "pattern", "missing"))).contains("truncated"));
+                "path", workspaceRoot.toString(), "pattern", "missing"), agentContext)).contains("truncated"));
     }
 
     @Test
@@ -138,9 +129,8 @@ public class WorkspaceFileAccessToolTest {
                 StandardCharsets.UTF_8);
 
         WorkspaceReadTool readTool = new WorkspaceReadTool(workspaceService, options);
-        readTool.setAgentContext(agentContext);
         String result = String.valueOf(readTool.execute(Map.of(
-                "path", "large.txt", "start_line", 1, "line_count", 1)));
+                "path", "large.txt", "start_line", 1, "line_count", 1), agentContext));
 
         Assert.assertTrue(result.contains("truncated"));
         Assert.assertTrue(result.contains("1 | 0123456789"));

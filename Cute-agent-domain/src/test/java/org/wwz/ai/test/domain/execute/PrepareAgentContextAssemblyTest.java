@@ -78,7 +78,6 @@ public class PrepareAgentContextAssemblyTest {
         Assert.assertEquals("帮我查一下订单", built.getQuery());
         Assert.assertFalse(built.getIsStream());
         Assert.assertEquals(ExecutionLedgerConstants.ENTRY_AGENT_REACT, recorder.entryAgent);
-        Assert.assertEquals("table", built.getTemplateType());
         Assert.assertEquals(1, built.getProductFiles().size());
         Assert.assertEquals("订单.xlsx", built.getProductFiles().get(0).getFileName());
         Assert.assertEquals(Integer.valueOf(1024), built.getProductFiles().get(0).getFileSize());

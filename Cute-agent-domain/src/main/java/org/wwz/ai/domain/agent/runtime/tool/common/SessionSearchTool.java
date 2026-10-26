@@ -1,7 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.tool.common;
 
 import com.alibaba.fastjson.JSON;
-import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.memory.ltm.LtmOwner;
 import org.wwz.ai.domain.agent.memory.ltm.LtmOwnerType;
@@ -20,12 +19,9 @@ import java.util.Map;
  * 情节按需检索：通过参数推断 discovery、scroll、read 或 browse 模式。
  * 搜索包含压缩前的 working-memory 投影；Execution Ledger 继续作为执行事实源。
  */
-@Data
 public class SessionSearchTool implements BaseTool {
 
     public static final String TOOL_NAME = "session_search";
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -91,8 +87,14 @@ public class SessionSearchTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
         Map<String, Object> args = normalize(input);
         String query = StringUtils.trimToEmpty(valueAsString(args.get("query")));
         String scope = StringUtils.defaultIfBlank(valueAsString(args.get("scope")), "user").trim();
@@ -102,15 +104,15 @@ public class SessionSearchTool implements BaseTool {
         Long aroundMessageId = parseLong(args.get("around_message_id"));
         Integer window = parseOptionalInt(args.get("window"));
 
-        SessionSearchService searchService = resolveSearch();
+        SessionSearchService searchService = resolveSearch(context);
         if (searchService == null) {
             return ToolResultPayload.failureFrom(
                     "session_search unavailable",
                     failureDetail(query, scope, limit, roleFilter, requestedSessionId, aroundMessageId)
             );
         }
-        String sessionId = agentContext == null ? null : agentContext.getSessionId();
-        String userId = resolveUserId();
+        String sessionId = context == null ? null : context.getSessionId();
+        String userId = resolveUserId(context);
         try {
             String result = searchService.search(SessionSearchRequest.builder()
                     .sessionId(requestedSessionId)
@@ -220,14 +222,14 @@ public class SessionSearchTool implements BaseTool {
         return value == null ? null : String.valueOf(value);
     }
 
-    private String resolveUserId() {
-        if (agentContext == null) {
+    private String resolveUserId(AgentContext context) {
+        if (context == null) {
             return UserRequestContext.currentUserId();
         }
-        if (StringUtils.isNotBlank(agentContext.getUserId())) {
-            return agentContext.getUserId();
+        if (StringUtils.isNotBlank(context.getUserId())) {
+            return context.getUserId();
         }
-        LtmOwner owner = agentContext.getLtmOwner();
+        LtmOwner owner = context.getLtmOwner();
         String fromThread = UserRequestContext.currentUserId();
         if (StringUtils.isNotBlank(fromThread)) {
             return fromThread;
@@ -238,11 +240,11 @@ public class SessionSearchTool implements BaseTool {
         return null;
     }
 
-    private SessionSearchService resolveSearch() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private SessionSearchService resolveSearch(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             return null;
         }
-        return agentContext.getRuntimeDependencies().getOptionalSessionSearchService();
+        return context.getRuntimeDependencies().getOptionalSessionSearchService();
     }
 
     private static Map<String, Object> normalize(Object input) {

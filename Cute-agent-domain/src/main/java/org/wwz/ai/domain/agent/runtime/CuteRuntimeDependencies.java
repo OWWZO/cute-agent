@@ -13,6 +13,10 @@ import org.wwz.ai.domain.agent.adapter.port.RemoteStreamPort;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionPort;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionStreamPort;
 import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
+import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
+import org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner;
 import org.wwz.ai.domain.agent.runtime.tool.codemode.CodeModeExecutorPort;
 import org.wwz.ai.domain.agent.runtime.tool.mcp.port.McpToolExecutor;
 import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
@@ -26,7 +30,9 @@ import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.image.service.IImageGenerationExecutionKernel;
 import org.wwz.ai.types.agent.config.CodeModeProperties;
 import org.wwz.ai.types.agent.config.HostCliProperties;
+import org.wwz.ai.types.agent.config.ImageGenerationProperties;
 import org.wwz.ai.types.agent.config.OpenCliProperties;
+import org.wwz.ai.types.agent.config.WebSearchProperties;
 import org.springframework.scheduling.TaskScheduler;
 
 import java.util.HashMap;
@@ -75,6 +81,12 @@ public class CuteRuntimeDependencies {
     HostCliProperties hostCliProperties;
 
     CodeModeProperties codeModeProperties;
+
+    /** WebSearch 四家搜索提供方；从 CuteConfig 拆出，只被 WebSearchTool 消费。 */
+    WebSearchProperties webSearchProperties;
+
+    /** 图片生成上游；从 CuteConfig 拆出，只被 CuteImageGenerationGateway 消费。 */
+    ImageGenerationProperties imageGenerationProperties;
 
     /** 可选：Code Mode（GraalJS 同 JVM JS 执行器，实现在 infrastructure） */
     CodeModeExecutorPort codeModeExecutorPort;
@@ -127,6 +139,37 @@ public class CuteRuntimeDependencies {
      */
     SubAgentSessionStreamPort subAgentSessionStreamPort;
 
+    /**
+     * 可选：子 Agent 执行器。AgentDispatchTool / SendMessageTool 从这里取，
+     * 从而无需在工具实例上持有构造依赖。
+     */
+    SubAgentRunner subAgentRunner;
+
+    /** 可选：可配置子 Agent 定义表，与 {@link #subAgentRunner} 同源装配。 */
+    SubAgentRegistry subAgentRegistry;
+
+    /** 可选：活跃后台 run 登记表，SendMessage 恢复执行时按 run 取消。 */
+    ActiveAgentRunRegistry activeAgentRunRegistry;
+
+    /** 可选：plan mode 产物存储，Enter/ExitPlanModeTool 解析 .cute/plan.md 路径用。 */
+    PlanArtifactStore planArtifactStore;
+
+    public SubAgentRunner getOptionalSubAgentRunner() {
+        return subAgentRunner;
+    }
+
+    public SubAgentRegistry getOptionalSubAgentRegistry() {
+        return subAgentRegistry;
+    }
+
+    public ActiveAgentRunRegistry getOptionalActiveAgentRunRegistry() {
+        return activeAgentRunRegistry;
+    }
+
+    public PlanArtifactStore getOptionalPlanArtifactStore() {
+        return planArtifactStore;
+    }
+
     public CuteConfig requireCuteConfig() {
         return Objects.requireNonNull(cuteConfig, "CuteConfig must not be null");
     }
@@ -177,6 +220,18 @@ public class CuteRuntimeDependencies {
 
     public CodeModeProperties getOptionalCodeModeProperties() {
         return codeModeProperties;
+    }
+
+    /**
+     * WebSearch 四家提供方配置。从 CuteConfig 拆出后唯一入口；
+     * 缺席（老装配）时由 WebSearchTool 自己回落到 CuteConfig 的兼容 getter。
+     */
+    public WebSearchProperties getOptionalWebSearchProperties() {
+        return webSearchProperties;
+    }
+
+    public ImageGenerationProperties getOptionalImageGenerationProperties() {
+        return imageGenerationProperties;
     }
 
     public CodeModeExecutorPort getOptionalCodeModeExecutorPort() {

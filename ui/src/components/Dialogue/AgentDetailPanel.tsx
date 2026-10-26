@@ -221,13 +221,13 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
       </div>
       <div ref={bodyRef} className="kimi-detail-panel-body px-3 py-2">
         {sub.errorMsg ? (
-          <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-ui-caption text-red-700">
+          <div className="mb-2 rounded-lg border border-[var(--color-danger-soft)] bg-[var(--color-danger-soft)] px-3 py-2 text-ui-caption text-[var(--color-danger)]">
             {sub.errorMsg}
           </div>
         ) : null}
 
         {childSession.error ? (
-          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-ui-caption text-amber-700">
+          <div className="mb-2 rounded-lg border border-[var(--color-warning-bd)] bg-[var(--color-warning-soft)] px-3 py-2 text-ui-caption text-[var(--color-warning)]">
             子会话读取失败，已回退本地投影：{childSession.error}
           </div>
         ) : null}

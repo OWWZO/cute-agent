@@ -6,6 +6,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { motion } from "motion/react";
+import { SPRING_GENTLE } from "@/lib/motion";
 import querySSE from "@/utils/querySSE";
 import { buildConversationTaskData, getStableTaskIdentity } from "@/utils/chat";
 import {
@@ -1539,7 +1541,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       />
       {headerStatus ? (
         <div
-          className="thinking-shimmer truncate text-ui-base font-semibold tracking-tight text-foreground-subtle"
+          className="thinking-shimmer truncate text-ui-base font-semibold tracking-[-0.02em] text-foreground-subtle"
           role="status"
           aria-live="polite"
         >
@@ -1829,9 +1831,23 @@ const ChatView: CuteType.FC<Props> = (props) => {
               />
 
               {!readOnly ? (
-                <div
+                <motion.div
+                  // 从欢迎页切到对话页时，composer 从下方轻轻就位：
+                  // 两页的输入区宽高与位置本就接近，弹簧收尾让过渡读作
+                  // 「同一个输入框沉到页脚」，而不是「换了一屏」。
+                  // reduced-motion 由 CSS 的 motion-reduce 兜底（见 className），
+                  // 不在这里读 hook，避免测试环境的 motion mock 缺 useReducedMotion。
+                  initial={{
+                    y: 12,
+                    opacity: 0,
+                  }}
+                  animate={{
+                    y: 0,
+                    opacity: 1,
+                  }}
+                  transition={SPRING_GENTLE}
                   className={cn(
-                    "shrink-0 bg-[var(--color-bg)]",
+                    "shrink-0 bg-[var(--color-bg)] motion-reduce:transform-none",
                     hasWorkspaceLayout
                       ? "pb-4 pt-3"
                       : "pb-5 pt-4",
@@ -1851,7 +1867,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
                   >
                     {renderComposerStack(`input-${conversation.sessionId}-main`)}
                   </div>
-                </div>
+                </motion.div>
               ) : null}
             </div>
           </>

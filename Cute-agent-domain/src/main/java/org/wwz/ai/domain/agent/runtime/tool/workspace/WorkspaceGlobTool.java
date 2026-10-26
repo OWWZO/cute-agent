@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 
 /**
  * 工作区 glob 匹配。
@@ -43,17 +44,22 @@ public class WorkspaceGlobTool extends AbstractWorkspacePathTool {
 
     @Override
     public Object execute(Object input) {
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = requireInputMap(input);
             Path basePath;
             Object pathValue = params.get("path");
             if (pathValue == null || String.valueOf(pathValue).isBlank()) {
-                basePath = requireWorkspaceRoot();
+                basePath = requireWorkspaceRoot(context);
             } else {
-                basePath = requireAllowedPath(params);
+                basePath = requireAllowedPath(params, context);
             }
             if (!Files.isDirectory(basePath)) {
-                return failResult("workspace_glob 只支持目录路径: " + toAgentPath(basePath));
+                return failResult("workspace_glob 只支持目录路径: " + toAgentPath(basePath, context));
             }
             Object patternValue = params.get("pattern");
             if (patternValue == null || String.valueOf(patternValue).isBlank()) {
@@ -93,7 +99,7 @@ public class WorkspaceGlobTool extends AbstractWorkspacePathTool {
                 }
             }
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("path", toAgentPath(basePath));
+            data.put("path", toAgentPath(basePath, context));
             data.put("pattern", pattern);
             data.put("files", files);
             if (truncated) {
@@ -101,13 +107,13 @@ public class WorkspaceGlobTool extends AbstractWorkspacePathTool {
             }
             return okResult(data);
         } catch (WorkspaceAccessException e) {
-            log.warn("{} workspace_glob failed, input={}", requestId(), input, e);
+            log.warn("{} workspace_glob failed, input={}", requestId(context), input, e);
             return failResult(e.getMessage());
         } catch (IOException e) {
-            log.error("{} workspace_glob io error, input={}", requestId(), input, e);
+            log.error("{} workspace_glob io error, input={}", requestId(context), input, e);
             return failResult("workspace_glob execute failed");
         } catch (Exception e) {
-            log.error("{} workspace_glob error, input={}", requestId(), input, e);
+            log.error("{} workspace_glob error, input={}", requestId(context), input, e);
             return failResult("workspace_glob execute failed");
         }
     }

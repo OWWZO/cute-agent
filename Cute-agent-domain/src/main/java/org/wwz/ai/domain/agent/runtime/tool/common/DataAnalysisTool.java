@@ -2,7 +2,6 @@ package org.wwz.ai.domain.agent.runtime.tool.common;
 
 
 import com.alibaba.fastjson.JSONObject;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamListener;
@@ -15,7 +14,6 @@ import org.wwz.ai.domain.agent.runtime.dto.DataAnalysisRequest;
 import org.wwz.ai.domain.agent.runtime.dto.DataAnalysisResponse;
 import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
-import org.wwz.ai.domain.agent.runtime.tool.ContextIsolatableTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.util.StringUtil;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
@@ -34,19 +32,7 @@ import java.util.concurrent.Future;
  * 绑定到当前工具调用，避免把长耗时分析阻塞在请求线程上。
  */
 @Slf4j
-@Data
-public class DataAnalysisTool implements ContextIsolatableTool {
-    private AgentContext agentContext;
-
-    @Override
-    public BaseTool isolateFor(AgentContext context) {
-        if (context == null) {
-            throw new IllegalArgumentException("DataAnalysisTool.isolateFor context 不能为空");
-        }
-        DataAnalysisTool copy = new DataAnalysisTool();
-        copy.setAgentContext(context);
-        return copy;
-    }
+public class DataAnalysisTool implements BaseTool {
 
     @Override
     public String getName() {
@@ -87,6 +73,15 @@ public class DataAnalysisTool implements ContextIsolatableTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext ctx) {
+        if (ctx == null) {
+            return buildFailurePayload("data_analysis 执行失败：缺少 AgentContext");
+        }
         try {
             Map<String, Object> params = (Map<String, Object>) input;
             String task = (String) params.getOrDefault("task", "");
@@ -98,22 +93,22 @@ public class DataAnalysisTool implements ContextIsolatableTool {
                     requestedReportFileName, "数据分析报告.md");
 
             DataAnalysisRequest request = DataAnalysisRequest.builder()
-                    .request_id(agentContext.getSessionId())
+                    .request_id(ctx.getSessionId())
                     .erp("cute")
                     .task(task)
                     .report_file_name(reportFileName)
                     .modelCodeList(Arrays.asList("modelCode"))
                     .businessKnowledge(businessKnowledge)
                     .build();
-            ToolArtifactSource artifactSource = agentContext.requireCurrentToolArtifactSource(getName());
+            ToolArtifactSource artifactSource = ctx.requireCurrentToolArtifactSource(getName());
 
             // 调用流式 API
-            Future<ToolResultPayload> future = callAutoAnalysisStream(request, artifactSource);
+            Future<ToolResultPayload> future = callAutoAnalysisStream(ctx, request, artifactSource);
             return future.get();
         } catch (Exception e) {
-            log.error("{} auto_analysis agent error", agentContext.getRequestId(), e);
+            log.error("{} auto_analysis agent error", ctx.getRequestId(), e);
             String message = "data_analysis 执行失败：" + StringUtils.defaultIfBlank(e.getMessage(), "未知异常");
-            agentContext.getPrinter().send("tool_result", ToolResultStreamPayload.builder()
+            ctx.getPrinter().send("tool_result", ToolResultStreamPayload.builder()
                     .toolName("数据分析智能体")
                     .toolParam(new HashMap<>())
                     .toolResult("执行失败")
@@ -125,21 +120,22 @@ public class DataAnalysisTool implements ContextIsolatableTool {
     /**
      * 调用自动分析 API。
      */
-    public CompletableFuture<ToolResultPayload> callAutoAnalysisStream(DataAnalysisRequest analysisRequest,
+    public CompletableFuture<ToolResultPayload> callAutoAnalysisStream(AgentContext ctx,
+                                                                       DataAnalysisRequest analysisRequest,
                                                                        ToolArtifactSource artifactSource) {
         CompletableFuture<ToolResultPayload> future = new CompletableFuture<>();
         try {
             // 返回 Future 让调用方可以把流式分析纳入统一工具超时和取消机制。
-            CuteConfig duccConfig = requireCuteConfig();
+            CuteConfig duccConfig = requireCuteConfig(ctx);
             String url = duccConfig.getDataAnalysisUrl() + "/v1/tool/auto_analysis";
-            log.info("{} auto_analysis request {}", agentContext.getRequestId(), JSONObject.toJSONString(analysisRequest));
-            String digitalEmployee = agentContext.getToolCollection().getDigitalEmployee(getName());
+            log.info("{} auto_analysis request {}", ctx.getRequestId(), JSONObject.toJSONString(analysisRequest));
+            String digitalEmployee = ctx.getToolCollection().getDigitalEmployee(getName());
             String messageId = StringUtil.getUUID();
             String toolCallId = artifactSource == null ? null : artifactSource.getToolCallId();
             StringBuilder fullContentBuilder = new StringBuilder();
             List<CodeInterpreterResponse.FileInfo> finalFileInfo = new ArrayList<>();
 
-            requireRemoteStreamPort().openStream(RemoteStreamRequest.builder()
+            requireRemoteStreamPort(ctx).openStream(RemoteStreamRequest.builder()
                     .method("POST")
                     .url(url)
                     .headers(Map.of("Content-Type", "application/json"))
@@ -151,7 +147,7 @@ public class DataAnalysisTool implements ContextIsolatableTool {
                     .build(), new RemoteStreamListener() {
                 @Override
                 public void onOpen() {
-                    log.info("{} auto_analysis stream opened", agentContext.getRequestId());
+                    log.info("{} auto_analysis stream opened", ctx.getRequestId());
                 }
 
                 @Override
@@ -163,7 +159,7 @@ public class DataAnalysisTool implements ContextIsolatableTool {
                     if ("[DONE]".equals(data) || "heartbeat".equals(data)) {
                         return;
                     }
-                    log.info("{} auto_analysis recv data: {}", agentContext.getRequestId(), data);
+                    log.info("{} auto_analysis recv data: {}", ctx.getRequestId(), data);
                     try {
                         DataAnalysisResponse analysisResponse = JSONObject.parseObject(data, DataAnalysisResponse.class);
                         if (analysisResponse == null) {
@@ -187,7 +183,7 @@ public class DataAnalysisTool implements ContextIsolatableTool {
                                         .description(fileInfo.getFileName())
                                         .isInternalFile(false)
                                         .build();
-                                agentContext.registerGeneratedArtifact(artifactSource, file);
+                                ctx.registerGeneratedArtifact(artifactSource, file);
                             }
                         }
 
@@ -195,14 +191,14 @@ public class DataAnalysisTool implements ContextIsolatableTool {
                         analysisResponse.setToolCallId(toolCallId);
                         if (Boolean.TRUE.equals(analysisResponse.getIsFinal())) {
                             analysisResponse.setData(fullContentBuilder.toString());
-                            agentContext.getPrinter().send(messageId, "data_analysis",
+                            ctx.getPrinter().send(messageId, "data_analysis",
                                     analysisResponse, digitalEmployee, true);
                         } else {
-                            agentContext.getPrinter().send(messageId, "data_analysis",
+                            ctx.getPrinter().send(messageId, "data_analysis",
                                     analysisResponse, digitalEmployee, false);
                         }
                     } catch (Exception parseException) {
-                        log.warn("{} auto_analysis parse response error: {}", agentContext.getRequestId(), parseException.getMessage());
+                        log.warn("{} auto_analysis parse response error: {}", ctx.getRequestId(), parseException.getMessage());
                     }
                 }
 
@@ -216,7 +212,7 @@ public class DataAnalysisTool implements ContextIsolatableTool {
                 @Override
                 public void onFailure(Throwable throwable, Integer statusCode, String responseBody) {
                     log.error("{} auto_analysis request error, code={}, body={}",
-                            agentContext.getRequestId(), statusCode, responseBody, throwable);
+                            ctx.getRequestId(), statusCode, responseBody, throwable);
                     if (!future.isDone()) {
                         if (statusCode != null) {
                             future.complete(buildFailurePayload("data_analysis 执行失败：上游服务返回异常状态 " + statusCode + "。"));
@@ -227,7 +223,7 @@ public class DataAnalysisTool implements ContextIsolatableTool {
                 }
             });
         } catch (Exception e) {
-            log.error("{} auto_analysis request error", agentContext.getRequestId(), e);
+            log.error("{} auto_analysis request error", ctx.getRequestId(), e);
             future.complete(buildFailurePayload("data_analysis 执行失败：" + e.getMessage()));
         }
 
@@ -295,17 +291,17 @@ public class DataAnalysisTool implements ContextIsolatableTool {
         return text.substring(0, maxLen) + "...";
     }
 
-    private CuteConfig requireCuteConfig() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private CuteConfig requireCuteConfig(AgentContext ctx) {
+        if (ctx == null || ctx.getRuntimeDependencies() == null) {
             throw new IllegalStateException("DataAnalysisTool 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireCuteConfig();
+        return ctx.getRuntimeDependencies().requireCuteConfig();
     }
 
-    private RemoteStreamPort requireRemoteStreamPort() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private RemoteStreamPort requireRemoteStreamPort(AgentContext ctx) {
+        if (ctx == null || ctx.getRuntimeDependencies() == null) {
             throw new IllegalStateException("DataAnalysisTool 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireRemoteStreamPort();
+        return ctx.getRuntimeDependencies().requireRemoteStreamPort();
     }
 }

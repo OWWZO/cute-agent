@@ -101,7 +101,7 @@ export const PlanTitle = ({ children, className, ...props }: PlanTitleProps) => 
   return (
     <CardTitle
       className={cn(
-        "text-[15px] font-semibold leading-snug tracking-[-0.02em] text-[var(--chat-text)]",
+        "text-[length:var(--content-font-size)] font-semibold leading-snug tracking-[-0.02em] text-[var(--chat-text)]",
         className
       )}
       data-slot="plan-title"

@@ -12,7 +12,6 @@ import org.wwz.ai.domain.agent.runtime.tool.mcp.model.McpToolInfo;
 import org.wwz.ai.domain.agent.runtime.printer.LogPrinter;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
-import org.wwz.ai.domain.agent.runtime.tool.ToolIsolation;
 import org.wwz.ai.domain.agent.runtime.tool.common.MemoryTool;
 
 import java.util.ArrayList;
@@ -234,11 +233,8 @@ public final class LtmAgentForkSupport {
             MemoryTool memoryTool = new MemoryTool();
             copy.addTool(memoryTool);
         }
-        ToolIsolation.bindAll(copy, child);
-        MemoryTool memory = (MemoryTool) copy.getTool(MemoryTool.TOOL_NAME);
-        if (memory != null) {
-            memory.setAgentContext(child);
-        }
+        // 工具全部无状态：context 由 execute(input, context) 传入，只需绑 collection 自身。
+        copy.setAgentContext(child);
         return copy;
     }
 

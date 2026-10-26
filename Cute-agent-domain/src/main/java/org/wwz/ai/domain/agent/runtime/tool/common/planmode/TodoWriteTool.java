@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionTaskItem;
@@ -21,10 +20,7 @@ import java.util.Map;
  * 全部 completed 时清空列表。
  */
 @Slf4j
-@Data
 public class TodoWriteTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -72,10 +68,16 @@ public class TodoWriteTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
         try {
-            if (agentContext == null) {
+            if (context == null) {
                 return ToolResultPayload.failure("TodoWrite 失败：无 AgentContext", "TodoWrite 失败：无 AgentContext", null, "no context");
             }
             Map<String, Object> params = ToolArgs.map(input);
@@ -89,10 +91,10 @@ public class TodoWriteTool implements BaseTool {
                     todoMaps.add((Map<String, Object>) map);
                 }
             }
-            SessionTaskListStore store = agentContext.requireSessionTaskList();
+            SessionTaskListStore store = context.requireSessionTaskList();
             List<SessionTaskItem> oldTodos = store.replaceAll(todoMaps);
             List<SessionTaskItem> newTodos = store.list();
-            SessionTaskListPublisher.publish(agentContext);
+            SessionTaskListPublisher.publish(context);
 
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("message", "Todos have been modified successfully. Continue using the todo list to track progress.");

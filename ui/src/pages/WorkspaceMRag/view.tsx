@@ -32,6 +32,7 @@ import {
   StaggerItem,
 } from "@/components/ai-elements/animated-message";
 import { motion, AnimatePresence } from "motion/react";
+import { DURATION_QUICK } from "@/lib/motion";
 import { EmptyState } from "@/components/ui/empty-state";
 import type {
   KnowledgeBase,
@@ -126,7 +127,7 @@ function ActionButton(props: {
   } = props;
 
   const className = cn(
-    "inline-flex min-h-8 items-center gap-1.5 rounded-md border px-3 text-[13px] font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-[160ms] ease-[var(--ease-out)] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)] active:scale-[0.98]",
+    "inline-flex min-h-8 items-center gap-1.5 rounded-md border px-3 text-ui-caption font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-[var(--duration-base)] ease-[var(--ease-out)] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)] active:scale-[0.97]",
     variant === "primary" && "workspace-admin-primary disabled:opacity-40",
     variant === "secondary" && "workspace-admin-secondary disabled:opacity-40",
     variant === "danger" &&
@@ -196,19 +197,19 @@ function KnowledgeBaseItem(props: {
       <div>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="truncate text-[14px] font-medium text-[var(--color-text)]">
+            <div className="truncate text-ui-base font-medium text-[var(--color-text)]">
               {knowledgeBase.name}
             </div>
-            <div className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+            <div className="mt-0.5 text-ui-sm text-[var(--color-text-muted)]">
               {knowledgeBase.description || "暂无描述"}
             </div>
-            <div className="mt-1 font-mono text-[11px] text-[var(--color-text-faint)]">
+            <div className="mt-1 font-mono text-ui-sm text-[var(--color-text-faint)]">
               ID: {knowledgeBase.id}
             </div>
           </div>
           <span
             className={cn(
-              "shrink-0 rounded px-2 py-0.5 text-[11px] font-medium",
+              "shrink-0 rounded px-2 py-0.5 text-ui-sm font-medium",
               selected
                 ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
                 : "bg-[var(--color-surface-sunken)] text-[var(--color-text-muted)]",
@@ -217,7 +218,7 @@ function KnowledgeBaseItem(props: {
             {knowledgeBase.chunkType}
           </span>
         </div>
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--color-text-faint)]">
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-ui-sm text-[var(--color-text-faint)]">
           <span>创建于 {formatWorkspaceDateTime(knowledgeBase.createdAt)}</span>
           <span>更新于 {formatWorkspaceDateTime(knowledgeBase.updatedAt)}</span>
         </div>
@@ -260,12 +261,12 @@ function FileRecordRow(props: {
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-[13px] font-medium text-[var(--chat-text)]">
+            <span className="truncate text-ui-caption font-medium text-[var(--chat-text)]">
               {file.title}
             </span>
             <span
               className={cn(
-                "shrink-0 rounded px-1 py-0 text-[10px] font-medium leading-4",
+                "shrink-0 rounded px-1 py-0 text-ui-xs font-medium leading-4",
                 statusMeta.className,
               )}
             >
@@ -280,7 +281,7 @@ function FileRecordRow(props: {
               </span>
             ) : null}
           </div>
-          <div className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-[var(--chat-text-muted)]">
+          <div className="mt-0.5 flex items-center gap-1.5 truncate text-ui-sm text-[var(--chat-text-muted)]">
             <span>
               {isWebSource ? "网页" : file.fileExt?.toUpperCase() || "文件"}
             </span>
@@ -331,14 +332,14 @@ function FileRecordRow(props: {
           <button
             type="button"
             onClick={() => onDelete(file.id)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-text-muted)] transition-colors hover:bg-rose-50 hover:text-rose-600"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-text-muted)] transition-colors hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
             title="删除"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2 pl-10 text-[11px] text-[var(--chat-text-muted)]">
+      <div className="mt-2 flex flex-wrap items-center gap-2 pl-10 text-ui-sm text-[var(--chat-text-muted)]">
         <span className="font-medium text-[var(--chat-text-soft)]">
           原始资料
         </span>
@@ -388,10 +389,10 @@ function FullContentPanel(props: {
       <div className="flex h-full flex-col">
         <div className="mrag-drawer-header flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[12px] font-semibold uppercase tracking-wider text-[var(--chat-text-muted)]">
+            <div className="text-ui-sm font-semibold uppercase tracking-wider text-[var(--chat-text-muted)]">
               整篇正文
             </div>
-            <div className="mt-1 truncate text-[15px] font-semibold text-[var(--chat-text)]">
+            <div className="mt-1 truncate text-[length:var(--content-font-size)] font-semibold text-[var(--chat-text)]">
               {title || "未命名资料"}
             </div>
           </div>
@@ -405,7 +406,7 @@ function FullContentPanel(props: {
 
         {file ? (
           <div className="mrag-drawer-section">
-            <div className="text-[12px] font-semibold text-[var(--chat-text-soft)]">
+            <div className="text-ui-sm font-semibold text-[var(--chat-text-soft)]">
               原始资料
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -442,7 +443,7 @@ function FullContentPanel(props: {
 
         <div className="mrag-drawer-body min-h-0 flex-1 overflow-auto px-5 py-4">
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-[13px] text-[var(--chat-text-muted)]">
+            <div className="flex items-center justify-center py-16 text-ui-caption text-[var(--chat-text-muted)]">
               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
               正在加载正文...
             </div>
@@ -450,10 +451,10 @@ function FullContentPanel(props: {
 
           {showUnavailable ? (
             <div className="mrag-inline-callout px-4 py-4">
-              <div className="text-[14px] font-semibold">
+              <div className="text-ui-base font-semibold">
                 {unavailableTitle}
               </div>
-              <div className="mt-2 text-[13px] leading-6">
+              <div className="mt-2 text-ui-caption leading-6">
                 {errorMessage || "当前文件暂时没有可回显的正文内容。"}
               </div>
             </div>
@@ -463,7 +464,7 @@ function FullContentPanel(props: {
             <div className="mrag-inline-callout px-4 py-4">
               <MarkdownRenderer
                 markDownContent={markdown}
-                className="text-[14px] leading-7"
+                className="text-ui-base leading-7"
               />
             </div>
           ) : null}
@@ -508,7 +509,7 @@ function SideDrawer(props: {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={DURATION_QUICK}
             className="mrag-drawer-scrim fixed inset-0 z-40"
             onClick={onClose}
           />
@@ -517,7 +518,7 @@ function SideDrawer(props: {
       <aside
         aria-hidden={!open}
         className={cn(
-          "mrag-drawer fixed inset-y-0 z-50 flex w-full max-w-[360px] flex-col transition-transform duration-[260ms] ease-[var(--ease-out)]",
+          "mrag-drawer fixed inset-y-0 z-50 flex w-full max-w-[360px] flex-col transition-transform duration-[var(--duration-slow)] ease-[var(--ease-out)]",
           side === "left" ? "left-0 border-r" : "right-0 border-l",
           open
             ? "translate-x-0 opacity-100"
@@ -528,11 +529,11 @@ function SideDrawer(props: {
       >
         <div className="mrag-drawer-header flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-[var(--chat-text)]">
+            <div className="text-ui-caption font-semibold text-[var(--chat-text)]">
               {title}
             </div>
             {subtitle ? (
-              <div className="mt-0.5 text-[12px] text-[var(--chat-text-muted)]">
+              <div className="mt-0.5 text-ui-sm text-[var(--chat-text-muted)]">
                 {subtitle}
               </div>
             ) : null}
@@ -759,7 +760,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                 }}
               >
                 {queryError ? (
-                  <div className="mrag-error px-4 py-3 text-[13px] leading-6">
+                  <div className="mrag-error px-4 py-3 text-ui-caption leading-6">
                     {queryError}
                   </div>
                 ) : queryAnswer ? (
@@ -767,7 +768,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                     <MarkdownRenderer
                       markDownContent={queryAnswer}
                       isStreaming={querying}
-                      className="mrag-document-body text-[15px] leading-8"
+                      className="mrag-document-body text-[length:var(--content-font-size)] leading-8"
                     />
                     {!querying ? (
                       <div className="mt-8 flex items-center gap-1 text-[var(--chat-text-muted)]">
@@ -797,7 +798,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                     ) : null}
                   </article>
                 ) : (
-                  <div className="flex items-center justify-center py-20 text-[13px] text-[var(--chat-text-muted)]">
+                  <div className="flex items-center justify-center py-20 text-ui-caption text-[var(--chat-text-muted)]">
                     <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                     正在检索资料并组织回答...
                   </div>
@@ -820,15 +821,15 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                     className="mt-8 overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)]"
                   >
                     <div className="flex items-center justify-between border-b border-[var(--chat-border)] px-4 py-2.5">
-                      <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[var(--chat-text-soft)]">
+                      <span className="inline-flex items-center gap-2 text-ui-sm font-medium text-[var(--chat-text-soft)]">
                         <DatabaseZap className="h-3.5 w-3.5" />
                         原始 SSE Chunk
                       </span>
-                      <span className="rounded-md bg-[var(--chat-surface-soft)] px-2 py-0.5 text-[11px] text-[var(--chat-text-muted)]">
+                      <span className="rounded-md bg-[var(--chat-surface-soft)] px-2 py-0.5 text-ui-sm text-[var(--chat-text-muted)]">
                         {queryRawChunks.length} 条
                       </span>
                     </div>
-                    <pre className="max-h-[220px] overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-[11px] leading-5 text-[var(--chat-text-muted)]">
+                    <pre className="max-h-[220px] overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-ui-sm leading-5 text-[var(--chat-text-muted)]">
                       {toPrettyJson(queryRawChunks)}
                     </pre>
                   </motion.div>
@@ -841,14 +842,14 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                     key={turn.turnId || `${turn.createdAt}-${index}`}
                     className="mrag-session-item border px-5 py-4"
                   >
-                    <div className="mb-3 text-[11px] uppercase tracking-wider text-[var(--chat-text-muted)]">
+                    <div className="mb-3 text-ui-xs uppercase tracking-wider text-[var(--chat-text-muted)]">
                       第 {index + 1} 轮
                     </div>
-                    <div className="rounded-2xl bg-[var(--chat-surface-soft)] px-4 py-3 text-[14px] leading-7 text-[var(--chat-text)]">
+                    <div className="rounded-2xl bg-[var(--chat-surface-soft)] px-4 py-3 text-ui-base leading-7 text-[var(--chat-text)]">
                       {turn.question}
                     </div>
                     {turn.errorMessage ? (
-                      <div className="mrag-error mt-3 px-4 py-3 text-[13px] leading-6">
+                      <div className="mrag-error mt-3 px-4 py-3 text-ui-caption leading-6">
                         {turn.errorMessage}
                       </div>
                     ) : (
@@ -856,7 +857,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                         <MarkdownRenderer
                           markDownContent={turn.answerMarkdown}
                           isStreaming={false}
-                          className="mrag-document-body text-[15px] leading-8"
+                          className="mrag-document-body text-[length:var(--content-font-size)] leading-8"
                         />
                       </div>
                     )}
@@ -868,10 +869,10 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--chat-surface-soft)] text-[var(--chat-text-muted)]">
                   <Search className="h-5 w-5" />
                 </div>
-                <h2 className="mt-5 text-[22px] font-semibold tracking-tight text-[var(--chat-text)]">
+                <h2 className="mt-5 text-display-sm font-semibold tracking-[-0.02em] text-[var(--chat-text)]">
                   输入问题，开始检索
                 </h2>
-                <p className="mt-2 max-w-[42ch] text-[14px] leading-7 text-[var(--chat-text-muted)]">
+                <p className="mt-2 max-w-[42ch] text-ui-base leading-7 text-[var(--chat-text-muted)]">
                   回答会以文档形式居中展示，知识源与证据从顶部打开。
                 </p>
               </div>
@@ -897,14 +898,14 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                 onKeyDown={handleKeyDown}
                 rows={2}
                 placeholder="输入你的问题..."
-                className="w-full resize-none border-none bg-transparent px-2 py-1.5 text-[15px] leading-7 text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-text-muted)]"
+                className="w-full resize-none border-none bg-transparent px-2 py-1.5 text-[length:var(--content-font-size)] leading-7 text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-text-muted)]"
               />
               <div className="mt-1 flex items-center justify-between gap-2 px-1">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => setIsEvidenceOpen(true)}
-                    className="inline-flex h-8 max-w-[180px] items-center gap-1.5 truncate rounded-full bg-[var(--chat-surface-soft)] px-2.5 text-[12px] text-[var(--chat-text-muted)] transition hover:text-[var(--chat-text)]"
+                    className="inline-flex h-8 max-w-[180px] items-center gap-1.5 truncate rounded-full bg-[var(--chat-surface-soft)] px-2.5 text-ui-sm text-[var(--chat-text-muted)] transition hover:text-[var(--chat-text)]"
                     title={
                       selectedKnowledgeBase
                         ? selectedKnowledgeBase.name
@@ -923,7 +924,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                       type="button"
                       onClick={() => setShowDebug((value) => !value)}
                       className={cn(
-                        "inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium transition",
+                        "inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-ui-sm font-medium transition",
                         showDebug
                           ? "bg-[var(--chat-accent-soft)] text-[var(--chat-accent)]"
                           : "text-[var(--chat-text-muted)] hover:bg-[var(--chat-surface-soft)] hover:text-[var(--chat-text)]",
@@ -939,7 +940,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                     <button
                       type="button"
                       onClick={onStopQuery}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--chat-border)] px-3.5 text-[13px] font-medium text-[var(--chat-text-soft)] transition hover:bg-[var(--chat-surface-soft)]"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--chat-border)] px-3.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition hover:bg-[var(--chat-surface-soft)]"
                     >
                       <Square className="h-3.5 w-3.5" />
                       停止
@@ -960,7 +961,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
               </div>
             </div>
             {!selectedKnowledgeBase ? (
-              <p className="mt-2 text-center text-[11px] text-[var(--chat-text-muted)]">
+              <p className="mt-2 text-center text-ui-sm text-[var(--chat-text-muted)]">
                 请先从顶部打开知识源，再开始提问
               </p>
             ) : null}
@@ -985,16 +986,16 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
         }
       >
         {sessionsError ? (
-          <div className="mrag-error px-3 py-2 text-[12px]">
+          <div className="mrag-error px-3 py-2 text-ui-sm">
             {sessionsError}
           </div>
         ) : null}
         {sessionsLoading ? (
-          <div className="py-6 text-center text-[12px] text-[var(--chat-text-muted)]">
+          <div className="py-6 text-center text-ui-sm text-[var(--chat-text-muted)]">
             加载中...
           </div>
         ) : sessions.length === 0 ? (
-          <div className="py-6 text-center text-[12px] text-[var(--chat-text-muted)]">
+          <div className="py-6 text-center text-ui-sm text-[var(--chat-text-muted)]">
             暂无历史对话
           </div>
         ) : (
@@ -1010,10 +1011,10 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                 )}
                 data-active={session.sessionId === activeSessionId}
               >
-                <div className="truncate text-[13px] font-semibold text-[var(--chat-text)]">
+                <div className="truncate text-ui-caption font-semibold text-[var(--chat-text)]">
                   {session.title}
                 </div>
-                <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-[var(--chat-text-muted)]">
+                <div className="mt-1 line-clamp-2 text-ui-sm leading-5 text-[var(--chat-text-muted)]">
                   {session.latestQuestion || "暂无问题"}
                 </div>
               </button>
@@ -1042,14 +1043,14 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
             <button
               type="button"
               onClick={() => setIsCreateFormOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--chat-border)] py-3 text-[13px] font-medium text-[var(--chat-text-muted)] transition hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)] hover:text-[var(--chat-text)]"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--chat-border)] py-3 text-ui-caption font-medium text-[var(--chat-text-muted)] transition hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)] hover:text-[var(--chat-text)]"
             >
               <DatabaseZap className="h-4 w-4" />
               新建知识库
             </button>
           ) : (
             <div className="space-y-2 rounded-2xl bg-[var(--chat-surface-soft)] p-3">
-              <div className="text-[12px] font-semibold text-[var(--chat-text-soft)]">
+              <div className="text-ui-sm font-semibold text-[var(--chat-text-soft)]">
                 新建知识库
               </div>
               <input
@@ -1058,7 +1059,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                   onCreateKnowledgeBaseNameChange(e.target.value)
                 }
                 placeholder="名称，如：产品知识源"
-                className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 py-2 text-[13px] text-[var(--chat-text)] outline-none transition placeholder:text-[var(--chat-text-muted)] focus:border-[var(--chat-accent)]/30"
+                className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 py-2 text-ui-caption text-[var(--chat-text)] outline-none transition placeholder:text-[var(--chat-text-muted)] focus:border-[var(--chat-accent)]/30"
               />
               <textarea
                 value={createKnowledgeBaseDesc}
@@ -1067,7 +1068,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                 }
                 rows={2}
                 placeholder="用途描述，可选"
-                className="w-full resize-none rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 py-2 text-[13px] text-[var(--chat-text)] outline-none transition placeholder:text-[var(--chat-text-muted)] focus:border-[var(--chat-accent)]/30"
+                className="w-full resize-none rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 py-2 text-ui-caption text-[var(--chat-text)] outline-none transition placeholder:text-[var(--chat-text-muted)] focus:border-[var(--chat-accent)]/30"
               />
               <div className="flex gap-2">
                 <ActionButton
@@ -1091,7 +1092,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
       >
         <div className="space-y-2 p-3">
           {knowledgeBasesError ? (
-            <div className="mrag-error px-3 py-2 text-[12px]">
+            <div className="mrag-error px-3 py-2 text-ui-sm">
               {knowledgeBasesError}
             </div>
           ) : null}
@@ -1117,7 +1118,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
               ))}
             </StaggerContainer>
           ) : knowledgeBasesLoading ? (
-            <div className="flex items-center justify-center py-8 text-[13px] text-[var(--chat-text-muted)]">
+            <div className="flex items-center justify-center py-8 text-ui-caption text-[var(--chat-text-muted)]">
               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
               正在加载...
             </div>
@@ -1180,7 +1181,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                 value={webUrl}
                 onChange={(e) => onWebUrlChange(e.target.value)}
                 placeholder="粘贴网页链接"
-                className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-text-muted)]"
+                className="min-w-0 flex-1 border-none bg-transparent text-ui-caption text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-text-muted)]"
                 disabled={!selectedKnowledgeBase}
               />
               <ActionButton
@@ -1197,7 +1198,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
 
         <div className="px-3 py-3">
           {filesError ? (
-            <div className="mrag-error mb-3 px-3 py-2 text-[12px]">
+            <div className="mrag-error mb-3 px-3 py-2 text-ui-sm">
               {filesError}
             </div>
           ) : null}
@@ -1229,7 +1230,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
               ))}
             </StaggerContainer>
           ) : filesLoading ? (
-            <div className="flex items-center justify-center py-12 text-[13px] text-[var(--chat-text-muted)]">
+            <div className="flex items-center justify-center py-12 text-ui-caption text-[var(--chat-text-muted)]">
               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
               正在刷新文件...
             </div>

@@ -14,6 +14,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
+import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 
 /**
  * TaskOutput：无 timeout；block=false 立即 peek；block=true 等到终态。
@@ -36,14 +38,13 @@ public class TaskOutputToolTest {
         RuntimeBackgroundTaskRegistry registry = new RuntimeBackgroundTaskRegistry();
         RuntimeBackgroundTask task = registry.registerLocalAgent("peek", "general-purpose", "p");
         TaskOutputTool tool = new TaskOutputTool();
-        tool.setAgentContext(AgentContext.builder()
-                .requestId("req-to")
-                .sessionId("sess-to")
-                .backgroundTasks(registry)
-                .build());
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "task_id", task.getId(),
-                "block", false));
+                "block", false), AgentContext.builder()
+                .requestId("req-to")
+                .sessionId("sess-to")
+                .sessionControl(new SessionControl().withBackgroundTasks(registry))
+                .build());
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
         Assert.assertEquals("not_ready", data.get("retrieval_status"));
@@ -57,15 +58,14 @@ public class TaskOutputToolTest {
         task.setStatus(RuntimeBackgroundTask.STATUS_LOST);
         task.setErrorMsg("server restarted");
         TaskOutputTool tool = new TaskOutputTool();
-        tool.setAgentContext(AgentContext.builder()
-                .requestId("req-to-lost")
-                .sessionId("sess-to-lost")
-                .backgroundTasks(registry)
-                .build());
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
                 "task_id", task.getId(),
-                "block", false));
+                "block", false), AgentContext.builder()
+                .requestId("req-to-lost")
+                .sessionId("sess-to-lost")
+                .sessionControl(new SessionControl().withBackgroundTasks(registry))
+                .build());
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
         Assert.assertEquals("success", data.get("retrieval_status"));
@@ -78,11 +78,6 @@ public class TaskOutputToolTest {
         RuntimeBackgroundTaskRegistry registry = new RuntimeBackgroundTaskRegistry();
         RuntimeBackgroundTask task = registry.registerLocalAgent("block", "general-purpose", "p");
         TaskOutputTool tool = new TaskOutputTool();
-        tool.setAgentContext(AgentContext.builder()
-                .requestId("req-to-block")
-                .sessionId("sess-to-block")
-                .backgroundTasks(registry)
-                .build());
         ExecutorService pool = Executors.newSingleThreadExecutor();
         try {
             Future<?> f = pool.submit(() -> {
@@ -97,7 +92,12 @@ public class TaskOutputToolTest {
                         .content("done")
                         .build());
             });
-            ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("task_id", task.getId()));
+            ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of("task_id", task.getId()),
+                    AgentContext.builder()
+                            .requestId("req-to-block")
+                            .sessionId("sess-to-block")
+                            .sessionControl(new SessionControl().withBackgroundTasks(registry))
+                            .build());
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
             Assert.assertEquals("success", data.get("retrieval_status"));

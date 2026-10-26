@@ -260,12 +260,12 @@ function OpenUiSegment({
 
   if (invalid) {
     return (
-      <div className="my-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
-        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-amber-700">
+      <div className="my-3 rounded-lg border border-[var(--color-warning-bd)] bg-[var(--color-warning-soft)] p-3">
+        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[var(--color-warning)]">
           <span>界面渲染失败，已显示原始内容</span>
-          {state === 'running' ? <span className="text-amber-600">· 正在自动修复…</span> : null}
+          {state === 'running' ? <span className="text-[var(--color-warning)]">· 正在自动修复…</span> : null}
         </div>
-        <pre className="overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-neutral-700">
+        <pre className="overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-[var(--chat-text-soft)]">
           {repaired ?? program}
         </pre>
       </div>

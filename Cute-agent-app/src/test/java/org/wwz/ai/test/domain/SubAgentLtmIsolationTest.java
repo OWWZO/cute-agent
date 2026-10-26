@@ -3,6 +3,7 @@ package org.wwz.ai.test.domain;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.wwz.ai.domain.agent.memory.CompactionBudget;
 import org.wwz.ai.domain.agent.memory.SessionWorkingMemoryService;
 import org.wwz.ai.domain.agent.memory.ltm.LtmManager;
 import org.wwz.ai.domain.agent.memory.ltm.LtmServices;
@@ -40,23 +41,19 @@ public class SubAgentLtmIsolationTest {
                 dependenciesProvider,
                 mock(SessionWorkingMemoryService.class),
                 mock(IWorkingMemoryCompactionDao.class),
-                true,
-                false,
-                false,
-                false,
-                0.50d,
-                1,
-                1,
-                10,
-                1,
-                0.2d,
-                4000,
-                1,
-                100,
-                false,
-                false,
-                false,
-                true);
+                CompactionBudget.defaults().toBuilder()
+                        .llmEnabled(false)
+                        .microEnabled(false)
+                        .keepMinTokens(1)
+                        .keepMinTextMessages(1)
+                        .keepMaxTokens(10)
+                        .maxConsecutiveFailures(1)
+                        .microKeepRecentToolResults(1)
+                        .microToolResultMaxChars(100)
+                        .persistProjection(false)
+                        .auditEnabled(false)
+                        .auditStoreMessages(false)
+                        .build());
 
         LtmServices.bind(null, flushService);
         try {

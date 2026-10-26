@@ -23,18 +23,24 @@ public class WorkspaceReadImageLimitTest {
 
     private Path workspaceRoot;
     private WorkspaceReadTool readTool;
+    private AgentContext agentContext;
 
     @Before
     public void setUp() throws Exception {
         workspaceRoot = Files.createTempDirectory("cute-ws-image-limit");
         readTool = newReadTool(0L);
+        agentContext = AgentContext.builder()
+                .requestId("req-image-limit")
+                .sessionId("session-image-limit")
+                .workspaceRoot(workspaceRoot.toString())
+                .build();
     }
 
     @Test
     public void loadsSmallImageAsMultimodalContent() throws Exception {
         Files.write(workspaceRoot.resolve("small.png"), new byte[]{1, 2, 3, 4});
 
-        ToolResultPayload payload = (ToolResultPayload) readTool.execute(Map.of("path", "small.png"));
+        ToolResultPayload payload = (ToolResultPayload) readTool.execute(Map.of("path", "small.png"), agentContext);
 
         Assert.assertNotNull(payload.getBase64Image());
         Assert.assertTrue(payload.getBase64Image().startsWith("data:image/png;base64,"));
@@ -48,7 +54,7 @@ public class WorkspaceReadImageLimitTest {
         readTool = newReadTool(8L);
         Files.write(workspaceRoot.resolve("big.png"), new byte[16]);
 
-        ToolResultPayload payload = (ToolResultPayload) readTool.execute(Map.of("path", "big.png"));
+        ToolResultPayload payload = (ToolResultPayload) readTool.execute(Map.of("path", "big.png"), agentContext);
 
         Assert.assertNull("超大图不得加载成多模态", payload.getBase64Image());
         Map<?, ?> data = (Map<?, ?>) payload.getLlmData();
@@ -66,7 +72,7 @@ public class WorkspaceReadImageLimitTest {
         readTool = newReadTool(8L);
         Files.write(workspaceRoot.resolve("edge.png"), new byte[8]);
 
-        ToolResultPayload payload = (ToolResultPayload) readTool.execute(Map.of("path", "edge.png"));
+        ToolResultPayload payload = (ToolResultPayload) readTool.execute(Map.of("path", "edge.png"), agentContext);
 
         Assert.assertNotNull("边界值应当放行", payload.getBase64Image());
     }
@@ -80,12 +86,6 @@ public class WorkspaceReadImageLimitTest {
                 .build();
         WorkspaceService service = new WorkspaceService(options, new WorkspacePathGuard(), null,
                 new SkillVirtualPaths(SkillRuntimeOptions.builder().enabled(false).build()));
-        WorkspaceReadTool tool = new WorkspaceReadTool(service, options);
-        tool.setAgentContext(AgentContext.builder()
-                .requestId("req-image-limit")
-                .sessionId("session-image-limit")
-                .workspaceRoot(workspaceRoot.toString())
-                .build());
-        return tool;
+        return new WorkspaceReadTool(service, options);
     }
 }

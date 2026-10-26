@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore;
@@ -18,18 +17,7 @@ import java.util.Map;
  * 仅主 Agent 使用；子 Agent 工具池剔除。
  */
 @Slf4j
-@Data
 public class EnterPlanModeTool implements BaseTool {
-
-    private AgentContext agentContext;
-    private PlanArtifactStore planArtifactStore;
-
-    public EnterPlanModeTool() {
-    }
-
-    public EnterPlanModeTool(PlanArtifactStore planArtifactStore) {
-        this.planArtifactStore = planArtifactStore;
-    }
 
     @Override
     public String getName() {
@@ -56,6 +44,12 @@ public class EnterPlanModeTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext agentContext) {
         try {
             if (agentContext == null) {
                 return ToolResultPayload.failure(
@@ -82,6 +76,7 @@ public class EnterPlanModeTool implements BaseTool {
             state.enterPlanMode();
 
             String planPathHint = PlanArtifactStore.RELATIVE_PLAN_PATH;
+            PlanArtifactStore planArtifactStore = resolvePlanArtifactStore(agentContext);
             if (planArtifactStore != null) {
                 var path = planArtifactStore.resolvePlanPath(agentContext.getSessionId());
                 if (path != null) {
@@ -108,5 +103,13 @@ public class EnterPlanModeTool implements BaseTool {
             String msg = "EnterPlanMode 失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             return ToolResultPayload.failureFrom(msg, null);
         }
+    }
+
+    /** plan 产物存储与 context 同源：装配期已挂到运行时依赖上。 */
+    private static PlanArtifactStore resolvePlanArtifactStore(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return null;
+        }
+        return context.getRuntimeDependencies().getOptionalPlanArtifactStore();
     }
 }

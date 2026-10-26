@@ -326,7 +326,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
               >
                 <Puzzle className="h-3.5 w-3.5" />
                 技能{" "}
-                <span className="font-mono text-[11px]">{skills.length}</span>
+                <span className="font-mono text-ui-sm">{skills.length}</span>
               </button>
               <button
                 type="button"
@@ -337,7 +337,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                 onClick={() => setTab("mcp")}
               >
                 <Blocks className="h-3.5 w-3.5" />
-                MCP <span className="font-mono text-[11px]">{mcps.length}</span>
+                MCP <span className="font-mono text-ui-sm">{mcps.length}</span>
               </button>
             </div>
             <span className="workspace-admin-section-meta">
@@ -574,13 +574,13 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
             <DialogTitle>上传技能包</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <p className="text-[12.5px] text-slate-500">
+            <p className="text-ui-caption text-[var(--chat-text-soft)]">
               zip 内含 <code>SKILL.md</code>（可包在一层目录里），可带
               references/、scripts/。
             </p>
-            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 hover:border-sky-400">
-              <FileArchive className="h-8 w-8 text-slate-400" />
-              <span className="text-sm text-slate-600">
+            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--chat-border-strong)] bg-[var(--chat-surface-soft)] px-4 py-8 hover:border-[var(--chat-accent)]">
+              <FileArchive className="h-8 w-8 text-[var(--chat-text-muted)]" />
+              <span className="text-sm text-[var(--chat-text-soft)]">
                 {zipFile ? zipFile.name : "选择或拖入 .zip"}
               </span>
               <input
@@ -594,18 +594,18 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
               />
             </label>
             {parsing ? (
-              <div className="flex items-center gap-2 text-sm text-slate-500">
+              <div className="flex items-center gap-2 text-sm text-[var(--chat-text-soft)]">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 解析中…
               </div>
             ) : null}
             {zipPreview ? (
-              <div className="rounded-lg border border-slate-200 bg-white p-3 text-[12.5px]">
+              <div className="rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-3 text-ui-caption">
                 <div>
                   <b>名称：</b>
                   {zipPreview.name}
                   {zipPreview.nameTaken ? (
-                    <span className="ml-2 text-amber-600">（将覆盖同名）</span>
+                    <span className="ml-2 text-[var(--color-warning)]">（将覆盖同名）</span>
                   ) : null}
                 </div>
                 <div className="mt-1">
@@ -613,7 +613,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                   {zipPreview.description || "—"}
                 </div>
                 {zipPreview.extraFiles?.length ? (
-                  <div className="mt-1 text-slate-500">
+                  <div className="mt-1 text-[var(--chat-text-soft)]">
                     附带文件：{zipPreview.extraFiles.slice(0, 8).join(", ")}
                     {zipPreview.extraFiles.length > 8 ? "…" : ""}
                   </div>
@@ -648,7 +648,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
             <DialogTitle>粘贴新建技能</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
-            <label className="text-[13px]">
+            <label className="text-ui-caption">
               名称（可空，从 frontmatter 解析）
               <Input
                 className="mt-1"
@@ -657,7 +657,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                 placeholder="my-skill"
               />
             </label>
-            <label className="text-[13px]">
+            <label className="text-ui-caption">
               说明
               <Input
                 className="mt-1"
@@ -665,10 +665,10 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                 onChange={(e) => setPasteDesc(e.target.value)}
               />
             </label>
-            <label className="text-[13px]">
+            <label className="text-ui-caption">
               SKILL.md 正文
               <Textarea
-                className="mt-1 min-h-[200px] font-mono text-[12px]"
+                className="mt-1 min-h-[200px] font-mono text-ui-sm"
                 value={pasteContent}
                 onChange={(e) => setPasteContent(e.target.value)}
                 placeholder={
@@ -703,7 +703,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
           <DialogHeader>
             <DialogTitle>在线导入</DialogTitle>
           </DialogHeader>
-          <p className="text-[12.5px] text-slate-500">
+          <p className="text-ui-caption text-[var(--chat-text-soft)]">
             支持 zip 直链，或 raw SKILL.md 文本 URL。
           </p>
           <Input
@@ -742,7 +742,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
             </DialogTitle>
           </DialogHeader>
           <div className="grid min-w-0 gap-3 py-2">
-            <label className="text-[13px]">
+            <label className="text-ui-caption">
               mcpId
               <Input
                 className="mt-1 font-mono"
@@ -756,7 +756,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                 }
               />
             </label>
-            <label className="text-[13px]">
+            <label className="text-ui-caption">
               名称
               <Input
                 className="mt-1"
@@ -770,10 +770,10 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                 }
               />
             </label>
-            <label className="text-[13px]">
+            <label className="text-ui-caption">
               传输类型
               <select
-                className="mt-1 flex h-9 w-full rounded-md border border-slate-200 px-3 text-[13px]"
+                className="mt-1 flex h-9 w-full rounded-md border border-[var(--chat-border)] px-3 text-ui-caption"
                 value={mcpForm.transportType}
                 disabled={mcpFormLocked}
                 onChange={(e) =>
@@ -788,10 +788,10 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                 <option value="stdio">stdio</option>
               </select>
             </label>
-            <label className="min-w-0 text-[13px]">
+            <label className="min-w-0 text-ui-caption">
               transportConfig（JSON）
               <Textarea
-                className="mt-1 min-h-[100px] min-w-0 w-full field-sizing-fixed break-all font-mono text-[12px]"
+                className="mt-1 min-h-[100px] min-w-0 w-full field-sizing-fixed break-all font-mono text-ui-sm"
                 value={mcpForm.transportConfig || ""}
                 disabled={mcpFormLocked}
                 onChange={(e) =>
@@ -803,7 +803,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
               />
             </label>
             <div className="flex items-center gap-2">
-              <span className="text-[13px]">启用</span>
+              <span className="text-ui-caption">启用</span>
               <Switch
                 checked={(mcpForm.status ?? 1) === 1}
                 disabled={mcpFormLocked}

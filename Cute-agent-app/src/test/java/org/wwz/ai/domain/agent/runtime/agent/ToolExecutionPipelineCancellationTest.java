@@ -14,6 +14,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
 
 public class ToolExecutionPipelineCancellationTest {
 
@@ -22,7 +23,7 @@ public class ToolExecutionPipelineCancellationTest {
         RunCancellation cancellation = new RunCancellation();
         AgentContext context = AgentContext.builder()
                 .requestId("request-stop-during-tool")
-                .runCancellation(cancellation)
+                .control(new RunControl().withCancellation(cancellation))
                 .build();
         BaseAgent agent = new BaseAgent() {
             @Override
@@ -77,7 +78,7 @@ public class ToolExecutionPipelineCancellationTest {
         cancellation.cancel(RunCancellation.REASON_USER_STOP);
         AgentContext context = AgentContext.builder()
                 .requestId("request-stop-before-tool")
-                .runCancellation(cancellation)
+                .control(new RunControl().withCancellation(cancellation))
                 .build();
         AtomicBoolean executed = new AtomicBoolean(false);
         BaseAgent agent = new BaseAgent() {

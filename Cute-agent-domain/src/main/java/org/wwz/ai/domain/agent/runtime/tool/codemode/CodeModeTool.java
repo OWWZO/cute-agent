@@ -17,17 +17,16 @@ import java.util.Map;
  * 本类只做参数解析、校验和结果转换，<b>不 import 任何 GraalJS 类型</b>；
  * 真正的执行委托给 {@link CodeModeExecutorPort}（实现在 infrastructure）。
  * </p>
+ * <p>
+ * 无状态实现：context 与执行器都由 {@link #execute(Object, AgentContext)} 显式传入，
+ * 实例本身可被多个 Agent 安全共享。
+ * </p>
  */
-@Setter
 public class CodeModeTool implements BaseTool {
 
     public static final String TOOL_NAME = "code_mode";
 
     private final CodeModeProperties properties;
-
-    private AgentContext agentContext;
-
-    private CodeModeExecutorPort executorPort;
 
     public CodeModeTool(CodeModeProperties properties) {
         this.properties = properties;
@@ -79,15 +78,22 @@ public class CodeModeTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
+        CodeModeExecutorPort executorPort = requireExecutorPort(context);
         if (executorPort == null) {
             return fail(CodeModeErrorCode.CODE_MODE_CAPABILITY_UNAVAILABLE, "Code Mode 执行器未装配");
         }
-        if (agentContext == null) {
+        if (context == null) {
             return fail(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT, "缺少 AgentContext");
         }
-        if (agentContext.isRunCancelled()) {
+        if (context.isRunCancelled()) {
             return fail(CodeModeErrorCode.CODE_MODE_CANCELLED, "工具未执行：用户已停止本轮对话");
         }
         Map<String, Object> params = input instanceof Map<?, ?> map
@@ -123,7 +129,7 @@ public class CodeModeTool implements BaseTool {
 
         CodeModeResult result;
         try {
-            result = executorPort.execute(request, agentContext);
+            result = executorPort.execute(request, context);
         } catch (RuntimeException e) {
             return fail(CodeModeErrorCode.CODE_MODE_RUNTIME_ERROR,
                     "Code Mode 执行失败：" + StringUtils.defaultString(e.getMessage(), e.getClass().getSimpleName()));
@@ -132,6 +138,14 @@ public class CodeModeTool implements BaseTool {
             return fail(CodeModeErrorCode.CODE_MODE_RUNTIME_ERROR, "Code Mode 执行器未返回结果");
         }
         return toPayload(result);
+    }
+
+    /** 执行器与 context 同源：装配期已确认 dependencies 里有该端口。 */
+    private CodeModeExecutorPort requireExecutorPort(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return null;
+        }
+        return context.getRuntimeDependencies().getOptionalCodeModeExecutorPort();
     }
 
     private Object toPayload(CodeModeResult result) {

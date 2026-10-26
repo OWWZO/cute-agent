@@ -1,5 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { SUMMARY_ROLL_TRANSITION } from "@/lib/motion";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 /**
  * 摘要文案上滚（移植 ZCode `ToolCallBlocks/QueuedSummaryContent.tsx`）。
@@ -17,10 +19,6 @@ const SUMMARY_ROLL_HOLD_MS = 500;
 const SUMMARY_ROLL_TOTAL_MS = SUMMARY_ROLL_TRANSITION_MS + SUMMARY_ROLL_HOLD_MS;
 const SUMMARY_ROLL_TIMER_DRIFT_SKIP_MS = 250;
 const SUMMARY_ROLL_MAX_PENDING = 2;
-const SUMMARY_ROLL_TRANSITION = {
-  duration: SUMMARY_ROLL_TRANSITION_MS / 1000,
-  ease: [0.4, 0, 0.2, 1],
-} as const;
 
 function getCurrentTimestamp() {
   if (typeof performance !== "undefined") {
@@ -34,30 +32,6 @@ function resolveQueuedSummaryPlaybackQueue<T>(queuedContent: readonly T[], timer
     return queuedContent.slice(-1);
   }
   return [...queuedContent];
-}
-
-function usePrefersReducedMotion() {
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setPrefersReducedMotion(query.matches);
-    update();
-
-    if (typeof query.addEventListener === "function") {
-      query.addEventListener("change", update);
-      return () => query.removeEventListener("change", update);
-    }
-
-    query.addListener(update);
-    return () => query.removeListener(update);
-  }, []);
-
-  return prefersReducedMotion;
 }
 
 interface SummaryContentSnapshot {

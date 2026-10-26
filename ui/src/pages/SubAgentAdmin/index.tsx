@@ -534,7 +534,7 @@ const SubAgentAdmin: CuteType.FC<SubAgentAdminProps> = ({ embedded }) => {
                           }))
                         }
                         placeholder="子 Agent 系统提示词"
-                        className="font-mono text-[12px]"
+                        className="font-mono text-ui-sm"
                       />
                     </label>
                   </div>

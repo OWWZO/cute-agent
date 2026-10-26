@@ -38,12 +38,11 @@ public class CodeExecutionToolTest {
                 .toolName("code_execution")
                 .build();
         CodeExecutionTool tool = new CodeExecutionTool();
-        tool.setAgentContext(context);
 
         ToolResultPayload payload;
         context.bindCurrentToolArtifactSource(artifactSource);
         try {
-            payload = (ToolResultPayload) tool.execute(Map.of("source", "result = 1"));
+            payload = (ToolResultPayload) tool.execute(Map.of("source", "result = 1"), context);
         } finally {
             context.clearCurrentToolArtifactSource();
         }
@@ -82,12 +81,11 @@ public class CodeExecutionToolTest {
                 .toolName("code_execution")
                 .build();
         CodeExecutionTool tool = new CodeExecutionTool();
-        tool.setAgentContext(context);
 
         ToolResultPayload payload;
         context.bindCurrentToolArtifactSource(artifactSource);
         try {
-            payload = (ToolResultPayload) tool.execute(Map.of("source", "result = 1"));
+            payload = (ToolResultPayload) tool.execute(Map.of("source", "result = 1"), context);
         } finally {
             context.clearCurrentToolArtifactSource();
         }
@@ -131,11 +129,10 @@ public class CodeExecutionToolTest {
                 .toolName("code_execution")
                 .build();
         CodeExecutionTool tool = new CodeExecutionTool();
-        tool.setAgentContext(context);
 
         context.bindCurrentToolArtifactSource(artifactSource);
         try {
-            tool.execute(Map.of("source", "result = 1"));
+            tool.execute(Map.of("source", "result = 1"), context);
         } finally {
             context.clearCurrentToolArtifactSource();
         }

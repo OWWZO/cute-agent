@@ -23,7 +23,7 @@ const DeepSearchChapterPanel: CuteType.FC<DeepSearchChapterPanelProps> = memo(
         <section>
           <div className="mb-3 flex items-center gap-2 px-1">
             <ListTree className="h-4 w-4 text-[var(--chat-text-muted)]" strokeWidth={1.75} />
-            <p className="text-[12px] font-medium text-[var(--chat-text-muted)]">
+            <p className="text-ui-sm font-medium text-[var(--chat-text-muted)]">
               本章检索来源
             </p>
           </div>
@@ -38,27 +38,27 @@ const DeepSearchChapterPanel: CuteType.FC<DeepSearchChapterPanelProps> = memo(
 
         <section className="rounded-2xl border border-[var(--chat-border)]/50 bg-white px-4 py-4">
           <div className="mb-3 flex items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--chat-border)]/40 bg-[#f5f5f7] text-[var(--chat-text-muted)]">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--chat-border)]/40 bg-[var(--chat-surface-muted)] text-[var(--chat-text-muted)]">
               <BookOpenText className="h-5 w-5" strokeWidth={1.75} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]">
+              <p className="text-ui-xs font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]">
                 {orderLabel}
               </p>
-              <h3 className="mt-1 text-[16px] font-semibold leading-snug tracking-[-0.01em] text-[var(--chat-text)]">
+              <h3 className="mt-1 text-ui-lg font-semibold leading-snug tracking-[-0.01em] text-[var(--chat-text)]">
                 {model.title}
               </h3>
             </div>
           </div>
           {model.summary ? (
-            <div className="rounded-xl bg-[#fafafa] px-3 py-2">
+            <div className="rounded-xl bg-[var(--chat-surface-soft)] px-3 py-2">
               <MarkdownRenderer
                 markDownContent={model.summary}
                 isStreaming={Boolean(model.isStreaming)}
               />
             </div>
           ) : (
-            <p className="text-[13px] leading-relaxed text-[var(--chat-text-soft)]">
+            <p className="text-ui-caption leading-relaxed text-[var(--chat-text-soft)]">
               章节总结生成中，可先查看上方检索来源。
             </p>
           )}

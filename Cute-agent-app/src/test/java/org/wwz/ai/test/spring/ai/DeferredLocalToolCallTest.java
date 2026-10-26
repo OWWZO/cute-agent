@@ -29,9 +29,8 @@ public class DeferredLocalToolCallTest {
         collection.setAgentContext(context);
 
         ToolSearchTool search = new ToolSearchTool();
-        search.setAgentContext(context);
         Map<?, ?> searchData = (Map<?, ?>) ((ToolResultPayload) search.execute(
-                Map.of("query", "generate document"))).getLlmData();
+                Map.of("query", "generate document"), context)).getLlmData();
         Map<?, ?> row = (Map<?, ?>) ((List<?>) searchData.get("matches")).get(0);
         Assert.assertEquals("document_generate", row.get("name"));
         Assert.assertEquals("local", row.get("source"));
@@ -39,9 +38,8 @@ public class DeferredLocalToolCallTest {
         Assert.assertFalse(row.containsKey("parameters"));
 
         ToolDescribeTool describe = new ToolDescribeTool();
-        describe.setAgentContext(context);
         Map<?, ?> described = (Map<?, ?>) ((ToolResultPayload) describe.execute(
-                Map.of("name", "document_generate"))).getLlmData();
+                Map.of("name", "document_generate"), context)).getLlmData();
         Assert.assertTrue(((Map<?, ?>) described.get("parameters")).containsKey("required"));
 
         Assert.assertTrue(String.valueOf(collection.execute(
@@ -56,8 +54,7 @@ public class DeferredLocalToolCallTest {
         Assert.assertEquals(1, local.invocations);
 
         ToolCallTool bridge = new ToolCallTool();
-        bridge.setAgentContext(context);
-        Assert.assertEquals("generated:x", bridge.execute(call));
+        Assert.assertEquals("generated:x", bridge.execute(call, context));
         Assert.assertEquals(2, local.invocations);
         Assert.assertFalse(LlmToolCallbackProvider.buildToolSignature(collection)
                 .contains("document_generate"));

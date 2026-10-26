@@ -40,11 +40,10 @@ public class SkipMemoryGuardTest {
                         .build())
                 .build();
         MemoryTool tool = new MemoryTool();
-        tool.setAgentContext(ctx);
         Object out = tool.execute(Map.of(
                 "action", "add",
                 "target", "user",
-                "content", "should not persist"));
+                "content", "should not persist"), ctx);
         Assert.assertNotNull(out);
         Assert.assertTrue(String.valueOf(out).contains("skip_memory"));
         Assert.assertTrue(store.listActive(LtmOwner.user("u1"), CuratedMemoryScope.USER).isEmpty());

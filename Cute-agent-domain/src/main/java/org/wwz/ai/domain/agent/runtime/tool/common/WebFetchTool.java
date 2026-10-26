@@ -2,7 +2,6 @@ package org.wwz.ai.domain.agent.runtime.tool.common;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpPort;
@@ -29,7 +28,6 @@ import java.util.concurrent.TimeUnit;
  * 网页抓取和正文提取委托给 cute-tool /v1/tool/web_fetch；本端只负责 prompt 提取。
  */
 @Slf4j
-@Data
 public class WebFetchTool implements BaseTool {
 
     public static final String TOOL_NAME = "WebFetch";
@@ -38,8 +36,6 @@ public class WebFetchTool implements BaseTool {
     private static final int MAX_MARKDOWN_LENGTH = 100_000;
     private static final long WEB_FETCH_SERVICE_TIMEOUT_SECONDS = 120L;
     private static final int EXTRACT_TIMEOUT_SECONDS = 90;
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -81,8 +77,14 @@ public class WebFetchTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Object execute(Object input, AgentContext context) {
         long start = System.currentTimeMillis();
         String rawUrl = "";
         String prompt = "";
@@ -99,9 +101,9 @@ public class WebFetchTool implements BaseTool {
 
             validateUrl(rawUrl);
 
-            FetchedPage fetch = fetchFromPython(rawUrl);
+            FetchedPage fetch = fetchFromPython(rawUrl, context);
             String markdown = truncateContent(fetch.content());
-            ExtractOutcome extracted = applyPromptToContent(prompt, markdown);
+            ExtractOutcome extracted = applyPromptToContent(prompt, markdown, context);
             long durationMs = System.currentTimeMillis() - start;
 
             Map<String, Object> data = new LinkedHashMap<>();
@@ -129,28 +131,28 @@ public class WebFetchTool implements BaseTool {
             }
             return ToolResultPayload.fromData(data);
         } catch (FetchHttpException e) {
-            log.warn("{} WebFetch remote response failed, url={}, status={}", requestId(), e.url, e.statusCode);
+            log.warn("{} WebFetch remote response failed, url={}, status={}", requestId(context), e.url, e.statusCode);
             Map<String, Object> detail = failureDetails(rawUrl, prompt);
             detail.put("status", e.statusCode);
             detail.put("statusText", StringUtils.defaultString(e.statusText));
             detail.put("responseBody", e.responseBody);
             return ToolResultPayload.failureFrom("WebFetch 失败：" + e.getMessage(), detail);
         } catch (Exception e) {
-            log.error("{} WebFetch execute error, input={}", requestId(), input, e);
+            log.error("{} WebFetch execute error, input={}", requestId(context), input, e);
             return failure("WebFetch 失败：" + StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName()),
                     rawUrl, prompt);
         }
     }
 
-    private FetchedPage fetchFromPython(String url) throws Exception {
-        CuteConfig config = requireCuteConfig();
+    private FetchedPage fetchFromPython(String url, AgentContext context) throws Exception {
+        CuteConfig config = requireCuteConfig(context);
         String endpoint = buildWebFetchEndpoint(config.getWebFetchUrl());
         Map<String, Object> requestBody = new LinkedHashMap<>();
-        requestBody.put("requestId", StringUtils.defaultIfBlank(requestId(), "web-fetch"));
+        requestBody.put("requestId", StringUtils.defaultIfBlank(requestId(context), "web-fetch"));
         requestBody.put("url", url);
         requestBody.put("timeoutSeconds", WEB_FETCH_SERVICE_TIMEOUT_SECONDS);
 
-        RemoteHttpResponse response = requireRemoteHttpPort().executeDetailed(RemoteHttpRequest.builder()
+        RemoteHttpResponse response = requireRemoteHttpPort(context).executeDetailed(RemoteHttpRequest.builder()
                 .method("POST")
                 .url(endpoint)
                 .headers(Map.of("Accept", "application/json", "Content-Type", "application/json"))
@@ -224,7 +226,7 @@ public class WebFetchTool implements BaseTool {
         return base + "/v1/tool/web_fetch";
     }
 
-    private ExtractOutcome applyPromptToContent(String prompt, String markdownContent) {
+    private ExtractOutcome applyPromptToContent(String prompt, String markdownContent, AgentContext context) {
         String modelPrompt = """
                 Web page content:
                 ---
@@ -239,13 +241,13 @@ public class WebFetchTool implements BaseTool {
                 """.formatted(markdownContent, prompt);
 
         try {
-            CuteConfig config = requireCuteConfig();
+            CuteConfig config = requireCuteConfig(context);
             String modelName = StringUtils.defaultIfBlank(config.getSummaryModelName(), config.getReactModelName());
-            LLM llm = new LLM(modelName, "", agentContext.getRuntimeDependencies());
+            LLM llm = new LLM(modelName, "", context.getRuntimeDependencies());
             // Prefer stream aggregation: some OpenAI-compatible gateways return empty/truncated
             // non-stream JSON bodies that Spring AI cannot deserialize as ChatCompletion.
             String answer = llm.ask(
-                    agentContext,
+                    context,
                     Collections.singletonList(Message.userMessage(modelPrompt, null)),
                     Collections.emptyList(),
                     true,
@@ -255,7 +257,7 @@ public class WebFetchTool implements BaseTool {
             return ExtractOutcome.success(StringUtils.defaultIfBlank(answer, "No response from model"));
         } catch (Exception e) {
             String root = rootCauseSummary(e);
-            log.warn("{} WebFetch model extract failed, degrade to page text, root={}", requestId(), root, e);
+            log.warn("{} WebFetch model extract failed, degrade to page text, root={}", requestId(context), root, e);
             String degraded = """
                     [WebFetch degraded: model extract failed]
                     error: %s
@@ -343,22 +345,22 @@ public class WebFetchTool implements BaseTool {
         return value == null ? null : String.valueOf(value);
     }
 
-    private String requestId() {
-        return agentContext == null ? "unknown" : StringUtils.defaultString(agentContext.getRequestId(), "unknown");
+    private String requestId(AgentContext context) {
+        return context == null ? "unknown" : StringUtils.defaultString(context.getRequestId(), "unknown");
     }
 
-    private CuteConfig requireCuteConfig() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private CuteConfig requireCuteConfig(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             throw new IllegalStateException("WebFetchTool 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireCuteConfig();
+        return context.getRuntimeDependencies().requireCuteConfig();
     }
 
-    private RemoteHttpPort requireRemoteHttpPort() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private RemoteHttpPort requireRemoteHttpPort(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             throw new IllegalStateException("WebFetchTool 缺少 CuteRuntimeDependencies");
         }
-        return agentContext.getRuntimeDependencies().requireRemoteHttpPort();
+        return context.getRuntimeDependencies().requireRemoteHttpPort();
     }
 
     private static final class FetchHttpException extends IllegalStateException {

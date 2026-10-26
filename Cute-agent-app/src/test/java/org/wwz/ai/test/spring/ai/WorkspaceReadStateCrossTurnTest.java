@@ -54,8 +54,7 @@ public class WorkspaceReadStateCrossTurnTest {
                 .workspaceRoot(workspaceRoot.toString())
                 .build();
         WorkspaceReadTool read1 = new WorkspaceReadTool(workspaceService, options);
-        read1.setAgentContext(turn1);
-        String first = String.valueOf(read1.execute(Map.of("path", "demo.txt")));
+        String first = String.valueOf(read1.execute(Map.of("path", "demo.txt"), turn1));
         Assert.assertTrue(first.contains("hello cross turn"));
         store.persist(turn1);
 
@@ -69,17 +68,15 @@ public class WorkspaceReadStateCrossTurnTest {
         Assert.assertTrue(turn2.hasWorkspaceFileBeenRead(targetFile.toAbsolutePath().normalize().toString()));
 
         WorkspaceReadTool read2 = new WorkspaceReadTool(workspaceService, options);
-        read2.setAgentContext(turn2);
-        String second = String.valueOf(read2.execute(Map.of("path", "demo.txt")));
+        String second = String.valueOf(read2.execute(Map.of("path", "demo.txt"), turn2));
         Assert.assertTrue(second.contains("File unchanged since last read"));
 
         WorkspaceEditTool edit = new WorkspaceEditTool(workspaceService, options);
-        edit.setAgentContext(turn2);
         String editResult = String.valueOf(edit.execute(Map.of(
                 "path", "demo.txt",
                 "old_string", "hello cross turn",
                 "new_string", "hello next turn"
-        )));
+        ), turn2));
         Assert.assertTrue("edit should succeed: " + editResult,
                 editResult.contains("replacements") || editResult.contains("已编辑") || editResult.contains("替换次数"));
         Assert.assertFalse(editResult.contains("File has been modified") || editResult.contains("must use workspace_read"));
@@ -94,8 +91,7 @@ public class WorkspaceReadStateCrossTurnTest {
                 .workspaceRoot(workspaceRoot.toString())
                 .build();
         WorkspaceReadTool read1 = new WorkspaceReadTool(workspaceService, options);
-        read1.setAgentContext(turn1);
-        Assert.assertTrue(String.valueOf(read1.execute(Map.of("path", "demo.txt"))).contains("hello cross turn"));
+        Assert.assertTrue(String.valueOf(read1.execute(Map.of("path", "demo.txt"), turn1)).contains("hello cross turn"));
         store.persist(turn1);
 
         // 模拟压缩成功：清内存 + 落盘（cc-haha clear readFileState）
@@ -111,8 +107,7 @@ public class WorkspaceReadStateCrossTurnTest {
         Assert.assertFalse(turn2.hasWorkspaceFileBeenRead(targetFile.toAbsolutePath().normalize().toString()));
 
         WorkspaceReadTool read2 = new WorkspaceReadTool(workspaceService, options);
-        read2.setAgentContext(turn2);
-        String second = String.valueOf(read2.execute(Map.of("path", "demo.txt")));
+        String second = String.valueOf(read2.execute(Map.of("path", "demo.txt"), turn2));
         Assert.assertFalse(second.contains("File unchanged since last read"));
         Assert.assertTrue(second.contains("hello cross turn"));
     }
@@ -125,8 +120,7 @@ public class WorkspaceReadStateCrossTurnTest {
                 .workspaceRoot(workspaceRoot.toString())
                 .build();
         WorkspaceReadTool read1 = new WorkspaceReadTool(workspaceService, options);
-        read1.setAgentContext(turn1);
-        read1.execute(Map.of("path", "demo.txt"));
+        read1.execute(Map.of("path", "demo.txt"), turn1);
         store.persist(turn1);
         Path storeFile = workspaceRoot.resolve(".cute/read-state.json");
         Assert.assertTrue(Files.isRegularFile(storeFile));
@@ -144,8 +138,7 @@ public class WorkspaceReadStateCrossTurnTest {
                 .workspaceRoot(workspaceRoot.toString())
                 .build();
         WorkspaceReadTool parentRead = new WorkspaceReadTool(workspaceService, options);
-        parentRead.setAgentContext(parent);
-        String first = String.valueOf(parentRead.execute(Map.of("path", "demo.txt")));
+        String first = String.valueOf(parentRead.execute(Map.of("path", "demo.txt"), parent));
         Assert.assertTrue(first.contains("hello cross turn"));
         store.persist(parent);
 
@@ -160,12 +153,11 @@ public class WorkspaceReadStateCrossTurnTest {
 
         Assert.assertFalse(child.hasWorkspaceFileBeenRead(targetFile.toAbsolutePath().normalize().toString()));
         WorkspaceReadTool childRead = new WorkspaceReadTool(workspaceService, options);
-        childRead.setAgentContext(child);
-        String childResult = String.valueOf(childRead.execute(Map.of("path", "demo.txt")));
+        String childResult = String.valueOf(childRead.execute(Map.of("path", "demo.txt"), child));
         Assert.assertFalse(childResult.contains("File unchanged since last read"));
         Assert.assertTrue(childResult.contains("hello cross turn"));
 
-        childRead.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 1));
+        childRead.execute(Map.of("path", "demo.txt", "start_line", 1, "line_count", 1), child);
         store.persist(child);
         AgentContext mainReload = AgentContext.builder()
                 .requestId("req-main-reload")

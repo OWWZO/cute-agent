@@ -10,7 +10,7 @@ import {
   PlanContent,
 } from "@/components/ai-elements/plan";
 import { Badge } from "@/components/ui/badge";
-import { EASE_OUT, useMotionConfig } from "@/lib/motion";
+import { DURATION, DURATION_QUICK, EASE_OUT, PULSE_LOOP, REDUCED_SPRING, SPRING_GENTLE, useMotionConfig } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 import { getStatusIcon } from "./config";
@@ -68,12 +68,8 @@ const PlanView: CuteType.FC<{
               }
               transition={
                 isStreaming && !reduce
-                  ? {
-                    duration: 2.2,
-                    repeat: Number.POSITIVE_INFINITY,
-                    ease: "easeInOut",
-                  }
-                  : { duration: 0.2 }
+                  ? PULSE_LOOP
+                  : { duration: DURATION.dropdown }
               }
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--chat-surface)]/95 text-[var(--chat-text-soft)] shadow-[var(--shadow-xs)]"
             >
@@ -81,14 +77,14 @@ const PlanView: CuteType.FC<{
             </motion.div>
             <div className="min-w-0 flex-1">
               <PlanTitle>任务进度</PlanTitle>
-              <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]">
+              <p className="mt-0.5 text-ui-xs font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]">
                 深度研究
               </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {total > 0 ? (
-              <Badge variant="secondary" className="h-6 px-2.5 text-[11px] font-medium tabular-nums">
+              <Badge variant="secondary" className="h-6 px-2.5 text-ui-sm font-medium tabular-nums">
                 {completed}/{total}
               </Badge>
             ) : null}
@@ -99,7 +95,7 @@ const PlanView: CuteType.FC<{
         <PlanContent>
           {total > 0 ? (
             <div className="mb-1">
-              <div className="mb-1.5 flex items-center justify-between text-[11px] text-[var(--chat-text-muted)]">
+              <div className="mb-1.5 flex items-center justify-between text-ui-sm text-[var(--chat-text-muted)]">
                 <span className="font-medium uppercase tracking-[0.06em]">整体进度</span>
                 <span className="tabular-nums text-[var(--chat-text-soft)]">{pct}%</span>
               </div>
@@ -111,11 +107,7 @@ const PlanView: CuteType.FC<{
                   transition={
                     reduce
                       ? { duration: 0 }
-                      : {
-                        type: "spring",
-                        duration: 0.5,
-                        bounce: 0.15
-                      }
+                      : SPRING_GENTLE
                   }
                 />
               </div>
@@ -141,7 +133,7 @@ const PlanView: CuteType.FC<{
                   }}
                   transition={{
                     delay: reduce ? 0 : Math.min(index * 0.05, 0.2),
-                    duration: reduce ? 0.12 : 0.22,
+                    duration: reduce ? DURATION.reduced : DURATION.message,
                     ease: EASE_OUT,
                   }}
                   className={cn(
@@ -166,10 +158,7 @@ const PlanView: CuteType.FC<{
                           opacity: 1,
                           scale: 1
                         }}
-                        transition={{
-                          duration: 0.18,
-                          ease: EASE_OUT
-                        }}
+                        transition={reduce ? REDUCED_SPRING : DURATION_QUICK}
                         className="inline-flex"
                       >
                         {getStatusIcon(status)}
@@ -179,11 +168,11 @@ const PlanView: CuteType.FC<{
                     )}
                   </div>
                   <div className="min-w-0 flex-1 pt-0.5">
-                    <div className="text-[14px] font-medium leading-snug tracking-[-0.01em] text-[var(--chat-text)]">
+                    <div className="text-ui-base font-medium leading-snug tracking-[-0.01em] text-[var(--chat-text)]">
                       {name}
                     </div>
                     {steps?.[index] ? (
-                      <p className="mt-1 text-[13px] leading-relaxed text-[var(--chat-text-soft)]">
+                      <p className="mt-1 text-ui-caption leading-relaxed text-[var(--chat-text-soft)]">
                         {steps[index]}
                       </p>
                     ) : null}

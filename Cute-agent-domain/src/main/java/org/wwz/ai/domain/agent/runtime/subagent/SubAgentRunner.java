@@ -25,7 +25,6 @@ import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionAgentMailboxHub;
-import org.wwz.ai.domain.agent.runtime.tool.ContextScopedTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 
 import java.util.ArrayList;
@@ -238,7 +237,7 @@ public class SubAgentRunner {
                 isolatedChildPrinter, isolatedChildPrinter == null ? null : childRequestId);
         // 后台 Agent：用任务级取消令牌，TaskStop 不误伤主 run；同步派发仍共享父令牌
         if (cancellationOverride != null) {
-            childContext.setRunCancellation(cancellationOverride);
+            childContext.control().bindCancellation(cancellationOverride);
         }
         // 子 Agent 记账落独立 run：LLM / tool / artifact 挂到 childSessionId 的 run，
         // 父 run 的 llm_call_count / tool_call_count 不再包含子代理调用。
@@ -287,8 +286,9 @@ public class SubAgentRunner {
                     childContext.getRequestId(), parentContext.getRequestId());
         }
 
-        // 默认每子 Agent 独占工具实例（ToolIsolation）；仅无法 fork 时才共享锁
-        ContextScopedTool.bindAll(childTools, childContext);
+        // 工具全部无状态：context 由 execute(input, context) 传入，实例可跨子 Agent 共享，
+        // 只需把 collection 自身绑到子 context（MCP 执行器等由它转发）。
+        childTools.setAgentContext(childContext);
 
         SessionAgentMailboxHub.markActive(sessionKey, agentId, true);
         ReactImplAgent agent = null;
@@ -648,7 +648,7 @@ public class SubAgentRunner {
         if (SessionAgentMailboxHub.isActive(sessionKey, agentId)) {
             return true;
         }
-        RuntimeBackgroundTaskRegistry registry = parent == null ? null : parent.getBackgroundTasks();
+        RuntimeBackgroundTaskRegistry registry = parent == null ? null : parent.sessionControl().getBackgroundTasks();
         if (registry == null) {
             return false;
         }

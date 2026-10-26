@@ -130,17 +130,31 @@ export async function hydrateSessionWithRunningReplay(
       .map((chat) => String(chat.requestId))
   );
 
+  // 待补 run 全部并行拉取：串行时每个 run 多付一个 RTT，长会话叠加最明显。
+  // loadReplay 自身有 in-flight 去重，并行不会发出重复请求。
+  const replayIds = collectPendingReplayIds(target.chats).filter(
+    (requestId) => !runningRequestIds.has(requestId)
+  );
+  const replays = await Promise.all(
+    replayIds.map((requestId) =>
+      loadReplay(requestId).catch((error) => {
+        onReplayError?.(requestId, error);
+        return null;
+      })
+    )
+  );
   let next = conversation;
-  for (const requestId of collectPendingReplayIds(target.chats)) {
-    if (runningRequestIds.has(requestId)) {
-      continue;
+  // 合并仍按 replayIds 原顺序，结果确定性与串行版一致。
+  replayIds.forEach((requestId, index) => {
+    const replay = replays[index];
+    if (!replay) {
+      return;
     }
     try {
-      const replay = await loadReplay(requestId);
       next = mergeRunReplayIntoConversation(next, replay);
     } catch (error) {
       onReplayError?.(requestId, error);
     }
-  }
+  });
   return next;
 }

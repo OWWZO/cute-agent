@@ -21,16 +21,10 @@ public abstract class AbstractWorkspacePathTool implements BaseTool {
     protected final WorkspaceService workspaceService;
     protected final WorkspaceRuntimeOptions workspaceRuntimeOptions;
 
-    protected AgentContext agentContext;
-
     protected AbstractWorkspacePathTool(WorkspaceService workspaceService,
                                         WorkspaceRuntimeOptions workspaceRuntimeOptions) {
         this.workspaceService = workspaceService;
         this.workspaceRuntimeOptions = workspaceRuntimeOptions;
-    }
-
-    public void setAgentContext(AgentContext agentContext) {
-        this.agentContext = agentContext;
     }
 
     @SuppressWarnings("unchecked")
@@ -41,28 +35,28 @@ public abstract class AbstractWorkspacePathTool implements BaseTool {
         return (Map<String, Object>) rawMap;
     }
 
-    protected Path requireWorkspaceRoot() {
-        if (agentContext != null && StringUtils.isNotBlank(agentContext.getWorkspaceRoot())) {
-            return Path.of(agentContext.getWorkspaceRoot()).toAbsolutePath().normalize();
+    protected Path requireWorkspaceRoot(AgentContext context) {
+        if (context != null && StringUtils.isNotBlank(context.getWorkspaceRoot())) {
+            return Path.of(context.getWorkspaceRoot()).toAbsolutePath().normalize();
         }
-        String sessionId = agentContext == null ? null : agentContext.getSessionId();
+        String sessionId = context == null ? null : context.getSessionId();
         return workspaceService.resolveAndEnsureRoot(sessionId);
     }
 
-    protected Path requireAllowedPath(Map<String, Object> params) {
+    protected Path requireAllowedPath(Map<String, Object> params, AgentContext context) {
         Object pathValue = params.containsKey("path") ? params.get("path") : params.get("file_path");
         if (pathValue == null || String.valueOf(pathValue).isBlank()) {
             throw new WorkspaceAccessException("path is required");
         }
-        return workspaceService.resolveAllowedPath(requireWorkspaceRoot(), String.valueOf(pathValue).trim());
+        return workspaceService.resolveAllowedPath(requireWorkspaceRoot(context), String.valueOf(pathValue).trim());
     }
 
-    protected Path requireWritablePath(Map<String, Object> params) {
+    protected Path requireWritablePath(Map<String, Object> params, AgentContext context) {
         Object pathValue = params.get("path");
         if (pathValue == null || String.valueOf(pathValue).isBlank()) {
             throw new WorkspaceAccessException("path is required");
         }
-        return workspaceService.resolveWritablePath(requireWorkspaceRoot(), String.valueOf(pathValue).trim());
+        return workspaceService.resolveWritablePath(requireWorkspaceRoot(context), String.valueOf(pathValue).trim());
     }
 
     /**
@@ -83,9 +77,9 @@ public abstract class AbstractWorkspacePathTool implements BaseTool {
     }
 
     /** Agent 可见路径：skills/... 或会话相对路径。 */
-    protected String toAgentPath(Path absolutePath) {
+    protected String toAgentPath(Path absolutePath, AgentContext context) {
         try {
-            return workspaceService.toAgentVisiblePath(requireWorkspaceRoot(), absolutePath);
+            return workspaceService.toAgentVisiblePath(requireWorkspaceRoot(context), absolutePath);
         } catch (Exception e) {
             return absolutePath == null ? null : absolutePath.toString();
         }
@@ -114,8 +108,8 @@ public abstract class AbstractWorkspacePathTool implements BaseTool {
         return Boolean.parseBoolean(String.valueOf(value).trim());
     }
 
-    protected String requestId() {
-        return agentContext == null ? "unknown" : agentContext.getRequestId();
+    protected String requestId(AgentContext context) {
+        return context == null ? "unknown" : context.getRequestId();
     }
 
     protected Pattern buildGlobPattern(String pattern) {

@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import lombok.Builder;
 import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.runtime.tool.mcp.model.McpToolInfo;
 import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
@@ -259,7 +260,7 @@ public class TokenCounter {
         int tokens = 0;
         if (tools.getToolMap() != null) {
             for (BaseTool tool : tools.getToolMap().values()) {
-                tokens += estimateOneToolSchema(tool);
+                tokens += estimateOneToolSchema(tool, tools.getAgentContext());
             }
         }
         if (tools.getMcpToolMap() != null) {
@@ -270,14 +271,14 @@ public class TokenCounter {
         return tokens;
     }
 
-    private int estimateOneToolSchema(BaseTool tool) {
+    private int estimateOneToolSchema(BaseTool tool, AgentContext context) {
         if (tool == null) {
             return 0;
         }
         int tokens = estimateTokens(tool.getName());
-        tokens += estimateTokens(tool.getDescription());
+        tokens += estimateTokens(tool.getDescription(context));
         try {
-            Object params = tool.toParams();
+            Object params = tool.toParams(context);
             if (params != null) {
                 tokens += estimateTokens(stableJson(params));
             }
@@ -383,9 +384,9 @@ public class TokenCounter {
                 }
                 Map<String, Object> one = new TreeMap<>();
                 one.put("name", tool.getName());
-                one.put("description", StringUtils.defaultString(tool.getDescription()));
+                one.put("description", StringUtils.defaultString(tool.getDescription(tools.getAgentContext())));
                 try {
-                    one.put("parameters", tool.toParams());
+                    one.put("parameters", tool.toParams(tools.getAgentContext()));
                 } catch (Exception ignored) {
                     one.put("parameters", Map.of());
                 }

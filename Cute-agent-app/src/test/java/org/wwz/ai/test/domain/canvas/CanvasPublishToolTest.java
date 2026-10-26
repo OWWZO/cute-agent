@@ -55,7 +55,6 @@ public class CanvasPublishToolTest {
         FileArtifactPort fileArtifactPort = Mockito.mock(FileArtifactPort.class);
         AgentContext agentContext = createAgentContext(fileArtifactPort, new ArrayList<>());
         CanvasPublishTool tool = new CanvasPublishTool();
-        tool.setAgentContext(agentContext);
 
         Map<?, ?> parameters = (Map<?, ?>) tool.toParams();
         Assert.assertEquals(List.of("html_path"), parameters.get("required"));
@@ -147,7 +146,6 @@ public class CanvasPublishToolTest {
 
     private ToolResultPayload execute(AgentContext agentContext, Map<String, Object> input) {
         CanvasPublishTool tool = new CanvasPublishTool();
-        tool.setAgentContext(agentContext);
-        return (ToolResultPayload) tool.execute(input);
+        return (ToolResultPayload) tool.execute(input, agentContext);
     }
 }

@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.openui;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
@@ -18,10 +17,7 @@ import java.util.Map;
  * 模型先调用本工具拿到完整签名再写程序块。只读，无副作用。</p>
  */
 @Slf4j
-@Data
 public class GetUiComponentsTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -47,6 +43,12 @@ public class GetUiComponentsTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             // 纯文本目录：llmData 是 String 时序列化器原样返回，保留换行，模型读起来和提示词一致。
             return ToolResultPayload.fromData(OpenUiResources.componentsCatalog());

@@ -12,7 +12,7 @@ type ConversationSessionActionMenuProps = {
 };
 
 const menuItemClassName =
-  "flex w-full items-center gap-2 px-3 py-2 text-[12px] transition-colors";
+  "flex w-full items-center gap-2 px-3 py-2 text-ui-sm transition-colors";
 
 export default function ConversationSessionActionMenu(
   props: ConversationSessionActionMenuProps

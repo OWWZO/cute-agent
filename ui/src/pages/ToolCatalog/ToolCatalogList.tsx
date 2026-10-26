@@ -96,7 +96,7 @@ export default function ToolCatalogList({
             value={query}
             onChange={(event) => onQueryChange(event.currentTarget.value)}
             placeholder="搜索工具、功能或命令"
-            className="h-10 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] pl-9 pr-3 text-[13px] text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)] focus-visible:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent-soft)]"
+            className="h-10 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] pl-9 pr-3 text-ui-caption text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)] focus-visible:border-[var(--color-accent)] focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
           />
         </label>
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="工具分类">
@@ -131,7 +131,7 @@ export default function ToolCatalogList({
                   type="button"
                   aria-label={`打开工具 ${tool.title}${tool.requiresLogin === false ? "，无需登录" : ""}`}
                   onClick={() => onSelectTool(tool)}
-                  className="group flex min-h-[148px] min-w-0 flex-col items-start rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] p-4 text-left transition-colors hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+                  className="group flex min-h-[148px] min-w-0 flex-col items-start rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] p-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
                 >
                   <span className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-accent-bd)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
                     <Icon aria-hidden="true" className="h-[18px] w-[18px]" />
@@ -141,15 +141,15 @@ export default function ToolCatalogList({
                       {tool.title}
                     </span>
                     {tool.requiresLogin === false ? (
-                      <span className="shrink-0 rounded-sm border border-[var(--color-line)] bg-[var(--status-success-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-4 text-[var(--status-success-text)]">
+                      <span className="shrink-0 rounded-full border border-[var(--color-line)] bg-[var(--status-success-bg)] px-1.5 py-0.5 text-ui-xs font-medium leading-4 text-[var(--status-success-text)]">
                         无需登录
                       </span>
                     ) : null}
                   </span>
-                  <span className="mt-1 line-clamp-2 min-h-10 w-full text-left text-[12px] leading-5 text-[var(--color-text-muted)]">
+                  <span className="mt-1 line-clamp-2 min-h-10 w-full text-left text-ui-sm leading-5 text-[var(--color-text-muted)]">
                     {tool.description}
                   </span>
-                  <span className="mt-auto flex w-full items-center justify-between gap-2 pt-3 text-[11px] text-[var(--color-text-faint)]">
+                  <span className="mt-auto flex w-full items-center justify-between gap-2 pt-3 text-ui-sm text-[var(--color-text-faint)]">
                     <span>{categoryLabels[tool.category]}</span>
                     <span>{getToolFunctionCount(tool)} 项功能</span>
                   </span>

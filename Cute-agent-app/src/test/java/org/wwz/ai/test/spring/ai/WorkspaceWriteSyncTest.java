@@ -73,7 +73,6 @@ public class WorkspaceWriteSyncTest {
                 .toolCallId("call-write-1")
                 .toolName("workspace_write")
                 .build());
-        writeTool.setAgentContext(agentContext);
 
         Mockito.when(fileArtifactPort.materializeLocalFile(Mockito.eq("http://127.0.0.1:1601"), Mockito.any(FileRequest.class)))
                 .thenReturn(FileResponse.builder()
@@ -89,7 +88,7 @@ public class WorkspaceWriteSyncTest {
         ToolResultPayload result = (ToolResultPayload) writeTool.execute(Map.of(
                 "path", "out/report.md",
                 "content", "hello sync"
-        ));
+        ), agentContext);
 
         Assert.assertTrue(result.getLlmData() instanceof Map<?, ?>);
         Map<?, ?> resultData = (Map<?, ?>) result.getLlmData();

@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.time.LocalDateTime;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
 
 /**
  * StreamResponseHandler 测试
@@ -348,7 +349,7 @@ public class StreamResponseHandlerTest {
         AtomicInteger subscribed = new AtomicInteger();
         AgentContext context = AgentContext.builder()
                 .requestId("req-stop-before-llm")
-                .runCancellation(cancellation)
+                .control(new RunControl().withCancellation(cancellation))
                 .build();
 
         try {
@@ -378,7 +379,7 @@ public class StreamResponseHandlerTest {
                 .requestId("req-stop-during-llm")
                 .isStream(true)
                 .streamMessageType("tool_thought")
-                .runCancellation(cancellation)
+                .control(new RunControl().withCancellation(cancellation))
                 .build();
         Flux<ChatResponse> flux = Flux.concat(
                 Flux.just(textChunk("partial answer")),

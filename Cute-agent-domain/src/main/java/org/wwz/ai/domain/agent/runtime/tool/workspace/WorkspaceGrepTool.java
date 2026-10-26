@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 
 /**
  * 工作区文本搜索。
@@ -48,14 +49,19 @@ public class WorkspaceGrepTool extends AbstractWorkspacePathTool {
 
     @Override
     public Object execute(Object input) {
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = requireInputMap(input);
             Path basePath;
             Object pathValue = params.get("path");
             if (pathValue == null || String.valueOf(pathValue).isBlank()) {
-                basePath = requireWorkspaceRoot();
+                basePath = requireWorkspaceRoot(context);
             } else {
-                basePath = requireAllowedPath(params);
+                basePath = requireAllowedPath(params, context);
             }
             Object patternValue = params.get("pattern");
             if (patternValue == null || String.valueOf(patternValue).isBlank()) {
@@ -68,7 +74,7 @@ public class WorkspaceGrepTool extends AbstractWorkspacePathTool {
             Pattern pattern = buildPattern(searchPattern, regex, caseSensitive);
 
             if (!Files.isRegularFile(basePath) && !Files.isDirectory(basePath)) {
-                return failResult("workspace_grep 需要文件或目录路径: " + toAgentPath(basePath));
+                return failResult("workspace_grep 需要文件或目录路径: " + toAgentPath(basePath, context));
             }
 
             List<Map<String, Object>> matches = new ArrayList<>();
@@ -104,7 +110,7 @@ public class WorkspaceGrepTool extends AbstractWorkspacePathTool {
                 }
             }
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("path", toAgentPath(basePath));
+            data.put("path", toAgentPath(basePath, context));
             data.put("pattern", searchPattern);
             data.put("matches", matches);
             if (truncated) {
@@ -112,13 +118,13 @@ public class WorkspaceGrepTool extends AbstractWorkspacePathTool {
             }
             return okResult(data);
         } catch (WorkspaceAccessException e) {
-            log.warn("{} workspace_grep failed, input={}", requestId(), input, e);
+            log.warn("{} workspace_grep failed, input={}", requestId(context), input, e);
             return failResult(e.getMessage());
         } catch (IOException e) {
-            log.error("{} workspace_grep io error, input={}", requestId(), input, e);
+            log.error("{} workspace_grep io error, input={}", requestId(context), input, e);
             return failResult("workspace_grep execute failed");
         } catch (Exception e) {
-            log.error("{} workspace_grep error, input={}", requestId(), input, e);
+            log.error("{} workspace_grep error, input={}", requestId(context), input, e);
             return failResult("workspace_grep execute failed");
         }
     }

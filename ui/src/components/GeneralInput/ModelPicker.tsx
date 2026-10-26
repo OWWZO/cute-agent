@@ -57,7 +57,7 @@ const ModelPicker: CuteType.FC<Props> = ({
         align="start"
         side="bottom"
         sideOffset={10}
-        className="w-[240px] rounded-[18px] border border-black/[0.04] bg-white p-1 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.28)]"
+        className="w-[240px] rounded-2xl border border-black/[0.04] bg-white p-1 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.28)]"
       >
         <div className="px-2.5 pb-1 pt-1.5 text-ui-xs font-medium text-foreground-subtle">
           模型
@@ -71,7 +71,7 @@ const ModelPicker: CuteType.FC<Props> = ({
                 key={m.modelId}
                 type="button"
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-[12px] px-2 py-2 text-left transition-colors",
+                  "flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition-colors",
                   active ? "bg-hover" : "hover:bg-hover/80"
                 )}
                 onClick={() => {

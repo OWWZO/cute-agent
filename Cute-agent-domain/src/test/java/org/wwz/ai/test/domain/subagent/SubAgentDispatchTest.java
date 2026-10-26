@@ -7,6 +7,7 @@ import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.ledger.model.AgentRunState;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
+import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
@@ -28,6 +29,8 @@ import java.util.Map;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
+import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 
 /**
  * 同步 SubAgent 派发：工具过滤、参数校验、防递归。
@@ -87,19 +90,23 @@ public class SubAgentDispatchTest {
     public void shouldRejectBlankPromptWithoutCallingRunner() {
         SubAgentRegistry registry = new SubAgentRegistry();
         SubAgentRunner runner = new SubAgentRunner(registry);
-        AgentDispatchTool tool = new AgentDispatchTool(runner, registry);
-        tool.setAgentContext(AgentContext.builder()
+        AgentDispatchTool tool = new AgentDispatchTool();
+        AgentContext context = AgentContext.builder()
                 .requestId("req-1")
                 .sessionId("s-1")
                 .query("q")
                 .printer(new NoopPrinter())
                 .toolCollection(new ToolCollection())
-                .build());
+                .runtimeDependencies(CuteRuntimeDependencies.builder()
+                        .subAgentRunner(runner)
+                        .subAgentRegistry(registry)
+                        .build())
+                .build();
 
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("description", "test");
         input.put("prompt", "  ");
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(input);
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(input, context);
 
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertTrue(payload.getToolResult().contains("prompt"));
@@ -129,15 +136,25 @@ public class SubAgentDispatchTest {
 
     @Test
     public void agentToolSchemaShouldRequireDescriptionAndPrompt() {
-        AgentDispatchTool tool = new AgentDispatchTool(new SubAgentRunner(new SubAgentRegistry()), new SubAgentRegistry());
-        Map<String, Object> params = tool.toParams();
+        SubAgentRegistry registry = new SubAgentRegistry();
+        AgentDispatchTool tool = new AgentDispatchTool();
+        AgentContext context = AgentContext.builder()
+                .requestId("req-schema")
+                .sessionId("s-schema")
+                .query("q")
+                .runtimeDependencies(CuteRuntimeDependencies.builder()
+                        .subAgentRunner(new SubAgentRunner(registry))
+                        .subAgentRegistry(registry)
+                        .build())
+                .build();
+        Map<String, Object> params = tool.toParams(context);
         Assert.assertEquals("object", params.get("type"));
         Assert.assertTrue(((java.util.List<?>) params.get("required")).contains("description"));
         Assert.assertTrue(((java.util.List<?>) params.get("required")).contains("prompt"));
-        Assert.assertTrue(tool.getDescription().contains(SubAgentRegistry.TYPE_GENERAL_PURPOSE));
-        Assert.assertTrue(tool.getDescription().contains("SendMessage"));
+        Assert.assertTrue(tool.getDescription(context).contains(SubAgentRegistry.TYPE_GENERAL_PURPOSE));
+        Assert.assertTrue(tool.getDescription(context).contains("SendMessage"));
         Assert.assertFalse(((java.util.Map<?, ?>) params.get("properties")).containsKey("resume_agent_id"));
-        Assert.assertTrue(tool.getDescription().contains("不要用本工具续跑"));
+        Assert.assertTrue(tool.getDescription(context).contains("不要用本工具续跑"));
         Assert.assertTrue(String.valueOf(
                 ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) params.get("properties")).get("subagent_type"))
                         .get("description")).contains(SubAgentRegistry.TYPE_GENERAL_PURPOSE));
@@ -163,7 +180,7 @@ public class SubAgentDispatchTest {
                 .sessionId("session-ledger")
                 .executionRecorder(recorder)
                 .agentRunState(runState)
-                .backgroundTasks(registry)
+                .sessionControl(new SessionControl().withBackgroundTasks(registry))
                 .build();
 
         String receipt = com.alibaba.fastjson.JSON.toJSONString(Map.of("task_id", task.getId()));

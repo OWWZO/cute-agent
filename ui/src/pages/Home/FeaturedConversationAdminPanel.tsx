@@ -44,10 +44,10 @@ export default function FeaturedConversationAdminPanel(
   if (loading) {
     return (
       <div className="space-y-2 py-10 text-center">
-        <div className="text-[16px] font-medium text-[var(--chat-text)]">
+        <div className="text-ui-lg font-medium text-[var(--chat-text)]">
           正在加载精品配置...
         </div>
-        <div className="text-[13px] text-[var(--chat-text-soft)]">
+        <div className="text-ui-caption text-[var(--chat-text-soft)]">
           会根据当前 sessionId 自动回填已有发布信息
         </div>
       </div>
@@ -57,15 +57,15 @@ export default function FeaturedConversationAdminPanel(
   return (
     <div className="space-y-5">
       <div className="space-y-1">
-        <div className="text-[18px] font-semibold text-[var(--chat-text)]">
+        <div className="text-ui-xl font-semibold text-[var(--chat-text)]">
           设为精品
         </div>
-        <div className="text-[13px] text-[var(--chat-text-soft)]">
+        <div className="text-ui-caption text-[var(--chat-text-soft)]">
           为当前会话补充公开展示信息，并按需上线到精品对话列表。
         </div>
       </div>
 
-      <div className="rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)]/70 p-4 text-[13px] text-[var(--chat-text-soft)]">
+      <div className="rounded-xl bg-[var(--chat-surface)]/70 p-4 text-ui-caption text-[var(--chat-text-soft)]">
         <div className="font-medium text-[var(--chat-text)]">{session.title}</div>
         <div className="mt-2 break-all">sessionId：{session.sessionId}</div>
         {record ? (
@@ -83,7 +83,7 @@ export default function FeaturedConversationAdminPanel(
 
       <div className="grid gap-4">
         <label className="grid gap-2">
-          <span className="text-[13px] font-medium text-[var(--chat-text)]">
+          <span className="text-ui-caption font-medium text-[var(--chat-text)]">
             精品标题
           </span>
           <Input
@@ -95,7 +95,7 @@ export default function FeaturedConversationAdminPanel(
         </label>
 
         <label className="grid gap-2">
-          <span className="text-[13px] font-medium text-[var(--chat-text)]">
+          <span className="text-ui-caption font-medium text-[var(--chat-text)]">
             精品摘要
           </span>
           <Textarea
@@ -109,7 +109,7 @@ export default function FeaturedConversationAdminPanel(
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-2">
-            <span className="text-[13px] font-medium text-[var(--chat-text)]">
+            <span className="text-ui-caption font-medium text-[var(--chat-text)]">
               封面图 URL
             </span>
             <Input
@@ -121,7 +121,7 @@ export default function FeaturedConversationAdminPanel(
           </label>
 
           <label className="grid gap-2">
-            <span className="text-[13px] font-medium text-[var(--chat-text)]">
+            <span className="text-ui-caption font-medium text-[var(--chat-text)]">
               标签
             </span>
             <Input
@@ -135,7 +135,7 @@ export default function FeaturedConversationAdminPanel(
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-2">
-            <span className="text-[13px] font-medium text-[var(--chat-text)]">
+            <span className="text-ui-caption font-medium text-[var(--chat-text)]">
               排序值
             </span>
             <Input
@@ -147,7 +147,7 @@ export default function FeaturedConversationAdminPanel(
           </label>
 
           <label className="grid gap-2">
-            <span className="text-[13px] font-medium text-[var(--chat-text)]">
+            <span className="text-ui-caption font-medium text-[var(--chat-text)]">
               操作人
             </span>
             <Input

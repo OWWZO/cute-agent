@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-@Setter
 public class BrowserTool implements BaseTool {
 
     public static final String TOOL_NAME = "browser";
@@ -65,8 +64,6 @@ public class BrowserTool implements BaseTool {
             + "只有用户明确要求关闭浏览器时，才调用 session stop。"
             + "只使用上面这些命令，不要使用列表之外的命令。";
 
-    private AgentContext agentContext;
-
     @Override
     public String getName() {
         return TOOL_NAME;
@@ -74,20 +71,38 @@ public class BrowserTool implements BaseTool {
 
     @Override
     public String getDescription() {
-        return isBskSurface()
+        return getDescription(null);
+    }
+
+    /** 描述按命令面切换：bsk 与 opencli 的词汇不能混在一份描述里。 */
+    @Override
+    public String getDescription(AgentContext context) {
+        return isBskSurface(context)
                 ? "远程操作用户的浏览器（bsk 命令面）。"
                 : "远程操作用户的浏览器。";
     }
 
     @Override
     public Map<String, Object> toParams() {
+        return toParams(null);
+    }
+
+    /** 参数说明同样按命令面切换，与 {@link #getDescription(AgentContext)} 保持一致。 */
+    @Override
+    public Map<String, Object> toParams(AgentContext context) {
         return BrowserCliSupport.toParams(
-                isBskSurface() ? BSK_ARGS_DESCRIPTION : OPENCLI_ARGS_DESCRIPTION);
+                isBskSurface(context) ? BSK_ARGS_DESCRIPTION : OPENCLI_ARGS_DESCRIPTION);
+    }
+
+    @Override
+    public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    public Object execute(Object input) {
+    public Object execute(Object input, AgentContext context) {
         Map<String, Object> params = input instanceof Map<?, ?> map
                 ? new LinkedHashMap<>((Map<String, Object>) map)
                 : new LinkedHashMap<>();
@@ -95,11 +110,11 @@ public class BrowserTool implements BaseTool {
         if (args.isEmpty()) {
             return ToolResultPayload.failure("args 不能为空", "args 不能为空", null, "missing args");
         }
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             return ToolResultPayload.failure("运行时未装配", "运行时未装配", null, "runtime_unavailable");
         }
-        CuteRuntimeDependencies deps = agentContext.getRuntimeDependencies();
-        String userId = StringUtils.trimToNull(agentContext.getUserId());
+        CuteRuntimeDependencies deps = context.getRuntimeDependencies();
+        String userId = StringUtils.trimToNull(context.getUserId());
         if (userId == null) {
             return ToolResultPayload.failure("缺少用户身份", "缺少用户身份", null, "missing userId");
         }
@@ -110,7 +125,7 @@ public class BrowserTool implements BaseTool {
         }
         long budgetMs = BrowserCliSupport.resolveTimeout(params.get("timeout_ms"), properties);
         long started = System.nanoTime();
-        Execution execution = executeCli(deps, args, userId, cli, properties, budgetMs, started);
+        Execution execution = executeCli(context, deps, args, userId, cli, properties, budgetMs, started);
         if (execution.failure != null) {
             return execution.failure;
         }
@@ -118,7 +133,7 @@ public class BrowserTool implements BaseTool {
         List<String> rewritten = execution.rewritten;
         Map<String, Object> fields = BrowserCliSupport.toFields(result, null);
         BrowserCliSupport.appendArtifacts(fields, execution.materialization);
-        BrowserCliSupport.publishViewport(agentContext, result.getStdout(), fields);
+        BrowserCliSupport.publishViewport(context, result.getStdout(), fields);
         boolean sensitive = OpenCliArgv.isSensitive(rewritten);
         if (sensitive) {
             Map<String, Object> redacted = new LinkedHashMap<>();
@@ -155,7 +170,8 @@ public class BrowserTool implements BaseTool {
         return ToolResultPayload.okData(TOOL_NAME, fields);
     }
 
-    private Execution executeCli(CuteRuntimeDependencies deps,
+    private Execution executeCli(AgentContext context,
+                                       CuteRuntimeDependencies deps,
                                        List<String> args,
                                        String userId,
                                        CliExecutionPort cli,
@@ -224,14 +240,14 @@ public class BrowserTool implements BaseTool {
             }
             processArgs.addAll(rewritten);
         }
-        ToolArtifactSource source = agentContext.getCurrentToolArtifactSource();
+        ToolArtifactSource source = context.getCurrentToolArtifactSource();
         CliArtifactCapturePlan capturePlan = CliArtifactCaptureCoordinator.plan(
                 TOOL_NAME,
                 args,
                 processArgs,
-                agentContext.getWorkspaceRoot(),
+                context.getWorkspaceRoot(),
                 source == null ? null : source.getToolCallId(),
-                agentContext.getRequestId());
+                context.getRequestId());
         if (!capturePlan.isValid()) {
             return Execution.failed(BrowserCliSupport.captureFailure(capturePlan), rewritten, CliArtifactMaterialization.empty());
         }
@@ -272,7 +288,7 @@ public class BrowserTool implements BaseTool {
                 result = cli.exec(CliInvocation.builder()
                         .tool(resolveToolCommand(properties, bskSurface))
                         .args(capturePlan.getRewrittenArgs())
-                        .cwd(agentContext.getWorkspaceRoot())
+                        .cwd(context.getWorkspaceRoot())
                         .env(env)
                         .timeoutMs(remaining)
                         .capture("both")
@@ -280,16 +296,16 @@ public class BrowserTool implements BaseTool {
                         .build());
             } catch (RuntimeException e) {
                 CliArtifactMaterialization materialization = BrowserCliSupport.materialize(
-                    agentContext, capturePlan, baseline, List.of(), "browser 执行产物");
+                    context, capturePlan, baseline, List.of(), "browser 执行产物");
                 return Execution.failed(BrowserCliSupport.cliFailure(materialization), rewritten, materialization);
             }
             if (result == null) {
                 CliArtifactMaterialization materialization = BrowserCliSupport.materialize(
-                    agentContext, capturePlan, baseline, List.of(), "browser 执行产物");
+                    context, capturePlan, baseline, List.of(), "browser 执行产物");
                 return Execution.failed(BrowserCliSupport.cliFailure(materialization), rewritten, materialization);
             }
             CliArtifactMaterialization materialization = BrowserCliSupport.materialize(
-                    agentContext, capturePlan, baseline, result.getArtifacts(), "browser 执行产物");
+                    context, capturePlan, baseline, result.getArtifacts(), "browser 执行产物");
             return Execution.completed(result, rewritten, materialization);
         } catch (CliArtifactCaptureCoordinator.CliArtifactCaptureException e) {
             return Execution.failed(ToolResultPayload.failure(
@@ -389,11 +405,11 @@ public class BrowserTool implements BaseTool {
     }
 
     /** browser 工具当前是否走 bsk 命令面。 */
-    private boolean isBskSurface() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
+    private static boolean isBskSurface(AgentContext context) {
+        if (context == null || context.getRuntimeDependencies() == null) {
             return false;
         }
-        return isBskSurface(agentContext.getRuntimeDependencies().getOpenCliProperties());
+        return isBskSurface(context.getRuntimeDependencies().getOpenCliProperties());
     }
 
     private static boolean isBskSurface(OpenCliProperties properties) {

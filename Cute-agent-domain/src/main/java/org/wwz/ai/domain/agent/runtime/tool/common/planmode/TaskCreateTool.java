@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -19,10 +18,7 @@ import java.util.Map;
  * 与 TaskStop 的后台运行任务无关。
  */
 @Slf4j
-@Data
 public class TaskCreateTool implements BaseTool {
-
-    private AgentContext agentContext;
 
     @Override
     public String getName() {
@@ -64,6 +60,12 @@ public class TaskCreateTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
+        // 无状态工具没有实例 context；旧签名路径不携带上下文。
+        return execute(input, null);
+    }
+
+    @Override
+    public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
             String subject = ToolArgs.str(params.get("subject"));
@@ -76,12 +78,12 @@ public class TaskCreateTool implements BaseTool {
                         null,
                         "missing fields");
             }
-            if (agentContext == null) {
+            if (context == null) {
                 return ToolResultPayload.failure("TaskCreate 失败：无 AgentContext", "TaskCreate 失败：无 AgentContext", null, "no context");
             }
-            SessionTaskItem item = agentContext.requireSessionTaskList()
+            SessionTaskItem item = context.requireSessionTaskList()
                     .create(subject, description, activeForm, null);
-            SessionTaskListPublisher.publish(agentContext);
+            SessionTaskListPublisher.publish(context);
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("message", "已创建任务 #" + item.getId() + "：" + item.getSubject());
             fields.put("task", item.toSummaryMap());

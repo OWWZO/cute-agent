@@ -363,7 +363,7 @@ public class LLM {
             LlmRequest request = REQUEST_ASSEMBLER.build(
                     context, model, llmSettings,
                     LlmRequestAssembler.merge(systemMsgs, messages),
-                    REQUEST_ASSEMBLER.buildToolDefinitions(tools),
+                    REQUEST_ASSEMBLER.buildToolDefinitions(tools, context),
                     toolChoice.getValue(),
                     temperature);
 

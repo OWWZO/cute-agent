@@ -10,7 +10,7 @@ export default function RequireAuth() {
   const returnUrl = `${location.pathname}${location.search}${location.hash}`;
 
   if (auth.status === "initializing") {
-    return <Loading loading className="h-full" />;
+    return <Loading loading branded className="h-full" />;
   }
 
   if (auth.status !== "authenticated") {

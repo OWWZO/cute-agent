@@ -49,8 +49,8 @@ function EmptyState({
         <h3
           className={cn(
             "font-semibold text-[var(--chat-text)]",
-            variant === "default" && "text-[15px]",
-            variant === "compact" && "text-[14px]"
+            variant === "default" && "text-[length:var(--content-font-size)]",
+            variant === "compact" && "text-ui-base"
           )}
         >
           {title}
@@ -60,8 +60,8 @@ function EmptyState({
         <p
           className={cn(
             "mt-1 text-[var(--chat-text-muted)]",
-            variant === "default" && "text-[13px]",
-            variant === "compact" && "text-[12px]"
+            variant === "default" && "text-ui-caption",
+            variant === "compact" && "text-ui-sm"
           )}
         >
           {description}
