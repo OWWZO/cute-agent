@@ -99,7 +99,7 @@ public class DeferredLocalToolCallTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             invocations++;
             return "generated:" + ((Map<?, ?>) input).get("title");
         }

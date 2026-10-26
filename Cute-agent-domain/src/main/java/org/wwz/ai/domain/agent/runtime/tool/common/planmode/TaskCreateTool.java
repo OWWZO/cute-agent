@@ -59,12 +59,6 @@ public class TaskCreateTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
@@ -77,9 +71,6 @@ public class TaskCreateTool implements BaseTool {
                         "TaskCreate 失败：subject 与 description 必填",
                         null,
                         "missing fields");
-            }
-            if (context == null) {
-                return ToolResultPayload.failure("TaskCreate 失败：无 AgentContext", "TaskCreate 失败：无 AgentContext", null, "no context");
             }
             SessionTaskItem item = context.requireSessionTaskList()
                     .create(subject, description, activeForm, null);
@@ -94,6 +85,5 @@ public class TaskCreateTool implements BaseTool {
             return ToolResultPayload.failureFrom(msg, null);
         }
     }
-
 
 }

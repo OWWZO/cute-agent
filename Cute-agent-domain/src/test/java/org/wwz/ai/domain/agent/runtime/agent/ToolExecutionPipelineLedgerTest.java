@@ -9,6 +9,7 @@ import org.wwz.ai.domain.agent.ledger.model.ArtifactRecordCommand;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationBatchStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
@@ -249,7 +250,7 @@ public class ToolExecutionPipelineLedgerTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             return payloadSupplier.get();
         }
     }

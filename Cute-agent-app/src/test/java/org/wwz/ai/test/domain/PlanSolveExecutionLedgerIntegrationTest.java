@@ -225,7 +225,7 @@ public class PlanSolveExecutionLedgerIntegrationTest {
 
         @Override
         @SuppressWarnings("unchecked")
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             Map<String, Object> params = (Map<String, Object>) input;
             try {
                 Thread.sleep(Long.parseLong(String.valueOf(params.get("sleepMs"))));

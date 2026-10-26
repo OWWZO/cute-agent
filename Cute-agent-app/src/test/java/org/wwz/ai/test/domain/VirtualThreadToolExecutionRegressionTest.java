@@ -246,7 +246,7 @@ public class VirtualThreadToolExecutionRegressionTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             started.countDown();
             await(release);
             return ToolResultPayload.text("ok");
@@ -270,7 +270,7 @@ public class VirtualThreadToolExecutionRegressionTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             throw new IllegalStateException("expected tool failure");
         }
     }
@@ -298,7 +298,7 @@ public class VirtualThreadToolExecutionRegressionTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             try {
                 Thread.sleep(30_000L);
             } catch (InterruptedException e) {
@@ -326,7 +326,7 @@ public class VirtualThreadToolExecutionRegressionTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             return ToolResultPayload.text("quick-ok");
         }
     }
@@ -354,7 +354,7 @@ public class VirtualThreadToolExecutionRegressionTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             runs.incrementAndGet();
             return ToolResultPayload.text("nested-ok");
         }
@@ -383,7 +383,7 @@ public class VirtualThreadToolExecutionRegressionTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             AgentContext parent = tools.getAgentContext();
             AgentContext child = AgentContext.builder()
                     .requestId(parent.getRequestId() + ":child")

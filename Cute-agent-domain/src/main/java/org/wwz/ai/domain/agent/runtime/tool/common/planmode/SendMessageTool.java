@@ -64,21 +64,8 @@ public class SendMessageTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext agentContext) {
         try {
-            if (agentContext == null) {
-                return ToolResultPayload.failure(
-                        "SendMessage 失败：无 AgentContext",
-                        "SendMessage 失败：无 AgentContext",
-                        null,
-                        "no context");
-            }
             Map<String, Object> params = ToolArgs.map(input);
             String to = ToolArgs.str(params.get("to"));
             String message = ToolArgs.str(params.get("message"));
@@ -255,6 +242,5 @@ public class SendMessageTool implements BaseTool {
         }
         return context.getRuntimeDependencies().getOptionalActiveAgentRunRegistry();
     }
-
 
 }

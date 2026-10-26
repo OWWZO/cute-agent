@@ -8,6 +8,7 @@ import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.ledger.model.AgentRunState;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.subagent.BackgroundSubAgentExecutor;
@@ -29,7 +30,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
 import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 
 /**
@@ -254,7 +254,7 @@ public class BackgroundAgentLedgerStatusTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             return payloadSupplier.get();
         }
     }

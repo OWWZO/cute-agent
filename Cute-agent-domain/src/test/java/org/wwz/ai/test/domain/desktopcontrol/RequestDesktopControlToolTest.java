@@ -14,7 +14,7 @@ public class RequestDesktopControlToolTest {
     public void missingContextDoesNotThrowYield() {
         RequestDesktopControlTool tool = new RequestDesktopControlTool();
         try {
-            Object result = tool.execute(Map.of("reason", "请登录"));
+            Object result = tool.execute(Map.of("reason", "请登录"), null);
             Assert.assertTrue(result instanceof ToolResultPayload);
             Assert.assertEquals(Boolean.TRUE, ((ToolResultPayload) result).getFailed());
         } catch (DesktopControlRequiredException e) {

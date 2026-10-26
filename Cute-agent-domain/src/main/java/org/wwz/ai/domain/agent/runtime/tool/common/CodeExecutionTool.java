@@ -68,12 +68,6 @@ public class CodeExecutionTool implements BaseTool {
         return Map.of("type", "object", "properties", properties, "required", List.of("source"));
     }
 
-    @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
     @Override @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext context) {
         try {

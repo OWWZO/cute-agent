@@ -56,8 +56,7 @@ public class SkillToolTest {
 
     @Test
     public void shouldReturnSkillContentWithVirtualDir() {
-        ToolResultPayload payload = (ToolResultPayload) skillViewTool.execute(
-                Collections.singletonMap("name", "sql-analysis"));
+        ToolResultPayload payload = (ToolResultPayload) skillViewTool.execute(Collections.singletonMap("name", "sql-analysis"), null);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -71,7 +70,7 @@ public class SkillToolTest {
     public void shouldLoadLinkedFile() {
         ToolResultPayload payload = (ToolResultPayload) skillViewTool.execute(Map.of(
                 "name", "sql-analysis",
-                "file_path", "references/metrics.md"));
+                "file_path", "references/metrics.md"), null);
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -82,7 +81,7 @@ public class SkillToolTest {
     public void shouldRejectPathTraversal() {
         ToolResultPayload payload = (ToolResultPayload) skillViewTool.execute(Map.of(
                 "name", "sql-analysis",
-                "file_path", "../outside.md"));
+                "file_path", "../outside.md"), null);
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
     }
 
@@ -90,7 +89,7 @@ public class SkillToolTest {
     public void shouldReturnAvailableFilesWhenMissing() {
         ToolResultPayload payload = (ToolResultPayload) skillViewTool.execute(Map.of(
                 "name", "sql-analysis",
-                "file_path", "references/missing.md"));
+                "file_path", "references/missing.md"), null);
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         @SuppressWarnings("unchecked")
         Map<String, Object> detail = (Map<String, Object>) payload.getLlmData();
@@ -99,8 +98,7 @@ public class SkillToolTest {
 
     @Test
     public void shouldReturnExplicitErrorWhenSkillMissing() {
-        ToolResultPayload payload = (ToolResultPayload) skillViewTool.execute(
-                Collections.singletonMap("name", "missing-skill"));
+        ToolResultPayload payload = (ToolResultPayload) skillViewTool.execute(Collections.singletonMap("name", "missing-skill"), null);
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertEquals("Skill not found: missing-skill", payload.getErrorMsg());
     }

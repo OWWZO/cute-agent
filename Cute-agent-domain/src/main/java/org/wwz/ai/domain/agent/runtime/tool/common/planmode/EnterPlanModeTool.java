@@ -43,21 +43,8 @@ public class EnterPlanModeTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext agentContext) {
         try {
-            if (agentContext == null) {
-                return ToolResultPayload.failure(
-                        "EnterPlanMode 失败：无 AgentContext",
-                        "EnterPlanMode 失败：无 AgentContext",
-                        null,
-                        "no context");
-            }
             if (agentContext.getRequestId() != null && agentContext.getRequestId().contains(":sub:")) {
                 return ToolResultPayload.failure(
                         "EnterPlanMode 不能在子 Agent 上下文中使用",

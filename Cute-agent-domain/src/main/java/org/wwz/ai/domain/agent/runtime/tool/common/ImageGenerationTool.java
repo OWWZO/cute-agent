@@ -52,12 +52,6 @@ public class ImageGenerationTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext context) {
         try {
@@ -98,7 +92,9 @@ public class ImageGenerationTool implements BaseTool {
             emitFileMessage(result, artifactSource, context);
             return buildSuccessPayload(result);
         } catch (Exception e) {
-            log.error("{} image_generation_tool error, input={}", context.getRequestId(), input, e);
+            // context 为 null 时 requireKernel 抛的是 IllegalStateException，catch 内不能再二次 NPE
+            log.error("{} image_generation_tool error, input={}",
+                    context == null ? "unknown" : context.getRequestId(), input, e);
             return buildFailurePayload("image_generation_tool 执行失败：" + e.getMessage());
         }
     }

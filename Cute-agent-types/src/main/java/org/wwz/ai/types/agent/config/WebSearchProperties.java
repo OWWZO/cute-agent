@@ -26,31 +26,44 @@ public class WebSearchProperties {
      * WebSearch 模式：auto | gpt | grok | exa | tavily | brave | disabled。
      * auto 时优先 Grok/xAI 原生搜索，其次 GPT/OpenAI Responses API、Exa、Tavily、Brave。
      */
+    @Builder.Default
     private String mode = "auto";
 
     /** Grok/xAI 原生搜索凭证；为空时回退 llm.default / llm.settings。 */
+    @Builder.Default
     private String grokApiKey = "";
 
+    @Builder.Default
     private String grokBaseUrl = "";
 
+    @Builder.Default
     private String grokModel = "";
 
+    @Builder.Default
     private String grokInterfaceUrl = "/v1/chat/completions";
 
     /** OpenAI Responses API 搜索凭证；支持官方 OpenAI 或兼容 Responses API 的代理。 */
+    @Builder.Default
     private String gptApiKey = "";
 
+    @Builder.Default
     private String gptBaseUrl = "https://api.openai.com/v1";
 
+    @Builder.Default
     private String gptModel = "gpt-4.1";
 
+    @Builder.Default
     private String gptInterfaceUrl = "/responses";
 
+    @Builder.Default
     private String exaApiKey = "";
 
+    @Builder.Default
     private String exaSearchUrl = "https://api.exa.ai/search";
 
+    @Builder.Default
     private String tavilyApiKey = "";
 
+    @Builder.Default
     private String braveApiKey = "";
 }

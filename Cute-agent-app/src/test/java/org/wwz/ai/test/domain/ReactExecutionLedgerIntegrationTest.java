@@ -197,7 +197,7 @@ public class ReactExecutionLedgerIntegrationTest {
 
         @Override
         @SuppressWarnings("unchecked")
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             if (fail) {
                 throw new IllegalStateException("tool failed");
             }

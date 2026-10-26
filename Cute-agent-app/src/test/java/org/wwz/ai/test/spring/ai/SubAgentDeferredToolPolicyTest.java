@@ -4,6 +4,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentDefinition;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentToolFilter;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.tool.common.mcp.McpToolNames;
@@ -93,7 +94,7 @@ public class SubAgentDeferredToolPolicyTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             return name;
         }
     }

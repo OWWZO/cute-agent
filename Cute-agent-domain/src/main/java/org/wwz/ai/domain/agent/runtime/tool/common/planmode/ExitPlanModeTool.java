@@ -61,17 +61,8 @@ public class ExitPlanModeTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext agentContext) {
         try {
-            if (agentContext == null) {
-                return fail("ExitPlanMode 失败：无 AgentContext");
-            }
             PlanModeState state = agentContext.requirePlanModeState();
             if (!state.isPlanMode()) {
                 return fail("ExitPlanMode 失败：当前不在 plan mode");

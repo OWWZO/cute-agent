@@ -22,7 +22,7 @@ public class WebSearchToolQueryValidationTest {
         // 因此只要拿到"query 至少 2 个字符"就证明校验拦住了。
         WebSearchTool tool = new WebSearchTool();
 
-        Object result = tool.execute(new LinkedHashMap<String, Object>());
+        Object result = tool.execute(new LinkedHashMap<String, Object>(), null);
 
         Assert.assertTrue(result instanceof ToolResultPayload);
         ToolResultPayload payload = (ToolResultPayload) result;
@@ -36,7 +36,7 @@ public class WebSearchToolQueryValidationTest {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("query", null);
 
-        Object result = tool.execute(input);
+        Object result = tool.execute(input, null);
 
         ToolResultPayload payload = (ToolResultPayload) result;
         Assert.assertTrue("query=null 必须被入参校验拦住，实际: " + payload.getToolResult(),
@@ -49,7 +49,7 @@ public class WebSearchToolQueryValidationTest {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("query", "a");
 
-        Object result = tool.execute(input);
+        Object result = tool.execute(input, null);
 
         ToolResultPayload payload = (ToolResultPayload) result;
         Assert.assertTrue(payload.getToolResult().contains("query 至少 2 个字符"));

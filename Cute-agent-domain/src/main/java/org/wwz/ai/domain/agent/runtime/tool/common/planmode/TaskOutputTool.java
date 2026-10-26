@@ -54,12 +54,6 @@ public class TaskOutputTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext context) {
         try {
@@ -71,13 +65,6 @@ public class TaskOutputTool implements BaseTool {
                         "TaskOutput 失败：task_id 必填",
                         null,
                         "missing task_id");
-            }
-            if (context == null) {
-                return ToolResultPayload.failure(
-                        "TaskOutput 失败：无 AgentContext",
-                        "TaskOutput 失败：无 AgentContext",
-                        null,
-                        "no context");
             }
 
             boolean shouldBlock = params.containsKey("block")

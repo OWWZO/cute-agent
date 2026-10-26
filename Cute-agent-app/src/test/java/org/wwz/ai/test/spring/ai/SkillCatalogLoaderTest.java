@@ -180,11 +180,11 @@ public class SkillCatalogLoaderTest {
                 new SkillScriptDiscoverer(guard));
         SkillsSearchTool searchTool = new SkillsSearchTool(catalog);
 
-        ToolResultPayload search = (ToolResultPayload) searchTool.execute(Map.of("query", "SQL 指标"));
+        ToolResultPayload search = (ToolResultPayload) searchTool.execute(Map.of("query", "SQL 指标"), null);
         Assert.assertFalse(Boolean.TRUE.equals(search.getFailed()));
         Assert.assertTrue(String.valueOf(search.getLlmData()).contains("sql-analysis"));
 
-        ToolResultPayload view = (ToolResultPayload) viewTool.execute(Map.of("name", "sql-analysis"));
+        ToolResultPayload view = (ToolResultPayload) viewTool.execute(Map.of("name", "sql-analysis"), null);
         Assert.assertFalse(Boolean.TRUE.equals(view.getFailed()));
         Assert.assertTrue(String.valueOf(view.getLlmData()).contains("# SQL Analysis"));
     }

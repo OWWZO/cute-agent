@@ -55,12 +55,6 @@ public class TaskStopTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext context) {
         try {
@@ -72,9 +66,6 @@ public class TaskStopTool implements BaseTool {
                         "TaskStop 失败：需要 task_id 或 shell_id",
                         null,
                         "missing id");
-            }
-            if (context == null) {
-                return ToolResultPayload.failure("TaskStop 失败：无 AgentContext", "TaskStop 失败：无 AgentContext", null, "no context");
             }
             Optional<RuntimeBackgroundTask> existing = context.requireBackgroundTasks().get(id);
             if (existing.isEmpty()) {

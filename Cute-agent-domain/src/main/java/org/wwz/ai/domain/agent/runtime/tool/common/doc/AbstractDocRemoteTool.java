@@ -91,11 +91,6 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext context) {
         try {
             // 工具输入可能来自 JSON 字符串或结构化 Map，先统一成字符串键的参数表。

@@ -27,7 +27,7 @@ public class GetUiComponentsToolTest {
 
     @Test
     public void shouldReturnExtendedCatalogAsPlainText() {
-        ToolResultPayload result = (ToolResultPayload) new GetUiComponentsTool().execute(Map.of());
+        ToolResultPayload result = (ToolResultPayload) new GetUiComponentsTool().execute(Map.of(), null);
 
         Assert.assertFalse(result.getFailed());
         Assert.assertTrue(result.getLlmData() instanceof String);

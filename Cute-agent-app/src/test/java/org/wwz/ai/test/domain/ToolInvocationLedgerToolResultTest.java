@@ -74,7 +74,7 @@ public class ToolInvocationLedgerToolResultTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             Map<String, Object> file = new LinkedHashMap<>();
             file.put("name", "a.txt");
             file.put("bytes", 42);

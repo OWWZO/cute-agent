@@ -83,13 +83,6 @@ public class MultiModalAgent implements BaseTool {
 
     @Override
     @SuppressWarnings("unchecked")
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext agentContext) {
         if (agentContext == null) {
             return buildFailurePayload("multimodalagent_tool 执行失败：缺少 AgentContext");

@@ -206,7 +206,7 @@ public class DeepSearchLlmObservationTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             return ToolResultPayload.text("deep_search执行超时，已终止本次搜索，请基于当前已获取的信息继续处理。");
         }
     }

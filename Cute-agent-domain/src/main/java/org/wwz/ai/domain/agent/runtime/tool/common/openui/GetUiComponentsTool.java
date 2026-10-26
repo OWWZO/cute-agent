@@ -42,12 +42,6 @@ public class GetUiComponentsTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext context) {
         try {
             // 纯文本目录：llmData 是 String 时序列化器原样返回，保留换行，模型读起来和提示词一致。

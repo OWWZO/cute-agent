@@ -72,12 +72,6 @@ public class DataAnalysisTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext ctx) {
         if (ctx == null) {
             return buildFailurePayload("data_analysis 执行失败：缺少 AgentContext");

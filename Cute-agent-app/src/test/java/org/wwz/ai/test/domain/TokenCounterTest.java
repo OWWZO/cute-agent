@@ -9,6 +9,7 @@ import org.wwz.ai.domain.agent.runtime.llm.LlmAskToolProtocol;
 import org.wwz.ai.domain.agent.runtime.llm.LlmPromptShapeFactory;
 import org.wwz.ai.domain.agent.runtime.llm.PromptShape;
 import org.wwz.ai.domain.agent.runtime.llm.TokenCounter;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 
@@ -164,7 +165,7 @@ public class TokenCounterTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             return "ok";
         }
     }

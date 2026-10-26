@@ -68,18 +68,9 @@ public class TodoWriteTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext context) {
         try {
-            if (context == null) {
-                return ToolResultPayload.failure("TodoWrite 失败：无 AgentContext", "TodoWrite 失败：无 AgentContext", null, "no context");
-            }
             Map<String, Object> params = ToolArgs.map(input);
             Object rawTodos = params.get("todos");
             if (!(rawTodos instanceof List<?> list)) {

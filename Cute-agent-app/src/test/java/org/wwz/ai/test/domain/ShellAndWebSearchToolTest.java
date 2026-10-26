@@ -198,6 +198,7 @@ public class ShellAndWebSearchToolTest {
         };
         CuteConfig config = new CuteConfig();
         ReflectionTestUtils.setField(config, "codeInterpreterUrl", "http://cute-tool");
+        WebSearchProperties webSearch = webSearchProperties(b -> b);
         SkillRuntimeOptions skillOptions = SkillRuntimeOptions.builder().enabled(false).build();
         BashTool tool = new BashTool(skillOptions, new SkillVirtualPaths(skillOptions));
 
@@ -234,7 +235,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-001")
                 .sessionId("session-ws-001")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 
@@ -336,9 +337,10 @@ public class ShellAndWebSearchToolTest {
     @Test
     public void webSearchShouldParseTavilyResponse() throws Exception {
         CuteConfig config = new CuteConfig();
-        ReflectionTestUtils.setField(config, "webSearchMode", "tavily");
-        ReflectionTestUtils.setField(config, "webSearchTavilyApiKey", "test-key");
-        ReflectionTestUtils.setField(config, "webSearchBraveApiKey", "");
+        WebSearchProperties webSearch = webSearchProperties(b -> b
+                .mode("tavily")
+                .tavilyApiKey("test-key")
+                .braveApiKey(""));
 
         RemoteHttpPort httpPort = request -> {
             Assert.assertEquals("POST", request.getMethod());
@@ -355,7 +357,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-002")
                 .sessionId("session-ws-002")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 
@@ -370,11 +372,12 @@ public class ShellAndWebSearchToolTest {
     @Test
     public void webSearchShouldUseGptResponsesApiAndParseCitations() {
         CuteConfig config = new CuteConfig();
-        ReflectionTestUtils.setField(config, "webSearchMode", "gpt");
-        ReflectionTestUtils.setField(config, "webSearchGptApiKey", "openai-test-key");
-        ReflectionTestUtils.setField(config, "webSearchGptBaseUrl", "https://api.openai.com/v1");
-        ReflectionTestUtils.setField(config, "webSearchGptModel", "gpt-4.1");
-        ReflectionTestUtils.setField(config, "webSearchGptInterfaceUrl", "/responses");
+        WebSearchProperties webSearch = webSearchProperties(b -> b
+                .mode("gpt")
+                .gptApiKey("openai-test-key")
+                .gptBaseUrl("https://api.openai.com/v1")
+                .gptModel("gpt-4.1")
+                .gptInterfaceUrl("/responses"));
 
         RemoteHttpPort httpPort = request -> {
             Assert.assertEquals("POST", request.getMethod());
@@ -406,7 +409,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-gpt")
                 .sessionId("session-ws-gpt")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 
@@ -424,9 +427,10 @@ public class ShellAndWebSearchToolTest {
     @Test
     public void webSearchShouldParseExaResponse() {
         CuteConfig config = new CuteConfig();
-        ReflectionTestUtils.setField(config, "webSearchMode", "exa");
-        ReflectionTestUtils.setField(config, "webSearchExaApiKey", "exa-test-key");
-        ReflectionTestUtils.setField(config, "webSearchExaSearchUrl", "https://api.exa.ai/search");
+        WebSearchProperties webSearch = webSearchProperties(b -> b
+                .mode("exa")
+                .exaApiKey("exa-test-key")
+                .exaSearchUrl("https://api.exa.ai/search"));
 
         RemoteHttpPort httpPort = request -> {
             Assert.assertEquals("POST", request.getMethod());
@@ -449,7 +453,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-exa")
                 .sessionId("session-ws-exa")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 
@@ -459,5 +463,11 @@ public class ShellAndWebSearchToolTest {
         Assert.assertTrue(data.contains("exa"));
         Assert.assertTrue(data.contains("Exa Hit"));
         Assert.assertTrue(data.contains("https://exa.example/doc"));
+    }
+
+    /** 测试夹具：按 builder 转换函数构造 WebSearchProperties。 */
+    private static WebSearchProperties webSearchProperties(
+            java.util.function.UnaryOperator<WebSearchProperties.WebSearchPropertiesBuilder> customizer) {
+        return customizer.apply(WebSearchProperties.builder()).build();
     }
 }

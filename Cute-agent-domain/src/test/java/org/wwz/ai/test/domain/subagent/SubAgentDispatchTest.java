@@ -29,7 +29,6 @@ import java.util.Map;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
 import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 
 /**
@@ -218,7 +217,7 @@ public class SubAgentDispatchTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             return "ok";
         }
     }

@@ -44,17 +44,8 @@ public class TaskListTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有可读取的实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext context) {
         try {
-            if (context == null) {
-                return ToolResultPayload.failure("TaskList 失败：无 AgentContext", "TaskList 失败：无 AgentContext", null, "no context");
-            }
             List<SessionTaskItem> all = context.requireSessionTaskList().list();
             if (all.isEmpty()) {
                 Map<String, Object> empty = new LinkedHashMap<>();

@@ -148,7 +148,7 @@ public class SkipMemoryGuardTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             return "ok";
         }
     }

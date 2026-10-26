@@ -182,7 +182,7 @@ public class AgentToolPoolNestingHardeningTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             AgentContext parent = agentContext != null ? agentContext : tools.getAgentContext();
             if (parent == null) {
                 return ToolResultPayload.failure("parent missing", "parent missing", null, "parent missing");
@@ -255,7 +255,7 @@ public class AgentToolPoolNestingHardeningTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             started.countDown();
             runs.incrementAndGet();
             return ToolResultPayload.text("nested-ok");
@@ -285,7 +285,7 @@ public class AgentToolPoolNestingHardeningTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             try {
                 Thread.sleep(30_000L);
             } catch (InterruptedException e) {

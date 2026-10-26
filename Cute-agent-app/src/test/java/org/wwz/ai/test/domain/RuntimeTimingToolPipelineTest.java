@@ -119,7 +119,7 @@ public class RuntimeTimingToolPipelineTest {
         }
 
         @Override
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             return ToolResultPayload.fromData(Map.of("durationMs", 999999L));
         }
     }

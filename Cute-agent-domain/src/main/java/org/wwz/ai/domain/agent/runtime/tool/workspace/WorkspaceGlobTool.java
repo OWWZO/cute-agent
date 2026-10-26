@@ -43,11 +43,6 @@ public class WorkspaceGlobTool extends AbstractWorkspacePathTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = requireInputMap(input);

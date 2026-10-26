@@ -10,6 +10,7 @@ import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
@@ -130,10 +131,19 @@ public class StatelessToolSharingTest {
     }
 
     /**
-     * 不变量：tool 包下所有 {@link BaseTool} 实现都不得持有 {@code AgentContext} 实例字段。
+     * 不变量：tool 包下所有 {@link BaseTool} 实现都不得持有 {@code AgentContext}
+     * （实例字段、基类字段、包装类型或 static 一律算违规）。
      *
      * <p>这是无状态化契约的根。一旦有工具把 context 缓存回实例，上面的并发测试会因时序
      * 偶发通过，而这个断言对任何一处回退都立即失败。</p>
+     *
+     * <p>三个扫描盲区必须覆盖：</p>
+     * <ol>
+     *   <li>沿 {@code getSuperclass()} 链上溯——子类没声明不代表基类没缓存；</li>
+     *   <li>{@code ThreadLocal<AgentContext>} / {@code AtomicReference<AgentContext>}
+     *       等包装类型同样算违规——只匹配字段类型恰好是 {@code AgentContext} 会漏掉它们；</li>
+     *   <li>static 字段显式列为违规——工具是单例共享，static 缓存比实例字段更隐蔽。</li>
+     * </ol>
      */
     @Test
     public void noToolShouldHoldAnAgentContextField() throws Exception {
@@ -151,16 +161,51 @@ public class StatelessToolSharingTest {
             if (ToolCollection.class.isAssignableFrom(toolClass)) {
                 continue;
             }
-            for (Field field : toolClass.getDeclaredFields()) {
-                if (Modifier.isStatic(field.getModifiers())) {
-                    continue;
-                }
-                if (AgentContext.class.isAssignableFrom(field.getType())) {
-                    offenders.add(toolClass.getSimpleName() + "." + field.getName());
+            for (Class<?> c = toolClass; c != null && c != Object.class; c = c.getSuperclass()) {
+                for (Field field : c.getDeclaredFields()) {
+                    if (holdsAgentContext(field)) {
+                        offenders.add(toolClass.getSimpleName() + "." + field.getName());
+                    }
                 }
             }
         }
-        Assert.assertTrue("这些工具仍持有 AgentContext 实例字段：" + offenders, offenders.isEmpty());
+        Assert.assertTrue("这些工具仍持有 AgentContext：" + offenders, offenders.isEmpty());
+    }
+
+    /**
+     * 字段直接是 AgentContext、其包装类型，或 static 缓存了 AgentContext，都算违规。
+     *
+     * <p>static 判定只针对「类型涉及 AgentContext」的字段：工具单例共享，
+     * {@code static AgentContext} / {@code static ThreadLocal<AgentContext>} 比实例字段更隐蔽；
+     * 而 {@code @Slf4j} 的 {@code log} 与常量不属于 context 缓存，不应误伤。</p>
+     */
+    private static boolean holdsAgentContext(Field field) {
+        if (AgentContext.class.isAssignableFrom(field.getType())) {
+            return true;
+        }
+        if (!(field.getGenericType() instanceof java.lang.reflect.ParameterizedType parameterized)) {
+            return false;
+        }
+        for (java.lang.reflect.Type arg : parameterized.getActualTypeArguments()) {
+            if (arg instanceof Class<?> type && AgentContext.class.isAssignableFrom(type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 类型锁：{@link BaseTool} 不得保留无 context 的 {@code execute(Object)} 重载。
+     *
+     * <p>删掉 44 份 stub 是行为层清理；这条把结果固化成类型契约——任何人重新加回
+     * 单参重载（哪怕只是 default 委托），无状态契约就重新出现可被绕过的入口。</p>
+     */
+    @Test
+    public void baseToolMustNotDeclareContextFreeExecute() throws Exception {
+        for (Method method : BaseTool.class.getDeclaredMethods()) {
+            Assert.assertFalse("BaseTool 不得声明 execute(Object) 单参重载",
+                    "execute".equals(method.getName()) && method.getParameterCount() == 1);
+        }
     }
 
     /**
@@ -193,11 +238,6 @@ public class StatelessToolSharingTest {
         @Override
         public Map<String, Object> toParams() {
             return Map.of("type", "object", "properties", Map.of());
-        }
-
-        @Override
-        public Object execute(Object input) {
-            return execute(input, null);
         }
 
         @Override

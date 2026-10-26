@@ -21,21 +21,28 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ImageGenerationProperties {
 
     /** 图片上游 base URL（OpenAI 兼容），由部署环境配置。 */
+    @Builder.Default
     private String baseUrl = "";
 
+    @Builder.Default
     private String apiKey = "";
 
+    @Builder.Default
     private String model = "gpt-image-2.5-flare";
 
+    @Builder.Default
     private String grokBaseUrl = "";
 
+    @Builder.Default
     private String grokApiKey = "";
 
+    @Builder.Default
     private String grokModel = "grok-imagine-image-lite";
 
     /**
      * 兼容旧配置：历史上指向 cute-tool 的 image_generation 代理地址。
      * Java 直连上游后不再作为主配置，仅作 base_url 兜底。
      */
+    @Builder.Default
     private String url = "";
 }

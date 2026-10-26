@@ -64,21 +64,12 @@ public class TaskUpdateTool implements BaseTool {
     }
 
     @Override
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
     public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
             String taskId = ToolArgs.str(params.get("taskId"));
             if (StringUtils.isBlank(taskId)) {
                 return fail("TaskUpdate 失败：taskId 必填");
-            }
-            if (context == null) {
-                return fail("TaskUpdate 失败：无 AgentContext");
             }
             String status = ToolArgs.str(params.get("status"));
             if ("deleted".equalsIgnoreCase(status)) {
@@ -149,6 +140,5 @@ public class TaskUpdateTool implements BaseTool {
     private static String emptyToNull(String value) {
         return StringUtils.isBlank(value) ? null : value;
     }
-
 
 }

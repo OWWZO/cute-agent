@@ -10,7 +10,6 @@ import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
-import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tool.ToolArgs;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
@@ -20,7 +19,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 文档生成 / 读取两个远端适配基类的公共协议。
@@ -48,7 +46,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-gen").toolName("doc_gen").build());
 
-        tool.execute(ToolArgs.map("{\"title\":\"季度报告\"}"));
+        tool.execute(ToolArgs.map("{\"title\":\"季度报告\"}"), null);
 
         Assert.assertEquals("https://autobots.example.com/v1/tool/gen", http.request.getUrl());
         Assert.assertEquals("POST", http.request.getMethod());
@@ -65,7 +63,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-read").toolName("doc_read").build());
 
-        tool.execute(ToolArgs.map("{\"path\":\"/tmp/a.pdf\"}"));
+        tool.execute(ToolArgs.map("{\"path\":\"/tmp/a.pdf\"}"), null);
 
         Assert.assertEquals("https://autobots.example.com/v1/tool/read", http.request.getUrl());
         @SuppressWarnings("unchecked")
@@ -84,7 +82,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-gen").toolName("doc_gen").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
 
         Assert.assertFalse(payload.getFailed());
         Assert.assertEquals("file", printer.messageType);
@@ -105,7 +103,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-read").toolName("doc_read").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
 
         Assert.assertFalse(payload.getFailed());
         Assert.assertEquals("file", printer.messageType);
@@ -122,7 +120,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-gen").toolName("doc_gen").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -140,7 +138,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-read").toolName("doc_read").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -156,8 +154,8 @@ public class DocToolRemoteProtocolTest {
         noUrl.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("c").toolName("t").build());
 
-        ToolResultPayload gen = (ToolResultPayload) genToolOn(noUrl).execute(ToolArgs.map("{}"));
-        ToolResultPayload read = (ToolResultPayload) readToolOn(noUrl).execute(ToolArgs.map("{}"));
+        ToolResultPayload gen = (ToolResultPayload) genToolOn(noUrl).execute(ToolArgs.map("{}"), null);
+        ToolResultPayload read = (ToolResultPayload) readToolOn(noUrl).execute(ToolArgs.map("{}"), null);
 
         Assert.assertTrue(gen.getFailed());
         Assert.assertTrue(read.getFailed());
@@ -177,7 +175,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-partial").toolName("doc_gen").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
 
         Assert.assertFalse("带 fileInfo 且无 success 键的响应不得判失败", payload.getFailed());
         Assert.assertFalse(context.getArtifactBindingsByToolCallId("call-partial").isEmpty());
@@ -192,7 +190,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-gen-fail").toolName("doc_gen").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
 
         Assert.assertTrue(payload.getFailed());
         Assert.assertTrue(payload.getToolResult().contains("boom"));
@@ -208,7 +206,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-read-partial").toolName("doc_read").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
 
         Assert.assertTrue(payload.getFailed());
         Assert.assertTrue(payload.getToolResult().contains("parse failed"));
@@ -223,7 +221,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-read-obj").toolName("doc_read").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -249,7 +247,7 @@ public class DocToolRemoteProtocolTest {
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("call-read-big").toolName("doc_read").build());
 
-        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"));
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) payload.getLlmData();
@@ -262,8 +260,8 @@ public class DocToolRemoteProtocolTest {
     public void bothFailOnRemoteErrorResponse() {
         http.response = "{\"success\":false,\"message\":\"boom\"}";
 
-        ToolResultPayload gen = (ToolResultPayload) genTool().execute(ToolArgs.map("{}"));
-        ToolResultPayload read = (ToolResultPayload) readTool().execute(ToolArgs.map("{}"));
+        ToolResultPayload gen = (ToolResultPayload) genTool().execute(ToolArgs.map("{}"), null);
+        ToolResultPayload read = (ToolResultPayload) readTool().execute(ToolArgs.map("{}"), null);
 
         Assert.assertTrue(gen.getFailed());
         Assert.assertTrue(read.getFailed());
@@ -275,8 +273,8 @@ public class DocToolRemoteProtocolTest {
     public void bothFailOnEmptyResponse() {
         http.response = null;
 
-        ToolResultPayload gen = (ToolResultPayload) genTool().execute(ToolArgs.map("{}"));
-        ToolResultPayload read = (ToolResultPayload) readTool().execute(ToolArgs.map("{}"));
+        ToolResultPayload gen = (ToolResultPayload) genTool().execute(ToolArgs.map("{}"), null);
+        ToolResultPayload read = (ToolResultPayload) readTool().execute(ToolArgs.map("{}"), null);
 
         Assert.assertTrue(gen.getFailed());
         Assert.assertTrue(read.getFailed());
@@ -289,7 +287,7 @@ public class DocToolRemoteProtocolTest {
         gen.bind(context);
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("c1").toolName("t1").build());
-        gen.execute(ToolArgs.map("{}"));
+        gen.execute(ToolArgs.map("{}"), null);
         Assert.assertEquals(Long.valueOf(240L), http.request.getReadTimeoutSeconds());
         Assert.assertEquals(Long.valueOf(270L), http.request.getCallTimeoutSeconds());
 
@@ -298,7 +296,7 @@ public class DocToolRemoteProtocolTest {
         read.bind(context);
         context.bindCurrentToolArtifactSource(
                 ToolArtifactSource.builder().toolCallId("c2").toolName("t2").build());
-        read.execute(ToolArgs.map("{}"));
+        read.execute(ToolArgs.map("{}"), null);
         Assert.assertEquals(Long.valueOf(180L), http.request.getReadTimeoutSeconds());
         Assert.assertEquals(Long.valueOf(210L), http.request.getCallTimeoutSeconds());
     }
@@ -364,8 +362,9 @@ public class DocToolRemoteProtocolTest {
         }
 
         @Override
-        public Object execute(Object input) {
-            return execute(input, boundContext);
+        public Object execute(Object input, AgentContext context) {
+            // 夹具持有一次绑定的 context；未绑定时用调用方传入的那个
+            return super.execute(input, boundContext != null ? boundContext : context);
         }
 
         @Override
@@ -398,8 +397,9 @@ public class DocToolRemoteProtocolTest {
         }
 
         @Override
-        public Object execute(Object input) {
-            return execute(input, boundContext);
+        public Object execute(Object input, AgentContext context) {
+            // 夹具持有一次绑定的 context；未绑定时用调用方传入的那个
+            return super.execute(input, boundContext != null ? boundContext : context);
         }
 
         @Override

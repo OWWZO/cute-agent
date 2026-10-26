@@ -118,13 +118,6 @@ public class AgentDispatchTool implements BaseTool {
 
     @Override
     @SuppressWarnings("unchecked")
-    public Object execute(Object input) {
-        // 无状态工具没有实例 context；旧签名路径不携带上下文。
-        return execute(input, null);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext agentContext) {
         try {
             Map<String, Object> params = input instanceof Map
@@ -152,9 +145,6 @@ public class AgentDispatchTool implements BaseTool {
             }
             if (StringUtils.isBlank(description)) {
                 description = StringUtils.defaultIfBlank(subagentType, "subagent-task");
-            }
-            if (agentContext == null) {
-                return ToolResultPayload.failureFrom("Agent 执行失败：无 AgentContext", null);
             }
             SubAgentRunner subAgentRunner = resolveSubAgentRunner(agentContext);
             if (subAgentRunner == null) {

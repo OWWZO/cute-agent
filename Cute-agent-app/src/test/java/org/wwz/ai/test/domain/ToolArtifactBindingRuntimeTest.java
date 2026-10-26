@@ -239,7 +239,7 @@ public class ToolArtifactBindingRuntimeTest {
 
         @Override
         @SuppressWarnings("unchecked")
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             Map<String, Object> params = (Map<String, Object>) input;
             ToolArtifactSource source = agentContext.requireCurrentToolArtifactSource(getName());
             File file = File.builder()
@@ -281,7 +281,7 @@ public class ToolArtifactBindingRuntimeTest {
 
         @Override
         @SuppressWarnings("unchecked")
-        public Object execute(Object input) {
+        public Object execute(Object input, AgentContext context) {
             Map<String, Object> params = (Map<String, Object>) input;
             ToolArtifactSource source = agentContext.requireCurrentToolArtifactSource(getName());
             String fileName = String.valueOf(params.get("fileName"));

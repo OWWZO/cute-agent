@@ -3,6 +3,7 @@ package org.wwz.ai.domain.agent.runtime.agent;
 import org.junit.Assert;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
@@ -104,7 +105,7 @@ public class ToolExecutionPipelineCancellationTest {
             }
 
             @Override
-            public Object execute(Object input) {
+            public Object execute(Object input, AgentContext context) {
                 executed.set(true);
                 return "ran";
             }
