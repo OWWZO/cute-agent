@@ -131,7 +131,7 @@ export default function ToolCatalogList({
                   type="button"
                   aria-label={`打开工具 ${tool.title}${tool.requiresLogin === false ? "，无需登录" : ""}`}
                   onClick={() => onSelectTool(tool)}
-                  className="group flex min-h-[148px] min-w-0 flex-col items-start rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] p-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
+                  className="group flex min-h-[148px] min-w-0 flex-col items-start rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] p-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:translate-none focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
                 >
                   <span className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-accent-bd)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
                     <Icon aria-hidden="true" className="h-[18px] w-[18px]" />

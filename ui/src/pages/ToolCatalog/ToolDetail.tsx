@@ -51,7 +51,7 @@ export default function ToolDetail({ tool, onBack, onSelectFunction }: ToolDetai
             type="button"
             aria-label={`配置任务：${toolFunction.title}`}
             onClick={() => onSelectFunction(toolFunction)}
-            className="flex min-h-[192px] min-w-0 flex-col items-start rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] p-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
+            className="flex min-h-[192px] min-w-0 flex-col items-start rounded-md border border-[var(--color-line)] bg-[var(--color-surface-raised)] p-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:translate-none focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
           >
             <span className="flex w-full items-start justify-between gap-3">
               <span className="text-sm font-medium leading-5 text-[var(--color-text)]">

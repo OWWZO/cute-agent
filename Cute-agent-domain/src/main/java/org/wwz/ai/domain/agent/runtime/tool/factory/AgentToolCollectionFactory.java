@@ -194,11 +194,11 @@ public class AgentToolCollectionFactory {
         if (runtimeDependencies.getOptionalCuratedMemoryStore() != null
                 || runtimeDependencies.getOptionalLtmManager() != null) {
             MemoryTool memoryTool = new MemoryTool();
-            addStatelessTool(toolCollection, memoryTool);
+            toolCollection.addTool(memoryTool);
         }
         if (runtimeDependencies.getOptionalSessionSearchService() != null) {
             SessionSearchTool sessionSearchTool = new SessionSearchTool();
-            addStatelessTool(toolCollection, sessionSearchTool);
+            toolCollection.addTool(sessionSearchTool);
         }
 
         // dataAgent 只暴露问数工具；普通 Agent 按配置装配 workspace、文档、数据处理、画布和外部检索工具。
@@ -206,11 +206,11 @@ public class AgentToolCollectionFactory {
             // dataAgent 只暴露问数入口，避免把普通 Agent 的文件/检索/编排工具带入
             // 数据查询协议；其它模式再按配置逐组挂载能力。
             DataAnalysisTool dataAnalysisTool = new DataAnalysisTool();
-            addStatelessTool(toolCollection, dataAnalysisTool);
+            toolCollection.addTool(dataAnalysisTool);
         } else {
             // agent 通过 workspace_* 操作会话文件；内部产物上传不作为工具暴露给 LLM。
             if (workspaceService.isEnabled()) {
-                registerWorkspaceTools(toolCollection, agentContext);
+                registerWorkspaceTools(toolCollection);
             }
             registerBrowserTool(toolCollection, agentContext);
             registerAgentBrowserTool(toolCollection, agentContext, request);
@@ -228,74 +228,74 @@ public class AgentToolCollectionFactory {
                     "excel_generator", "checklist_generate", "template_filler",
                     "document_template", "theme_designer", "chart_generator")) {
                 DocumentGenerateTool documentGenerateTool = new DocumentGenerateTool();
-                addStatelessTool(toolCollection, documentGenerateTool);
+                toolCollection.addTool(documentGenerateTool);
 
                 SlidesGenerateTool slidesGenerateTool = new SlidesGenerateTool();
-                addStatelessTool(toolCollection, slidesGenerateTool);
+                toolCollection.addTool(slidesGenerateTool);
 
                 ExcelGeneratorTool excelGeneratorTool = new ExcelGeneratorTool();
-                addStatelessTool(toolCollection, excelGeneratorTool);
+                toolCollection.addTool(excelGeneratorTool);
 
                 ChecklistGenerateTool checklistGenerateTool = new ChecklistGenerateTool();
-                addStatelessTool(toolCollection, checklistGenerateTool);
+                toolCollection.addTool(checklistGenerateTool);
 
                 TemplateFillerTool templateFillerTool = new TemplateFillerTool();
-                addStatelessTool(toolCollection, templateFillerTool);
+                toolCollection.addTool(templateFillerTool);
 
                 DocumentTemplateTool documentTemplateTool = new DocumentTemplateTool();
-                addStatelessTool(toolCollection, documentTemplateTool);
+                toolCollection.addTool(documentTemplateTool);
 
                 ThemeDesignerTool themeDesignerTool = new ThemeDesignerTool();
-                addStatelessTool(toolCollection, themeDesignerTool);
+                toolCollection.addTool(themeDesignerTool);
 
                 ChartGeneratorTool chartGeneratorTool = new ChartGeneratorTool();
-                addStatelessTool(toolCollection, chartGeneratorTool);
+                toolCollection.addTool(chartGeneratorTool);
             }
             if (matchesAny(agentToolList, "docread", "csv_processor", "excel_reader",
                     "pdf_reader", "word_reader", "html_processor", "markdown_processor",
                     "text_processor", "pdf_structure", "citation_extractor", "image_ocr")) {
-                registerDocReadTools(toolCollection, agentContext);
+                registerDocReadTools(toolCollection);
             }
             if (matchesAny(agentToolList, "dataprep", "data_aggregate", "data_clean",
                     "data_merge", "data_transform", "data_validate", "sql_query")) {
-                registerDataPrepTools(toolCollection, agentContext);
+                registerDataPrepTools(toolCollection);
             }
             // canvas：把 workspace 里的 HTML 发布成可预览链接。它不产出界面 DSL，与 genui 树无关，保持可用。
             if (matchesAny(agentToolList, "canvas", "canvas_publish", "html_canvas")) {
                 CanvasPublishTool canvasPublishTool = new CanvasPublishTool();
-                addStatelessTool(toolCollection, canvasPublishTool);
+                toolCollection.addTool(canvasPublishTool);
             }
             // openui-lang 扩展组件目录：界面通道唯一入口（旧 genui 树已整体下线）。
             if (matchesAny(agentToolList, "openui", OpenUiToolNames.GET_UI_COMPONENTS)) {
                 GetUiComponentsTool getUiComponentsTool = new GetUiComponentsTool();
-                addStatelessTool(toolCollection, getUiComponentsTool);
+                toolCollection.addTool(getUiComponentsTool);
             }
             if (agentToolList.contains("search")) {
                 DeepSearchTool deepSearchTool = new DeepSearchTool();
-                addStatelessTool(toolCollection, deepSearchTool);
+                toolCollection.addTool(deepSearchTool);
             }
             if (matchesAny(agentToolList, "web_fetch", "WebFetch")) {
                 WebFetchTool webFetchTool = new WebFetchTool();
-                addStatelessTool(toolCollection, webFetchTool);
+                toolCollection.addTool(webFetchTool);
             }
             if (matchesAny(agentToolList, "web_search", "WebSearch")) {
                 WebSearchTool webSearchTool = new WebSearchTool();
-                addStatelessTool(toolCollection, webSearchTool);
+                toolCollection.addTool(webSearchTool);
             }
             if (agentToolList.contains("code_execution")) {
                 CodeExecutionTool codeExecutionTool = new CodeExecutionTool();
-                addStatelessTool(toolCollection, codeExecutionTool);
+                toolCollection.addTool(codeExecutionTool);
             }
             if (agentToolList.contains("image_generation")) {
                 ImageGenerationTool imageGenerationTool = new ImageGenerationTool();
-                addStatelessTool(toolCollection, imageGenerationTool);
+                toolCollection.addTool(imageGenerationTool);
             }
             if (agentToolList.contains("data_analysis")) {
                 DataAnalysisTool dataAnalysisTool = new DataAnalysisTool();
-                addStatelessTool(toolCollection, dataAnalysisTool);
+                toolCollection.addTool(dataAnalysisTool);
             }
             if (shouldAttachSkillTools(attachScope)) {
-                registerSkillTools(toolCollection, agentContext);
+                registerSkillTools(toolCollection);
             }
         }
 
@@ -308,12 +308,12 @@ public class AgentToolCollectionFactory {
                 && runtimeDependencies.getOptionalSubAgentRegistry() != null) {
             // 子 Agent 派发工具只挂在主 Agent 上，避免 dataAgent 或子任务再次无限扩散执行边界。
             AgentDispatchTool agentDispatchTool = new AgentDispatchTool();
-            addStatelessTool(toolCollection, agentDispatchTool);
+            toolCollection.addTool(agentDispatchTool);
         }
 
         // Task / Plan Mode 工具
         if (!"dataAgent".equals(request.getOutputStyle())) {
-            registerPlanModeTools(toolCollection, agentContext);
+            registerPlanModeTools(toolCollection);
         }
         return toolCollection;
     }
@@ -361,9 +361,9 @@ public class AgentToolCollectionFactory {
             DeferredToolCatalog catalog = new DeferredToolCatalog(catalogEntries);
             if (catalog.size() > 0) {
                 toolCollection.setDeferredToolCatalog(catalog);
-                addStatelessTool(toolCollection, new ToolSearchTool());
-                addStatelessTool(toolCollection, new ToolDescribeTool());
-                addStatelessTool(toolCollection, new ToolCallTool());
+                toolCollection.addTool(new ToolSearchTool());
+                toolCollection.addTool(new ToolDescribeTool());
+                toolCollection.addTool(new ToolCallTool());
             }
             log.info("{} MCP deferred mode: catalog={}, alwaysLoad={}",
                     agentContext.getRequestId(), catalog.size(), visible.size());
@@ -400,10 +400,10 @@ public class AgentToolCollectionFactory {
         }
         // 始终注册 list/read：无资源时返回空列表，避免能力探测抖动导致工具集签名抖动。
         ListMcpResourcesTool listMcpResourcesTool = new ListMcpResourcesTool();
-        addStatelessTool(toolCollection, listMcpResourcesTool);
+        toolCollection.addTool(listMcpResourcesTool);
 
         ReadMcpResourceTool readMcpResourceTool = new ReadMcpResourceTool();
-        addStatelessTool(toolCollection, readMcpResourceTool);
+        toolCollection.addTool(readMcpResourceTool);
 
         if (hasResources) {
             log.info("{} MCP resource tools registered (resources present)", agentContext.getRequestId());
@@ -476,44 +476,44 @@ public class AgentToolCollectionFactory {
                 .toList();
     }
 
-    private void registerPlanModeTools(ToolCollection toolCollection, AgentContext agentContext) {
+    private void registerPlanModeTools(ToolCollection toolCollection) {
         // Plan Mode 工具共享当前上下文的 task/approval registry，工具调用结果才能
         // 在多轮执行中保持同一状态，而不是每次 build 重新创建孤立状态机。
         TaskCreateTool taskCreateTool = new TaskCreateTool();
-        addStatelessTool(toolCollection, taskCreateTool);
+        toolCollection.addTool(taskCreateTool);
 
         TaskGetTool taskGetTool = new TaskGetTool();
-        addStatelessTool(toolCollection, taskGetTool);
+        toolCollection.addTool(taskGetTool);
 
         TaskUpdateTool taskUpdateTool = new TaskUpdateTool();
-        addStatelessTool(toolCollection, taskUpdateTool);
+        toolCollection.addTool(taskUpdateTool);
 
         TaskListTool taskListTool = new TaskListTool();
-        addStatelessTool(toolCollection, taskListTool);
+        toolCollection.addTool(taskListTool);
 
         TodoWriteTool todoWriteTool = new TodoWriteTool();
-        addStatelessTool(toolCollection, todoWriteTool);
+        toolCollection.addTool(todoWriteTool);
 
         TaskStopTool taskStopTool = new TaskStopTool();
-        addStatelessTool(toolCollection, taskStopTool);
+        toolCollection.addTool(taskStopTool);
 
         TaskOutputTool taskOutputTool = new TaskOutputTool();
-        addStatelessTool(toolCollection, taskOutputTool);
+        toolCollection.addTool(taskOutputTool);
 
         SendMessageTool sendMessageTool = new SendMessageTool();
-        addStatelessTool(toolCollection, sendMessageTool);
+        toolCollection.addTool(sendMessageTool);
 
         EnterPlanModeTool enterPlanModeTool = new EnterPlanModeTool();
-        addStatelessTool(toolCollection, enterPlanModeTool);
+        toolCollection.addTool(enterPlanModeTool);
 
         ExitPlanModeTool exitPlanModeTool = new ExitPlanModeTool();
-        addStatelessTool(toolCollection, exitPlanModeTool);
+        toolCollection.addTool(exitPlanModeTool);
 
         if (pendingUserQuestionRegistry != null) {
             AskUserQuestionTool askUserQuestionTool = new AskUserQuestionTool();
-            addStatelessTool(toolCollection, askUserQuestionTool);
+            toolCollection.addTool(askUserQuestionTool);
             RequestDesktopControlTool requestDesktopControlTool = new RequestDesktopControlTool();
-            addStatelessTool(toolCollection, requestDesktopControlTool);
+            toolCollection.addTool(requestDesktopControlTool);
         }
     }
 
@@ -531,78 +531,78 @@ public class AgentToolCollectionFactory {
         }
     }
 
-    private void registerWorkspaceTools(ToolCollection toolCollection, AgentContext agentContext) {
+    private void registerWorkspaceTools(ToolCollection toolCollection) {
         // workspace 工具统一绑定已解析的 cwd 和读状态存储；read/write/edit/list 等
         // 入口虽然分开，路径安全和会话级 read 状态仍由 WorkspaceService 共享。
         WorkspaceReadTool readTool = new WorkspaceReadTool(workspaceService, workspaceRuntimeOptions);
-        addStatelessTool(toolCollection, readTool);
+        toolCollection.addTool(readTool);
 
         WorkspaceWriteTool writeTool = new WorkspaceWriteTool(workspaceService, workspaceRuntimeOptions);
-        addStatelessTool(toolCollection, writeTool);
+        toolCollection.addTool(writeTool);
 
         WorkspaceEditTool editTool = new WorkspaceEditTool(workspaceService, workspaceRuntimeOptions);
-        addStatelessTool(toolCollection, editTool);
+        toolCollection.addTool(editTool);
 
         WorkspaceListTool listTool = new WorkspaceListTool(workspaceService, workspaceRuntimeOptions);
-        addStatelessTool(toolCollection, listTool);
+        toolCollection.addTool(listTool);
 
         WorkspaceGlobTool globTool = new WorkspaceGlobTool(workspaceService, workspaceRuntimeOptions);
-        addStatelessTool(toolCollection, globTool);
+        toolCollection.addTool(globTool);
 
         WorkspaceGrepTool grepTool = new WorkspaceGrepTool(workspaceService, workspaceRuntimeOptions);
-        addStatelessTool(toolCollection, grepTool);
+        toolCollection.addTool(grepTool);
     }
 
-    private void registerDocReadTools(ToolCollection toolCollection, AgentContext agentContext) {
+    private void registerDocReadTools(ToolCollection toolCollection) {
         CsvProcessorTool csvProcessorTool = new CsvProcessorTool();
-        addStatelessTool(toolCollection, csvProcessorTool);
+        toolCollection.addTool(csvProcessorTool);
 
         ExcelReaderTool excelReaderTool = new ExcelReaderTool();
-        addStatelessTool(toolCollection, excelReaderTool);
+        toolCollection.addTool(excelReaderTool);
 
         HtmlProcessorTool htmlProcessorTool = new HtmlProcessorTool();
-        addStatelessTool(toolCollection, htmlProcessorTool);
+        toolCollection.addTool(htmlProcessorTool);
 
         MarkdownProcessorTool markdownProcessorTool = new MarkdownProcessorTool();
-        addStatelessTool(toolCollection, markdownProcessorTool);
+        toolCollection.addTool(markdownProcessorTool);
 
         TextProcessorTool textProcessorTool = new TextProcessorTool();
-        addStatelessTool(toolCollection, textProcessorTool);
+        toolCollection.addTool(textProcessorTool);
 
         WordReaderTool wordReaderTool = new WordReaderTool();
-        addStatelessTool(toolCollection, wordReaderTool);
+        toolCollection.addTool(wordReaderTool);
 
         PdfReaderTool pdfReaderTool = new PdfReaderTool();
-        addStatelessTool(toolCollection, pdfReaderTool);
+        toolCollection.addTool(pdfReaderTool);
 
         PdfStructureTool pdfStructureTool = new PdfStructureTool();
-        addStatelessTool(toolCollection, pdfStructureTool);
+        toolCollection.addTool(pdfStructureTool);
 
         CitationExtractorTool citationExtractorTool = new CitationExtractorTool();
-        addStatelessTool(toolCollection, citationExtractorTool);
+        toolCollection.addTool(citationExtractorTool);
 
         ImageOcrTool imageOcrTool = new ImageOcrTool();
-        addStatelessTool(toolCollection, imageOcrTool);
+        toolCollection.addTool(imageOcrTool);
     }
 
-    private void registerDataPrepTools(ToolCollection toolCollection, AgentContext agentContext) {
+    private void registerDataPrepTools(ToolCollection toolCollection) {
         DataAggregateTool dataAggregateTool = new DataAggregateTool();
-        addStatelessTool(toolCollection, dataAggregateTool);
+        toolCollection.addTool(dataAggregateTool);
 
         DataCleanTool dataCleanTool = new DataCleanTool();
-        addStatelessTool(toolCollection, dataCleanTool);
+        toolCollection.addTool(dataCleanTool);
 
         DataMergeTool dataMergeTool = new DataMergeTool();
-        addStatelessTool(toolCollection, dataMergeTool);
+        toolCollection.addTool(dataMergeTool);
 
         DataTransformTool dataTransformTool = new DataTransformTool();
-        addStatelessTool(toolCollection, dataTransformTool);
+        toolCollection.addTool(dataTransformTool);
 
         DataValidateTool dataValidateTool = new DataValidateTool();
-        addStatelessTool(toolCollection, dataValidateTool);
+        toolCollection.addTool(dataValidateTool);
 
         SqlQueryTool sqlQueryTool = new SqlQueryTool();
-        addStatelessTool(toolCollection, sqlQueryTool);
+        toolCollection.addTool(sqlQueryTool);
     }
 
     /**
@@ -624,7 +624,7 @@ public class AgentToolCollectionFactory {
         if (properties == null || !properties.isEnabled() || cli == null || !cli.isResolvable(properties.getCommand())) {
             return;
         }
-        addStatelessTool(toolCollection, new BrowserTool());
+        toolCollection.addTool(new BrowserTool());
     }
 
     private void registerAgentBrowserTool(ToolCollection toolCollection,
@@ -642,7 +642,7 @@ public class AgentToolCollectionFactory {
                 || !cli.isResolvable(properties.getCommand()) || port == null || !port.isConfigured()) {
             return;
         }
-        addStatelessTool(toolCollection, new AgentBrowserTool());
+        toolCollection.addTool(new AgentBrowserTool());
     }
 
     private void registerHostCliTool(ToolCollection toolCollection, AgentContext agentContext) {
@@ -665,7 +665,7 @@ public class AgentToolCollectionFactory {
         if (available.isEmpty()) {
             return;
         }
-        addStatelessTool(toolCollection, new HostCliTool(available));
+        toolCollection.addTool(new HostCliTool(available));
     }
 
     /**
@@ -687,17 +687,13 @@ public class AgentToolCollectionFactory {
         if (deps.getOptionalCodeModeExecutorPort() == null || !workspaceService.isEnabled()) {
             return;
         }
-        addStatelessTool(toolCollection, new CodeModeTool(properties));
+        toolCollection.addTool(new CodeModeTool(properties));
     }
 
     /**
      * 注册无状态工具：context 由 {@link BaseTool#execute(Object, AgentContext)} 传入，
      * 不写实例字段，因此可跨会话共享同一实例。
      */
-    private <T extends BaseTool> void addStatelessTool(ToolCollection toolCollection, T tool) {
-        toolCollection.addTool(tool);
-    }
-
     /**
      * 白名单组判定：组名或组内任一工具别名命中即装配整组。
      * <p>
@@ -734,7 +730,7 @@ public class AgentToolCollectionFactory {
         };
     }
 
-    private void registerSkillTools(ToolCollection toolCollection, AgentContext agentContext) {
+    private void registerSkillTools(ToolCollection toolCollection) {
         // skill 读写：workspace_* 虚拟路径 skills/ → runtime 库；执行：bash 沙箱物化 + skills/** sync-back
         if (!(skillRegistry instanceof SkillCatalog catalog)) {
             return;
@@ -744,14 +740,14 @@ public class AgentToolCollectionFactory {
                 skillLoader,
                 skillRuntimeLayout,
                 skillScriptDiscoverer);
-        addStatelessTool(toolCollection, skillViewTool);
+        toolCollection.addTool(skillViewTool);
         SkillsSearchTool skillsSearchTool = new SkillsSearchTool(catalog);
-        addStatelessTool(toolCollection, skillsSearchTool);
+        toolCollection.addTool(skillsSearchTool);
 
         if (skillRuntimeOptions.isSandboxBashEnabled() && workspaceService.isEnabled()) {
             // 只发 HTTP 到 cute-tool /v1/tool/bash；本机不执行
             BashTool bashTool = new BashTool(skillRuntimeOptions, skillVirtualPaths);
-            addStatelessTool(toolCollection, bashTool);
+            toolCollection.addTool(bashTool);
         }
     }
 

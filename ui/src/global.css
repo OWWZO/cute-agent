@@ -2199,11 +2199,6 @@ ol {
   display: flex;
   min-width: 100%;
   width: 100%;
-  /* 屏外行跳过布局与绘制（对齐 ZCode `CodeBlockContainer` 的 contentVisibility）。
-     展开体上限只有 240px，几百行的内联 diff 里绝大多数行都在视口外，
-     不隔离的话它们照样参与每一次重排 —— 展开动画期间每帧都要重算整棵树。 */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 20px;
 }
 
 .kimi-diff-row.is-added {

@@ -33,8 +33,6 @@ const MAX_TOKEN_CACHE_ENTRIES = 400;
 
 export type TokenizedCode = {
   tokens: ThemedToken[][];
-  fg: string;
-  bg: string;
 };
 
 /**
@@ -132,11 +130,7 @@ export function tokenizeCode(
   dark: boolean
 ): Promise<TokenizedCode> {
   if (!shouldUseSyntaxHighlighting(language)) {
-    return Promise.resolve({
-      tokens: createRawTokens(code),
-      fg: "inherit",
-      bg: "transparent",
-    });
+    return Promise.resolve({ tokens: createRawTokens(code) });
   }
 
   const cacheKey = createTokenCacheKey(code, language, dark);
@@ -158,11 +152,7 @@ export function tokenizeCode(
         lang,
         theme
       });
-      return {
-        tokens: result.tokens,
-        fg: result.fg ?? "inherit",
-        bg: result.bg ?? "transparent",
-      } satisfies TokenizedCode;
+      return { tokens: result.tokens } satisfies TokenizedCode;
     };
 
     try {

@@ -84,7 +84,7 @@ export default function FeaturedConversationCard(
       <CardShell
         href={href}
         onSelect={handleSelect}
-        className="group flex w-full items-stretch gap-4 rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-3 text-left transition duration-200 hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)]/50 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:transform-none sm:gap-5 sm:p-4"
+        className="group flex w-full items-stretch gap-4 rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-3 text-left transition duration-200 hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)]/50 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:translate-none sm:gap-5 sm:p-4"
       >
         <div
           className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br sm:h-24 sm:w-28 ${accent}`}
@@ -138,7 +138,7 @@ export default function FeaturedConversationCard(
     <CardShell
       href={href}
       onSelect={handleSelect}
-      className="group flex h-full w-full flex-col overflow-hidden rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] text-left transition duration-200 hover:-translate-y-0.5 hover:border-[var(--chat-border-strong)] hover:shadow-[var(--shadow-md)] motion-reduce:transform-none"
+      className="group flex h-full w-full flex-col overflow-hidden rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] text-left transition duration-200 hover:-translate-y-0.5 hover:border-[var(--chat-border-strong)] hover:shadow-[var(--shadow-md)] motion-reduce:translate-none"
     >
       <div
         className={`relative aspect-[16/10] overflow-hidden bg-gradient-to-br ${accent}`}

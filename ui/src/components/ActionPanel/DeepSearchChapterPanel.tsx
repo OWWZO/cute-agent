@@ -36,7 +36,7 @@ const DeepSearchChapterPanel: CuteType.FC<DeepSearchChapterPanelProps> = memo(
           />
         </section>
 
-        <section className="rounded-2xl border border-[var(--chat-border)]/50 bg-white px-4 py-4">
+        <section className="rounded-2xl border border-[var(--chat-border)]/50 bg-[var(--chat-surface)] px-4 py-4">
           <div className="mb-3 flex items-start gap-3">
             <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--chat-border)]/40 bg-[var(--chat-surface-muted)] text-[var(--chat-text-muted)]">
               <BookOpenText className="h-5 w-5" strokeWidth={1.75} />

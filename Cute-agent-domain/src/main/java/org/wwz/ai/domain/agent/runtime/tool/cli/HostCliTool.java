@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.cli;
 
-import lombok.Setter;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.cli.CliExecutionPort;
 import org.wwz.ai.domain.agent.adapter.port.cli.CliInvocation;

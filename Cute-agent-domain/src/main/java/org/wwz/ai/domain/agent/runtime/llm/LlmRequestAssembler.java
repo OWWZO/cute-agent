@@ -92,15 +92,6 @@ final class LlmRequestAssembler {
      * 本地工具与 MCP 工具统一转成出站工具定义。
      * <p>
      * 排序按名称固定，避免同一批工具每次下发顺序不同破坏 prompt cache。
-     */
-    List<LlmToolDefinition> buildToolDefinitions(ToolCollection tools) {
-        return buildToolDefinitions(tools, null);
-    }
-
-    /**
-     * 本地工具与 MCP 工具统一转成出站工具定义。
-     * <p>
-     * 排序按名称固定，避免同一批工具每次下发顺序不同破坏 prompt cache。
      * invoker 显式携带本次请求的 context，无状态工具因此不需要实例绑定。
      */
     List<LlmToolDefinition> buildToolDefinitions(ToolCollection tools, AgentContext context) {

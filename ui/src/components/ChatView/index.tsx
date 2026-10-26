@@ -1847,7 +1847,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
                   }}
                   transition={SPRING_GENTLE}
                   className={cn(
-                    "shrink-0 bg-[var(--color-bg)] motion-reduce:transform-none",
+                    "shrink-0 bg-[var(--color-bg)] motion-reduce:translate-none",
                     hasWorkspaceLayout
                       ? "pb-4 pt-3"
                       : "pb-5 pt-4",

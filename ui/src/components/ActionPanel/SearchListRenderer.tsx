@@ -59,7 +59,7 @@ const SearchListItemComponent: CuteType.FC<SearchListItem & { index: number }> =
           ease: [0.25, 0.46, 0.45, 0.94],
         }}
         className={cn(
-          "group rounded-2xl border border-[var(--chat-border)]/50 bg-white px-4 py-4 transition-colors duration-200",
+          "group rounded-2xl border border-[var(--chat-border)]/50 bg-[var(--chat-surface)] px-4 py-4 transition-colors duration-200",
           clickable
             ? "cursor-pointer hover:bg-[var(--chat-surface-soft)]"
             : "cursor-default"
@@ -146,7 +146,7 @@ const SearchListRenderer: CuteType.FC<SearchListRendererProps> = React.memo(({
   if (!list?.length) {
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col items-center justify-center px-4 py-16 text-center">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--chat-border)]/50 bg-white text-[var(--chat-text-muted)]">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--chat-border)]/50 bg-[var(--chat-surface)] text-[var(--chat-text-muted)]">
           {loading ? (
             <LoaderCircle className="h-6 w-6 animate-spin" strokeWidth={1.5} />
           ) : (

@@ -3,7 +3,6 @@ package org.wwz.ai.domain.agent.runtime.tool.common.doc;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpPort;
@@ -33,7 +32,6 @@ import java.util.Map;
  * {@link #fileEventCommand()}、{@link #fileDescriptionSuffix()}、{@link #extraLlmData(JSONObject, Map)}。
  */
 @Slf4j
-@Data
 public abstract class AbstractDocRemoteTool implements BaseTool {
 
     /** 连接超时对所有文档工具一致；读/调用超时由具体工具决定。 */

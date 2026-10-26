@@ -163,10 +163,6 @@ public class ToolCollection {
      *         - MCP工具：返回远程调用的响应结果字符串；
      *         - 工具不存在：返回null。
      */
-    public Object execute(String name, Object toolInput) {
-        return execute(name, toolInput, agentContext);
-    }
-
     /**
      * 统一执行工具，并显式传入本次调用的上下文。
      * <p>
@@ -195,10 +191,6 @@ public class ToolCollection {
      * 执行已解析的真实工具名（eager 本地 / eager MCP / 延迟本地或 MCP）。
      * pipeline 解包后走这里，避免再次命中 deferred 拒绝或二次 ToolCall 解包。
      */
-    public Object executeResolved(String name, Object toolInput) {
-        return executeResolved(name, toolInput, agentContext);
-    }
-
     /**
      * 执行已解析的真实工具名，并显式传入本次调用的上下文。
      * <p>

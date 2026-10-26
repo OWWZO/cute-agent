@@ -565,10 +565,10 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
         <div className="fixed inset-0 z-40 flex flex-col bg-black/80">
           <div className="flex items-center justify-between gap-4 bg-black/40 px-6 py-3 backdrop-blur-sm">
             <div className="flex items-center gap-3">
-              <span className="text-ui-base font-medium text-[var(--color-text-on-accent)]/90">
+              <span className="text-ui-base font-medium text-white/90">
                 编辑 #{images.findIndex((i) => i.id === editingImage.id) + 1}
               </span>
-              <span className="text-ui-sm text-[var(--color-text-on-accent)]/50">
+              <span className="text-ui-sm text-white/50">
                 {editingImage.naturalWidth}×{editingImage.naturalHeight}
               </span>
             </div>
@@ -576,7 +576,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
               <button
                 type="button"
                 onClick={clearCurrentMask}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-ui-caption text-[var(--color-text-on-accent)]/80 transition hover:bg-white/20"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-ui-caption text-white/80 transition hover:bg-white/20"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 清除涂抹
@@ -617,8 +617,8 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-ui-caption font-medium transition",
                   toolMode === "brush"
-                    ? "bg-white/20 text-[var(--color-text-on-accent)] shadow-sm"
-                    : "text-[var(--color-text-on-accent)]/60 hover:text-[var(--color-text-on-accent)]/90"
+                    ? "bg-white/20 text-white shadow-sm"
+                    : "text-white/60 hover:text-white/90"
                 )}
               >
                 <Brush className="h-4 w-4" />
@@ -630,8 +630,8 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-ui-caption font-medium transition",
                   toolMode === "eraser"
-                    ? "bg-white/20 text-[var(--color-text-on-accent)] shadow-sm"
-                    : "text-[var(--color-text-on-accent)]/60 hover:text-[var(--color-text-on-accent)]/90"
+                    ? "bg-white/20 text-white shadow-sm"
+                    : "text-white/60 hover:text-white/90"
                 )}
               >
                 <Eraser className="h-4 w-4" />
@@ -639,7 +639,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
               </button>
             </div>
 
-            <div className="inline-flex items-center gap-3 rounded-full bg-white/10 px-4 py-2 text-ui-caption text-[var(--color-text-on-accent)]/70">
+            <div className="inline-flex items-center gap-3 rounded-full bg-white/10 px-4 py-2 text-ui-caption text-white/70">
               <span>笔刷大小</span>
               <input
                 type="range"
@@ -650,7 +650,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                 onChange={(event) => setBrushSize(Number(event.target.value))}
                 className="w-24 accent-white"
               />
-              <span className="min-w-[2ch] font-mono text-[var(--color-text-on-accent)]">{brushSize}</span>
+              <span className="min-w-[2ch] font-mono text-white">{brushSize}</span>
             </div>
           </div>
         </div>

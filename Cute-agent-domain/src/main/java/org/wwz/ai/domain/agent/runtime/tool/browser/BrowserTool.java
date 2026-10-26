@@ -1,7 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.tool.browser;
 
 import com.alibaba.fastjson.JSON;
-import lombok.Setter;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.BrowserRelayPort;
 import org.wwz.ai.domain.agent.adapter.port.BrowserBskConnectionPort;
