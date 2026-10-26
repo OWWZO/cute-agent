@@ -1,8 +1,10 @@
 package org.wwz.ai.domain.agent.runtime.tool.deferred;
 
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.mcp.model.McpToolInfo;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
+import org.wwz.ai.domain.agent.runtime.util.ToolSchemaNormalizer;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -95,7 +97,35 @@ public final class DeferredToolEntry {
         return description;
     }
 
+    /**
+     * 执行期求值的描述。
+     *
+     * <p>LOCAL 源直接问 {@code BaseTool.getDescription(context)}：browser 的 bsk/opencli
+     * 命令面、ToolSearch 的目录清单都依赖 context，注册期快照会与主 {@code tools[]} 不一致。
+     * MCP 源没有 context 维度，继续用快照。</p>
+     */
+    public String getDescription(AgentContext context) {
+        if (source == DeferredToolSource.LOCAL && localTool != null) {
+            String resolved = localTool.getDescription(context);
+            return resolved == null ? "" : resolved;
+        }
+        return description;
+    }
+
     public Map<String, Object> getParameters() {
+        return parameters;
+    }
+
+    /**
+     * 执行期求值的参数 schema。
+     *
+     * <p>LOCAL 源用本次 context 调 {@code toParams(context)}；MCP 源保持注册期快照
+     * （MCP 参数是服务端声明的，与 Java 侧 context 无关）。</p>
+     */
+    public Map<String, Object> getParameters(AgentContext context) {
+        if (source == DeferredToolSource.LOCAL && localTool != null) {
+            return immutableCopy(ToolSchemaNormalizer.normalizeSchema(localTool.toParams(context), name));
+        }
         return parameters;
     }
 

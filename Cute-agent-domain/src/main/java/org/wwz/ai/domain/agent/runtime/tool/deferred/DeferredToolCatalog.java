@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.tool.deferred;
 
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.mcp.model.McpToolInfo;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.util.ToolSchemaNormalizer;
@@ -52,11 +53,21 @@ public final class DeferredToolCatalog {
         return new DeferredToolCatalog(List.of());
     }
 
+    /**
+     * 本地工具入目录。
+     *
+     * <p>schema / description 不在注册期拍快照：entry 保留 tool 引用，读取方按本次
+     * context 求值（见 {@link DeferredToolEntry#getParameters(AgentContext)}）。这样
+     * browser / Agent 这类 context-aware 工具进 deferred 名单也不会与主 {@code tools[]}
+     * 出现两份 schema。</p>
+     *
+     * <p>注册期的空 context 求值只用于搜索索引（BM25 关键词），不影响对外 schema。</p>
+     */
     public static DeferredToolEntry localEntry(BaseTool tool, String sourceName) {
         return DeferredToolEntry.local(
                 tool,
                 sourceName,
-                ToolSchemaNormalizer.normalizeSchema(tool.toParams(), tool.getName()),
+                ToolSchemaNormalizer.normalizeSchema(tool.toParams(null), tool.getName()),
                 "");
     }
 
@@ -143,6 +154,17 @@ public final class DeferredToolCatalog {
     }
 
     public String formatListingForToolSearchDescription() {
+        return formatListingForToolSearchDescription(null);
+    }
+
+    /**
+     * 按本次 context 求值的目录清单。
+     *
+     * <p>ToolSearch 的 description 会拼进这份清单；描述依赖 context 的工具
+     * （browser 的 bsk/opencli 命令面）必须用调用方的 context，否则清单里是
+     * 注册期空 context 的快照。</p>
+     */
+    public String formatListingForToolSearchDescription(AgentContext context) {
         if (allByName.isEmpty()) {
             return "";
         }
@@ -157,7 +179,7 @@ public final class DeferredToolCatalog {
             entries.sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.getName(), b.getName()));
             sb.append('\n').append(group.getKey()).append(" tools (").append(entries.size()).append("):");
             for (DeferredToolEntry entry : entries) {
-                String shortDesc = shortDesc(entry.getDescription());
+                String shortDesc = shortDesc(entry.getDescription(context));
                 sb.append("\n- ").append(entry.getName());
                 if (StringUtils.isNotBlank(shortDesc)) {
                     sb.append(": ").append(shortDesc);

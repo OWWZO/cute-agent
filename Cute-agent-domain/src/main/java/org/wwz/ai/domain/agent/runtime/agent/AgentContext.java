@@ -489,8 +489,25 @@ public class AgentContext {
         return subAgentId != null && !subAgentId.isBlank();
     }
 
-    // ---- 控制面 facade：委托给 {@link RunControl}，保持调用方签名不变 ----
+    // ---- 运行时依赖 facade：工具不再各自复制「取可选依赖 + null 检查」的样板 ----
+    // 依赖在装配期已挂到 runtimeDependencies 上，这里统一给出与 context 同源的访问入口。
 
+    /** 子 Agent 派发器；未装配时返回 null。 */
+    public org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner subAgentRunner() {
+        return runtimeDependencies == null ? null : runtimeDependencies.getOptionalSubAgentRunner();
+    }
+
+    /** 活跃 run 注册表（TaskStop / 中断定位）；未装配时返回 null。 */
+    public org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry activeAgentRunRegistry() {
+        return runtimeDependencies == null ? null : runtimeDependencies.getOptionalActiveAgentRunRegistry();
+    }
+
+    /** Plan Mode 产物存储；未装配时返回 null。 */
+    public org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore planArtifactStore() {
+        return runtimeDependencies == null ? null : runtimeDependencies.getOptionalPlanArtifactStore();
+    }
+
+    // ---- 控制面 facade：委托给 {@link RunControl}，保持调用方签名不变 ----
     public void markTurnClosed() {
         control().markTurnClosed();
     }

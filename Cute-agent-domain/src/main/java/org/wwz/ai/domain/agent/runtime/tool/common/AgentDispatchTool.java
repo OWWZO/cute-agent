@@ -146,11 +146,11 @@ public class AgentDispatchTool implements BaseTool {
             if (StringUtils.isBlank(description)) {
                 description = StringUtils.defaultIfBlank(subagentType, "subagent-task");
             }
-            SubAgentRunner subAgentRunner = resolveSubAgentRunner(agentContext);
+            SubAgentRunner subAgentRunner = agentContext.subAgentRunner();
             if (subAgentRunner == null) {
                 return ToolResultPayload.failureFrom("Agent 执行失败：SubAgentRunner 未注入", null);
             }
-            ActiveAgentRunRegistry activeAgentRunRegistry = resolveActiveAgentRunRegistry(agentContext);
+            ActiveAgentRunRegistry activeAgentRunRegistry = agentContext.activeAgentRunRegistry();
 
             // 必须在当前线程捕获：currentToolArtifactSource 是 ThreadLocal，
             // 后台线程不会继承，否则子事件丢失 parentToolUseId 并泄漏到主时间线。
@@ -207,27 +207,13 @@ public class AgentDispatchTool implements BaseTool {
     }
 
     /** 子 Agent 执行器与 context 同源：装配期已挂到运行时依赖上。 */
-    private static SubAgentRunner resolveSubAgentRunner(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            return null;
-        }
-        return context.getRuntimeDependencies().getOptionalSubAgentRunner();
-    }
-
     /** 子 Agent 定义表与 context 同源：描述里的 subagent_type 清单由此生成。 */
+    /** 子 Agent 注册表只在本工具使用，不值得单开 AgentContext getter。 */
     private static SubAgentRegistry resolveSubAgentRegistry(AgentContext context) {
         if (context == null || context.getRuntimeDependencies() == null) {
             return null;
         }
         return context.getRuntimeDependencies().getOptionalSubAgentRegistry();
-    }
-
-    /** 活跃 run 登记表与 context 同源：后台派发需要它登记取消句柄。 */
-    private static ActiveAgentRunRegistry resolveActiveAgentRunRegistry(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            return null;
-        }
-        return context.getRuntimeDependencies().getOptionalActiveAgentRunRegistry();
     }
 
     private static boolean coerceBoolean(Object value) {

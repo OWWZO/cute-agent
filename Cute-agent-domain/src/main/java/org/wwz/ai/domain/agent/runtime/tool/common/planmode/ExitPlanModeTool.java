@@ -72,7 +72,7 @@ public class ExitPlanModeTool implements BaseTool {
             String planFromArg = ToolArgs.str(params.get("plan"));
             String planFilePathArg = ToolArgs.str(params.get("planFilePath"));
 
-            PlanArtifactStore planArtifactStore = resolvePlanArtifactStore(agentContext);
+            PlanArtifactStore planArtifactStore = agentContext.planArtifactStore();
             String planContent = planFromArg;
             if (StringUtils.isBlank(planContent) && planArtifactStore != null) {
                 planContent = planArtifactStore.readPlan(agentContext.getSessionId()).orElse(null);
@@ -113,14 +113,6 @@ public class ExitPlanModeTool implements BaseTool {
 
     private static ToolResultPayload fail(String msg) {
         return ToolResultPayload.failureFrom(msg, null);
-    }
-
-    /** plan 产物存储与 context 同源：装配期已挂到运行时依赖上。 */
-    private static PlanArtifactStore resolvePlanArtifactStore(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            return null;
-        }
-        return context.getRuntimeDependencies().getOptionalPlanArtifactStore();
     }
 
 }

@@ -63,7 +63,7 @@ public class EnterPlanModeTool implements BaseTool {
             state.enterPlanMode();
 
             String planPathHint = PlanArtifactStore.RELATIVE_PLAN_PATH;
-            PlanArtifactStore planArtifactStore = resolvePlanArtifactStore(agentContext);
+            PlanArtifactStore planArtifactStore = agentContext.planArtifactStore();
             if (planArtifactStore != null) {
                 var path = planArtifactStore.resolvePlanPath(agentContext.getSessionId());
                 if (path != null) {
@@ -92,11 +92,4 @@ public class EnterPlanModeTool implements BaseTool {
         }
     }
 
-    /** plan 产物存储与 context 同源：装配期已挂到运行时依赖上。 */
-    private static PlanArtifactStore resolvePlanArtifactStore(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            return null;
-        }
-        return context.getRuntimeDependencies().getOptionalPlanArtifactStore();
-    }
 }

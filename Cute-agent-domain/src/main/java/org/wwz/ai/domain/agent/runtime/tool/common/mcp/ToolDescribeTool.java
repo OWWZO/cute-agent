@@ -66,8 +66,8 @@ public class ToolDescribeTool implements BaseTool {
             fields.put("name", tool.getName());
             fields.put("source", tool.isLocal() ? "local" : "mcp");
             fields.put("source_name", tool.getSourceName());
-            fields.put("description", tool.getDescription());
-            fields.put("parameters", tool.getParameters());
+            fields.put("description", tool.getDescription(context));
+            fields.put("parameters", tool.getParameters(context));
             return ToolResultPayload.okData(McpToolNames.TOOL_DESCRIBE, fields);
         } catch (Exception e) {
             log.warn("ToolDescribe failed", e);

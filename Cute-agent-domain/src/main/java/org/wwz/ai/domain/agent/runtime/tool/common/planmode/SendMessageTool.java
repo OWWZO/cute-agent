@@ -166,8 +166,8 @@ public class SendMessageTool implements BaseTool {
 
     private Object resumeStopped(AgentContext agentContext, String to, ResolvedTarget target,
                                  String message, String summary) {
-        SubAgentRunner subAgentRunner = resolveSubAgentRunner(agentContext);
-        ActiveAgentRunRegistry activeAgentRunRegistry = resolveActiveAgentRunRegistry(agentContext);
+        SubAgentRunner subAgentRunner = agentContext.subAgentRunner();
+        ActiveAgentRunRegistry activeAgentRunRegistry = agentContext.activeAgentRunRegistry();
         if (subAgentRunner == null) {
             return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, Map.of(
                     "ok", false,
@@ -225,22 +225,6 @@ public class SendMessageTool implements BaseTool {
     }
 
     private record ResolvedTarget(String agentId, String taskId, RuntimeBackgroundTask task) {
-    }
-
-    /** 子 Agent 执行器与 context 同源：装配期已挂到运行时依赖上。 */
-    private static SubAgentRunner resolveSubAgentRunner(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            return null;
-        }
-        return context.getRuntimeDependencies().getOptionalSubAgentRunner();
-    }
-
-    /** 活跃 run 登记表与 context 同源：装配期已挂到运行时依赖上。 */
-    private static ActiveAgentRunRegistry resolveActiveAgentRunRegistry(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            return null;
-        }
-        return context.getRuntimeDependencies().getOptionalActiveAgentRunRegistry();
     }
 
 }

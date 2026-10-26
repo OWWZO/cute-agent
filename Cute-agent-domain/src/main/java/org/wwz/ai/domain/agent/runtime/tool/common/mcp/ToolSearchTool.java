@@ -53,7 +53,7 @@ public class ToolSearchTool implements BaseTool {
                 .append("Invoke deferred tools only via ToolCall. ")
                 .append("query is keywords or select:name1,name2. max_results default 5.");
         if (catalog != null && catalog.size() > 0) {
-            String listing = catalog.formatListingForToolSearchDescription();
+            String listing = catalog.formatListingForToolSearchDescription(context);
             if (StringUtils.isNotBlank(listing)) {
                 desc.append("\n\nEvery deferred capability is listed below. If a tool name appears here, ")
                         .append("do NOT claim it is unavailable — load it with ToolDescribe ")
@@ -110,7 +110,7 @@ public class ToolSearchTool implements BaseTool {
                 row.put("name", tool.getName());
                 row.put("source", tool.isLocal() ? "local" : "mcp");
                 row.put("source_name", tool.getSourceName());
-                String description = StringUtils.defaultString(tool.getDescription());
+                String description = StringUtils.defaultString(tool.getDescription(context));
                 if (description.length() > 400) {
                     description = description.substring(0, 400);
                 }
