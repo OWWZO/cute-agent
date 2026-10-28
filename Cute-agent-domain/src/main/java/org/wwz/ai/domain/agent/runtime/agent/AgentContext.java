@@ -181,15 +181,6 @@ public class AgentContext {
     String dateInfo;
 
     /**
-     * 产品相关文件列表（全局）
-     * 用途：
-     * 1. 上下文补充：为智能体提供产品基础信息（如商品详情、规格文档、售后政策）；
-     * 2. 用户消息补充：由 BaseAgent 格式化后追加到本轮用户消息，供 LLM 参考；
-     * 范围：覆盖当前会话的所有产品文件，粒度为「会话级」
-     */
-    List<File> productFiles;
-
-    /**
      * 基础提示词模板（核心指令模板）
      * 用途：
      * 模板复用：作为智能体的核心指令模板，可替换占位符生成最终的系统提示词；
@@ -492,6 +483,20 @@ public class AgentContext {
     // ---- 运行时依赖 facade：工具不再各自复制「取可选依赖 + null 检查」的样板 ----
     // 依赖在装配期已挂到 runtimeDependencies 上，这里统一给出与 context 同源的访问入口。
 
+    /**
+     * 必需的运行时依赖包：缺席即装配错误，直接抛出。
+     *
+     * <p>本方法是「依赖是否装配」这一判断的<b>唯一</b>落点。工具不要再各自写
+     * {@code if (ctx == null || ctx.getRuntimeDependencies() == null) throw ...}：
+     * 那段样板曾逐字复制 15 份，只有类名不同。</p>
+     */
+    public CuteRuntimeDependencies requireRuntimeDependencies() {
+        if (runtimeDependencies == null) {
+            throw new IllegalStateException("AgentContext 缺少 CuteRuntimeDependencies");
+        }
+        return runtimeDependencies;
+    }
+
     /** 子 Agent 派发器；未装配时返回 null。 */
     public org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner subAgentRunner() {
         return runtimeDependencies == null ? null : runtimeDependencies.getOptionalSubAgentRunner();
@@ -648,13 +653,9 @@ public class AgentContext {
 
 
     public ToolArtifactBinding registerGeneratedArtifact(ToolArtifactSource source, File file) {
-        // 工具产物先登记到唯一 registry，再同步到会话级兼容文件列表；
-        // 前端可见列表因此由 ledger/toolCall 绑定派生，而不是由工具自行拼装。
-        return toolArtifactRegistry.registerGeneratedFile(
-                source,
-                file,
-                ensureProductFiles()
-        );
+        // 工具产物登记到唯一 registry；前端可见列表由 ledger/toolCall 绑定派生，
+        // 不再另维护会话级兼容文件列表。
+        return toolArtifactRegistry.registerGeneratedFile(source, file);
     }
 
     public List<ToolArtifactBinding> getArtifactBindingsByToolCallId(String toolCallId) {
@@ -715,7 +716,6 @@ public class AgentContext {
                 .printer(printer)
                 .runtimeDependencies(runtimeDependencies)
                 .dateInfo(dateInfo)
-                .productFiles(copyFiles(productFiles))
                 .workspaceRoot(workspaceRoot)
                 .subAgentToolCollection(subAgentToolCollection)
                 .workspaceReadStateByPath(new ConcurrentHashMap<>())
@@ -757,10 +757,6 @@ public class AgentContext {
         return contextTokenTracker;
     }
 
-    private List<File> copyFiles(List<File> sourceFiles) {
-        return sourceFiles == null ? new ArrayList<>() : new ArrayList<>(sourceFiles);
-    }
-
     /**
      * 刻意只拼请求身份与轻量字段。不改为 {@code @ToString}：
      * control（取消令牌/注入队列/任务表）、运行时依赖、工具池这些字段
@@ -775,7 +771,6 @@ public class AgentContext {
                 ", query='" + query + '\'' +
                 ", task='" + task + '\'' +
                 ", dateInfo='" + dateInfo + '\'' +
-                ", productFiles=" + productFiles +
                 ", isStream=" + isStream +
                 ", streamMessageType='" + streamMessageType + '\'' +
                 ", agentType=" + agentType +

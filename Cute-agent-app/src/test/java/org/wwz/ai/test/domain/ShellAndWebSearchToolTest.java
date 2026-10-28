@@ -59,7 +59,6 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-bash-output")
                 .sessionId("session-bash-output")
-                .productFiles(new ArrayList<>())
                 .printer(printer)
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
@@ -149,7 +148,6 @@ public class ShellAndWebSearchToolTest {
                 .requestId("req-bash-align")
                 .sessionId("session-bash-align")
                 .workspaceRoot(workspaceRoot)
-                .productFiles(new ArrayList<>())
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         SkillRuntimeOptions skillOptions = SkillRuntimeOptions.builder().enabled(false).build();
@@ -178,7 +176,6 @@ public class ShellAndWebSearchToolTest {
                 .requestId("req-bash-owner")
                 .sessionId("session-bash-owner")
                 .userId("v1")
-                .productFiles(new ArrayList<>())
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         SkillRuntimeOptions skillOptions = SkillRuntimeOptions.builder().enabled(false).build();
@@ -215,7 +212,7 @@ public class ShellAndWebSearchToolTest {
                 .requestId("req-bash-user")
                 .sessionId("session-bash-user")
                 .ltmOwner(LtmOwner.user("erp-1"))
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort, webSearch, null))
                 .build();
         tool.execute(Map.of("command", "echo ok"), ltmOwnerContext);
         Assert.assertEquals("user:erp-1", JSON.parseObject(capturedBody.get()).getString("ownerKey"));
@@ -235,7 +232,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-001")
                 .sessionId("session-ws-001")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, (org.wwz.ai.types.agent.config.ImageGenerationProperties) null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 
@@ -281,7 +278,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-grok")
                 .sessionId("session-ws-grok")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 
@@ -322,7 +319,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-fallback")
                 .sessionId("session-ws-fallback")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 
@@ -357,7 +354,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-002")
                 .sessionId("session-ws-002")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 
@@ -409,7 +406,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-gpt")
                 .sessionId("session-ws-gpt")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 
@@ -453,7 +450,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-ws-exa")
                 .sessionId("session-ws-exa")
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, webSearch, null))
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort, webSearch, null))
                 .build();
         WebSearchTool tool = new WebSearchTool();
 

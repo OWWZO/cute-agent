@@ -79,12 +79,13 @@ public class CodeModeTool implements BaseTool {
     @Override
     @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext context) {
-        CodeModeExecutorPort executorPort = requireExecutorPort(context);
-        if (executorPort == null) {
-            return fail(CodeModeErrorCode.CODE_MODE_CAPABILITY_UNAVAILABLE, "Code Mode 执行器未装配");
-        }
         if (context == null) {
             return fail(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT, "缺少 AgentContext");
+        }
+        CodeModeExecutorPort executorPort = context.requireRuntimeDependencies()
+                .getOptionalCodeModeExecutorPort();
+        if (executorPort == null) {
+            return fail(CodeModeErrorCode.CODE_MODE_CAPABILITY_UNAVAILABLE, "Code Mode 执行器未装配");
         }
         if (context.isRunCancelled()) {
             return fail(CodeModeErrorCode.CODE_MODE_CANCELLED, "工具未执行：用户已停止本轮对话");
@@ -131,14 +132,6 @@ public class CodeModeTool implements BaseTool {
             return fail(CodeModeErrorCode.CODE_MODE_RUNTIME_ERROR, "Code Mode 执行器未返回结果");
         }
         return toPayload(result);
-    }
-
-    /** 执行器与 context 同源：装配期已确认 dependencies 里有该端口。 */
-    private CodeModeExecutorPort requireExecutorPort(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            return null;
-        }
-        return context.getRuntimeDependencies().getOptionalCodeModeExecutorPort();
     }
 
     private Object toPayload(CodeModeResult result) {

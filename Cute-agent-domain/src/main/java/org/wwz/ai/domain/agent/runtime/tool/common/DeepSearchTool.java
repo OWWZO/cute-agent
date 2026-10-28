@@ -6,7 +6,6 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamListener;
-import org.wwz.ai.domain.agent.adapter.port.RemoteStreamPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamRequest;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamSession;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -100,7 +99,7 @@ public class DeepSearchTool implements BaseTool {
                     : String.valueOf(params.get("reportFileName"));
             // Schema 用于约束模型；入口仍做最终归一化，避免模型偶尔漏传或生成过长名称导致整次搜索失败。
             String reportFileName = DeepSearchFileNamePolicy.resolveReportFileName(requestedReportFileName);
-            CuteConfig cuteConfig = requireCuteConfig(ctx);
+            CuteConfig cuteConfig = ctx.requireRuntimeDependencies().requireCuteConfig();
             Map<String, Object> srcConfig = new HashMap<>();
 
             Map<String, Object> bingConfig = new HashMap<>();
@@ -148,7 +147,7 @@ public class DeepSearchTool implements BaseTool {
         searchRequest.setReport_file_name(
                 DeepSearchFileNamePolicy.resolveReportFileName(searchRequest.getReport_file_name()));
         try {
-            CuteConfig cuteConfig = requireCuteConfig(ctx);
+            CuteConfig cuteConfig = ctx.requireRuntimeDependencies().requireCuteConfig();
             String url = cuteConfig.getDeepSearchUrl() + "/v1/tool/deepsearch";
             log.info("{} deep_search request queryLength={} reportFileName={}",
                     ctx.getRequestId(),
@@ -173,7 +172,7 @@ public class DeepSearchTool implements BaseTool {
             DeepSearchStructuredResultBuilder resultBuilder = new DeepSearchStructuredResultBuilder(searchRequest.getQuery());
              FileArtifactUploader fileArtifactUploader = new FileArtifactUploader(ctx);
             String digitalEmployee = ctx.getToolCollection().getDigitalEmployee(getName());
-            RemoteStreamSession session = requireRemoteStreamPort(ctx).openStream(RemoteStreamRequest.builder()
+            RemoteStreamSession session = ctx.requireRuntimeDependencies().requireRemoteStreamPort().openStream(RemoteStreamRequest.builder()
                     .method("POST")
                     .url(url)
                     .headers(Map.of(
@@ -382,17 +381,4 @@ public class DeepSearchTool implements BaseTool {
         );
     }
 
-    private CuteConfig requireCuteConfig(AgentContext ctx) {
-        if (ctx == null || ctx.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("DeepSearchTool 缺少 CuteRuntimeDependencies");
-        }
-        return ctx.getRuntimeDependencies().requireCuteConfig();
-    }
-
-    private RemoteStreamPort requireRemoteStreamPort(AgentContext ctx) {
-        if (ctx == null || ctx.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("DeepSearchTool 缺少 CuteRuntimeDependencies");
-        }
-        return ctx.getRuntimeDependencies().requireRemoteStreamPort();
-    }
 }

@@ -1,6 +1,7 @@
 package org.wwz.ai.test.domain;
 
 import com.alibaba.fastjson.JSONObject;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -11,7 +12,6 @@ import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.types.agent.config.ImageGenerationProperties;
-import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.tool.common.ImageGenerationTool;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ImageGenerationToolOutput;
@@ -21,7 +21,11 @@ import org.wwz.ai.domain.agent.image.model.WorkspaceImageFile;
 import org.wwz.ai.domain.agent.image.service.IImageGenerationExecutionKernel;
 import org.wwz.ai.test.domain.support.CuteRuntimeTestSupport;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -66,7 +70,6 @@ public class ImageGenerationToolTest {
                 .isStream(true)
                 .printer(printer)
                 .toolCollection(toolCollection)
-                .productFiles(new ArrayList<>())
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig, kernel, new org.springframework.mock.env.MockEnvironment(), null, null, buildImageGenerationProperties()))
                 .build();
         toolCollection.setAgentContext(context);
@@ -116,91 +119,78 @@ public class ImageGenerationToolTest {
     }
 
     @Test
-    public void shouldReuseContextImagesWhenModeIsMissing() {
-        IImageGenerationExecutionKernel kernel = Mockito.mock(IImageGenerationExecutionKernel.class);
-        ArgumentCaptor<ImageGenerationExecuteCommand> commandCaptor = ArgumentCaptor.forClass(ImageGenerationExecuteCommand.class);
-        Mockito.when(kernel.execute(commandCaptor.capture())).thenReturn(ImageGenerationExecutionResult.builder()
-                .requestId("session-image-002")
-                .prompt("基于上传图片改成赛博朋克风")
-                .mode("edits")
-                .summary("图片编辑完成")
-                .size("1024x1024")
-                .batchCount(1)
-                .sourceImageCount(1)
-                .maskImageCount(0)
-                .usedFallback(false)
-                .files(List.of(WorkspaceImageFile.builder()
-                        .fileName("edited.png")
-                        .domainUrl("https://file.example.com/preview/edited.png")
-                        .downloadUrl("https://file.example.com/download/edited.png")
-                        .fileSize(128L)
-                        .mimeType("image/png")
-                        .build()))
-                .build());
+    public void shouldReadWorkspaceRelativePathAsDataUrl() throws Exception {
+        Path workspace = Files.createTempDirectory("cute-image-ws-root");
+        Files.writeString(workspace.resolve("cat.png"), "cat-bytes");
 
-        CuteConfig cuteConfig = buildConfig();
-        RecordingPrinter printer = new RecordingPrinter();
-        ToolCollection toolCollection = new ToolCollection();
-        AgentContext context = AgentContext.builder()
-                .requestId("req-image-002")
-                .sessionId("session-image-002")
-                .query("基于上传图片改成赛博朋克风")
-                .isStream(true)
-                .printer(printer)
-                .toolCollection(toolCollection)
-                .productFiles(new ArrayList<>(List.of(
-                        File.builder()
-                                .fileName("source-image.png")
-                                .domainUrl("https://file.example.com/preview/source-image.png")
-                                .ossUrl("https://file.example.com/download/source-image.png")
-                                .isInternalFile(Boolean.FALSE)
-                                .build(),
-                        File.builder()
-                                .fileName("notes.txt")
-                                .isInternalFile(Boolean.FALSE)
-                                .build()
-                )))
-                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig, kernel, new org.springframework.mock.env.MockEnvironment(), null, null, buildImageGenerationProperties()))
-                .build();
-        toolCollection.setAgentContext(context);
+        List<String> resolved = executeCapturing(List.of("cat.png"), "req-image-ws-1", "session-image-ws-1",
+                workspace.toString()).getFileNames();
 
-        ImageGenerationTool tool = new ImageGenerationTool();
-        ToolArtifactSource artifactSource = ToolArtifactSource.builder()
-                .sessionId(context.getSessionId())
-                .requestId(context.getRequestId())
-                .toolCallId("call-image-002")
-                .toolName("image_generation_tool")
-                .build();
-
-        context.bindCurrentToolArtifactSource(artifactSource);
-        try {
-            ToolResultPayload payload = (ToolResultPayload) tool.execute(JSONObject.parseObject("""
-                    {"prompt":"基于上传图片改成赛博朋克风"}
-                    """), context);
-            Assert.assertFalse(payload.getFailed());
-        } finally {
-            context.clearCurrentToolArtifactSource();
-        }
-
+        Assert.assertEquals(1, resolved.size());
+        Assert.assertTrue(resolved.get(0).startsWith("data:image/png;base64,"));
         Assert.assertEquals(
-                List.of("https://file.example.com/preview/source-image.png"),
-                commandCaptor.getValue().getFileNames()
+                Base64.getEncoder().encodeToString("cat-bytes".getBytes(StandardCharsets.UTF_8)),
+                StringUtils.substringAfter(resolved.get(0), "base64,")
         );
     }
 
     @Test
-    public void shouldFallbackToFileNameWhenContextImageUrlMissing() {
+    public void shouldKeepSubDirectoryPathWhenReadingWorkspaceImage() throws Exception {
+        Path workspace = Files.createTempDirectory("cute-image-ws-subdir");
+        Files.createDirectories(workspace.resolve("output"));
+        Files.writeString(workspace.resolve("cat.png"), "root-image");
+        Files.writeString(workspace.resolve("output/cat.png"), "subdir-image");
+
+        List<String> resolved = executeCapturing(List.of("output/cat.png"), "req-image-ws-2", "session-image-ws-2",
+                workspace.toString()).getFileNames();
+
+        Assert.assertEquals(1, resolved.size());
+        Assert.assertEquals(
+                Base64.getEncoder().encodeToString("subdir-image".getBytes(StandardCharsets.UTF_8)),
+                StringUtils.substringAfter(resolved.get(0), "base64,")
+        );
+    }
+
+    @Test
+    public void shouldRejectPathTraversalAndAbsolutePathFromImageReference() throws Exception {
+        // 越界与绝对路径都走不到本地读取，最终保留原值交给下游报错
+        for (String reference : List.of("../../etc/passwd", "/etc/passwd")) {
+            List<String> resolved = executeCapturing(List.of(reference), "req-image-ws-3", "session-image-ws-3", null)
+                    .getFileNames();
+            Assert.assertEquals(List.of(reference), resolved);
+        }
+    }
+
+    @Test
+    public void shouldPassThroughNetworkUrlAndDataUrlUnchanged() throws Exception {
+        List<String> refs = List.of(
+                "https://example.com/a.png",
+                "data:image/png;base64,xxx"
+        );
+        Assert.assertEquals(refs,
+                executeCapturing(refs, "req-image-ws-4", "session-image-ws-4", null).getFileNames());
+    }
+
+    @Test
+    public void shouldKeepOriginalValueWhenWorkspaceImageMissing() throws Exception {
+        // 工作区内不存在：保留原值，由下游报出明确错误，不静默吞掉
+        Assert.assertEquals(List.of("missing.png"),
+                executeCapturing(List.of("missing.png"), "req-image-ws-5", "session-image-ws-5", null).getFileNames());
+    }
+
+    /** 以给定引用执行工具，捕获发给下游内核的命令；workspaceRoot 为 null 时取临时目录。 */
+    private ImageGenerationExecuteCommand executeCapturing(List<String> references,
+                                                           String requestId,
+                                                           String sessionId,
+                                                           String workspaceRootOverride) throws Exception {
         IImageGenerationExecutionKernel kernel = Mockito.mock(IImageGenerationExecutionKernel.class);
         ArgumentCaptor<ImageGenerationExecuteCommand> commandCaptor = ArgumentCaptor.forClass(ImageGenerationExecuteCommand.class);
         Mockito.when(kernel.execute(commandCaptor.capture())).thenReturn(ImageGenerationExecutionResult.builder()
-                .requestId("session-image-003")
-                .prompt("沿用上一张图继续修改")
+                .requestId(sessionId)
+                .prompt("图片编辑")
                 .mode("edits")
                 .summary("图片编辑完成")
-                .size("1024x1024")
                 .batchCount(1)
-                .sourceImageCount(1)
-                .maskImageCount(0)
                 .usedFallback(false)
                 .files(List.of(WorkspaceImageFile.builder()
                         .fileName("edited.png")
@@ -214,42 +204,36 @@ public class ImageGenerationToolTest {
         CuteConfig cuteConfig = buildConfig();
         RecordingPrinter printer = new RecordingPrinter();
         ToolCollection toolCollection = new ToolCollection();
+        String workspaceRoot = workspaceRootOverride == null
+                ? Files.createTempDirectory("cute-image-ws").toString()
+                : workspaceRootOverride;
         AgentContext context = AgentContext.builder()
-                .requestId("req-image-003")
-                .sessionId("session-image-003")
-                .query("沿用上一张图继续修改")
+                .requestId(requestId)
+                .sessionId(sessionId)
+                .query("图片编辑")
                 .isStream(true)
                 .printer(printer)
                 .toolCollection(toolCollection)
-                .productFiles(new ArrayList<>(List.of(
-                        File.builder()
-                                .fileName("source-image.png")
-                                .isInternalFile(Boolean.FALSE)
-                                .build()
-                )))
+                .workspaceRoot(workspaceRoot)
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig, kernel, new org.springframework.mock.env.MockEnvironment(), null, null, buildImageGenerationProperties()))
                 .build();
         toolCollection.setAgentContext(context);
 
-        ImageGenerationTool tool = new ImageGenerationTool();
-        ToolArtifactSource artifactSource = ToolArtifactSource.builder()
-                .sessionId(context.getSessionId())
-                .requestId(context.getRequestId())
-                .toolCallId("call-image-003")
+        context.bindCurrentToolArtifactSource(ToolArtifactSource.builder()
+                .sessionId(sessionId)
+                .requestId(requestId)
+                .toolCallId("call-" + requestId)
                 .toolName("image_generation_tool")
-                .build();
-
-        context.bindCurrentToolArtifactSource(artifactSource);
+                .build());
         try {
-            ToolResultPayload payload = (ToolResultPayload) tool.execute(JSONObject.parseObject("""
-                    {"prompt":"沿用上一张图继续修改"}
-                    """), context);
-            Assert.assertFalse(payload.getFailed());
+            JSONObject params = new JSONObject();
+            params.put("prompt", "图片编辑");
+            params.put("fileNames", references);
+            Assert.assertFalse(((ToolResultPayload) new ImageGenerationTool().execute(params, context)).getFailed());
         } finally {
             context.clearCurrentToolArtifactSource();
         }
-
-        Assert.assertEquals(List.of("source-image.png"), commandCaptor.getValue().getFileNames());
+        return commandCaptor.getValue();
     }
 
     private CuteConfig buildConfig() {

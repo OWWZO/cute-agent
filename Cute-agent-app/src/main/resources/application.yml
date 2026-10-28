@@ -83,7 +83,7 @@ autobots:
       reconcile-grace-ms: 60000
       reconcile-batch-size: 500
 
-    # 兼容旧字段；实际上游凭证见 image_generation.*
+    # 兼容旧字段；实际上游凭证见 image-generation.*
     image_generation_url: ""
     image_generation:
       base_url: ""

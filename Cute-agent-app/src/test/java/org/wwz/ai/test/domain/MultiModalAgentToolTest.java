@@ -53,7 +53,6 @@ public class MultiModalAgentToolTest {
                     .isStream(true)
                     .printer(printer)
                     .toolCollection(toolCollection)
-                    .productFiles(new ArrayList<>())
                     .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig))
                     .build();
             toolCollection.setAgentContext(agentContext);
@@ -115,7 +114,6 @@ public class MultiModalAgentToolTest {
                 .isStream(true)
                 .printer(new RecordingPrinter())
                 .toolCollection(new ToolCollection())
-                .productFiles(new ArrayList<>())
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(cuteConfig))
                 .build();
 

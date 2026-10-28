@@ -28,7 +28,6 @@ public class CodeExecutionToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-code-001")
                 .sessionId("session-code-001")
-                .productFiles(new ArrayList<>())
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()
@@ -71,7 +70,6 @@ public class CodeExecutionToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-code-paths")
                 .sessionId("session-code-paths")
-                .productFiles(new ArrayList<>())
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()
@@ -119,7 +117,6 @@ public class CodeExecutionToolTest {
                 .requestId("req-code-001")
                 .sessionId("session-code-001")
                 .workspaceRoot(workspaceRoot)
-                .productFiles(new ArrayList<>())
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()

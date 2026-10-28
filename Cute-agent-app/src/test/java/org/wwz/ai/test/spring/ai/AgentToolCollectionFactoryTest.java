@@ -11,6 +11,9 @@ import org.slf4j.LoggerFactory;
 import org.wwz.ai.domain.agent.runtime.util.ToolSchemaNormalizer;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
+import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
+import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
@@ -18,7 +21,9 @@ import org.wwz.ai.domain.agent.runtime.tool.mcp.model.McpToolInfo;
 import org.wwz.ai.domain.agent.runtime.enums.RoleType;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentDefinition;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentSessionToolScope;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner;
 import org.wwz.ai.domain.agent.runtime.tool.factory.AgentToolCollectionFactory;
 import org.wwz.ai.domain.agent.runtime.tool.mcp.port.McpToolExecutor;
@@ -108,6 +113,65 @@ public class AgentToolCollectionFactoryTest {
                         || name.contains("remote_tool")));
         Assert.assertTrue(toolCollection.getToolMap().containsKey("ListMcpResources"));
         Assert.assertTrue(toolCollection.getToolMap().containsKey("ReadMcpResource"));
+    }
+
+    /**
+     * 模式 2（用户直聊子会话）：工具池由会话行里的 {@code sub_agent_type} 决定，与派发方无关。
+     */
+    @Test
+    public void subAgentSessionToolsAreScopedBySessionType() {
+        AgentToolCollectionFactory factory = newFactory(
+                buildCuteConfig(),
+                Mockito.mock(McpToolExecutor.class),
+                Mockito.mock(DefaultSkillRegistry.class),
+                SkillRuntimeOptions.builder().enabled(false).build(),
+                disabledWorkspaceService(),
+                disabledWorkspaceOptions());
+
+        SubAgentRegistry registry = new SubAgentRegistry();
+        registry.register(SubAgentDefinition.builder()
+                .agentType("report-only")
+                .allowedTools(java.util.Set.of("deep_search"))
+                .toolPolicyMode(SubAgentDefinition.TOOL_POLICY_INHERIT)
+                .build());
+        IExecutionLedgerReadRepository ledger = Mockito.mock(IExecutionLedgerReadRepository.class);
+        Mockito.when(ledger.querySessionEntity("sub_agent-1")).thenReturn(DialogueSession.builder()
+                .sessionId("sub_agent-1")
+                .sessionKind(SessionKind.SUBAGENT.code())
+                .subAgentType("report-only")
+                .build());
+        factory.setSubAgentSessionToolScope(new SubAgentSessionToolScope(registry, ledger));
+
+        ToolCollection toolCollection = factory.buildForReact(
+                buildAgentContextWithSession("sub_agent-1"), buildAgentExecutionCommand("html"));
+
+        Assert.assertTrue(toolCollection.getToolMap().containsKey("deep_search"));
+        Assert.assertFalse("定义外的工具不得进入子会话",
+                toolCollection.getToolMap().containsKey("code_execution"));
+        Assert.assertFalse(toolCollection.getToolMap().containsKey("Agent"));
+    }
+
+    @Test
+    public void mainSessionKeepsFullToolPoolEvenWhenTypeIsMissing() {
+        AgentToolCollectionFactory factory = newFactory(
+                buildCuteConfig(),
+                Mockito.mock(McpToolExecutor.class),
+                Mockito.mock(DefaultSkillRegistry.class),
+                SkillRuntimeOptions.builder().enabled(false).build(),
+                disabledWorkspaceService(),
+                disabledWorkspaceOptions());
+        // 历史子会话没有类型：不裁剪，行为与改造前一致
+        IExecutionLedgerReadRepository ledger = Mockito.mock(IExecutionLedgerReadRepository.class);
+        Mockito.when(ledger.querySessionEntity("sub_legacy")).thenReturn(DialogueSession.builder()
+                .sessionId("sub_legacy")
+                .sessionKind(SessionKind.SUBAGENT.code())
+                .build());
+        factory.setSubAgentSessionToolScope(new SubAgentSessionToolScope(new SubAgentRegistry(), ledger));
+
+        ToolCollection toolCollection = factory.buildForReact(
+                buildAgentContextWithSession("sub_legacy"), buildAgentExecutionCommand("html"));
+
+        Assert.assertTrue(toolCollection.getToolMap().containsKey("code_execution"));
     }
 
     @Test
@@ -553,7 +617,6 @@ public class AgentToolCollectionFactoryTest {
         ToolCollection parentToolCollection = factory.buildForPlanSolve(parentContext, request);
         parentContext.setToolCollection(parentToolCollection);
         parentContext.setTask("父任务");
-        parentContext.getProductFiles().add(File.builder().fileName("parent-session.md").ossUrl("https://parent/session").domainUrl("https://parent/session").isInternalFile(false).build());
 
         JSONObject parentEmployees = new JSONObject();
         parentEmployees.put("document_generate", "父数字员工");
@@ -579,13 +642,10 @@ public class AgentToolCollectionFactoryTest {
         JSONObject childEmployees = new JSONObject();
         childEmployees.put("document_generate", "子数字员工");
         childToolCollection.updateDigitalEmployee(childEmployees);
-        childContext.getProductFiles().add(File.builder().fileName("child-session.md").ossUrl("https://child/session").domainUrl("https://child/session").isInternalFile(false).build());
         childContext.getCurrentToolArtifactSourceHolder().set(null);
 
         Assert.assertEquals("父任务", parentToolCollection.getCurrentTask());
         Assert.assertEquals("父数字员工", parentToolCollection.getDigitalEmployee("document_generate"));
-        Assert.assertEquals(1, parentContext.getProductFiles().size());
-        Assert.assertEquals(2, childContext.getProductFiles().size());
     }
 
     @Test
@@ -1116,6 +1176,22 @@ public class AgentToolCollectionFactoryTest {
         Assert.assertTrue(properties.containsKey("encryption"));
     }
 
+    /** 指定 sessionId 的上下文：AgentContext 不提供 setter，只能重建。 */
+    private AgentContext buildAgentContextWithSession(String sessionId) {
+        AgentContext base = buildAgentContext();
+        CuteRuntimeDependencies dependencies = base.getRuntimeDependencies();
+        return AgentContext.builder()
+                .requestId(base.getRequestId())
+                .sessionId(sessionId)
+                .query(base.getQuery())
+                .task("")
+                .printer(new SilentPrinter())
+                .runtimeDependencies(dependencies)
+                .basePrompt("")
+                .dateInfo("2026-05-10")
+                .build();
+    }
+
     private AgentContext buildAgentContext() {
         // 子 Agent 依赖现在由 runtimeDependencies 承载，工具从 context 取。
         SubAgentRegistry subAgentRegistry = new SubAgentRegistry();
@@ -1134,7 +1210,6 @@ public class AgentToolCollectionFactoryTest {
                 .query("测试 skill 工具装配")
                 .task("")
                 .printer(new SilentPrinter())
-                .productFiles(new ArrayList<>())
                 .runtimeDependencies(runtimeDependencies)
                 .basePrompt("")
                 .dateInfo("2026-05-10")

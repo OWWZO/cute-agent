@@ -36,8 +36,8 @@ public final class FileArtifactUploader {
             if (request == null) {
                 return ToolResultPayload.failureFrom("文件上传请求为空", null);
             }
-            CuteConfig config = requireCuteConfig();
-            FileArtifactPort fileArtifactPort = requireFileArtifactPort();
+            CuteConfig config = agentContext.requireRuntimeDependencies().requireCuteConfig();
+            FileArtifactPort fileArtifactPort = agentContext.requireRuntimeDependencies().requireFileArtifactPort();
 
             request.setRequestId(StringUtils.defaultIfBlank(
                     agentContext.getSessionId(), agentContext.getRequestId()));
@@ -81,17 +81,4 @@ public final class FileArtifactUploader {
         }
     }
 
-    private CuteConfig requireCuteConfig() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("FileArtifactUploader 缺少 CuteRuntimeDependencies");
-        }
-        return agentContext.getRuntimeDependencies().requireCuteConfig();
-    }
-
-    private FileArtifactPort requireFileArtifactPort() {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("FileArtifactUploader 缺少 CuteRuntimeDependencies");
-        }
-        return agentContext.getRuntimeDependencies().requireFileArtifactPort();
-    }
 }

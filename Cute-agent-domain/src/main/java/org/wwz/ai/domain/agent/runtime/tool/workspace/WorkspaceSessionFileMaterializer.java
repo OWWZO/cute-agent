@@ -7,7 +7,6 @@ import org.springframework.stereotype.Component;
 import org.wwz.ai.domain.agent.adapter.port.FileArtifactPort;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionFile;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
-import org.wwz.ai.domain.agent.runtime.dto.File;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -110,36 +109,7 @@ public class WorkspaceSessionFileMaterializer {
             }
         }
 
-        // 同步一份到 productFiles 描述，便于后续工具侧感知“本地路径”
-        // 这里只补充 workspace 标记，不覆盖原始 URL 或文件元数据。
-        annotateProductFiles(agentContext, written);
         return written;
-    }
-
-    private void annotateProductFiles(AgentContext agentContext, List<String> written) {
-        if (written.isEmpty() || agentContext.getProductFiles() == null) {
-            return;
-        }
-        Set<String> writtenSet = new HashSet<>();
-        for (String name : written) {
-            writtenSet.add(name.toLowerCase(Locale.ROOT));
-        }
-        for (File productFile : agentContext.getProductFiles()) {
-            if (productFile == null || StringUtils.isBlank(productFile.getFileName())) {
-                continue;
-            }
-            String baseName = Path.of(productFile.getFileName()).getFileName().toString();
-            if (!writtenSet.contains(baseName.toLowerCase(Locale.ROOT))) {
-                continue;
-            }
-            String desc = productFile.getDescription();
-            String marker = "workspace:" + baseName;
-            if (StringUtils.isBlank(desc)) {
-                productFile.setDescription(marker);
-            } else if (!desc.contains(marker)) {
-                productFile.setDescription(desc + " | " + marker);
-            }
-        }
     }
 
     private String resolveSafeFileName(AgentExecutionFile sessionFile, Set<String> usedNames) {

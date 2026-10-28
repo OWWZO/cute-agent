@@ -30,7 +30,7 @@ public final class AgentBootstrap {
     }
 
     public static CuteConfig configure(BaseAgent agent, AgentContext context, Profile profile) {
-        CuteRuntimeDependencies deps = agent.requireRuntimeDependencies(context);
+        CuteRuntimeDependencies deps = context.requireRuntimeDependencies();
         CuteConfig config = deps.requireCuteConfig();
         agent.setName(profile.name());
         agent.setDescription(profile.description());

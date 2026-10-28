@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 
 /**
  * 当前请求运行期内的工具产物登记簿。
- * registry 是生成文件来源的唯一事实来源，productFiles 仅作为兼容视图维护。
+ * registry 是生成文件来源的唯一事实来源。
  */
 public class ToolArtifactRegistry {
 
@@ -21,12 +21,9 @@ public class ToolArtifactRegistry {
      * 登记一个生成的文件
      * @param source           文件来源（哪个工具调用产生的）
      * @param file             要登记的文件
-     * @param productFiles 兼容视图：所有产物文件（外部传入的列表，会被修改）
      * @return 创建或已存在的绑定对象
      */
-    public synchronized ToolArtifactBinding registerGeneratedFile(ToolArtifactSource source,
-                                                                  File file,
-                                                                  List<File> productFiles) {
+    public synchronized ToolArtifactBinding registerGeneratedFile(ToolArtifactSource source, File file) {
         // 参数校验
         Objects.requireNonNull(source, "toolArtifactSource must not be null");
         Objects.requireNonNull(file, "file must not be null");
@@ -41,9 +38,6 @@ public class ToolArtifactRegistry {
         if (!containsBinding(binding)) {
             bindings.add(binding);
         }
-
-        // 同步更新会话级兼容视图；内部文件也要保留，供后续工具继续引用。
-        addFileIfAbsent(productFiles, file);
         return binding;
     }
 
@@ -87,26 +81,6 @@ public class ToolArtifactRegistry {
             && Objects.equals(readFileName(left), readFileName(right))
             && Objects.equals(readFileUrl(left), readFileUrl(right))
             && Objects.equals(readInternalFlag(left), readInternalFlag(right));
-    }
-
-    /** 文件加入列表（去重） */
-    private void addFileIfAbsent(List<File> targetFiles, File candidate) {
-        for (File existing : targetFiles) {
-            if (sameFile(existing, candidate)) {
-                return;  // 已存在，跳过
-            }
-        }
-        targetFiles.add(candidate);
-    }
-
-    /** 文件是否相同：比较 文件名、URL、是否内部文件 */
-    private boolean sameFile(File left, File right) {
-        if (left == null || right == null) {
-            return false;
-        }
-        return Objects.equals(left.getFileName(), right.getFileName())
-            && Objects.equals(resolveFileUrl(left), resolveFileUrl(right))
-            && Objects.equals(Boolean.TRUE.equals(left.getIsInternalFile()), Boolean.TRUE.equals(right.getIsInternalFile()));
     }
 
     // ========== 安全取值工具方法 ==========

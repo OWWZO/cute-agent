@@ -16,9 +16,11 @@ import org.wwz.ai.domain.agent.image.model.ImageGenerationExecutionResult;
 import org.wwz.ai.domain.agent.image.model.WorkspaceImageFile;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ImageGenerationToolOutput;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolFileRef;
-import org.wwz.ai.domain.agent.image.service.IImageGenerationExecutionKernel;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
+import java.util.Base64;
 import java.util.stream.Collectors;
 
 /**
@@ -27,9 +29,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ImageGenerationTool implements BaseTool {
 
-    private static final String DESCRIPTION = "本工具用于文生图和图生图。用户要求基于当前轮上传图片修改、换风格、扩图时应优先调用它；未显式传 fileNames 时系统可自动复用当前轮上传图片，输出图片会自动保存为当前会话产物。";
+    private static final String DESCRIPTION = "本工具用于文生图和图生图。用户要求基于已有图片修改、换风格、扩图时应优先调用它；此时必须显式传 fileNames 指定参考图（工作区相对路径或 http(s) URL）。未传 fileNames 时按文生图处理，不会自动复用上传图片。输出图片会自动保存为当前会话产物。";
     private static final String PARAMS = """
-            {"type":"object","properties":{"prompt":{"type":"string","description":"图片生成或编辑指令，需要明确主体、风格、构图、质感及修改要求。"},"mode":{"type":"string","enum":["images","edits"],"description":"生成模式，images 表示文生图，edits 表示图生图。用户明确要求忽略上传图片时传 images。"},"fileNames":{"type":"array","items":{"type":"string"},"description":"图生图参考图片列表，可来自当前会话已有图片；未显式传入时系统可自动复用当前轮上传图片。"},"maskFileNames":{"type":"array","items":{"type":"string"},"description":"可选的涂抹参考图列表，与 fileNames 一一对应。"},"size":{"type":"string","description":"输出尺寸，例如 1024x1024、1536x1024。"},"n":{"type":"integer","description":"期望生成的图片数量。"}},"required":["prompt"]}
+            {"type":"object","properties":{"prompt":{"type":"string","description":"图片生成或编辑指令，需要明确主体、风格、构图、质感及修改要求。"},"mode":{"type":"string","enum":["images","edits"],"description":"生成模式，images 表示文生图，edits 表示图生图。用户明确要求忽略已有图片时传 images。"},"fileNames":{"type":"array","items":{"type":"string"},"description":"图生图参考图片列表，可填工作区相对路径（如 cat.png、output/cat.png）或 http(s) URL；不传则不做图生图。"},"maskFileNames":{"type":"array","items":{"type":"string"},"description":"可选的涂抹参考图列表，与 fileNames 一一对应。"},"size":{"type":"string","description":"输出尺寸，例如 1024x1024、1536x1024。"},"n":{"type":"integer","description":"期望生成的图片数量。"}},"required":["prompt"]}
             """;
 
     private static final String MODE_IMAGES = "images";
@@ -65,17 +67,10 @@ public class ImageGenerationTool implements BaseTool {
             }
 
             String mode = StringUtils.trimToEmpty(valueAsString(params.get("mode")));
-            List<String> fileNames = toStringList(params.get("fileNames"));
-            // 仅在未显式要求文生图时，才兜底复用当前轮图片，避免误伤明确的 images 模式。
-            if (fileNames.isEmpty() && shouldReuseContextImages(mode)) {
-                fileNames = collectContextImageFileNames(context);
-            } else {
-                // Agent 常传裸文件名；先映射到 productFiles 里的可访问 URL，避免按 sessionId 重拼 preview 导致 404。
-                fileNames = resolveReferenceList(fileNames, context);
-            }
-            List<String> maskFileNames = resolveReferenceList(toStringList(params.get("maskFileNames")), context);
+            List<String> fileNames = resolveImageReferences(toStringList(params.get("fileNames")), context);
+            List<String> maskFileNames = resolveImageReferences(toStringList(params.get("maskFileNames")), context);
             ToolArtifactSource artifactSource = context.requireCurrentToolArtifactSource(getName());
-            ImageGenerationExecutionResult result = requireKernel(context).execute(ImageGenerationExecuteCommand.builder()
+            ImageGenerationExecutionResult result = context.requireRuntimeDependencies().requireImageGenerationExecutionKernel().execute(ImageGenerationExecuteCommand.builder()
                     // 图片产物目录按 session 归档，和其他工具保持一致，便于会话内统一查看文件。
                     .requestId(context.getSessionId())
                     .prompt(prompt)
@@ -97,13 +92,6 @@ public class ImageGenerationTool implements BaseTool {
                     context == null ? "unknown" : context.getRequestId(), input, e);
             return buildFailurePayload("image_generation_tool 执行失败：" + e.getMessage());
         }
-    }
-
-    private IImageGenerationExecutionKernel requireKernel(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("ImageGenerationTool 缺少 CuteRuntimeDependencies");
-        }
-        return context.getRuntimeDependencies().requireImageGenerationExecutionKernel();
     }
 
     private void appendGeneratedArtifacts(ImageGenerationExecutionResult result, ToolArtifactSource artifactSource, AgentContext context) {
@@ -143,52 +131,17 @@ public class ImageGenerationTool implements BaseTool {
         context.getPrinter().send(messageId, "file", resultMap, digitalEmployee, true);
     }
 
-    private List<String> collectContextImageFileNames(AgentContext context) {
-        if (context.getProductFiles() == null) {
-            return Collections.emptyList();
-        }
-        return context.getProductFiles().stream()
-                .filter(Objects::nonNull)
-                .filter(this::isImageFile)
-                .map(this::resolveImageReference)
-                .filter(StringUtils::isNotBlank)
-                .collect(Collectors.toList());
-    }
-
-    private boolean shouldReuseContextImages(String mode) {
-        return StringUtils.isBlank(mode) || MODE_EDITS.equals(mode);
-    }
-
-    private boolean isImageFile(File file) {
-        return file != null && isImageFileName(file.getFileName());
-    }
-
-    private boolean isImageFileName(String fileName) {
-        if (StringUtils.isBlank(fileName) || !fileName.contains(".")) {
-            return false;
-        }
-        String extension = StringUtils.substringAfterLast(fileName, ".").toLowerCase(Locale.ROOT);
-        return Arrays.asList("png", "jpg", "jpeg", "gif", "webp", "bmp", "svg").contains(extension);
-    }
-
     /**
-     * 复用会话图片时优先使用可直接访问的 URL，避免下游按当前 requestId 重拼预览地址导致 404。
+     * 把 Agent 给的图片引用归一为下游可直接消费的字符串，按输入形态分流两条路径。
+     * <ul>
+     *   <li>{@code http(s)://} 与 {@code data:}：原样透传，由下游 {@code loadImageReference}
+     *       的对应分支处理——网络 URL 走 HTTP GET 下载后转 data URL。</li>
+     *   <li>其余视为工作区相对路径：{@code Files.readAllBytes} 直读本地字节转 data URL，
+     *       跳过 preview URL 那趟自调用 HTTP。</li>
+     * </ul>
+     * 解析失败（文件不存在 / 路径越界 / 绝对路径）时保留原值，交由下游报出明确错误。
      */
-    private String resolveImageReference(File file) {
-        if (StringUtils.isNotBlank(file.getDomainUrl())) {
-            return file.getDomainUrl();
-        }
-        if (StringUtils.isNotBlank(file.getOssUrl())) {
-            return file.getOssUrl();
-        }
-        return file.getFileName();
-    }
-
-    /**
-     * 把 agent 传入的 fileNames/maskFileNames 解析为可下载引用。
-     * 优先保留 http(s)/data URL；裸文件名则匹配会话 productFiles 的 domainUrl/ossUrl。
-     */
-    private List<String> resolveReferenceList(List<String> refs, AgentContext context) {
+    private List<String> resolveImageReferences(List<String> refs, AgentContext context) {
         if (refs == null || refs.isEmpty()) {
             return new ArrayList<>();
         }
@@ -202,15 +155,50 @@ public class ImageGenerationTool implements BaseTool {
                 resolved.add(value);
                 continue;
             }
-            String mapped = findProductFileUrl(value, context);
-            if (StringUtils.isNotBlank(mapped)) {
-                resolved.add(mapped);
-            } else {
-                // 保留原值，交给下游 previewBaseUrl + requestId 兜底拼接
-                resolved.add(value);
-            }
+            String dataUrl = readWorkspaceImageAsDataUrl(context, value);
+            resolved.add(StringUtils.isNotBlank(dataUrl) ? dataUrl : value);
         }
         return resolved;
+    }
+
+    /**
+     * 读工作区内图片文件并转 data URL。
+     * <p>只接受工作区相对路径：绝对路径、越界路径（含 {@code ../}）一律返回 null，
+     * 避免 Agent 借引用读到工作区外的任意文件。相对路径可含子目录（{@code output/cat.png}），
+     * 不做 basename 截断。</p>
+     */
+    private String readWorkspaceImageAsDataUrl(AgentContext context, String relativePath) {
+        try {
+            Path root = resolveWorkspaceRoot(context);
+            if (root == null || StringUtils.isBlank(relativePath)) {
+                return null;
+            }
+            Path candidate = Path.of(relativePath.trim());
+            if (candidate.isAbsolute()) {
+                return null;
+            }
+            Path file = root.resolve(candidate).normalize();
+            if (!file.startsWith(root) || !Files.isRegularFile(file)) {
+                return null;
+            }
+            byte[] bytes = Files.readAllBytes(file);
+            String mime = Files.probeContentType(file);
+            return "data:" + (StringUtils.isBlank(mime) ? "image/png" : mime) + ";base64,"
+                    + Base64.getEncoder().encodeToString(bytes);
+        } catch (Exception e) {
+            log.warn("read workspace image failed sessionId={} path={}",
+                    context == null ? "unknown" : context.getSessionId(), relativePath, e);
+            return null;
+        }
+    }
+
+    /** 解析并规范化工作区根；未配置或目录不存在时返回 null。 */
+    private Path resolveWorkspaceRoot(AgentContext context) {
+        if (context == null || StringUtils.isBlank(context.getWorkspaceRoot())) {
+            return null;
+        }
+        Path root = Path.of(context.getWorkspaceRoot().trim()).toAbsolutePath().normalize();
+        return Files.isDirectory(root) ? root : null;
     }
 
     private boolean looksLikeDirectUrl(String value) {
@@ -220,55 +208,6 @@ public class ImageGenerationTool implements BaseTool {
                 || lower.startsWith("data:")
                 || lower.contains("/preview/")
                 || lower.contains("/download/");
-    }
-
-    private String findProductFileUrl(String fileNameOrPath, AgentContext context) {
-        if (context == null || context.getProductFiles() == null) {
-            return null;
-        }
-        String wanted = basename(fileNameOrPath);
-        if (StringUtils.isBlank(wanted)) {
-            return null;
-        }
-        for (File file : context.getProductFiles()) {
-            if (file == null || StringUtils.isBlank(file.getFileName())) {
-                continue;
-            }
-            if (!wanted.equalsIgnoreCase(basename(file.getFileName()))) {
-                continue;
-            }
-            String url = resolveImageReference(file);
-            if (StringUtils.isNotBlank(url) && !wanted.equals(url)) {
-                return url;
-            }
-        }
-        for (File file : context.getProductFiles()) {
-            if (file == null) {
-                continue;
-            }
-            for (String candidate : Arrays.asList(file.getDomainUrl(), file.getOssUrl())) {
-                if (StringUtils.isBlank(candidate)) {
-                    continue;
-                }
-                if (wanted.equalsIgnoreCase(basename(candidate))) {
-                    return candidate;
-                }
-            }
-        }
-        return null;
-    }
-
-    private static String basename(String path) {
-        if (path == null) {
-            return null;
-        }
-        String value = path.trim();
-        int q = value.indexOf('?');
-        if (q >= 0) {
-            value = value.substring(0, q);
-        }
-        int slash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
-        return slash >= 0 ? value.substring(slash + 1) : value;
     }
 
     private String resolveOutputFileName(Object rawValue) {

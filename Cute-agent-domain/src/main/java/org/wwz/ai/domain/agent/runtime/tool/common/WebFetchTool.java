@@ -4,7 +4,6 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.wwz.ai.domain.agent.adapter.port.RemoteHttpPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpRequest;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpResponse;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -139,14 +138,14 @@ public class WebFetchTool implements BaseTool {
     }
 
     private FetchedPage fetchFromPython(String url, AgentContext context) throws Exception {
-        CuteConfig config = requireCuteConfig(context);
+        CuteConfig config = context.requireRuntimeDependencies().requireCuteConfig();
         String endpoint = buildWebFetchEndpoint(config.getWebFetchUrl());
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("requestId", StringUtils.defaultIfBlank(requestId(context), "web-fetch"));
         requestBody.put("url", url);
         requestBody.put("timeoutSeconds", WEB_FETCH_SERVICE_TIMEOUT_SECONDS);
 
-        RemoteHttpResponse response = requireRemoteHttpPort(context).executeDetailed(RemoteHttpRequest.builder()
+        RemoteHttpResponse response = context.requireRuntimeDependencies().requireRemoteHttpPort().executeDetailed(RemoteHttpRequest.builder()
                 .method("POST")
                 .url(endpoint)
                 .headers(Map.of("Accept", "application/json", "Content-Type", "application/json"))
@@ -235,7 +234,7 @@ public class WebFetchTool implements BaseTool {
                 """.formatted(markdownContent, prompt);
 
         try {
-            CuteConfig config = requireCuteConfig(context);
+            CuteConfig config = context.requireRuntimeDependencies().requireCuteConfig();
             String modelName = StringUtils.defaultIfBlank(config.getSummaryModelName(), config.getReactModelName());
             LLM llm = new LLM(modelName, "", context.getRuntimeDependencies());
             // Prefer stream aggregation: some OpenAI-compatible gateways return empty/truncated
@@ -341,20 +340,6 @@ public class WebFetchTool implements BaseTool {
 
     private String requestId(AgentContext context) {
         return context == null ? "unknown" : StringUtils.defaultString(context.getRequestId(), "unknown");
-    }
-
-    private CuteConfig requireCuteConfig(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("WebFetchTool 缺少 CuteRuntimeDependencies");
-        }
-        return context.getRuntimeDependencies().requireCuteConfig();
-    }
-
-    private RemoteHttpPort requireRemoteHttpPort(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("WebFetchTool 缺少 CuteRuntimeDependencies");
-        }
-        return context.getRuntimeDependencies().requireRemoteHttpPort();
     }
 
     private static final class FetchHttpException extends IllegalStateException {

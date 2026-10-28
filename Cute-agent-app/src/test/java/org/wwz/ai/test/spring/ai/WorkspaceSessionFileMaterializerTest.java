@@ -7,7 +7,6 @@ import org.mockito.Mockito;
 import org.wwz.ai.domain.agent.adapter.port.FileArtifactPort;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionFile;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
-import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspacePathGuard;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceRuntimeOptions;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceService;
@@ -16,7 +15,6 @@ import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceSessionFileMateri
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -40,18 +38,10 @@ public class WorkspaceSessionFileMaterializerTest {
         fileArtifactPort = Mockito.mock(FileArtifactPort.class);
         materializer = new WorkspaceSessionFileMaterializer(workspaceService, fileArtifactPort);
 
-        List<File> productFiles = new ArrayList<>();
-        productFiles.add(File.builder()
-                .fileName("notes.md")
-                .ossUrl("https://file.example.com/notes.md")
-                .isInternalFile(false)
-                .build());
-
         agentContext = AgentContext.builder()
                 .requestId("req-mat-001")
                 .sessionId("session-mat-001")
                 .workspaceRoot(workspaceRoot.toString())
-                .productFiles(productFiles)
                 .build();
     }
 
@@ -72,7 +62,6 @@ public class WorkspaceSessionFileMaterializerTest {
         Path target = workspaceRoot.resolve("notes.md");
         Assert.assertTrue(Files.isRegularFile(target));
         Assert.assertTrue(Files.readString(target, StandardCharsets.UTF_8).contains("hello workspace"));
-        Assert.assertTrue(agentContext.getProductFiles().get(0).getDescription().contains("workspace:notes.md"));
     }
 
     @Test

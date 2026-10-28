@@ -5,7 +5,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * WebSearch 四家搜索提供方配置（{@code autobots.autoagent.web_search.*}）。
+ * WebSearch 四家搜索提供方配置（{@code autobots.autoagent.web-search.*}）。
  *
  * <p>从 {@code CuteConfig} 拆出：这 13 个字段只有 {@code WebSearchTool} 一个消费方，
  * 与 Agent 执行编排无耦合，混在共享配置里纯粹放大 CuteConfig 的面。</p>
@@ -16,10 +16,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * {@link HostCliProperties} 同一归属。</p>
  *
  * <p>字段默认值与拆出前 CuteConfig 上同名 {@code @Value} 冒号后的值逐一相同。</p>
+ *
+ * <p><b>注意 prefix 与 yml 键名的关系</b>：{@code @ConfigurationProperties} 的 prefix 本身
+ * 必须是 canonical kebab-case，写 {@code web_search} 会启动报
+ * {@code Invalid characters: '_'}。yml 里的键名仍写 {@code web_search}——
+ * relaxed binding 会把 {@code _} 归一化成 {@code -}，两者等价，无需改配置。</p>
  */
 @Data
 @Builder
-@ConfigurationProperties(prefix = "autobots.autoagent.web_search")
+@ConfigurationProperties(prefix = "autobots.autoagent.web-search")
 public class WebSearchProperties {
 
     /**

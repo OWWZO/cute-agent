@@ -114,7 +114,7 @@ public class WebSearchTool implements BaseTool {
             }
             // 缺失 HTTP 端口是配置问题，不是某个 provider 的失败：提前抛，
             // 否则每个 provider 都会以"Grok 缺少 RemoteHttpPort"的名义失败一遍。
-            requireHttpPort(context);
+            context.requireRuntimeDependencies().requireRemoteHttpPort();
 
             Exception lastError = null;
             // provider 按优先级逐个尝试；单个供应商超时或响应格式异常时，继续使用下一个可用后端。
@@ -143,11 +143,11 @@ public class WebSearchTool implements BaseTool {
     /** 按 plan 构造 provider；HTTP 端口惰性取，避免 provider 构造时就要求依赖齐备。 */
     private SearchProvider newProvider(ProviderPlan plan, AgentContext context) {
         return switch (plan.name()) {
-            case "grok" -> new GrokSearchProvider(() -> requireHttpPort(context));
-            case "gpt" -> new GptSearchProvider(() -> requireHttpPort(context));
-            case "exa" -> new ExaSearchProvider(() -> requireHttpPort(context));
-            case "tavily" -> new TavilySearchProvider(() -> requireHttpPort(context));
-            case "brave" -> new BraveSearchProvider(() -> requireHttpPort(context));
+            case "grok" -> new GrokSearchProvider(() -> context.requireRuntimeDependencies().requireRemoteHttpPort());
+            case "gpt" -> new GptSearchProvider(() -> context.requireRuntimeDependencies().requireRemoteHttpPort());
+            case "exa" -> new ExaSearchProvider(() -> context.requireRuntimeDependencies().requireRemoteHttpPort());
+            case "tavily" -> new TavilySearchProvider(() -> context.requireRuntimeDependencies().requireRemoteHttpPort());
+            case "brave" -> new BraveSearchProvider(() -> context.requireRuntimeDependencies().requireRemoteHttpPort());
             default -> throw new IllegalStateException("unknown provider: " + plan.name());
         };
     }
@@ -354,23 +354,11 @@ public class WebSearchTool implements BaseTool {
      * 那 13 个 getter 已从 CuteConfig 删除，回落只会把问题推到运行时才暴露。
      */
     private WebSearchProperties requireWebSearchProperties(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("WebSearchTool 缺少 CuteRuntimeDependencies");
-        }
-        WebSearchProperties properties = context.getRuntimeDependencies().getOptionalWebSearchProperties();
+        WebSearchProperties properties = context.requireRuntimeDependencies().getOptionalWebSearchProperties();
         if (properties == null) {
             throw new IllegalStateException("WebSearchTool 缺少 WebSearchProperties（检查 app 侧装配）");
         }
         return properties;
-    }
-
-    /** 惰性取 HTTP 端口；缺失时返回 null，由 provider 在使用处报错。 */
-    /** 依赖缺失时立即抛错，不让每个 provider 都以自己的名义失败一遍。 */
-    private RemoteHttpPort requireHttpPort(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("WebSearchTool 缺少 CuteRuntimeDependencies");
-        }
-        return context.getRuntimeDependencies().requireRemoteHttpPort();
     }
 
     /**

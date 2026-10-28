@@ -7,7 +7,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.memory.ltm.LtmMemoryGuard;
 import org.wwz.ai.domain.agent.memory.ltm.LtmPromptGuidance;
 import org.wwz.ai.domain.agent.runtime.stream.ToolResultStreamPayload;
-import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactFormatter;
 import org.wwz.ai.domain.agent.runtime.cancel.PendingInjectMessage;
 import org.wwz.ai.domain.agent.runtime.dto.Memory;
@@ -35,7 +34,6 @@ import org.wwz.ai.domain.agent.runtime.tool.common.skill.SkillViewTool;
 import org.wwz.ai.domain.agent.runtime.tool.deferred.DeferredToolCall;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillPromptIndexBuilder;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadStateStore;
-import org.wwz.ai.domain.agent.runtime.util.FileUtil;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -114,13 +112,6 @@ public abstract class BaseAgent {
      * 子类定义单步执行逻辑。
      */
     public abstract String step();
-
-    protected CuteRuntimeDependencies requireRuntimeDependencies(AgentContext agentContext) {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
-            throw new IllegalStateException(getClass().getSimpleName() + " 缺少 CuteRuntimeDependencies");
-        }
-        return agentContext.getRuntimeDependencies();
-    }
 
     protected <T> T awaitFuture(CompletableFuture<T> future) {
         try {
@@ -248,13 +239,6 @@ public abstract class BaseAgent {
         }
         if (query != null && !query.isEmpty()) {
             String userContent = query;
-            // 本轮上传/可用文件挂在 user 侧（不进 system，保护 prompt cache）
-            if (context != null && context.getProductFiles() != null && !context.getProductFiles().isEmpty()) {
-                String filesBlock = FileUtil.formatAvailableFilesUserBlock(context.getProductFiles());
-                if (StringUtils.isNotBlank(filesBlock)) {
-                    userContent = filesBlock + "\n\n" + userContent;
-                }
-            }
             // 深度记忆 prefetch 挂在 user 侧围栏；skip_memory 不注入
             if (context != null
                     && !Boolean.TRUE.equals(context.getSkipMemory())

@@ -120,7 +120,7 @@ public class DataAnalysisTool implements BaseTool {
         CompletableFuture<ToolResultPayload> future = new CompletableFuture<>();
         try {
             // 返回 Future 让调用方可以把流式分析纳入统一工具超时和取消机制。
-            CuteConfig duccConfig = requireCuteConfig(ctx);
+            CuteConfig duccConfig = ctx.requireRuntimeDependencies().requireCuteConfig();
             String url = duccConfig.getDataAnalysisUrl() + "/v1/tool/auto_analysis";
             log.info("{} auto_analysis request {}", ctx.getRequestId(), JSONObject.toJSONString(analysisRequest));
             String digitalEmployee = ctx.getToolCollection().getDigitalEmployee(getName());
@@ -129,7 +129,7 @@ public class DataAnalysisTool implements BaseTool {
             StringBuilder fullContentBuilder = new StringBuilder();
             List<CodeInterpreterResponse.FileInfo> finalFileInfo = new ArrayList<>();
 
-            requireRemoteStreamPort(ctx).openStream(RemoteStreamRequest.builder()
+            ctx.requireRuntimeDependencies().requireRemoteStreamPort().openStream(RemoteStreamRequest.builder()
                     .method("POST")
                     .url(url)
                     .headers(Map.of("Content-Type", "application/json"))
@@ -285,17 +285,4 @@ public class DataAnalysisTool implements BaseTool {
         return text.substring(0, maxLen) + "...";
     }
 
-    private CuteConfig requireCuteConfig(AgentContext ctx) {
-        if (ctx == null || ctx.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("DataAnalysisTool 缺少 CuteRuntimeDependencies");
-        }
-        return ctx.getRuntimeDependencies().requireCuteConfig();
-    }
-
-    private RemoteStreamPort requireRemoteStreamPort(AgentContext ctx) {
-        if (ctx == null || ctx.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("DataAnalysisTool 缺少 CuteRuntimeDependencies");
-        }
-        return ctx.getRuntimeDependencies().requireRemoteStreamPort();
-    }
 }

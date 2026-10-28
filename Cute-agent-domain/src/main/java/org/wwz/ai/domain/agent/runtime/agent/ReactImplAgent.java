@@ -77,7 +77,7 @@ public class ReactImplAgent extends ReActAgent {
      */
     @Override
     public boolean think() {
-        // system 固定；productFiles/nextStep 不注入（prompt cache）。
+        // system 固定；nextStep 不注入（prompt cache）。
         ensureQueryMessage();
         try {
             // 正文 delta 走 agent_stream（前端把它增量拼进结论区 → openui 块能流式渐进渲染）。

@@ -9,7 +9,10 @@ import org.wwz.ai.domain.agent.runtime.tool.mcp.model.McpToolInfo;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentDefinition;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentSessionToolScope;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentToolFilter;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner;
 import org.wwz.ai.domain.agent.runtime.tool.common.AgentDispatchTool;
 import org.wwz.ai.domain.agent.runtime.askuser.PendingUserQuestionRegistry;
@@ -127,6 +130,17 @@ public class AgentToolCollectionFactory {
     private final PendingUserQuestionRegistry pendingUserQuestionRegistry;
     private final PendingPlanApprovalRegistry pendingPlanApprovalRegistry;
 
+    /**
+     * 按会话身份解析子 Agent 定义；setter 注入以避免改动 {@code @RequiredArgsConstructor}
+     * 已固定的构造器签名（大量测试直接 new 本类）。
+     */
+    private SubAgentSessionToolScope subAgentSessionToolScope;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setSubAgentSessionToolScope(SubAgentSessionToolScope scope) {
+        this.subAgentSessionToolScope = scope;
+    }
+
     public ToolCollection buildForReact(AgentContext agentContext, AgentExecutionCommand request) {
         return build(agentContext, request, SkillAttachScope.REACT);
     }
@@ -184,7 +198,7 @@ public class AgentToolCollectionFactory {
         // 工具集合是一次请求的能力快照：先绑定上下文和工作区，再按 outputStyle、
         // 配置白名单及 attachScope 装配工具，最后补 MCP、子 Agent 和 Plan Mode 能力。
         // 所有工具复用同一 AgentContext，才能保持 artifact、取消和 ledger 关联。
-        CuteRuntimeDependencies runtimeDependencies = requireRuntimeDependencies(agentContext);
+        CuteRuntimeDependencies runtimeDependencies = agentContext.requireRuntimeDependencies();
         ensureWorkspaceRoot(agentContext);
         ToolCollection toolCollection = new ToolCollection();
         toolCollection.setAgentContext(agentContext);
@@ -315,7 +329,28 @@ public class AgentToolCollectionFactory {
         if (!"dataAgent".equals(request.getOutputStyle())) {
             registerPlanModeTools(toolCollection);
         }
-        return toolCollection;
+        return applySubAgentSessionScope(toolCollection, agentContext);
+    }
+
+    /**
+     * 子会话按自身类型裁剪工具池（模式 2：用户直聊子会话）。
+     * <p>
+     * 模式 1（父派发）在 {@code SubAgentRunner} 里已经用同一份定义过滤过一次，这里拿不到
+     * {@code sub_agent_type} 就原样返回；模式 2 没有父上下文，只能靠会话行里的类型重建。
+     * 两条入口因此收敛到「工具池由会话身份决定」。
+     * </p>
+     */
+    private ToolCollection applySubAgentSessionScope(ToolCollection toolCollection, AgentContext agentContext) {
+        if (agentContext == null || agentContext.isSubAgent() || subAgentSessionToolScope == null) {
+            return toolCollection;
+        }
+        SubAgentDefinition definition = subAgentSessionToolScope.resolve(agentContext.getSessionId());
+        if (definition == null) {
+            return toolCollection;
+        }
+        ToolCollection scoped = SubAgentToolFilter.filter(toolCollection, definition);
+        scoped.setAgentContext(agentContext);
+        return scoped;
     }
 
     /**
@@ -525,7 +560,10 @@ public class AgentToolCollectionFactory {
             return;
         }
         try {
-            agentContext.setWorkspaceRoot(workspaceService.resolveAndEnsureRoot(agentContext.getSessionId()).toString());
+            // 沿 parent_session_id 上溯到根：子会话因此与父共享工作区。
+            // 主会话上溯返回自己，行为与改造前一致；模式 1 已在上面 return。
+            agentContext.setWorkspaceRoot(
+                    workspaceService.resolveSessionWorkspaceRoot(agentContext.getSessionId()).toString());
         } catch (Exception e) {
             log.warn("{} ensure workspace root failed", agentContext.getRequestId(), e);
         }
@@ -711,13 +749,6 @@ public class AgentToolCollectionFactory {
             }
         }
         return false;
-    }
-
-    private CuteRuntimeDependencies requireRuntimeDependencies(AgentContext agentContext) {
-        if (agentContext == null || agentContext.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("AgentToolCollectionFactory 缺少 CuteRuntimeDependencies");
-        }
-        return agentContext.getRuntimeDependencies();
     }
 
     private boolean shouldAttachSkillTools(SkillAttachScope attachScope) {

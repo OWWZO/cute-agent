@@ -11,7 +11,6 @@ import org.wwz.ai.domain.agent.runtime.capability.SessionCapabilityService;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionFile;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
-import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.planmode.IPlanApprovalRepository;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
@@ -25,7 +24,6 @@ import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
 import org.wwz.ai.domain.agent.memory.ltm.LtmRuntimeBootstrap;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -112,7 +110,6 @@ public class PrepareAgentContextAssembly {
                 .disabledSkillNames(disabled.skills())
                 .disabledMcpIds(disabled.mcps())
                 .dateInfo(DateUtil.CurrentDateInfo())
-                .productFiles(new ArrayList<>(convertFiles(request.getSessionFiles())))
                 .workspaceRoot(resolveWorkspaceRoot(request.getSessionId()))
                 .basePrompt(request.getBasePrompt())
                 .workingMemoryMessages(request.getWorkingMemoryMessages())
@@ -240,26 +237,5 @@ public class PrepareAgentContextAssembly {
             log.warn("resolve workspace root failed, sessionId={}", sessionId, e);
             return null;
         }
-    }
-
-    private List<File> convertFiles(List<AgentExecutionFile> sessionFiles) {
-        if (sessionFiles == null || sessionFiles.isEmpty()) {
-            return List.of();
-        }
-        List<File> files = new ArrayList<>(sessionFiles.size());
-        for (AgentExecutionFile sessionFile : sessionFiles) {
-            files.add(File.builder()
-                    .fileName(sessionFile.getFileName())
-                    .description(sessionFile.getFileDesc())
-                    .ossUrl(sessionFile.getOssUrl())
-                    .domainUrl(sessionFile.getDomainUrl())
-                    .fileSize(sessionFile.getFileSize())
-                    .originFileName(sessionFile.getOriginFileName())
-                    .originOssUrl(sessionFile.getOriginOssUrl())
-                    .originDomainUrl(sessionFile.getOriginDomainUrl())
-                    .isInternalFile(Boolean.FALSE)
-                    .build());
-        }
-        return files;
     }
 }

@@ -31,7 +31,7 @@ public class ToolArtifactBindingRuntimeTest {
         context.registerGeneratedArtifact(source, createFile("report.md",
                 "https://file.example.com/public/report.md", "最终报告", false));
 
-        Assert.assertEquals(2, context.getProductFiles().size());
+        Assert.assertEquals(2, context.getArtifactBindingsByToolCallId("call-file-001").size());
         Assert.assertEquals(1, context.getVisibleArtifactFiles().size());
         Assert.assertEquals("report.md", context.getVisibleArtifactFiles().get(0).getFileName());
     }
@@ -62,7 +62,7 @@ public class ToolArtifactBindingRuntimeTest {
         Assert.assertEquals("call-sync-001", binding.getSource().getToolCallId());
         Assert.assertEquals("sync_artifact_tool", binding.getSource().getToolName());
         Assert.assertEquals("deliverable.md", binding.getFile().getFileName());
-        Assert.assertEquals(1, context.getProductFiles().size());
+        Assert.assertEquals(1, context.getArtifactBindingsByToolCallId("call-sync-001").size());
     }
 
     @Test
@@ -162,7 +162,6 @@ public class ToolArtifactBindingRuntimeTest {
                 .sessionId("session-artifact-001")
                 .query("验证工具产物来源绑定")
                 .toolCollection(toolCollection)
-                .productFiles(new ArrayList<>())
                 .build();
         toolCollection.setAgentContext(context);
         return context;

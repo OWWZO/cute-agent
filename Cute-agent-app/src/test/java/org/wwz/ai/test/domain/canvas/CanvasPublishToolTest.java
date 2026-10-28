@@ -12,7 +12,6 @@ import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
-import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.tool.common.canvas.CanvasPublishTool;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspacePaths;
@@ -21,7 +20,6 @@ import org.wwz.ai.test.domain.support.CuteRuntimeTestSupport;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -53,7 +51,7 @@ public class CanvasPublishToolTest {
     @Test
     public void shouldPublishExistingWorkspaceFileWithoutUploadOrRegister() throws Exception {
         FileArtifactPort fileArtifactPort = Mockito.mock(FileArtifactPort.class);
-        AgentContext agentContext = createAgentContext(fileArtifactPort, new ArrayList<>());
+        AgentContext agentContext = createAgentContext(fileArtifactPort);
         CanvasPublishTool tool = new CanvasPublishTool();
 
         Map<?, ?> parameters = (Map<?, ?>) tool.toParams();
@@ -87,7 +85,7 @@ public class CanvasPublishToolTest {
     @Test
     public void shouldRejectMissingHtmlPathWithoutFileServiceCalls() {
         FileArtifactPort fileArtifactPort = Mockito.mock(FileArtifactPort.class);
-        AgentContext agentContext = createAgentContext(fileArtifactPort, new ArrayList<>());
+        AgentContext agentContext = createAgentContext(fileArtifactPort);
 
         ToolResultPayload result = execute(agentContext, Map.of(
                 "title", "Canvas",
@@ -102,7 +100,7 @@ public class CanvasPublishToolTest {
     @Test
     public void shouldRejectInlineHtmlInput() {
         FileArtifactPort fileArtifactPort = Mockito.mock(FileArtifactPort.class);
-        AgentContext agentContext = createAgentContext(fileArtifactPort, new ArrayList<>());
+        AgentContext agentContext = createAgentContext(fileArtifactPort);
 
         ToolResultPayload result = execute(agentContext, Map.of(
                 "title", "Canvas",
@@ -114,7 +112,7 @@ public class CanvasPublishToolTest {
         Mockito.verifyNoInteractions(fileArtifactPort);
     }
 
-    private AgentContext createAgentContext(FileArtifactPort fileArtifactPort, List<File> productFiles) {
+    private AgentContext createAgentContext(FileArtifactPort fileArtifactPort) {
         CuteConfig cuteConfig = new CuteConfig();
         ReflectionTestUtils.setField(cuteConfig, "codeInterpreterUrl", "http://127.0.0.1:1601");
         CuteRuntimeDependencies base = CuteRuntimeTestSupport.runtimeDependencies(cuteConfig);
@@ -125,7 +123,6 @@ public class CanvasPublishToolTest {
                 .requestId("request-canvas-publish-direct-url")
                 .sessionId(SESSION_ID)
                 .runtimeDependencies(dependencies)
-                .productFiles(productFiles)
                 .build();
         context.bindCurrentToolArtifactSource(ToolArtifactSource.builder()
                 .sessionId(SESSION_ID)

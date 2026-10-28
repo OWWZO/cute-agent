@@ -5,7 +5,6 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamListener;
-import org.wwz.ai.domain.agent.adapter.port.RemoteStreamPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamRequest;
 
 import org.wwz.ai.domain.agent.runtime.dto.CodeInterpreterRequest;
@@ -21,11 +20,14 @@ import org.wwz.ai.domain.agent.runtime.util.StringUtil;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.CodeInterpreterToolOutput;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolFileRefMapper;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * 代码解释器工具。
@@ -79,7 +81,7 @@ public class CodeInterpreterTool implements BaseTool {
                     : String.valueOf(params.get("fileName"));
             String reportFileName = DeepSearchFileNamePolicy.resolveReportFileName(
                     requestedFileName, "代码解释器输出.md");
-            List<String> fileNames = ctx.getProductFiles().stream().map(File::getFileName).collect(Collectors.toList());
+            List<String> fileNames = listWorkspaceTopLevelFileNames(ctx);
             CodeInterpreterRequest request = CodeInterpreterRequest.builder()
                     .requestId(ctx.getSessionId()) // 适配多轮对话
                     .query(ctx.getQuery())
@@ -100,6 +102,33 @@ public class CodeInterpreterTool implements BaseTool {
     }
 
     /**
+     * 列出工作区顶层文件名，供 Python 侧感知可用的输入文件。
+     * 目录不存在 / workspaceRoot 未配置时返回空列表（降级，不抛异常）。
+     */
+    private List<String> listWorkspaceTopLevelFileNames(AgentContext ctx) {
+        String root = ctx == null ? null : ctx.getWorkspaceRoot();
+        if (StringUtils.isBlank(root)) {
+            return List.of();
+        }
+        try {
+            Path workspace = Path.of(root.trim());
+            if (!Files.isDirectory(workspace)) {
+                return List.of();
+            }
+            try (Stream<Path> entries = Files.list(workspace)) {
+                return entries
+                        .filter(Files::isRegularFile)
+                        .map(path -> path.getFileName().toString())
+                        .sorted()
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            log.warn("{} list workspace file names failed root={}", ctx.getRequestId(), root, e);
+            return List.of();
+        }
+    }
+
+    /**
      * 调用 CodeAgent：细粒度 SSE（任务/过程/步骤思考/代码/执行输出/结论）对齐 data_analysis 累加推送。
      */
     public CompletableFuture<ToolResultPayload> callCodeAgentStream(AgentContext ctx,
@@ -107,7 +136,7 @@ public class CodeInterpreterTool implements BaseTool {
                                                                     ToolArtifactSource artifactSource) {
         CompletableFuture<ToolResultPayload> future = new CompletableFuture<>();
         try {
-            CuteConfig cuteConfig = requireCuteConfig(ctx);
+            CuteConfig cuteConfig = ctx.requireRuntimeDependencies().requireCuteConfig();
             String url = cuteConfig.getCodeInterpreterUrl() + "/v1/tool/code_interpreter";
             log.info("{} code_interpreter request {}", ctx.getRequestId(), JSONObject.toJSONString(codeRequest));
             String digitalEmployee = ctx.getToolCollection().getDigitalEmployee(getName());
@@ -120,7 +149,7 @@ public class CodeInterpreterTool implements BaseTool {
                             .codeOutput("code_interpreter执行失败")
                             .build());
 
-            requireRemoteStreamPort(ctx).openStream(RemoteStreamRequest.builder()
+            ctx.requireRuntimeDependencies().requireRemoteStreamPort().openStream(RemoteStreamRequest.builder()
                     .method("POST")
                     .url(url)
                     .headers(Map.of("Content-Type", "application/json"))
@@ -347,17 +376,4 @@ public class CodeInterpreterTool implements BaseTool {
         );
     }
 
-    private CuteConfig requireCuteConfig(AgentContext ctx) {
-        if (ctx == null || ctx.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("CodeInterpreterTool 缺少 CuteRuntimeDependencies");
-        }
-        return ctx.getRuntimeDependencies().requireCuteConfig();
-    }
-
-    private RemoteStreamPort requireRemoteStreamPort(AgentContext ctx) {
-        if (ctx == null || ctx.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("CodeInterpreterTool 缺少 CuteRuntimeDependencies");
-        }
-        return ctx.getRuntimeDependencies().requireRemoteStreamPort();
-    }
 }

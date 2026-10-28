@@ -5,7 +5,6 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.wwz.ai.domain.agent.adapter.port.RemoteHttpPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpRequest;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
@@ -93,7 +92,7 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
         try {
             // 工具输入可能来自 JSON 字符串或结构化 Map，先统一成字符串键的参数表。
             Map<String, Object> params = ToolArgs.map(input);
-            CuteConfig config = requireCuteConfig(context);
+            CuteConfig config = context.requireRuntimeDependencies().requireCuteConfig();
             String base = StringUtils.trimToEmpty(config.getCodeInterpreterUrl());
             if (StringUtils.isBlank(base)) {
                 return failure(getName() + " 执行失败：未配置 autobots.autoagent.code_interpreter_url");
@@ -112,7 +111,7 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
             }
 
             long timeoutSeconds = timeoutSeconds();
-            String responseText = requireRemoteHttpPort(context).execute(RemoteHttpRequest.builder()
+            String responseText = context.requireRuntimeDependencies().requireRemoteHttpPort().execute(RemoteHttpRequest.builder()
                     .method("POST")
                     .url(url)
                     .headers(Map.of("Content-Type", "application/json"))
@@ -240,20 +239,6 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
 
     protected ToolResultPayload failure(String message) {
         return ToolResultPayload.failureFrom(message, null);
-    }
-
-    protected CuteConfig requireCuteConfig(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            throw new IllegalStateException(getName() + " 缺少 CuteRuntimeDependencies");
-        }
-        return context.getRuntimeDependencies().requireCuteConfig();
-    }
-
-    protected RemoteHttpPort requireRemoteHttpPort(AgentContext context) {
-        if (context == null || context.getRuntimeDependencies() == null) {
-            throw new IllegalStateException(getName() + " 缺少 CuteRuntimeDependencies");
-        }
-        return context.getRuntimeDependencies().requireRemoteHttpPort();
     }
 
     protected static Map<String, Object> stringProp(String description) {

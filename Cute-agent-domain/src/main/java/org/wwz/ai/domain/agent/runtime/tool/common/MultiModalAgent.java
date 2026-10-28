@@ -5,7 +5,6 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamListener;
-import org.wwz.ai.domain.agent.adapter.port.RemoteStreamPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamRequest;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamSession;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -97,7 +96,7 @@ public class MultiModalAgent implements BaseTool {
                 return buildFailurePayload("multimodalagent_tool 执行失败：question 不能为空。");
             }
 
-            CuteConfig cuteConfig = requireCuteConfig(agentContext);
+            CuteConfig cuteConfig = agentContext.requireRuntimeDependencies().requireCuteConfig();
             if (!StringUtils.hasText(cuteConfig.getMultiModalAgentUrl())) {
                 return buildFailurePayload("multimodalagent_tool 执行失败：未配置 multimodalagent_url。");
             }
@@ -142,7 +141,7 @@ public class MultiModalAgent implements BaseTool {
         // listener 只转发事件给局部 StreamState，避免并发调用共享缓冲区。
         CompletableFuture<ToolResultPayload> future = new CompletableFuture<>();
         try {
-            CuteConfig cuteConfig = requireCuteConfig(agentContext);
+            CuteConfig cuteConfig = agentContext.requireRuntimeDependencies().requireCuteConfig();
             String url = cuteConfig.getMultiModalAgentUrl() + "/v1/tool/mragQuery";
             log.info("{} multimodalagent_tool request {}", agentContext.getRequestId(),
                     JSONObject.toJSONString(multiModalAgentRequest));
@@ -152,7 +151,7 @@ public class MultiModalAgent implements BaseTool {
             int sendInterval = Integer.parseInt(interval[1]);
             // 单次调用局部 StreamState，避免并行 execute 抢写实例字段
             StreamState localState = new StreamState(agentContext, artifactSource, firstInterval, sendInterval, future);
-            RemoteStreamSession session = requireRemoteStreamPort(agentContext).openStream(RemoteStreamRequest.builder()
+            RemoteStreamSession session = agentContext.requireRuntimeDependencies().requireRemoteStreamPort().openStream(RemoteStreamRequest.builder()
                     .method("POST")
                     .url(url)
                     .headers(Map.of("Content-Type", "application/json"))
@@ -567,17 +566,4 @@ public class MultiModalAgent implements BaseTool {
         return result;
     }
 
-    private CuteConfig requireCuteConfig(AgentContext ctx) {
-        if (ctx == null || ctx.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("MultiModalAgent 缺少 CuteRuntimeDependencies");
-        }
-        return ctx.getRuntimeDependencies().requireCuteConfig();
-    }
-
-    private RemoteStreamPort requireRemoteStreamPort(AgentContext ctx) {
-        if (ctx == null || ctx.getRuntimeDependencies() == null) {
-            throw new IllegalStateException("MultiModalAgent 缺少 CuteRuntimeDependencies");
-        }
-        return ctx.getRuntimeDependencies().requireRemoteStreamPort();
-    }
 }
