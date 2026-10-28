@@ -114,3 +114,7 @@ Thumbs.db
 # 本地运行产物与分析图表，不纳入版本控制
 /.dogfood/
 /cute-tool/nl2sql-dataflow.*
+
+# 启动脚本的生成物（依赖 classpath 缓存与 JVM argfile），按需重建
+/scripts/.classpath.txt
+/scripts/.java-args.txt
