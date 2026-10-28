@@ -105,3 +105,17 @@ export function withLinkDefinitions(block: string, defs: string): string {
   }
   return `${block}\n\n${missing.join("\n")}`;
 }
+
+/**
+ * 批量为每个块补齐链接定义。
+ *
+ * 抽成单一入口是为了让调用方能用 `useMemo` 只算一次：流式时父组件每帧重渲染，
+ * 若在 render 里内联 `blocks.map(...)`，已落定的块每次也会拿到**新字符串**，
+ * 逐块 `memo` 的 `content` 比较永远不相等，块级增量直接失效。
+ */
+export function buildMarkdownBlockContents(
+  blocks: readonly string[],
+  defs: string
+): string[] {
+  return blocks.map((block) => withLinkDefinitions(block, defs));
+}

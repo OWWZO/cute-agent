@@ -490,11 +490,15 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
     };
   }, [cancelAutoScrollFrame]);
 
+  // 流式时 ActionPanel 每帧重渲染，内联对象会让 PanelProvider 的所有消费者
+  // 跟着重渲染；ref 是稳定对象，scrollToBottom 是 useMemoizedFn，依赖实际稳定。
+  const panelContextValue = useMemo(
+    () => ({ wrapRef: ref, scrollToBottom }),
+    [ref, scrollToBottom]
+  );
+
   return (
-    <PanelProvider value={{
-      wrapRef: ref,
-      scrollToBottom,
-    }}>
+    <PanelProvider value={panelContextValue}>
       <div
         className={cn(
           "w-full",

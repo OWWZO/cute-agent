@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useRequest } from "ahooks";
 import { downloadFile } from "@/utils";
 import { normalizeFileUrlForBrowser } from "@/utils/fileUrl";
@@ -60,13 +60,20 @@ const PdfRenderer: React.FC<PdfRendererProps> = React.memo((props) => {
 
   const displayName = fileName || "document.pdf";
 
+  const abortRef = useRef<AbortController | null>(null);
+  // 卸载时取消未完成的下载；切 URL 时由 service 自己 abort 上一个。
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   const { data: buffer, loading, error } = useRequest(
     async () => {
       // URL / 缺失原因变化会重新获取文档；先读完整 buffer 再交给 pdf.js，
       // 避免把远端响应流的生命周期泄漏到阅读器组件。
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
       if (missingReason) throw new Error(missingReason);
       if (!resolvedUrl) throw new Error("引用资源不存在或已失效");
-      const response = await fetch(resolvedUrl);
+      const response = await fetch(resolvedUrl, { signal: controller.signal });
       if (!response.ok) throw new Error("Network response was not ok");
       return await response.arrayBuffer();
     },

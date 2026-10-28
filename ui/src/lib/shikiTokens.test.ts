@@ -47,6 +47,26 @@ describe("tokenizeCode", () => {
     }]);
   });
 
+  // 纯文本同样要缓存：日志 / 输出块经常整段重渲染，不该每次都重建 token 数组。
+  it("returns the identical cached object for repeated plain text", async () => {
+    const code = "line one\nline two";
+    const first = await tokenizeCode(code, "text" as BundledLanguage, false);
+    const second = await tokenizeCode(code, "text" as BundledLanguage, false);
+    expect(second).toBe(first);
+  });
+
+  it("rebuilds raw tokens when the content changes", async () => {
+    const first = await tokenizeCode("alpha", "text" as BundledLanguage, false);
+    const second = await tokenizeCode("beta", "text" as BundledLanguage, false);
+    expect(second).not.toBe(first);
+    expect(second.tokens).toEqual([[
+      {
+        color: "inherit",
+        content: "beta"
+      }
+    ]]);
+  });
+
   // 回归：同一份代码重复高亮必须命中缓存。30KB HTML 单次 tokenize 实测 ~116ms，
   // 没有缓存时每次渲染都是这个量级，是「展开后整个前端卡住」的主因。
   it("returns the identical cached object for repeated calls", async () => {

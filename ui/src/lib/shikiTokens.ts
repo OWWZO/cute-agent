@@ -99,6 +99,33 @@ const tokenCache = new Map<string, TokenizedCode>();
 /** in-flight 请求：同一 key 的并发调用共用一次 tokenize。 */
 const pendingTokens = new Map<string, Promise<TokenizedCode>>();
 
+/** 纯文本 token 缓存：日志 / 输出块经常整段重渲染，重建成本不该每次都付。 */
+const rawTokenCache = new Map<string, TokenizedCode>();
+const MAX_RAW_TOKEN_CACHE_ENTRIES = 64;
+
+function createRawTokenCacheKey(code: string): string {
+  return `${code.length}:${hashContent(code)}`;
+}
+
+function readRawTokenCache(key: string): TokenizedCode | undefined {
+  const cached = rawTokenCache.get(key);
+  if (cached) {
+    rawTokenCache.delete(key);
+    rawTokenCache.set(key, cached);
+  }
+  return cached;
+}
+
+function writeRawTokenCache(key: string, value: TokenizedCode): void {
+  rawTokenCache.delete(key);
+  rawTokenCache.set(key, value);
+  while (rawTokenCache.size > MAX_RAW_TOKEN_CACHE_ENTRIES) {
+    const oldest = rawTokenCache.keys().next();
+    if (oldest.done) break;
+    rawTokenCache.delete(oldest.value);
+  }
+}
+
 function readTokenCache(key: string): TokenizedCode | undefined {
   const cached = tokenCache.get(key);
   if (cached) {
@@ -130,7 +157,14 @@ export function tokenizeCode(
   dark: boolean
 ): Promise<TokenizedCode> {
   if (!shouldUseSyntaxHighlighting(language)) {
-    return Promise.resolve({ tokens: createRawTokens(code) });
+    const rawKey = createRawTokenCacheKey(code);
+    const cachedRaw = readRawTokenCache(rawKey);
+    if (cachedRaw) {
+      return Promise.resolve(cachedRaw);
+    }
+    const value = { tokens: createRawTokens(code) };
+    writeRawTokenCache(rawKey, value);
+    return Promise.resolve(value);
   }
 
   const cacheKey = createTokenCacheKey(code, language, dark);
@@ -178,4 +212,5 @@ export function tokenizeCode(
 export function resetShikiTokenCache(): void {
   tokenCache.clear();
   pendingTokens.clear();
+  rawTokenCache.clear();
 }

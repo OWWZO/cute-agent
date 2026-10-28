@@ -241,7 +241,10 @@ const CodeViewerComponent: CuteType.FC<CodeViewerProps> = (props) => {
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
       for (const observer of observers) observer.disconnect();
     };
-  }, [canUseCommentGutterUtility, labels.addCommentTooltip]);
+    // file.cacheKey 没在闭包里直接读取，但切文件会重建库内部的 shadow root，
+    // 必须靠它重挂 observer；exhaustive-deps 会把它判成多余依赖。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseCommentGutterUtility, file.cacheKey, labels.addCommentTooltip]);
 
   const focusedStartLine = focusedRange?.startLine;
   const focusedEndLine = focusedRange?.endLine;

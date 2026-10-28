@@ -50,29 +50,35 @@ function toBounds(node: PresentationElementNodeInput): PresentationElementBounds
   };
 }
 
-function sum(values: readonly number[]) {
-  return values.reduce((total, value) => total + Math.max(0, value), 0);
-}
-
 function buildTableCellElements(
   node: PresentationElementNodeInput,
   base: Omit<PresentationPageElement, "bounds" | "nodeType">,
 ): PresentationPageElement[] {
-  if (!node.columns || !node.rows || node.columns.length === 0 || node.rows.length === 0) {
+  const columns = node.columns;
+  const rows = node.rows;
+  if (!columns || !rows || columns.length === 0 || rows.length === 0) {
     return [];
   }
-  const columnTotal = sum(node.columns);
-  const rowTotal = sum(node.rows.map((row) => row.height));
+
+  // 一次前缀和：列宽 / 行高的累加、单元格区间和都降为 O(1)，不再反复 slice + reduce。
+  const columnPrefix: number[] = [0];
+  for (const width of columns) {
+    columnPrefix.push((columnPrefix[columnPrefix.length - 1] ?? 0) + Math.max(0, width));
+  }
+  const rowPrefix: number[] = [0];
+  for (const row of rows) {
+    rowPrefix.push((rowPrefix[rowPrefix.length - 1] ?? 0) + Math.max(0, row.height));
+  }
+  const columnTotal = columnPrefix[columnPrefix.length - 1] ?? 0;
+  const rowTotal = rowPrefix[rowPrefix.length - 1] ?? 0;
   if (columnTotal <= 0 || rowTotal <= 0) {
     return [];
   }
 
-  const columnOffsets = node.columns.map((_, index) => sum(node.columns?.slice(0, index) ?? []));
-  const rowOffsets = node.rows.map((_, index) =>
-    sum(node.rows?.slice(0, index).map((row) => row.height) ?? []),
-  );
+  const columnOffsets = columns.map((_, index) => columnPrefix[index] ?? 0);
+  const rowOffsets = rows.map((_, index) => rowPrefix[index] ?? 0);
 
-  return node.rows.flatMap((row, rowIndex) => {
+  return rows.flatMap((row, rowIndex) => {
     let columnIndex = 0;
     return row.cells.flatMap((cell, cellIndex) => {
       const gridSpan = Math.max(1, cell.gridSpan || 1);
@@ -87,12 +93,11 @@ function buildTableCellElements(
       const startColumnIndex = columnIndex;
       columnIndex += gridSpan;
       const rowSpan = Math.max(1, cell.rowSpan || 1);
-      const cellWidth = sum(
-        node.columns?.slice(startColumnIndex, startColumnIndex + gridSpan) ?? [],
-      );
-      const cellHeight = sum(
-        node.rows?.slice(rowIndex, rowIndex + rowSpan).map((item) => item.height) ?? [],
-      );
+      const columnEnd = Math.min(startColumnIndex + gridSpan, columns.length);
+      const rowEnd = Math.min(rowIndex + rowSpan, rows.length);
+      const cellWidth =
+        (columnPrefix[columnEnd] ?? 0) - (columnPrefix[startColumnIndex] ?? 0);
+      const cellHeight = (rowPrefix[rowEnd] ?? 0) - (rowPrefix[rowIndex] ?? 0);
       return [
         {
           ...base,

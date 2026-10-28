@@ -36,7 +36,7 @@ export const getSearchList = (taskItem?: PanelItemType) => {
   ));
   if (messageType === 'tool_result') {
     if (toolName === 'search') {
-      const resultText = resolveTaskToolResultText(taskItem);
+      const resultText = resolveTaskToolResultText(taskItem, toolResult);
       let tool: any = {};
       try {
         tool = JSON.parse(resultText || "{}");
@@ -105,7 +105,9 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
     const { messageType } = taskItem;
     const resultMap = resolveTaskResultMap(taskItem);
     const toolResult = resolveTaskToolResult(taskItem);
-    const toolResultText = resolveTaskToolResultText(taskItem);
+    // 复用上面已解析的结果：否则内部会再跑一次 resolveTaskToolResult，
+    // 对象型 toolResult 在流式每帧都要重新 JSON.stringify。
+    const toolResultText = resolveTaskToolResultText(taskItem, toolResult);
     const rawToolName = String(toolResult?.toolName || "").toLowerCase();
     const primaryFile = getPrimaryTaskFile(taskItem);
     const fileName = primaryFile?.name || '';

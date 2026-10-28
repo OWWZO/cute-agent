@@ -3,6 +3,7 @@ import {
   getLightweightDiffLineParts,
   getPatchPreviewLineContent,
   getPlainTextPatchPreviewLines,
+  parseLightweightDiffRows,
   parseTruncatedMarkerOmittedLineCount,
 } from "./patchPreview";
 
@@ -72,5 +73,38 @@ describe("patchPreview", () => {
   it("空 patch 返回单个空行，调用方不必再分支", () => {
     expect(getPlainTextPatchPreviewLines("")).toEqual([""]);
     expect(parseTruncatedMarkerOmittedLineCount("+normal line")).toBeNull();
+  });
+});
+
+describe("parseLightweightDiffRows", () => {
+  it("普通行、+/- 行与截断标记解析为对应 kind", () => {
+    const rows = parseLightweightDiffRows([" ctx", "+added", "-removed"]);
+
+    expect(rows.map((row) => (row.kind === "line" ? row.parts.kind : row.kind))).toEqual([
+      "context",
+      "added",
+      "removed",
+    ]);
+  });
+
+  it("截断标记行单独成 omitted 行，其余行不受影响", () => {
+    const body = Array.from({ length: 1200 }, (_, index) => `+line ${index}`);
+    const lines = getPlainTextPatchPreviewLines(
+      ["--- a/x", "+++ b/x", "@@", ...body].join("\n")
+    );
+    const rows = parseLightweightDiffRows(lines);
+
+    expect(rows).toHaveLength(lines.length);
+    const omitted = rows.find((row) => row.kind === "omitted");
+    expect(omitted).toEqual({
+      kind: "omitted",
+      omittedLineCount: 1200 - 799,
+    });
+    // 除标记行外全部是 line 行
+    expect(rows.filter((row) => row.kind === "line")).toHaveLength(lines.length - 1);
+  });
+
+  it("空行数组返回空结果", () => {
+    expect(parseLightweightDiffRows([])).toEqual([]);
   });
 });

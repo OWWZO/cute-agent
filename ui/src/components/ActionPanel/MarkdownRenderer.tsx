@@ -13,9 +13,9 @@ import {
   rewriteMarkdownArtifactRefs,
 } from '@/utils/markdownArtifacts';
 import {
+  buildMarkdownBlockContents,
   collectLinkDefinitions,
   splitMarkdownBlocks,
-  withLinkDefinitions,
 } from '@/lib/markdownBlocks';
 
 /** `ReactMarkdown` 的 props 形状：块级组件只取插件相关的三个字段。 */
@@ -211,6 +211,12 @@ const MarkdownRenderer: CuteType.FC<{
     [normalizedContent]
   );
   const linkDefs = useMemo(() => collectLinkDefinitions(blocks), [blocks]);
+  // 只在 blocks / linkDefs 变化时拼一次；否则内联 map 会让每块的 content
+  // 每次渲染都是新字符串，MarkdownBlock 的 memo 永远不命中。
+  const blockContents = useMemo(
+    () => buildMarkdownBlockContents(blocks, linkDefs),
+    [blocks, linkDefs]
+  );
 
   if (!normalizedContent) {
     return (
@@ -226,15 +232,15 @@ const MarkdownRenderer: CuteType.FC<{
 
   return (
     <div className={cn('w-full markdown-body kimi-md', className)}>
-      {blocks.map((block, index) => (
+      {blockContents.map((content, index) => (
         <MarkdownBlock
           key={index}
-          content={withLinkDefinitions(block, linkDefs)}
+          content={content}
           remarkPlugins={remarkPlugins}
           rehypePlugins={rehypePlugins}
           // 已落定的块要补上 shiki / Mermaid；只有正在增长的最后一块跳过。
           components={
-            isStreaming && index === blocks.length - 1
+            isStreaming && index === blockContents.length - 1
               ? streamingComponents
               : settledComponents
           }

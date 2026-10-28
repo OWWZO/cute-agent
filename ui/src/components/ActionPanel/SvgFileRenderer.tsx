@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRequest } from "ahooks";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -69,11 +69,18 @@ const SvgFileRenderer: CuteType.FC<SvgFileRendererProps> = React.memo((props) =>
     [downloadUrl, fileUrl, resolvedUrl]
   );
 
+  const abortRef = useRef<AbortController | null>(null);
+  // 卸载时取消未完成的下载；切文件时由 service 自己 abort 上一个。
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   const { data: content, loading, error } = useRequest(
     async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
       if (missingReason) throw new Error(missingReason);
       if (!resolvedUrl) throw new Error("引用资源不存在或已失效");
-      const response = await fetch(resolvedUrl);
+      const response = await fetch(resolvedUrl, { signal: controller.signal });
       if (!response.ok) throw new Error("Network response was not ok");
       return response.text();
     },

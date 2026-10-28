@@ -12,6 +12,12 @@ import Loading from "./Loading";
 import DocumentFallback from "./DocumentFallback";
 import PreviewErrorBoundary from "./PreviewErrorBoundary";
 import XlsxSheetTabs from "./XlsxSheetTabs";
+import {
+  TABLE_MAX_FILE_SIZE_BYTES,
+  TableFileTooLargeError,
+  estimateUtf8Bytes,
+  isTableFileTooLarge,
+} from "./tableFileSize";
 
 const ERROR_CLASS =
   "m-12 md:m-24 min-w-[260px] max-w-[calc(100%-24px)] md:max-w-[calc(100%-48px)] [&_[data-slot=alert-description]]:break-words [&_[data-slot=alert-description]]:whitespace-normal";
@@ -54,6 +60,10 @@ const TableRenderer: CuteType.FC<TableRendererProps> = memo((props) => {
   const { fileUrl, mode, fileName, downloadUrl, missingReason, className } = props;
   const isDark = useIsDarkTheme();
   const viewerRef = useRef<HTMLDivElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // 卸载时取消还没下完的表格请求；切文件时由 service 自己 abort 上一个。
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const ext = (fileName || fileUrl).split(".").pop()?.toLowerCase();
   const fileType: "csv" | "excel" = mode || (ext && EXCEL_EXTENSIONS.has(ext) ? "excel" : "csv");
@@ -69,15 +79,28 @@ const TableRenderer: CuteType.FC<TableRendererProps> = memo((props) => {
     error,
   } = useRequest(
     async () => {
+      // 切换文件后旧请求继续下载只会白占带宽与内存；abort 后 ahooks 的
+      // run-count 守卫会忽略过期结果，取消不会变成错误态。
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       if (missingReason) {
         throw new Error(missingReason);
       }
       if (!resolvedUrl) {
         throw new Error("引用资源不存在或已失效");
       }
-      const res = await fetch(resolvedUrl);
+
+      const res = await fetch(resolvedUrl, { signal: controller.signal });
       if (!res.ok) {
         throw new Error("网络错误");
+      }
+
+      // 有 Content-Length 就先把明显超限的文件挡在读取 body 之前。
+      const contentLength = Number(res.headers.get("Content-Length") ?? "");
+      if (Number.isFinite(contentLength) && isTableFileTooLarge(contentLength)) {
+        throw new TableFileTooLargeError(contentLength);
       }
 
       if (fileType === "excel") {
@@ -85,7 +108,12 @@ const TableRenderer: CuteType.FC<TableRendererProps> = memo((props) => {
       }
 
       // CSV → 工作簿字节：SheetJS 只做一次格式转换，渲染仍交给 WASM 查看器。
+      // 大小检查必须在 `xlsx.read` 之前，否则主线程会先被大文件转换卡死。
       const text = await res.text();
+      const textBytes = estimateUtf8Bytes(text);
+      if (isTableFileTooLarge(textBytes)) {
+        throw new TableFileTooLargeError(textBytes);
+      }
       const xlsx = await loadXlsx();
       const workbook = xlsx.read(text, { type: "string", raw: false, FS: "," });
       return xlsx.write(workbook, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
@@ -122,7 +150,21 @@ const TableRenderer: CuteType.FC<TableRendererProps> = memo((props) => {
   }, [viewerModule, buffer]);
 
   const displayError = error ?? moduleError;
+  const renderFileTooLargeAlert = () => (
+    <Alert
+      variant="warning"
+      className={ERROR_CLASS}
+    >
+      <TriangleAlert />
+      <AlertTitle>文件过大</AlertTitle>
+      <AlertDescription>该表格超出在线预览的大小上限，请下载后用本地 Excel / WPS 打开。</AlertDescription>
+    </Alert>
+  );
+
   if (displayError) {
+    if (displayError instanceof TableFileTooLargeError) {
+      return renderFileTooLargeAlert();
+    }
     return (
       <Alert
         variant="destructive"
@@ -174,6 +216,8 @@ const TableRenderer: CuteType.FC<TableRendererProps> = memo((props) => {
           height="100%"
           isDark={isDark}
           readOnly
+          // 前端预检与查看器共用同一个上限，避免库默认值变化后口径漂移。
+          maxFileSizeBytes={TABLE_MAX_FILE_SIZE_BYTES}
           // 关掉库内置的解析 worker：它用 `new Worker(new URL("./xlsx-worker.js", import.meta.url))`
           // 建 worker，dev 下依赖预打包会把 `import.meta.url` 指到 `/node_modules/.vite/deps/`，
           // worker 被解析成不存在的 `/node_modules/.vite/deps/xlsx-worker.js`（404）→
@@ -201,16 +245,7 @@ const TableRenderer: CuteType.FC<TableRendererProps> = memo((props) => {
               <AlertDescription>{resolveUnavailableReason(err)}</AlertDescription>
             </Alert>
           )}
-          fileTooLargeState={() => (
-            <Alert
-              variant="warning"
-              className={ERROR_CLASS}
-            >
-              <TriangleAlert />
-              <AlertTitle>文件过大</AlertTitle>
-              <AlertDescription>该表格超出在线预览的大小上限，请下载后用本地 Excel / WPS 打开。</AlertDescription>
-            </Alert>
-          )}
+          fileTooLargeState={renderFileTooLargeAlert}
         />
       </PreviewErrorBoundary>
     </div>

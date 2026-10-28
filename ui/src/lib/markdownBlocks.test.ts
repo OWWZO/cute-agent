@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import ReactMarkdown from "react-markdown";
 import gfm from "remark-gfm";
 import {
+  buildMarkdownBlockContents,
   collectLinkDefinitions,
   splitMarkdownBlocks,
   withLinkDefinitions,
@@ -157,5 +158,32 @@ describe("markdownBlocks", () => {
     expect(withLinkDefinitions(`正文\n\n${defs}`, defs)).toBe(
       `正文\n\n${defs}`
     );
+  });
+
+  describe("buildMarkdownBlockContents", () => {
+    it("没有定义时输出与输入块逐一一致", () => {
+      const blocks = ["第一段", "第二段"];
+      expect(buildMarkdownBlockContents(blocks, "")).toEqual(blocks);
+    });
+
+    it("有定义时每个块都能解析出引用链接", () => {
+      const blocks = splitMarkdownBlocks("参见 [文档][ref]。\n\n[ref]: https://example.com");
+      const defs = collectLinkDefinitions(blocks);
+      const contents = buildMarkdownBlockContents(blocks, defs);
+
+      expect(contents).toHaveLength(blocks.length);
+      for (const content of contents) {
+        expect(content).toContain("[ref]: https://example.com");
+      }
+    });
+
+    it("同一输入两次调用输出内容一致", () => {
+      const blocks = ["正文", "另一段"];
+      const defs = "[r]: https://x.com";
+
+      expect(buildMarkdownBlockContents(blocks, defs)).toEqual(
+        buildMarkdownBlockContents(blocks, defs)
+      );
+    });
   });
 });

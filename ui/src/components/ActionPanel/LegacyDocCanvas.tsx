@@ -147,7 +147,9 @@ const LegacyDocCanvas: CuteType.FC<LegacyDocCanvasProps> = (props) => {
       )}
       data-office-preview-kind="doc"
     >
-      <div className="h-full min-h-0 w-full min-w-0 overflow-auto p-3 sm:p-4">
+      {/* scrollbar-gutter:stable 让 clientWidth 不随滚动条出现/消失变化，
+          否则 fit 计算的可用宽度来回跳，缩放会反复振荡。 */}
+      <div className="h-full min-h-0 w-full min-w-0 overflow-auto p-3 [scrollbar-gutter:stable] sm:p-4">
         <div ref={viewportRef} className="w-full min-w-0" data-docx-fit-viewport>
           <div
             className="relative mx-auto"

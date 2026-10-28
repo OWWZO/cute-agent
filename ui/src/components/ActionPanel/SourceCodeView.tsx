@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { CodeViewer, CodeWrapToggle } from "./codeViewer";
 import MermaidBlock from "./MermaidBlock";
 import PreviewModeToggle, { type PreviewViewMode } from "./PreviewModeToggle";
+import { estimateSourceBytes, truncateSourceToBytes } from "./sourceCodeBytes";
 
 /** 超过该字节数不做语法高亮：高亮是 CPU 密集操作，大文件会把主线程卡死。 */
 export const FILE_VIEWER_MAX_TEXT_BYTES = 256 * 1024;
@@ -32,18 +33,6 @@ interface SourceCodeViewProps {
   hideWrapToggle?: boolean;
 }
 
-const estimateByteLength = (code: string): number => {
-  if (code.length <= FILE_VIEWER_MAX_TEXT_BYTES / 4) {
-    // 字符数都远小于阈值时不必精确计算
-    return code.length;
-  }
-  try {
-    return new TextEncoder().encode(code).length;
-  } catch {
-    return code.length;
-  }
-};
-
 function getSourceTitle(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
@@ -62,7 +51,16 @@ function getSourceTitle(path: string): string {
  */
 const SourceCodeView: CuteType.FC<SourceCodeViewProps> = (props) => {
   const { code, language, className, sourcePath, wrapLongLines, hideWrapToggle = false } = props;
-  const tooLarge = useMemo(() => estimateByteLength(code) > FILE_VIEWER_MAX_TEXT_BYTES, [code]);
+  const tooLarge = useMemo(
+    () => estimateSourceBytes(code) > FILE_VIEWER_MAX_TEXT_BYTES,
+    [code]
+  );
+  // 超限时按 UTF-8 字节截断预览；直接把原串 slice 会按字符切，CJK 实际显示量是上限的 3 倍。
+  const fallbackCode = useMemo(
+    () =>
+      tooLarge ? truncateSourceToBytes(code, FILE_VIEWER_MAX_TEXT_BYTES) : "",
+    [code, tooLarge]
+  );
 
   const [globalWrap, , toggleGlobalWrap] = useCodePreviewWrap();
   const isWrapControlled = wrapLongLines !== undefined;
@@ -127,7 +125,7 @@ const SourceCodeView: CuteType.FC<SourceCodeViewProps> = (props) => {
               resolvedWrap ? "whitespace-pre-wrap break-words" : "w-max min-w-full whitespace-pre"
             )}
           >
-            {code.slice(0, FILE_VIEWER_MAX_TEXT_BYTES)}
+            {fallbackCode}
           </pre>
         </div>
         {showWrapToggle ? (

@@ -352,7 +352,8 @@ const WordRenderer: CuteType.FC<WordRendererProps> = React.memo((props) => {
       return buffer;
     },
     {
-      refreshDeps: [legacyDoc, resolvedUrl, missingReason],
+      // legacyDoc 只影响展示标签（DOC / DOCX），请求本身完全一致，不该触发重新下载。
+      refreshDeps: [resolvedUrl, missingReason],
       onBefore: () => {
         setRenderError(null);
       },

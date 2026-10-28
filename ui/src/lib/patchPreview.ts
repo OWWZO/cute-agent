@@ -96,6 +96,36 @@ export function getLightweightDiffLineParts(line: string): LightweightDiffLinePa
   };
 }
 
+/** 一行 diff 的解析结果：截断标记，或普通行（带已剥协议的展示内容）。 */
+export type ParsedLightweightDiffRow =
+  | { kind: "omitted"; omittedLineCount: number }
+  | { kind: "line"; parts: LightweightDiffLineParts };
+
+/**
+ * 批量解析 diff 行。
+ *
+ * 渲染层把它交给 `useMemo`：同一份 `lines` 引用下只解析一次，
+ * 父组件因 token 补齐 / 主题切换等原因重渲染时不再重复跑 regex 与分配。
+ * 最多 800 行，每帧都重算是实打实的主线程浪费。
+ */
+export function parseLightweightDiffRows(
+  lines: readonly string[]
+): ParsedLightweightDiffRow[] {
+  return lines.map((line) => {
+    const omittedLineCount = parseTruncatedMarkerOmittedLineCount(line);
+    if (omittedLineCount !== null) {
+      return {
+        kind: "omitted",
+        omittedLineCount,
+      };
+    }
+    return {
+      kind: "line",
+      parts: getLightweightDiffLineParts(line),
+    };
+  });
+}
+
 function collectPatchMetadataPreviewLines(lines: readonly string[]): string[] {
   return lines.filter((line) => {
     if (!line.trim()) return false;

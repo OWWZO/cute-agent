@@ -42,6 +42,7 @@ import {
   type PdfPageSize,
 } from "@/lib/pdf/pdfZoom";
 import { createPdfJsDocumentOptions } from "@/lib/pdf/pdfJsAssets";
+import { findCurrentPageByOffsets } from "@/lib/pdf/pageOffsets";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
@@ -551,28 +552,90 @@ export function PdfViewer({
 
   // ---- 当前页跟踪 -----------------------------------------------------------
 
+  /**
+   * 缓存的页偏移（相对滚动内容顶部，1-based 下标）。
+   *
+   * 每页相对容器顶部的 top = offset - scrollTop；滚动时只要找最后一个
+   * `offset <= scrollTop + 24` 的页码，不必逐页读布局。
+   */
+  const pageOffsetsRef = useRef<number[]>([]);
+  const measureFrameRef = useRef<number | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+
   const syncCurrentPage = useCallback(() => {
     const container = scrollEl;
     if (!container) return;
-    const containerTop = container.getBoundingClientRect().top;
-    let best = 1;
-    let bestTop = Number.NEGATIVE_INFINITY;
-    slotElementsRef.current.forEach((element, pageNumber) => {
-      const top = element.getBoundingClientRect().top - containerTop;
-      if (top <= 24 && top > bestTop) {
-        bestTop = top;
-        best = pageNumber;
-      }
-    });
-    setCurrentPage(best);
+    const page = findCurrentPageByOffsets(
+      pageOffsetsRef.current,
+      container.scrollTop + 24
+    );
+    setCurrentPage((current) => (current === page ? current : page));
   }, [scrollEl]);
+
+  const measurePageOffsets = useCallback(() => {
+    const container = scrollEl;
+    if (!container) return;
+    const containerTop = container.getBoundingClientRect().top;
+    const offsets: number[] = [0];
+    let last = 0;
+    // 以页码升序补齐：个别槽位暂时没注册时沿用前一页偏移，保持数组稠密单调。
+    for (let page = 1; page <= (numPages ?? 0); page += 1) {
+      const element = slotElementsRef.current.get(page);
+      if (element) {
+        last = element.getBoundingClientRect().top - containerTop + container.scrollTop;
+      }
+      offsets[page] = last;
+    }
+    pageOffsetsRef.current = offsets;
+    // 缩放 / 页尺寸变化后布局已变，重测后立即纠正一次当前页，
+    // 不能等下一次用户滚动才发现高亮落后。
+    syncCurrentPage();
+  }, [numPages, scrollEl, syncCurrentPage]);
+
+  // 缩放提交、页尺寸补齐、文档重载、容器宽度变化后都要重测一次偏移；
+  // 用 rAF 合并同一帧内的多次请求，等布局落地后再读。
+  const scheduleMeasurePageOffsets = useCallback(() => {
+    if (measureFrameRef.current !== null) return;
+    measureFrameRef.current = requestAnimationFrame(() => {
+      measureFrameRef.current = null;
+      measurePageOffsets();
+    });
+  }, [measurePageOffsets]);
+
+  useEffect(() => {
+    scheduleMeasurePageOffsets();
+  }, [committedScale, containerWidth, numPages, pageSizes, scheduleMeasurePageOffsets]);
+
+  // scroll 事件可能一帧内触发多次；合并到每帧最多算一次。
+  const handleScroll = useCallback(() => {
+    if (scrollFrameRef.current !== null) return;
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      syncCurrentPage();
+    });
+  }, [syncCurrentPage]);
 
   useEffect(() => {
     const container = scrollEl;
     if (!container) return;
-    container.addEventListener("scroll", syncCurrentPage, { passive: true });
-    return () => container.removeEventListener("scroll", syncCurrentPage);
-  }, [scrollEl, syncCurrentPage]);
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (scrollFrameRef.current !== null) {
+        cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      }
+    };
+  }, [scrollEl, handleScroll]);
+
+  useEffect(() => {
+    return () => {
+      if (measureFrameRef.current !== null) {
+        cancelAnimationFrame(measureFrameRef.current);
+        measureFrameRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (numPages) syncCurrentPage();
