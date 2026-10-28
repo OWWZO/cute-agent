@@ -109,7 +109,7 @@ public class SendMessageResumeTest {
         Assert.assertEquals(Boolean.TRUE, data.get("ok"));
         Assert.assertEquals(Boolean.TRUE, data.get("resumed"));
         Assert.assertEquals("agent-done", data.get("agentId"));
-        Assert.assertNotEquals(old.getId(), data.get("task_id"));
+        Assert.assertFalse("task_id 不再对模型暴露", data.containsKey("task_id"));
         Assert.assertEquals(RuntimeBackgroundTask.STATUS_RUNNING, data.get("status"));
         Assert.assertTrue(runner.awaitCalled());
         Assert.assertEquals("agent-done", runner.capturedResumeAgentId);

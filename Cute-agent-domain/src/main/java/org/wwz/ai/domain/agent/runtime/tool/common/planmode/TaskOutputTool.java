@@ -26,30 +26,30 @@ public class TaskOutputTool implements BaseTool {
 
     @Override
     public String getDescription() {
-        return                 "获取后台任务（Agent / SendMessage 续跑 / shell 等）的输出。"
+        return                 "获取后台子 Agent 的输出。"
                 + "block=true（默认）时等到 completed/failed/stopped/lost；block=false 立即返回当前状态（可反复调用）。"
-                + "task_id 来自 Agent 后台派发或 SendMessage 续跑返回值。"
+                + "agent_id 来自 Agent(run_in_background=true) 的回执。"
                 + "等待或查看子 Agent 结果必须用本工具，不要用 workspace_list 轮询文件。";
     }
 
     @Override
     public Map<String, Object> toParams() {
-        Map<String, Object> taskId = new LinkedHashMap<>();
-        taskId.put("type", "string");
-        taskId.put("description", "后台任务 ID");
+        Map<String, Object> agentId = new LinkedHashMap<>();
+        agentId.put("type", "string");
+        agentId.put("description", "子 Agent 的 agentId（Agent 后台派发回执里给出的那个）");
 
         Map<String, Object> block = new LinkedHashMap<>();
         block.put("type", "boolean");
         block.put("description", "是否等待任务结束，默认 true");
 
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("task_id", taskId);
+        properties.put("agent_id", agentId);
         properties.put("block", block);
 
         Map<String, Object> parameters = new LinkedHashMap<>();
         parameters.put("type", "object");
         parameters.put("properties", properties);
-        parameters.put("required", java.util.List.of("task_id"));
+        parameters.put("required", java.util.List.of("agent_id"));
         return parameters;
     }
 
@@ -58,34 +58,34 @@ public class TaskOutputTool implements BaseTool {
     public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
-            String taskId = ToolArgs.str(params.get("task_id"));
-            if (StringUtils.isBlank(taskId)) {
+            String agentId = ToolArgs.str(params.get("agent_id"));
+            if (StringUtils.isBlank(agentId)) {
                 return ToolResultPayload.failure(
-                        "TaskOutput 失败：task_id 必填",
-                        "TaskOutput 失败：task_id 必填",
+                        "TaskOutput 失败：agent_id 必填",
+                        "TaskOutput 失败：agent_id 必填",
                         null,
-                        "missing task_id");
+                        "missing agent_id");
             }
 
             boolean shouldBlock = params.containsKey("block")
                     ? coerceBoolean(params.get("block"), true)
                     : true;
 
-            Optional<RuntimeBackgroundTask> found = context.requireBackgroundTasks().get(taskId);
+            Optional<RuntimeBackgroundTask> found = context.requireBackgroundTasks().findLatestByAgentId(agentId);
             if (found.isEmpty()) {
                 String sid = context.getSessionId() != null
                         ? context.getSessionId()
                         : context.getRequestId();
                 return ToolResultPayload.failure(
-                        "TaskOutput 失败：任务不存在 " + taskId
-                                + "（session=" + sid
-                                + "；若为跨轮查询请确认已执行 migration_session_tasklist.sql 且任务在同 session 下创建）",
-                        "Task not found: " + taskId + " session=" + sid,
+                        "TaskOutput 失败：该会话下没有 agentId=" + agentId + " 的子 Agent"
+                                + "（session=" + sid + "）",
+                        "Task not found: agentId=" + agentId + " session=" + sid,
                         null,
                         "not_found");
             }
 
             RuntimeBackgroundTask task = found.get();
+            String taskId = task.getId();
             String retrieval = "success";
             if (shouldBlock && RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
                 task = context.requireBackgroundTasks()
@@ -100,13 +100,10 @@ public class TaskOutputTool implements BaseTool {
 
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("retrieval_status", retrieval);
-            fields.put("task_id", task.getId());
+            fields.put("agent_id", task.getAgentId());
             fields.put("task_type", task.getType());
             fields.put("status", task.getStatus());
             fields.put("description", task.getDescription());
-            if (StringUtils.isNotBlank(task.getAgentId())) {
-                fields.put("agentId", task.getAgentId());
-            }
             if (StringUtils.isNotBlank(task.getAgentType())) {
                 fields.put("agentType", task.getAgentType());
             }

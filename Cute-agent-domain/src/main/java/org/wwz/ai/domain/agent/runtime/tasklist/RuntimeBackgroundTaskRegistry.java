@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -20,6 +21,15 @@ import java.util.function.BooleanSupplier;
 public class RuntimeBackgroundTaskRegistry {
 
     private final Map<String, RuntimeBackgroundTask> tasks = new ConcurrentHashMap<>();
+    /**
+     * 注册先后序号，供 {@link #findLatestByAgentId} 判定「最新」。
+     * <p>
+     * 不能只靠 {@code startedAtMs}：同一毫秒内连开两次（SendMessage 唤醒紧接着首跑）
+     * 时间戳相同，而 {@link ConcurrentHashMap} 遍历无序，结果会随机。序号是唯一可靠依据。
+     * 从持久化 hydrate 的任务没有序号（值为 null），回退按时间戳比较。
+     */
+    private final Map<String, Long> registrationOrder = new ConcurrentHashMap<>();
+    private final AtomicLong orderCounter = new AtomicLong();
     private final String sessionId;
     private final TasklistPersistencePort persistence;
 
@@ -79,6 +89,7 @@ public class RuntimeBackgroundTaskRegistry {
                 .cancellation(new RunCancellation())
                 .build();
         tasks.put(id, task);
+        registrationOrder.put(id, orderCounter.incrementAndGet());
         persist(task);
         return task;
     }
@@ -120,6 +131,45 @@ public class RuntimeBackgroundTaskRegistry {
         }
         // 跨 run：内存未命中时回源 DB，并并入本进程 registry
         return loadFromPersistence(id);
+    }
+
+    /**
+     * 按 agentId 找该子 Agent 最近一次运行。
+     * <p>
+     * 模型侧只认 agentId（task_id 不对模型暴露）：同一个子 Agent 被 SendMessage 唤醒会新建
+     * task，所以「取最新」等价于「取当前/最近一次运行」，正是调用方要的语义。
+     */
+    public Optional<RuntimeBackgroundTask> findLatestByAgentId(String agentId) {
+        String target = StringUtils.trimToNull(agentId);
+        if (target == null) {
+            return Optional.empty();
+        }
+        RuntimeBackgroundTask latest = null;
+        for (RuntimeBackgroundTask task : tasks.values()) {
+            if (task == null || !target.equals(StringUtils.trimToEmpty(task.getAgentId()))) {
+                continue;
+            }
+            if (latest == null || isNewer(task, latest)) {
+                latest = task;
+            }
+        }
+        return Optional.ofNullable(latest);
+    }
+
+    /** 先比注册序号（同毫秒也能分出先后），序号缺失时回退时间戳。 */
+    private boolean isNewer(RuntimeBackgroundTask candidate, RuntimeBackgroundTask current) {
+        Long candidateOrder = registrationOrder.get(candidate.getId());
+        Long currentOrder = registrationOrder.get(current.getId());
+        if (candidateOrder != null && currentOrder != null) {
+            return candidateOrder > currentOrder;
+        }
+        if (candidateOrder != null) {
+            return true;
+        }
+        if (currentOrder != null) {
+            return false;
+        }
+        return candidate.getStartedAtMs() >= current.getStartedAtMs();
     }
 
     private Optional<RuntimeBackgroundTask> loadFromPersistence(String taskId) {

@@ -195,7 +195,8 @@ public class SubAgentDispatchTest {
                 .sessionControl(new SessionControl().withBackgroundTasks(registry))
                 .build();
 
-        String receipt = com.alibaba.fastjson.JSON.toJSONString(Map.of("task_id", task.getId()));
+        // 回执对模型只暴露 agentId（task_id 不外露），结算按 agentId 找回任务
+        String receipt = com.alibaba.fastjson.JSON.toJSONString(Map.of("agentId", "agent-1"));
         AgentDispatchTool.settleLedgerIfTerminal(parent, "parent-tool-1", receipt);
 
         ArgumentCaptor<ToolInvocationFinishRecord> captor =

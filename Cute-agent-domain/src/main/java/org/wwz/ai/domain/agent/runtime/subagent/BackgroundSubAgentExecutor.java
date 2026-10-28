@@ -148,7 +148,7 @@ public final class BackgroundSubAgentExecutor {
         data.put("tool", toolName);
         data.put("ok", true);
         data.put("status", RuntimeBackgroundTask.STATUS_RUNNING);
-        data.put("task_id", taskId);
+        // 模型侧只有 agentId 一种句柄：task_id 不暴露，否则模型会拿它去调 TaskOutput。
         data.put("agentId", preferredAgentId);
         data.put("childSessionId", childSessionId);
         data.put("task_type", RuntimeBackgroundTask.TYPE_LOCAL_AGENT);
@@ -157,13 +157,13 @@ public final class BackgroundSubAgentExecutor {
         data.put("run_in_background", true);
         if (resume) {
             data.put("resumed", true);
-            data.put("message", "已在后台唤醒子 Agent。用 TaskOutput(task_id=\"" + taskId
+            data.put("message", "已在后台唤醒子 Agent。用 TaskOutput(agent_id=\"" + preferredAgentId
                     + "\") 取结果；SendMessage(to=\"" + preferredAgentId
-                    + "\") 中途指导；TaskStop 取消。");
+                    + "\") 中途指导；TaskStop(agent_id) 取消。");
         } else {
-            data.put("message", "后台子 Agent 已启动。用 TaskOutput(task_id=\"" + taskId
+            data.put("message", "后台子 Agent 已启动。用 TaskOutput(agent_id=\"" + preferredAgentId
                     + "\") 取结果；SendMessage(to=\"" + preferredAgentId
-                    + "\" 或 task_id) 中途指导；TaskStop 取消。");
+                    + "\") 中途指导；TaskStop(agent_id) 取消。");
         }
         return ToolResultPayload.fromData(data);
     }
@@ -203,12 +203,12 @@ public final class BackgroundSubAgentExecutor {
         }
         try {
             Map<String, Object> receipt = JSON.parseObject(runningObservation, Map.class);
-            String taskId = receipt == null ? null : trimToString(receipt.get("task_id"));
-            if (StringUtils.isBlank(taskId)) {
+            String agentId = receipt == null ? null : trimToString(receipt.get("agentId"));
+            if (StringUtils.isBlank(agentId)) {
                 return;
             }
             String toolName = StringUtils.defaultIfBlank(parentToolName, AgentDispatchTool.NAME);
-            parent.requireBackgroundTasks().get(taskId)
+            parent.requireBackgroundTasks().findLatestByAgentId(agentId)
                     .filter(task -> !RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus()))
                     .ifPresent(task -> persistLedgerSettlement(parent, parentToolUseId, toolName, task));
         } catch (Exception e) {

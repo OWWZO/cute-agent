@@ -497,6 +497,11 @@ public final class ToolObservationFormatter {
         }
         if (Boolean.TRUE.equals(data.get("run_in_background"))) {
             out.append("\nrun_in_background: true");
+            // 后台派发时 agentId 同时也是取结果的句柄：模型只能看到这一个 ID。
+            if (StringUtils.isNotBlank(agentId)) {
+                out.append("\n(use TaskOutput with agent_id: '").append(agentId)
+                        .append("' to get the result)");
+            }
         }
         return out.toString();
     }
@@ -523,9 +528,9 @@ public final class ToolObservationFormatter {
             return null;
         }
         StringBuilder out = new StringBuilder(message);
-        String taskId = StringUtils.firstNonBlank(text(data.get("task_id")), text(data.get("agentId")));
-        if (StringUtils.isNotBlank(taskId)) {
-            out.append("\ntask_id: ").append(taskId);
+        String agentId = text(data.get("agent_id"));
+        if (StringUtils.isNotBlank(agentId)) {
+            out.append("\nagent_id: ").append(agentId);
         }
         String status = text(data.get("status"));
         if (StringUtils.isNotBlank(status)) {

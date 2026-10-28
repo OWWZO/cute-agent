@@ -33,16 +33,16 @@ public class SendMessageTool implements BaseTool {
     @Override
     public String getDescription() {
         return "向后台子 Agent 发送消息。"
-                + " to 填 agentId 或 task_id。"
+                + " to 填 agentId。"
                 + " 目标仍在运行或邮箱仍活跃时注入指导，不新开任务。"
-                + " 目标已 completed/failed/stopped 时后台唤醒（同一 agentId、新 task_id），再用 TaskOutput 取结果。";
+                + " 目标已 completed/failed/stopped 时后台唤醒（同一 agentId），再用 TaskOutput(agent_id) 取结果。";
     }
 
     @Override
     public Map<String, Object> toParams() {
         Map<String, Object> to = new LinkedHashMap<>();
         to.put("type", "string");
-        to.put("description", "目标 agentId 或后台 task_id");
+        to.put("description", "目标子 Agent 的 agentId");
 
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("type", "string");
@@ -85,8 +85,8 @@ public class SendMessageTool implements BaseTool {
                 return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, Map.of(
                         "ok", false,
                         "to", to,
-                        "message", "无法解析目标 agentId/task_id。请使用后台 Agent 返回的 agentId 或 task_id。",
-                        "hint", "Agent(run_in_background=true) 后使用返回的 agentId/task_id"
+                        "message", "无法解析目标 agentId。请使用后台 Agent 回执里给出的 agentId。",
+                        "hint", "Agent(run_in_background=true) 后使用返回的 agentId"
                 ));
             }
 
@@ -103,32 +103,15 @@ public class SendMessageTool implements BaseTool {
     }
 
     private ResolvedTarget resolveTarget(AgentContext agentContext, String sessionId, String to) {
-        // 先按 task_id 查后台任务
-        Optional<RuntimeBackgroundTask> byTask = agentContext.requireBackgroundTasks().get(to);
-        if (byTask.isPresent()) {
-            RuntimeBackgroundTask task = byTask.get();
-            return new ResolvedTarget(task.getAgentId(), task.getId(), task);
+        // 模型侧只有 agentId 一种句柄：先在本会话的后台任务里找该子 Agent 最近一次运行，
+        // 取不到就直接当 agentId 用（mailbox 可能仍 active，或该子 Agent 从未落过后台任务）。
+        Optional<RuntimeBackgroundTask> latest =
+                agentContext.requireBackgroundTasks().findLatestByAgentId(to);
+        if (latest.isPresent()) {
+            RuntimeBackgroundTask task = latest.get();
+            return new ResolvedTarget(task.getAgentId(), task);
         }
-        ResolvedTarget byAgentId = null;
-        for (RuntimeBackgroundTask task : agentContext.requireBackgroundTasks().listAll()) {
-            if (task == null || !to.equals(task.getAgentId())) {
-                continue;
-            }
-            if (RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
-                return new ResolvedTarget(task.getAgentId(), task.getId(), task);
-            }
-            if (byAgentId == null) {
-                byAgentId = new ResolvedTarget(task.getAgentId(), task.getId(), task);
-            }
-        }
-        if (byAgentId != null) {
-            return byAgentId;
-        }
-        // 直接当 agentId（mailbox 可能仍 active）
-        if (SessionAgentMailboxHub.isActive(sessionId, to)) {
-            return new ResolvedTarget(to, null, null);
-        }
-        return new ResolvedTarget(to, null, null);
+        return new ResolvedTarget(to, null);
     }
 
     private Object injectRunning(AgentContext agentContext,
@@ -157,9 +140,6 @@ public class SendMessageTool implements BaseTool {
         fields.put("ok", true);
         fields.put("to", to);
         fields.put("agentId", target.agentId);
-        if (StringUtils.isNotBlank(target.taskId)) {
-            fields.put("task_id", target.taskId);
-        }
         fields.put("queued", queued);
         fields.put("message", "已投递指导，子 Agent 下一步可见。");
         return ToolResultPayload.okData(TaskToolNames.SEND_MESSAGE, fields);
@@ -224,7 +204,7 @@ public class SendMessageTool implements BaseTool {
         return false;
     }
 
-    private record ResolvedTarget(String agentId, String taskId, RuntimeBackgroundTask task) {
+    private record ResolvedTarget(String agentId, RuntimeBackgroundTask task) {
     }
 
 }

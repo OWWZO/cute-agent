@@ -729,18 +729,13 @@ public class AgentContext {
                 .executionRecorder(executionRecorder)
                 .agentRunState(agentRunState)
                 .planModeState(planModeState)
-                // 并行 fork 必须共享控制面：否则 TaskOutput 在子上下文里 not_found，
-                // 且 /stop 杀不到并发子任务。run 级与会话级控制面都共享。
-                .control(control())
+                // run 级控制面必须独立：fork 是并发子任务，它的 finishRun 不得关闭父回合，
+                // 也不得与父共用 inject 队列（否则并发子任务的步进边界会互相吃掉对方的指导）。
+                // 父的取消令牌经 parentCancellation 只读透传：/stop 仍杀得到并发子任务。
+                // 会话级控制面共享：TaskList / 后台任务表必须命中同一份。
+                .control(new RunControl().withParentCancellation(getRunCancellation()))
                 .sessionControl(sessionControl())
                 .build();
-    }
-
-    private synchronized List<File> ensureProductFiles() {
-        if (productFiles == null) {
-            productFiles = new ArrayList<>();
-        }
-        return productFiles;
     }
 
     private synchronized AgentRunState ensureAgentRunState() {

@@ -27,30 +27,24 @@ public class TaskStopTool implements BaseTool {
 
     @Override
     public String getDescription() {
-        return "按 ID 停止正在运行的后台任务（shell/agent 等）。"
-                + "仅在用户明确要求取消/停止，或任务 runaway/有害时使用。"
-                + "不要仅因已读够输出就 stop agent。task_id 与 shell_id 二选一。";
+        return "按 agentId 停止正在运行的后台子 Agent。"
+                + "仅在用户明确要求取消/停止，或子 Agent runaway/有害时使用。"
+                + "不要仅因已读够输出就 stop agent。";
     }
 
     @Override
     public Map<String, Object> toParams() {
-        Map<String, Object> taskId = new LinkedHashMap<>();
-        taskId.put("type", "string");
-        taskId.put("description", "后台任务 ID");
-
-        Map<String, Object> shellId = new LinkedHashMap<>();
-        shellId.put("type", "string");
-        shellId.put("description", "兼容旧名 shell_id，等同 task_id");
+        Map<String, Object> agentId = new LinkedHashMap<>();
+        agentId.put("type", "string");
+        agentId.put("description", "子 Agent 的 agentId");
 
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("task_id", taskId);
-        properties.put("shell_id", shellId);
+        properties.put("agent_id", agentId);
 
         Map<String, Object> parameters = new LinkedHashMap<>();
         parameters.put("type", "object");
         parameters.put("properties", properties);
-        // task_id / shell_id 二选一，在 execute 内校验；required 显式为空数组
-        parameters.put("required", java.util.Collections.emptyList());
+        parameters.put("required", java.util.List.of("agent_id"));
         return parameters;
     }
 
@@ -59,38 +53,40 @@ public class TaskStopTool implements BaseTool {
     public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
-            String id = firstNonBlank(ToolArgs.str(params.get("task_id")), ToolArgs.str(params.get("shell_id")));
-            if (StringUtils.isBlank(id)) {
+            String agentId = ToolArgs.str(params.get("agent_id"));
+            if (StringUtils.isBlank(agentId)) {
                 return ToolResultPayload.failure(
-                        "TaskStop 失败：需要 task_id 或 shell_id",
-                        "TaskStop 失败：需要 task_id 或 shell_id",
+                        "TaskStop 失败：agent_id 必填",
+                        "TaskStop 失败：agent_id 必填",
                         null,
-                        "missing id");
+                        "missing agent_id");
             }
-            Optional<RuntimeBackgroundTask> existing = context.requireBackgroundTasks().get(id);
+            Optional<RuntimeBackgroundTask> existing =
+                    context.requireBackgroundTasks().findLatestByAgentId(agentId);
             if (existing.isEmpty()) {
                 return ToolResultPayload.failure(
-                        "TaskStop 失败：任务不存在 " + id,
-                        "Task not found: " + id,
+                        "TaskStop 失败：没有 agentId=" + agentId + " 的后台子 Agent",
+                        "Task not found: agentId=" + agentId,
                         null,
                         "not_found");
             }
             RuntimeBackgroundTask before = existing.get();
             if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(before.getStatus())) {
                 return ToolResultPayload.failure(
-                        "TaskStop 失败：任务非 running 状态（" + before.getStatus() + "）",
-                        "Task not running: " + id + " status=" + before.getStatus(),
+                        "TaskStop 失败：该子 Agent 非 running 状态（" + before.getStatus() + "）",
+                        "Task not running: agentId=" + agentId + " status=" + before.getStatus(),
                         null,
                         "not_running");
             }
-            RuntimeBackgroundTask stopped = context.requireBackgroundTasks().stop(id).orElse(before);
+            RuntimeBackgroundTask stopped = context.requireBackgroundTasks()
+                    .stop(before.getId()).orElse(before);
             Map<String, Object> fields = new LinkedHashMap<>();
-            fields.put("message", "已停止后台任务 " + id + "（已发送取消令牌）");
-            fields.put("task_id", stopped.getId());
+            fields.put("message", "已停止后台子 Agent " + agentId + "（已发送取消令牌）");
+            fields.put("agent_id", agentId);
             fields.put("task_type", stopped.getType());
             fields.put("status", stopped.getStatus());
-            if (StringUtils.isNotBlank(stopped.getAgentId())) {
-                fields.put("agentId", stopped.getAgentId());
+            if (StringUtils.isNotBlank(stopped.getAgentType())) {
+                fields.put("agentType", stopped.getAgentType());
             }
             if (StringUtils.isNotBlank(stopped.getCommand())) {
                 fields.put("command", stopped.getCommand());
@@ -101,12 +97,5 @@ public class TaskStopTool implements BaseTool {
             String msg = "TaskStop 失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             return ToolResultPayload.failureFrom(msg, null);
         }
-    }
-
-        private static String firstNonBlank(String a, String b) {
-        if (StringUtils.isNotBlank(a)) {
-            return a;
-        }
-        return b;
     }
 }
