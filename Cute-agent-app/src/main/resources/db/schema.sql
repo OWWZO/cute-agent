@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS ai_client_tool_mcp (
 
 CREATE TABLE IF NOT EXISTS ai_agent_session_capability (
     id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '涓婚敭',
-    session_id  VARCHAR(64)  NOT NULL COMMENT '浼氳瘽 ID',
+    session_id  VARCHAR(128)  NOT NULL COMMENT '浼氳瘽 ID',
     kind        VARCHAR(16)  NOT NULL COMMENT 'skill|mcp',
     ref_id      VARCHAR(128) NOT NULL COMMENT 'skill name 鎴?mcpId',
     enabled     TINYINT      NOT NULL DEFAULT 0 COMMENT '0 鍏?1 寮',
@@ -198,7 +198,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_run (
     id                      BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     run_uid                 VARCHAR(64)    NOT NULL COMMENT '对外稳定运行ID，首期复用\r\n  requestId',
     request_id              VARCHAR(64)    NOT NULL COMMENT '单次请求ID',
-    session_id              VARCHAR(64)    NOT NULL COMMENT '会话ID',
+    session_id              VARCHAR(128)   NOT NULL COMMENT '会话ID',
     user_id                 VARCHAR(64)    NULL COMMENT '用户ID',
     entry_agent             VARCHAR(32)    NOT NULL COMMENT '入口执行链 react /\r\n  plan_solve',
     status                  TINYINT        NOT NULL DEFAULT 0 COMMENT '0=RUNNING,1=SUCCESS,2=FAILED,3=TIMEOUT,4=STOPPED,5=WAITING_INPUT',
@@ -229,10 +229,13 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_run (
 
 CREATE TABLE IF NOT EXISTS ai_agent_dialogue_session (
     id                 BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    session_id         VARCHAR(64)    NOT NULL COMMENT '会话ID',
+    session_id         VARCHAR(128)   NOT NULL COMMENT '会话ID',
     user_id            VARCHAR(64)    NULL COMMENT '用户ID',
+    binding_id         BIGINT         NULL COMMENT '所属 IM 渠道绑定（NULL = Web UI 原生会话）',
     session_kind       VARCHAR(32)    NOT NULL DEFAULT 'conversation' COMMENT '会话类型：conversation=用户会话；subagent=子智能体隐藏会话',
-    parent_session_id  VARCHAR(64)    NULL COMMENT '父会话ID（仅审计与授权穿透；子会话不继承父工作记忆）',
+    parent_session_id  VARCHAR(128)   NULL COMMENT '父会话ID（仅审计与授权穿透；子会话不继承父工作记忆）',
+    root_session_id    VARCHAR(128)   NULL COMMENT '根会话ID；根会话指向自己，子会话指向树根。用于一次查询取整棵会话树',
+    sub_agent_type     VARCHAR(64)    NULL COMMENT '子智能体类型（对应 ai_agent_sub_agent_definition.agent_key）；决定该会话的工具池。NULL=未记录，回退全量工具',
     title              VARCHAR(256)   NOT NULL COMMENT '会话标题',
     status             TINYINT        NOT NULL DEFAULT 0 COMMENT '会话终态，复用 run\r\n  状态枚举',
     latest_request_id  VARCHAR(64)    NULL COMMENT '最近一次请求ID',
@@ -243,6 +246,10 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_session (
     failed_run_count   INT            NOT NULL DEFAULT 0 COMMENT '失败/停止/超时轮次',
     started_at         DATETIME(3)    NULL COMMENT '首轮开始时间',
     last_active_at     DATETIME(3)    NULL COMMENT '最近活跃时间',
+    model              VARCHAR(128)   NULL COMMENT '会话级模型标识；NULL=未显式选择',
+    thinking           TINYINT(1)     NULL COMMENT '是否开启深度思考；NULL=未显式选择',
+    thinking_effort    VARCHAR(32)    NULL COMMENT '思考强度（low/medium/high）；NULL=默认',
+    deep_think         TINYINT(1)     NOT NULL DEFAULT 0 COMMENT 'Deep Think 开关；派生 agentType',
     event_seq          BIGINT         NOT NULL DEFAULT 0 COMMENT '会话内 SSE 高水位，delta 占号但不逐帧回写',
     create_time        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建\r\n  时间',
     update_time        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -251,6 +258,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_session (
     UNIQUE KEY uk_dialogue_session_id (session_id, deleted),
     KEY idx_dialogue_session_user_active (user_id, deleted, last_active_at DESC),
     KEY idx_dialogue_session_kind (session_kind, deleted),
+    KEY idx_dialogue_session_binding (binding_id, deleted, last_active_at DESC),
     KEY idx_dialogue_session_active (deleted, last_active_at DESC, id DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话会话\r\n  主表';
 
@@ -338,7 +346,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_user_question (
     id                   BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     question_id          VARCHAR(64)    NOT NULL COMMENT '问题对外ID',
     user_id              VARCHAR(64)    NULL COMMENT '用户ID',
-    session_id           VARCHAR(64)    NOT NULL COMMENT '会话ID',
+    session_id           VARCHAR(128)   NOT NULL COMMENT '会话ID',
     source_run_id        BIGINT         NULL COMMENT '源 dialogue_run.id',
     source_request_id    VARCHAR(64)    NOT NULL COMMENT '源 requestId',
     tool_invocation_id   BIGINT         NULL COMMENT '源 tool_invocation.id',
@@ -364,7 +372,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_desktop_control (
     id                   BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     control_id           VARCHAR(64)    NOT NULL COMMENT '桌面控制对外ID',
     user_id              VARCHAR(64)    NULL COMMENT '用户ID',
-    session_id           VARCHAR(64)    NOT NULL COMMENT '会话ID',
+    session_id           VARCHAR(128)   NOT NULL COMMENT '会话ID',
     owner_key            VARCHAR(128)   NULL COMMENT '沙箱 ownerKey',
     source_run_id        BIGINT         NULL COMMENT '源 dialogue_run.id',
     source_request_id    VARCHAR(64)    NOT NULL COMMENT '源 requestId',
@@ -391,7 +399,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_plan_approval (
     id                   BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     approval_id          VARCHAR(64)    NOT NULL COMMENT '审批对外ID',
     user_id              VARCHAR(64)    NULL COMMENT '用户ID',
-    session_id           VARCHAR(64)    NOT NULL COMMENT '会话ID',
+    session_id           VARCHAR(128)   NOT NULL COMMENT '会话ID',
     source_run_id        BIGINT         NULL COMMENT '源 dialogue_run.id',
     source_request_id    VARCHAR(64)    NOT NULL COMMENT '源 requestId',
     tool_invocation_id   BIGINT         NULL COMMENT '源 tool_invocation.id',
@@ -419,7 +427,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_tool_output_deep_search (
     tool_invocation_id BIGINT         NULL COMMENT '所属 tool invocation ID',
     run_id             BIGINT         NULL COMMENT '所属 run ID',
     request_id         VARCHAR(64)    NOT NULL COMMENT '请求ID',
-    session_id         VARCHAR(64)    NULL COMMENT '会话ID',
+    session_id         VARCHAR(128)   NULL COMMENT '会话ID',
     tool_call_id       VARCHAR(128)   NOT NULL COMMENT 'toolCallId',
     status             TINYINT        NOT NULL COMMENT '终态状态',
     error_msg          TEXT           NULL COMMENT '错误信息',
@@ -440,7 +448,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_tool_output_code_interpreter (
     tool_invocation_id BIGINT         NULL COMMENT '所属 tool invocation ID',
     run_id             BIGINT         NULL COMMENT '所属 run ID',
     request_id         VARCHAR(64)    NOT NULL COMMENT '请求ID',
-    session_id         VARCHAR(64)    NULL COMMENT '会话ID',
+    session_id         VARCHAR(128)   NULL COMMENT '会话ID',
     tool_call_id       VARCHAR(128)   NOT NULL COMMENT 'toolCallId',
     status             TINYINT        NOT NULL COMMENT '终态状态',
     error_msg          TEXT           NULL COMMENT '错误信息',
@@ -462,7 +470,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_tool_output_data_analysis (
     tool_invocation_id BIGINT         NULL COMMENT '所属 tool invocation ID',
     run_id             BIGINT         NULL COMMENT '所属 run ID',
     request_id         VARCHAR(64)    NOT NULL COMMENT '请求ID',
-    session_id         VARCHAR(64)    NULL COMMENT '会话ID',
+    session_id         VARCHAR(128)   NULL COMMENT '会话ID',
     tool_call_id       VARCHAR(128)   NOT NULL COMMENT 'toolCallId',
     status             TINYINT        NOT NULL COMMENT '终态状态',
     error_msg          TEXT           NULL COMMENT '错误信息',
@@ -483,7 +491,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_tool_output_multimodal_agent (
     tool_invocation_id BIGINT         NULL COMMENT '所属 tool invocation ID',
     run_id             BIGINT         NULL COMMENT '所属 run ID',
     request_id         VARCHAR(64)    NOT NULL COMMENT '请求ID',
-    session_id         VARCHAR(64)    NULL COMMENT '会话ID',
+    session_id         VARCHAR(128)   NULL COMMENT '会话ID',
     tool_call_id       VARCHAR(128)   NOT NULL COMMENT 'toolCallId',
     status             TINYINT        NOT NULL COMMENT '终态状态',
     error_msg          TEXT           NULL COMMENT '错误信息',
@@ -504,7 +512,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_tool_output_image_generation (
     run_id             BIGINT         NULL COMMENT '所属 run ID',
     request_id         VARCHAR(64)    NOT NULL COMMENT '请求ID',
     request_source     VARCHAR(32)    NOT NULL COMMENT '请求来源 agent/\r\n  workspace',
-    session_id         VARCHAR(64)    NULL COMMENT '会话ID',
+    session_id         VARCHAR(128)   NULL COMMENT '会话ID',
     tool_call_id       VARCHAR(128)   NOT NULL COMMENT 'toolCallId',
     status             TINYINT        NOT NULL COMMENT '终态状态',
     error_msg          TEXT           NULL COMMENT '错误信息',
@@ -531,7 +539,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_tool_output_canvas_publish (
     tool_invocation_id   BIGINT         NULL COMMENT '所属 tool invocation ID',
     run_id               BIGINT         NULL COMMENT '所属 run ID',
     request_id           VARCHAR(64)    NOT NULL COMMENT '请求ID',
-    session_id           VARCHAR(64)    NULL COMMENT '会话ID',
+    session_id           VARCHAR(128)   NULL COMMENT '会话ID',
     tool_call_id         VARCHAR(128)   NOT NULL COMMENT 'toolCallId',
     status               TINYINT        NOT NULL COMMENT '终态状态',
     error_msg            TEXT           NULL COMMENT '错误信息',
@@ -583,7 +591,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_artifact (
 CREATE TABLE IF NOT EXISTS ai_agent_featured_conversation (
     id                 BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     featured_id        VARCHAR(64)    NOT NULL COMMENT '公共精品ID',
-    session_id         VARCHAR(64)    NOT NULL COMMENT '原会话ID',
+    session_id         VARCHAR(128)   NOT NULL COMMENT '原会话ID',
     title              VARCHAR(256)   NOT NULL COMMENT '展示标题',
     summary            TEXT           NULL COMMENT '展示摘要',
     cover_resource_key VARCHAR(512)   NULL COMMENT '封面资源key',
@@ -612,7 +620,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_ltm_curated_entry (
     scope               VARCHAR(32)  NOT NULL COMMENT 'curated/user',
     content             TEXT         NOT NULL COMMENT '条目正文',
     status              VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/PENDING_APPROVAL/DELETED',
-    source_session_id   VARCHAR(64)  NULL COMMENT '写入来源 session',
+    source_session_id   VARCHAR(128)  NULL COMMENT '写入来源 session',
     source_request_id   VARCHAR(64)  NULL COMMENT '写入来源 request',
     write_origin        VARCHAR(32)  NULL COMMENT 'tool/background_review/system',
     create_time         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -625,7 +633,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_ltm_curated_entry (
 
 CREATE TABLE IF NOT EXISTS ai_agent_working_memory_turn (
     id                 BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    session_id         VARCHAR(64)  NOT NULL COMMENT '会话ID',
+    session_id         VARCHAR(128)  NOT NULL COMMENT '会话ID',
     memory_scope       VARCHAR(64)  NOT NULL DEFAULT 'main' COMMENT 'main 或 sub:{agentId}',
     request_id         VARCHAR(128) NOT NULL COMMENT '请求ID（含 wm-compact-* 合成 id）',
     run_id             BIGINT       NULL COMMENT '关联 dialogue_run.id',
@@ -650,7 +658,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_working_memory_turn (
 
 CREATE TABLE IF NOT EXISTS ai_agent_working_memory_message (
     id                   BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    session_id           VARCHAR(64)   NOT NULL COMMENT '会话ID',
+    session_id           VARCHAR(128)   NOT NULL COMMENT '会话ID',
     memory_scope         VARCHAR(64)   NOT NULL DEFAULT 'main' COMMENT 'main 或 sub:{agentId}',
     turn_id              BIGINT        NOT NULL COMMENT 'FK -> working_memory_turn.id',
     request_id           VARCHAR(128)  NOT NULL COMMENT '请求ID（含 wm-compact-* 合成 id）',
@@ -682,7 +690,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_working_memory_message (
 -- 工作记忆压缩事件审计表（记录压缩前后 token、摘要文本、压缩后的投影状态）
 CREATE TABLE IF NOT EXISTS ai_agent_working_memory_compaction (
     id                    BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    session_id            VARCHAR(64)   NOT NULL COMMENT '会话ID',
+    session_id            VARCHAR(128)   NOT NULL COMMENT '会话ID',
     trigger_request_id    VARCHAR(64)   NOT NULL COMMENT '触发压缩的当前请求ID',
     compact_request_id    VARCHAR(128)  NULL COMMENT '写入 working_memory 的 compact request_id',
     strategy              VARCHAR(32)   NOT NULL COMMENT 'micro-only/session-memory/full-llm/drop-oldest',
@@ -708,7 +716,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_working_memory_compaction (
 -- LTM memory-only fork 执行观测（压缩前 flush / background review）
 CREATE TABLE IF NOT EXISTS ai_agent_ltm_fork_execution (
     id                      BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    session_id              VARCHAR(64)   NOT NULL COMMENT '会话ID',
+    session_id              VARCHAR(128)   NOT NULL COMMENT '会话ID',
     trigger_request_id      VARCHAR(64)   NULL COMMENT '触发本 fork 的父 requestId',
     fork_request_id         VARCHAR(128)  NULL COMMENT 'fork 自身 requestId',
     fork_kind               VARCHAR(32)   NOT NULL COMMENT 'flush / bg-review',
@@ -739,7 +747,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_ltm_fork_execution (
 -- 会话 Todo + 后台运行任务（非 Execution Ledger）
 CREATE TABLE IF NOT EXISTS ai_agent_session_todo (
     id              BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    session_id      VARCHAR(64)    NOT NULL COMMENT '会话ID（listId）',
+    session_id      VARCHAR(128)   NOT NULL COMMENT '会话ID（listId）',
     task_id         VARCHAR(32)    NOT NULL COMMENT 'Todo 任务ID（会话内自增序号）',
     subject         VARCHAR(512)   NOT NULL COMMENT '短标题',
     description     MEDIUMTEXT     NOT NULL COMMENT '任务详情',
@@ -760,7 +768,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_session_todo (
 
 CREATE TABLE IF NOT EXISTS ai_agent_background_task (
     id                     BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    session_id             VARCHAR(64)    NOT NULL COMMENT '会话ID',
+    session_id             VARCHAR(128)   NOT NULL COMMENT '会话ID',
     task_id                VARCHAR(32)    NOT NULL COMMENT '后台任务ID',
     type                   VARCHAR(32)    NOT NULL DEFAULT 'generic' COMMENT 'local_agent|local_shell|generic',
     status                 VARCHAR(32)    NOT NULL DEFAULT 'running' COMMENT 'running|completed|stopped|failed',
@@ -797,3 +805,45 @@ CREATE TABLE IF NOT EXISTS ai_agent_kernel_browser_session (
     UNIQUE KEY uk_kernel_browser_session (kernel_session_id),
     UNIQUE KEY uk_kernel_browser_name (kernel_browser_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Cute owner 与 Kernel 云端 browser 外部资源映射（非 Execution Ledger）';
+
+-- =============================================================================
+-- IM 渠道（specs/027-im-channel-qq）
+-- 不属于 Execution Ledger：绑定与平台身份是渠道侧配置，不是执行事实。
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS ai_agent_channel_binding (
+    id                 BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    owner_user_id      VARCHAR(64)  NOT NULL COMMENT '绑定者 user_account.user_id',
+    platform           VARCHAR(32)  NOT NULL DEFAULT 'qqbot' COMMENT '平台标识',
+    app_id             VARCHAR(64)  NOT NULL COMMENT 'QQ 机器人 AppID',
+    -- 明文存储（用户决策）。能读本表即可接管对应 bot，禁止在日志中打印。
+    app_secret         VARCHAR(128) NOT NULL COMMENT 'QQ 机器人 AppSecret（明文，禁止打印）',
+    bot_openid         VARCHAR(128) NULL COMMENT '扫码者 openid（仅展示，非授权依据）',
+    status             VARCHAR(16)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/ACTIVE/ERROR/DISABLED',
+    last_error         VARCHAR(512) NULL COMMENT '最近一次连接错误，供前端展示',
+    connected_at       DATETIME(3)  NULL COMMENT '最近一次连接成功时间',
+    create_time        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted            TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '软删除',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_channel_binding_app (platform, app_id, deleted),
+    UNIQUE KEY uk_channel_binding_owner (owner_user_id, platform, deleted),
+    KEY idx_channel_binding_status (status, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='IM 渠道机器人绑定（app_secret 明文）';
+
+CREATE TABLE IF NOT EXISTS ai_agent_channel_identity (
+    id                 BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    binding_id         BIGINT       NOT NULL COMMENT '所属 binding',
+    platform           VARCHAR(32)  NOT NULL DEFAULT 'qqbot' COMMENT '平台标识',
+    platform_user_id   VARCHAR(128) NOT NULL COMMENT 'QQ openid',
+    user_id            VARCHAR(64)  NOT NULL COMMENT '内部身份 ch_{bindingId}_{hash}',
+    display_name       VARCHAR(128) NULL COMMENT 'QQ 昵称，仅日志与排障',
+    first_seen_at      DATETIME(3)  NOT NULL COMMENT '首次出现',
+    last_seen_at       DATETIME(3)  NOT NULL COMMENT '最近出现',
+    create_time        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted            TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '软删除',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_channel_identity (binding_id, platform, platform_user_id, deleted),
+    KEY idx_channel_identity_user (user_id, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='IM 平台用户到内部身份的映射';

@@ -50,6 +50,22 @@
 |-----|------|
 | `ICSDNService` | CSDN 服务网关（在 mcp-server-csdn 中实现） |
 
+### IM 渠道（`channel/`）
+| 组件 | 职责 |
+|------|------|
+| `channel/qqbot/QqBotWsClient` | QQ Bot WS 长连接（Hello → Identify → Heartbeat / Resume，退避重连，去重 + 剥离 @ 前缀） |
+| `channel/qqbot/QqBotRestClient` / `QqBotTokenService` | 出站 REST 与 access_token 缓存（401 失效重试一次） |
+| `channel/qqbot/QqBotAdapter` / `QqBotBoundAdapter` | `ChannelAdapter` 的 QQ 实现：Markdown 降级 → 4000 字切块 → 发送 |
+| `channel/qqbot/QqBotOnboardClient` / `QqBotCrypto` | 扫码建连任务轮询与 AES-256-GCM 解密 app_secret |
+| `channel/QqBotConnectionManager` | 一绑定一连接；启动恢复、扫码激活、解绑；实现 `ChannelConnectionPort` + `ChannelActivationListener` |
+| `channel/QqBotQrGateway` | 实现 `ChannelQrGateway`：按 taskId 保管 bindKey，COMPLETED 时解密并落库 |
+| `channel/ChannelAppIdLock` | `~/.cute-agent/locks/qq_{appId}.lock` 文件锁，防同 appId 双进程连接 |
+| `channel/dao/` + `channel/dao/po/` | `ai_agent_channel_binding` / `ai_agent_channel_identity` 的 DAO 与 PO |
+| `adapter/repository/channel/` | 上述 DAO 之上的仓储实现 |
+
+连接生命周期放在 infrastructure（不是 trigger）是硬约束：`DddArchitectureGuardTest.triggerMustNotImportInfrastructure`
+禁止 trigger 依赖 infrastructure，而 WS/REST 客户端只能是 infrastructure。与 `browserrelay/` 同一模式。
+
 ---
 
 ## 关键依赖与配置
@@ -92,6 +108,13 @@
 | 类 | 说明 |
 |---|------|
 | `AdminUser` | 管理员用户 |
+
+### IM 渠道持久化边界
+- 渠道 DAO / PO 放在 `infrastructure/channel/dao/`（不在 `infrastructure/dao/` 下），
+  这样 `ChannelAutoConfiguration` 的 `@MapperScan("org.wwz.ai.infrastructure.channel.dao")`
+  才能做到 `cute.channel.enabled=false` 时渠道 Mapper 完全不注册。
+- `ai_agent_channel_binding.app_secret` 是**明文**。`ChannelBinding` 与 `AiAgentChannelBindingPO`
+  都覆盖了 `toString`；新增字段时不得让 secret 进入日志、响应体或 toString。
 
 ### Cute Phase 2A 持久化边界
 - Cute ledger、tool-output、chat-model DAO / Mapper 统一位于 `src/main/java/org/wwz/ai/infrastructure/dao/cute/`

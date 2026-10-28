@@ -3,7 +3,9 @@ package org.wwz.ai.application.agent.authorization;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.wwz.ai.domain.agent.channel.port.ChannelBindingOwnershipPort;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
@@ -25,6 +27,12 @@ public class ConversationSessionAuthorizationService {
     private final IExecutionLedgerReadRepository executionLedgerReadRepository;
     private final IExecutionLedgerWriteRepository executionLedgerWriteRepository;
     private final ObjectProvider<LtmManager> ltmManagerProvider;
+
+    /**
+     * IM 渠道绑定的 owner 判定。渠道模块未启用时容器里没有实现，保持原有「只认会话本人」行为。
+     */
+    @Autowired(required = false)
+    private ChannelBindingOwnershipPort channelBindingOwnershipPort;
 
     /**
      * 交互入口：校验归属，且会话必须是可交互的用户会话。
@@ -91,9 +99,28 @@ public class ConversationSessionAuthorizationService {
             return executionLedgerWriteRepository.querySessionBySessionId(sessionId);
         }
         if (!StringUtils.equals(existing.getUserId(), userId)) {
+            // IM 渠道会话：归属是绑定的所有者，而不是发消息的陌生人。
+            if (isChannelOwner(existing, userId)) {
+                return existing;
+            }
             throw new SessionOwnershipDeniedException("当前用户无权访问该会话");
         }
         return existing;
+    }
+
+    /**
+     * 该会话是否属于某个 IM 绑定，且当前用户正是该绑定的 owner。
+     * <p>{@code binding_id} 为空的会话（Web UI 原生会话）恒返回 false，行为与改动前一致。</p>
+     */
+    private boolean isChannelOwner(DialogueSession session, String userId) {
+        if (session == null || session.getBindingId() == null || StringUtils.isBlank(userId)) {
+            return false;
+        }
+        ChannelBindingOwnershipPort port = channelBindingOwnershipPort;
+        if (port == null) {
+            return false;
+        }
+        return port.isOwner(session.getBindingId(), userId);
     }
 
     private DialogueSession ensureSessionAccessible(String userId,
@@ -112,6 +139,7 @@ public class ConversationSessionAuthorizationService {
             executionLedgerWriteRepository.upsertSession(DialogueSessionUpsertRecord.builder()
                     .sessionId(sessionId)
                     .userId(userId)
+                    .rootSessionId(sessionId)
                     .title(resolveSessionTitle(queryText))
                     .status(ExecutionLedgerConstants.STATUS_RUNNING)
                     .runCount(0)
@@ -144,6 +172,8 @@ public class ConversationSessionAuthorizationService {
             return executionLedgerWriteRepository.querySessionBySessionId(sessionId);
         }
         if (!StringUtils.equals(existing.getUserId(), userId)) {
+            // 交互路径刻意不放行 owner：owner 对自己的 bot 只有读权限，
+            // 否则他就能往陌生人的 QQ 会话里续写，伪装成对方。
             throw new SessionOwnershipDeniedException("当前用户无权访问该会话");
         }
         return existing;
@@ -151,13 +181,16 @@ public class ConversationSessionAuthorizationService {
 
     /**
      * 断言会话可交互。未知/缺失类型按 fail-closed 处理（见 {@link SessionKind#fromCode}）。
+     * <p>
+     * 子会话与主会话同构（独立 run / 记忆 / 观察流），用户可以从会话树点进去继续对话，
+     * 因此 {@link SessionKind#SUBAGENT} 一并放行。
      */
     private static void assertInteractive(DialogueSession session) {
         if (session == null) {
             return;
         }
         SessionKind kind = SessionKind.fromCode(session.getSessionKind());
-        if (kind != SessionKind.CONVERSATION) {
+        if (kind != SessionKind.CONVERSATION && kind != SessionKind.SUBAGENT) {
             throw new SessionNotInteractiveException(
                     "该会话为只读会话（" + kind.code() + "），不支持继续对话或续跑");
         }

@@ -84,6 +84,34 @@ export async function resolveInitialSession(params: {
 }
 
 /**
+ * 把 bootstrap 内联回放的 replay 合并进会话。
+ *
+ * 顺序必须与并行补拉版一致：按 requestId 逐个整块替换 chat。
+ * `mergeRunReplayIntoConversation` 是幂等的（同 requestId 替换而非追加），
+ * 所以调用方不必先判断哪些 run 已经带 replay。
+ */
+export function applyInlineReplays(
+  conversation: CHAT.ConversationHistory,
+  replays: Record<string, ConversationRunReplay> | null | undefined
+): CHAT.ConversationHistory {
+  if (!replays) {
+    return conversation;
+  }
+  let next = conversation;
+  for (const replay of Object.values(replays)) {
+    if (!replay) {
+      continue;
+    }
+    try {
+      next = mergeRunReplayIntoConversation(next, replay);
+    } catch (error) {
+      console.warn(`合并内联回放失败 (requestId=${replay.requestId})`, error);
+    }
+  }
+  return next;
+}
+
+/**
  * 首屏补齐历史回放。
  *
  * 历史接口只返回**轻量摘要壳**（`tasks` 为空），过程数据必须按 run 单独拉回放。

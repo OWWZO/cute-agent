@@ -23,7 +23,7 @@ public class SubAgentSessionPortAdapterTest {
                 ExecutionLedgerFixtureFactory.newLedgerTestContext();
         SubAgentSessionPortAdapter adapter = new SubAgentSessionPortAdapter(ctx.writeRepository);
 
-        adapter.ensureChildSession("sub_agent-1", "parent-1", "user-1", "探索前端");
+        adapter.ensureChildSession("sub_agent-1", "parent-1", "user-1", "探索前端", "code-executor");
 
         DialogueSession row = ctx.readRepository.querySessionEntity("sub_agent-1");
         Assert.assertNotNull(row);
@@ -31,6 +31,7 @@ public class SubAgentSessionPortAdapterTest {
         Assert.assertEquals("parent-1", row.getParentSessionId());
         Assert.assertEquals("user-1", row.getUserId());
         Assert.assertEquals("探索前端", row.getTitle());
+        Assert.assertEquals("code-executor", row.getSubAgentType());
     }
 
     @Test
@@ -39,7 +40,7 @@ public class SubAgentSessionPortAdapterTest {
                 ExecutionLedgerFixtureFactory.newLedgerTestContext();
         SubAgentSessionPortAdapter adapter = new SubAgentSessionPortAdapter(ctx.writeRepository);
 
-        adapter.ensureChildSession("sub_agent-2", "parent-1", "user-1", "首次");
+        adapter.ensureChildSession("sub_agent-2", "parent-1", "user-1", "首次", "general-purpose");
         // 模拟子 run 启动：run_count 原子 +1
         LocalDateTime now = LocalDateTime.now();
         ctx.writeRepository.upsertSessionOnRunStart(DialogueSessionUpsertRecord.builder()
@@ -54,13 +55,15 @@ public class SubAgentSessionPortAdapterTest {
                 ctx.readRepository.querySessionEntity("sub_agent-2").getRunCount());
 
         // 续跑再次确保身份：必须 no-op，不得重置计数或改写身份列
-        adapter.ensureChildSession("sub_agent-2", "parent-1", "user-1", "改名尝试");
+        adapter.ensureChildSession("sub_agent-2", "parent-1", "user-1", "改名尝试", "deep-search");
 
         DialogueSession row = ctx.readRepository.querySessionEntity("sub_agent-2");
         Assert.assertEquals(Integer.valueOf(1), row.getRunCount());
         Assert.assertEquals("首次", row.getTitle());
         Assert.assertEquals(SessionKind.SUBAGENT.code(), row.getSessionKind());
         Assert.assertEquals("parent-1", row.getParentSessionId());
+        // 身份列不可被续跑覆盖：类型仍是首次落库的那个
+        Assert.assertEquals("general-purpose", row.getSubAgentType());
     }
 
     @Test
@@ -80,7 +83,7 @@ public class SubAgentSessionPortAdapterTest {
                 .startedAt(now)
                 .lastActiveAt(now)
                 .build());
-        adapter.ensureChildSession("sub_agent-3", "session-user-1", "user-1", "子任务");
+        adapter.ensureChildSession("sub_agent-3", "session-user-1", "user-1", "子任务", null);
 
         List<DialogueSessionView> listed = ctx.readRepository.queryRecentSessions("user-1", 10);
 

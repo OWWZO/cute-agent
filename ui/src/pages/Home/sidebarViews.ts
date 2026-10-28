@@ -16,7 +16,8 @@ export type SidebarView =
   | "models"
   | "capabilities"
   | "tools"
-  | "featured";
+  | "featured"
+  | "channels";
 
 export const SIDEBAR_VIEWS: SidebarView[] = [
   "chat",
@@ -28,6 +29,7 @@ export const SIDEBAR_VIEWS: SidebarView[] = [
   "capabilities",
   "tools",
   "featured",
+  "channels",
 ];
 
 export const isSidebarView = (value: string | null): value is SidebarView =>

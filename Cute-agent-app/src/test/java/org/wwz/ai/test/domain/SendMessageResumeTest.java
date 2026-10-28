@@ -181,7 +181,7 @@ public class SendMessageResumeTest {
         }
 
         @Override
-        public boolean hasPersistedMemory(String sessionId, String agentId) {
+        public boolean hasPersistedMemory(String childSessionId) {
             return hasMemory;
         }
 

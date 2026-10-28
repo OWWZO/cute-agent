@@ -16,6 +16,7 @@ import org.wwz.ai.domain.agent.memory.WorkingMemoryCompactor;
 import org.wwz.ai.domain.agent.memory.WorkingMemoryScopes;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
+import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 import org.wwz.ai.domain.agent.memory.ltm.LtmManager;
 import org.wwz.ai.domain.agent.memory.ltm.LtmOwner;
 import org.wwz.ai.domain.agent.memory.ltm.LtmOwnerResolver;
@@ -75,6 +76,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
     private final ObjectProvider<CuteRuntimeDependencies> runtimeDependenciesProvider;
     private final SessionWorkingMemoryService sessionWorkingMemoryService;
     private final IWorkingMemoryCompactionDao workingMemoryCompactionDao;
+    private final IExecutionLedgerReadRepository executionLedgerReadRepository;
     private final WorkingMemoryCompactor compactor = new WorkingMemoryCompactor();
     private final ConcurrentHashMap<String, AtomicInteger> consecutiveFailures = new ConcurrentHashMap<>();
 
@@ -90,11 +92,13 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
             ObjectProvider<CuteRuntimeDependencies> runtimeDependenciesProvider,
             SessionWorkingMemoryService sessionWorkingMemoryService,
             IWorkingMemoryCompactionDao workingMemoryCompactionDao,
-            CompactionBudget budget) {
+            CompactionBudget budget,
+            IExecutionLedgerReadRepository executionLedgerReadRepository) {
         this.runtimeDependenciesProvider = runtimeDependenciesProvider;
         this.sessionWorkingMemoryService = sessionWorkingMemoryService;
         this.workingMemoryCompactionDao = workingMemoryCompactionDao;
         this.budget = budget;
+        this.executionLedgerReadRepository = executionLedgerReadRepository;
     }
 
     private CuteRuntimeDependencies runtimeDependencies() {
@@ -154,8 +158,10 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
             return current;
         }
 
-        // 子 Agent 只压缩自己的 working_memory，不向共享长期记忆 flush 或调用 provider hook。
-        if (!WorkingMemoryScopes.isSubScope(scope)) {
+        // 子会话只压缩自己的 working_memory，不向共享长期记忆 flush 或调用 provider hook。
+        // 判据用 session_kind 而不是 memory_scope：scope 是存储细节（子会话已统一为 main），
+        // 会话类型才是业务事实。
+        if (!isSubAgentSession(sessionId)) {
             current = applyLtmPreCompactHooks(sessionId, requestId, current);
         }
 
@@ -243,6 +249,20 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
      * ② Provider onPreCompress insight
      * 失败均不阻断后续压缩。
      */
+    /**
+     * 会话是否为子智能体会话。
+     * <p>压缩本身低频，一次账本查询可接受；查不到会话时按「非子会话」处理，
+     * 与改造前 {@code isSubScope} 对未知 scope 的放行行为一致。</p>
+     */
+    private boolean isSubAgentSession(String sessionId) {
+        if (StringUtils.isBlank(sessionId) || executionLedgerReadRepository == null) {
+            return false;
+        }
+        DialogueSession session = executionLedgerReadRepository.querySessionEntity(sessionId);
+        return session != null
+                && SessionKind.SUBAGENT.code().equals(session.getSessionKind());
+    }
+
     private List<Message> applyLtmPreCompactHooks(String sessionId, String requestId, List<Message> current) {
         List<Message> working = current;
         try {

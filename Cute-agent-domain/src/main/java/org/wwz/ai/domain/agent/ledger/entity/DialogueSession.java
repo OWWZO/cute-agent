@@ -33,12 +33,31 @@ public class DialogueSession {
     private String userId;
 
     /**
+     * 所属 IM 渠道绑定；{@code null} 表示 Web UI 原生会话。
+     * <p>非空时该会话的读权限除了本人，还对该绑定 owner 开放。</p>
+     */
+    private Long bindingId;
+
+    /**
      * 会话类型 code，见 {@link org.wwz.ai.domain.agent.ledger.model.SessionKind}。
      */
     private String sessionKind;
 
     /** 父会话ID，仅审计与授权穿透。 */
     private String parentSessionId;
+
+    /**
+     * 根会话ID：根会话指向自己，子会话指向树根。
+     * <p>{@code parent_session_id} 是权威血缘链，本列是它的缓存——用于一次查询取整棵会话树。
+     * 将来开放多层嵌套时不必再改 schema。</p>
+     */
+    private String rootSessionId;
+
+    /**
+     * 子智能体类型（对应 {@code ai_agent_sub_agent_definition.agent_key}），决定该会话的工具池。
+     * <p>身份列，只在建行时写入；{@code null} 表示未记录类型，装配时回退全量工具池。</p>
+     */
+    private String subAgentType;
 
     private String title;
 
@@ -59,6 +78,21 @@ public class DialogueSession {
     private LocalDateTime startedAt;
 
     private LocalDateTime lastActiveAt;
+
+    /**
+     * 会话级模型标识；{@code null} 表示用户从未显式选择过。
+     * <p>子会话在父 Agent 结束、内存上下文被回收后，靠这一列重建自己的运行时选择。</p>
+     */
+    private String model;
+
+    /** 是否开启深度思考；{@code null} 表示未显式选择。 */
+    private Boolean thinking;
+
+    /** 思考强度（low/medium/high）；{@code null} 表示用默认。 */
+    private String thinkingEffort;
+
+    /** Deep Think 开关；派生 {@code agentType}（1 → plan_solve，0 → react）。 */
+    private Integer deepThink;
 
     private Long eventSeq;
 

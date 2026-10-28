@@ -92,6 +92,25 @@ public final class RunControl {
         return this;
     }
 
+    /**
+     * 父令牌链的完整上游：own（任务级）与 parent（用户 stop）两个令牌都在列。
+     *
+     * <p>透传给下一层时必须用本方法而非 {@link #getCancellation()}：后者 own 优先，
+     * 后台子 Agent 覆盖任务级令牌后会交出任务令牌而非用户 stop 令牌，导致再下一层
+     * 收不到 {@code /stop}。两个令牌都挂上，任一侧 cancel 都能中止孙 Agent 的在途工作，
+     * 与 {@link #registerAbort(Runnable)} 的双令牌模式一致。</p>
+     */
+    public List<RunCancellation> cancellationChain() {
+        List<RunCancellation> chain = new ArrayList<>(2);
+        if (ownCancellation != null) {
+            chain.add(ownCancellation);
+        }
+        if (parentCancellation != null && parentCancellation != ownCancellation) {
+            chain.add(parentCancellation);
+        }
+        return chain;
+    }
+
     /** own 优先：后台任务覆盖令牌后，取消原因以任务级为准。 */
     public RunCancellation getCancellation() {
         return ownCancellation != null ? ownCancellation : parentCancellation;

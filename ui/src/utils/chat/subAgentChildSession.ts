@@ -53,6 +53,11 @@ export type BuildChildSessionChatInput = {
   childSessionId: string;
   /** 会话级历史（runs 摘要），决定 query / status / requestId */
   history?: ConversationHistoryPage | null;
+  /**
+   * 要投影的 run。多轮渲染由 {@link buildChildSessionRounds} 显式传入；
+   * 缺省时按 `replay` / `latestRequestId` 推导，供旧调用方继续使用。
+   */
+  run?: ChildSessionRun;
   /** 单 run 回放（账本事件），终态 run 的唯一轨迹来源 */
   replay?: ConversationRunReplay | null;
   /** 子会话 SSE 实时帧（MESSAGE.Answer 信封） */
@@ -103,7 +108,9 @@ function getRunSummary(run: ChildSessionRun): string {
 
 /**
  * 取子会话当前关注的 run：优先 `latestRequestId`，否则取最后一条。
- * 子会话通常只有一条 run（一次派发），多轮 SendMessage 复用同一子会话时按最新一轮。
+ * <p>
+ * 只用于「尚未按轮次拆分的旧入口」兜底；多轮渲染走 {@link buildChildSessionRounds}，
+ * 那里每个 run 都被显式传入。
  */
 export function pickChildSessionRun(
   history?: ConversationHistoryPage | null
@@ -240,7 +247,8 @@ function detachExternalParentTags(
 function createChildSessionShell(
   childSessionId: string,
   run: ChildSessionRun,
-  fallbackQuery?: string
+  fallbackQuery?: string,
+  replayLoaded = false
 ): CHAT.ChatItem {
   const status = normalizeRunStatus(run?.status);
   return {
@@ -260,7 +268,7 @@ function createChildSessionShell(
     timeline: [],
     startedAt: run?.startedAt,
     finishedAt: run?.finishedAt,
-    replayLoaded: false,
+    replayLoaded,
     replayAvailable: run ? (isRunReplay(run) || run.hasReplay) : false,
     metrics: { status },
   } as CHAT.ChatItem;
@@ -395,9 +403,9 @@ function readLiveFrameEvents(frames?: unknown[]): ChildSessionFrameEvent[] {
 export function buildChildSessionChat(
   input: BuildChildSessionChatInput
 ): CHAT.ChatItem {
-  const { childSessionId, history, replay, frames, fallbackQuery } = input;
-  const run = replay || pickChildSessionRun(history);
-  const chat = createChildSessionShell(childSessionId, run, fallbackQuery);
+  const { childSessionId, history, run: explicitRun, replay, frames, fallbackQuery } = input;
+  const run = explicitRun ?? replay ?? pickChildSessionRun(history);
+  const chat = createChildSessionShell(childSessionId, run, fallbackQuery, Boolean(replay));
 
   // 派生层 handleTaskData 会按「result 且无 parentToolUseId」重建 conclusion。
   // 子会话里这条判据会把带父标记的子终答丢掉，所以显式结论必须在派生之后覆盖回来。
@@ -409,11 +417,21 @@ export function buildChildSessionChat(
   const replayFrames: ConversationReplayFrame[] =
     replay && Array.isArray(replay.replayFrames) ? replay.replayFrames : [];
 
-  // 回放为空才吃实时帧：两者同源会重复追加同一段流式增量。
-  const frameEvents =
-    replayFrames.length > 0
-      ? readReplayFrameEvents(replayFrames)
-      : readLiveFrameEvents(frames);
+  /**
+   * 账本打底 + 实时补差，而不是二选一。
+   * <p>
+   * 后端投影缓冲按「落库边界」清理（收到该组 isFinal 末帧才清中间 delta），所以实时帧里
+   * 只剩**账本还没写完的那一段**；已落库的部分只在 replay 里。两者天然不重叠、缺一不可：
+   * 只用 replay 会丢掉进行中的流式正文，只用 frames 会丢掉此前所有轮次。
+   * <p>
+   * 顺序是 replay 在前：同一张卡（toolCallId 相同）若同时出现在两边，combineData 会按
+   * 顺序更新同一张卡，实时帧在后可以把 replay 里 RUNNING 工具被投影成 failed 的状态纠正回来
+   * （见 {@code DefaultToolInvocationProjector} 对非 SUCCESS 一律标 failed）。
+   */
+  const frameEvents = [
+    ...readReplayFrameEvents(replayFrames),
+    ...readLiveFrameEvents(frames),
+  ];
 
   // 先收集本会话自身的身份键，再逐帧剥离指向会话之外的父链标签。
   // 顺序很重要：剥离判据要看全量帧，不能边读边判。
@@ -435,4 +453,90 @@ export function buildChildSessionChat(
     derived.conclusion = explicitConclusion;
   }
   return derived;
+}
+
+export type BuildChildSessionRoundsInput = {
+  childSessionId: string;
+  history?: ConversationHistoryPage | null;
+  /** 按 requestId 索引的回放；未拉取的 run 不在 map 里 */
+  replays?: Record<string, ConversationRunReplay>;
+  /** 子会话 SSE 实时帧（会话级流，按帧上的 reqId 归属到具体 run） */
+  frames?: unknown[];
+  /** 实时流当前所属的 run；帧上没有 reqId 时作为兜底归属 */
+  liveRequestId?: string;
+  /** 刚提交、账本尚未落库的 run：先在列表末尾补一条运行中的壳 */
+  pendingRun?: { requestId: string; query: string } | null;
+  /** 父卡兜底文案：只属于最早那一轮（派发时的提示词） */
+  fallbackQuery?: string;
+};
+
+/**
+ * 实时帧按 reqId 归属到某个 run；没有 reqId 的帧归给当前 live run。
+ * 会话级流的投影只覆盖当前 run，按 reqId 过滤是防止重订拿到旧轮增量后串到新轮上。
+ */
+function pickRunFrames(
+  frames: unknown[] | undefined,
+  requestId: string,
+  liveRequestId: string
+): unknown[] | undefined {
+  if (!requestId || !frames?.length) {
+    return undefined;
+  }
+  const picked = frames.filter((frame) => {
+    const frameRequestId = isRecord(frame) ? asText(frame.reqId) : "";
+    return frameRequestId
+      ? frameRequestId === requestId
+      : requestId === liveRequestId;
+  });
+  return picked.length > 0 ? picked : undefined;
+}
+
+/**
+ * 每个 run 一个 ChatItem，顺序与 `history.runs` 一致（旧 → 新）。
+ * <p>
+ * 与主会话同构：调用方拿到后用 `groupChatsIntoTurns` 切轮、`mergeTurnChats` 合并，
+ * 每轮交给同一个 `Dialogue`。未拉回放的 run 只产出轻量壳（提问 + 结论摘要 + 状态），
+ * 完整过程等用户点开折叠条时再按 requestId 补拉 —— 全量内联的代价后端已记过
+ * （20 个 run 平均 117MB）。
+ */
+export function buildChildSessionRounds(
+  input: BuildChildSessionRoundsInput
+): CHAT.ChatItem[] {
+  const { childSessionId, history, replays, frames, pendingRun, fallbackQuery } = input;
+  const runs: ConversationRunSummary[] = Array.isArray(history?.runs)
+    ? [...history.runs]
+    : [];
+  if (pendingRun && !runs.some((run) => run?.requestId === pendingRun.requestId)) {
+    // 账本还没写完这条 run：先占位，落库后由同 requestId 的真实 run 顶替
+    runs.push({
+      requestId: pendingRun.requestId,
+      status: "RUNNING",
+      queryPreview: pendingRun.query,
+      hasReplay: false,
+      startedAt: new Date().toISOString(),
+    });
+  }
+  if (runs.length === 0) {
+    // history 未回来：保留一条兜底壳，与旧行为一致（父卡提示词）
+    return [
+      buildChildSessionChat({
+        childSessionId,
+        history,
+        frames,
+        fallbackQuery
+      })
+    ];
+  }
+  const liveRequestId =
+    asText(input.liveRequestId) || asText(runs[runs.length - 1]?.requestId);
+  return runs.map((run, index) =>
+    buildChildSessionChat({
+      childSessionId,
+      history,
+      run,
+      replay: replays?.[run.requestId] ?? null,
+      frames: pickRunFrames(frames, asText(run.requestId), liveRequestId),
+      fallbackQuery: index === 0 ? fallbackQuery : undefined
+    })
+  );
 }

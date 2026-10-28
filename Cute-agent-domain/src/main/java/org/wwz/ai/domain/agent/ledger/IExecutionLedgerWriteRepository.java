@@ -36,6 +36,17 @@ public interface IExecutionLedgerWriteRepository {
     void upsertSession(DialogueSessionUpsertRecord record);
 
     /**
+     * 只更新会话偏好四列（model / thinking / thinking_effort / deep_think）。
+     * <p>与 {@link #upsertSession} 的区别：那个会整行覆盖 title/status/run_count 等列，
+     * 传入 null 就把库里的值清空；本方法只碰偏好列，null 表示「不清空」。</p>
+     */
+    void updateSessionPreferences(String sessionId,
+                                  String model,
+                                  Boolean thinking,
+                                  String thinkingEffort,
+                                  Integer deepThink);
+
+    /**
      * run 启动：会话 run_count 原子 +1（行不存在则新建），不做读-改-写。
      */
     void upsertSessionOnRunStart(DialogueSessionUpsertRecord record);

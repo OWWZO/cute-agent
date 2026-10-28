@@ -78,17 +78,29 @@ public class SubAgentRunner {
         this.sessionWorkingMemoryService = sessionWorkingMemoryService;
     }
 
-    public boolean hasPersistedMemory(String sessionId, String agentId) {
-        if (sessionWorkingMemoryService == null
-                || StringUtils.isBlank(sessionId)
-                || StringUtils.isBlank(agentId)) {
+    /**
+     * 子 Agent 是否已有可唤醒的工作记忆。
+     * <p>记忆按 {@code (childSessionId, main)} 存——子会话与主会话同构，
+     * 不再挂在父 sessionId 的 {@code sub:{agentId}} 作用域下。</p>
+     */
+    public boolean hasPersistedMemory(String childSessionId) {
+        if (sessionWorkingMemoryService == null || StringUtils.isBlank(childSessionId)) {
             return false;
         }
+        String agentId = extractAgentIdFromChildSessionId(childSessionId);
         List<Message> prior = sessionWorkingMemoryService.loadReadyMessages(
-                sessionId,
-                WorkingMemoryScopes.forSubAgent(agentId),
+                childSessionId,
+                WorkingMemoryScopes.MAIN,
                 SubAgentContextFactory.newChildRequestId(agentId));
         return prior != null && !prior.isEmpty();
+    }
+
+    /** {@code sub_{agentId}} → {@code agentId}；非该前缀时原样返回。 */
+    private static String extractAgentIdFromChildSessionId(String childSessionId) {
+        String prefix = SubAgentContextFactory.CHILD_SESSION_ID_PREFIX;
+        return childSessionId.startsWith(prefix)
+                ? childSessionId.substring(prefix.length())
+                : childSessionId;
     }
 
     public SubAgentResult run(AgentContext parentContext,
@@ -251,8 +263,9 @@ public class SubAgentRunner {
         String sessionKey = StringUtils.defaultIfBlank(parentContext.getSessionId(), parentContext.getRequestId());
         childContext.bindPendingInjectQueue(SessionAgentMailboxHub.queue(sessionKey, agentId));
 
-        String memoryScope = WorkingMemoryScopes.forSubAgent(agentId);
-        childContext.setMemoryScope(memoryScope);
+        // 记忆键统一为 (childSessionId, main)：子会话与主会话同构，用户从会话树点进来
+        // 续聊时读到的是同一份记忆（见 D11/D15）。
+        childContext.setMemoryScope(WorkingMemoryScopes.MAIN);
 
         // resume：每次运行需要唯一 requestId，否则 working_memory persist 幂等跳过
         if (resume) {
@@ -269,7 +282,7 @@ public class SubAgentRunner {
             }
             String resumeRequestId = childContext.getRequestId();
             List<Message> prior = sessionWorkingMemoryService.loadReadyMessages(
-                    parentContext.getSessionId(), memoryScope, resumeRequestId);
+                    childContext.getSessionId(), WorkingMemoryScopes.MAIN, resumeRequestId);
             if (prior == null || prior.isEmpty()) {
                 return failed(agentId, childSessionId, definition, description, prompt, start,
                         "无法唤醒子 Agent：未找到 agentId=" + agentId + " 的工作记忆（可能已过期或从未成功结束）",
@@ -556,7 +569,8 @@ public class SubAgentRunner {
                     childSessionId,
                     parentContext.getSessionId(),
                     parentContext.getUserId(),
-                    title);
+                    title,
+                    definition == null ? null : definition.getAgentType());
             return true;
         } catch (Exception e) {
             log.error("{} subagent child session persist failed childSessionId={} parentSessionId={}",
@@ -584,9 +598,9 @@ public class SubAgentRunner {
                     childContext == null ? "-" : childContext.resolveMemoryScope());
             return false;
         }
-        String workingMemorySessionId = parentContext == null
-                ? childContext.getSessionId()
-                : StringUtils.defaultIfBlank(parentContext.getSessionId(), childContext.getSessionId());
+        // 记忆键统一为 (childSessionId, main)：子会话是独立会话，不该把记忆写进父会话名下。
+        // 模式 1（父派发）与模式 2（用户直聊）读写同一份记忆，这正是「同一个会话两种驱动方式」。
+        String workingMemorySessionId = childContext.getSessionId();
         try {
             List<Message> delta = agent.exportWorkingMemoryDelta();
             List<Message> toPersist = delta;

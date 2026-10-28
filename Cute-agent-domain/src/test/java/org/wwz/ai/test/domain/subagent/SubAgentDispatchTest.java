@@ -86,6 +86,19 @@ public class SubAgentDispatchTest {
     }
 
     @Test
+    public void shouldKeepAgentWhenDispatchAllowed() {
+        ToolCollection parent = new ToolCollection();
+        parent.addTool(new StubTool("file_tool"));
+        parent.addTool(new StubTool(AgentDispatchTool.NAME));
+
+        SubAgentDefinition gp = new SubAgentRegistry().require(SubAgentRegistry.TYPE_GENERAL_PURPOSE);
+        ToolCollection child = SubAgentToolFilter.filter(parent, gp, true);
+
+        Assert.assertTrue(child.getToolMap().containsKey("file_tool"));
+        Assert.assertTrue(child.getToolMap().containsKey(AgentDispatchTool.NAME));
+    }
+
+    @Test
     public void shouldRejectBlankPromptWithoutCallingRunner() {
         SubAgentRegistry registry = new SubAgentRegistry();
         SubAgentRunner runner = new SubAgentRunner(registry);

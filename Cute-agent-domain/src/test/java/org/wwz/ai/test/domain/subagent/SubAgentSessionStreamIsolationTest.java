@@ -136,7 +136,8 @@ public class SubAgentSessionStreamIsolationTest {
         public void ensureChildSession(String childSessionId,
                                        String parentSessionId,
                                        String userId,
-                                       String title) {
+                                       String title,
+                                       String subAgentType) {
             // 身份落库成功路径
         }
     }

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.wwz.ai.infrastructure.channel.dao.IAiAgentChannelIdentityDao">
+
+    <resultMap id="IdentityMap" type="org.wwz.ai.infrastructure.channel.dao.po.AiAgentChannelIdentityPO">
+        <id column="id" property="id"/>
+        <result column="binding_id" property="bindingId"/>
+        <result column="platform" property="platform"/>
+        <result column="platform_user_id" property="platformUserId"/>
+        <result column="user_id" property="userId"/>
+        <result column="display_name" property="displayName"/>
+        <result column="first_seen_at" property="firstSeenAt"/>
+        <result column="last_seen_at" property="lastSeenAt"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="columns">
+        id, binding_id, platform, platform_user_id, user_id, display_name,
+        first_seen_at, last_seen_at, create_time, update_time, deleted
+    </sql>
+
+    <select id="query" resultMap="IdentityMap">
+        SELECT <include refid="columns"/> FROM ai_agent_channel_identity
+        WHERE binding_id = #{bindingId}
+          AND platform = #{platform}
+          AND platform_user_id = #{platformUserId}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <insert id="insert" parameterType="org.wwz.ai.infrastructure.channel.dao.po.AiAgentChannelIdentityPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ai_agent_channel_identity (
+            binding_id, platform, platform_user_id, user_id, display_name,
+            first_seen_at, last_seen_at, create_time, update_time, deleted
+        ) VALUES (
+            #{bindingId}, #{platform}, #{platformUserId}, #{userId}, #{displayName},
+            #{firstSeenAt}, #{lastSeenAt}, NOW(), NOW(), 0
+        )
+    </insert>
+
+    <update id="touch">
+        UPDATE ai_agent_channel_identity
+        SET display_name = IFNULL(#{displayName}, display_name),
+            last_seen_at = #{lastSeenAt},
+            update_time = NOW()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+</mapper>

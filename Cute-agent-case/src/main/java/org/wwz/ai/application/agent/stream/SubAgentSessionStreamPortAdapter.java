@@ -69,7 +69,11 @@ public class SubAgentSessionStreamPortAdapter implements SubAgentSessionStreamPo
         }
         if (printer instanceof AgentSessionPrinter sessionPrinter
                 && sessionPrinter.getStream() instanceof AgentStreamProjection projection) {
-            sessionProjectionRegistry.unregister(childSessionId, projection);
+            // 必须走 complete() 而不是只从 registry 摘除：complete() 会 detachRegistry 并
+            // 关闭已建立的观察连接，前端才能收到结束信号。只 unregister 的话，投影虽已消失，
+            // 但 SSE 连接仍活着（心跳每 10s 一跳），前端无法区分「安静地活着」和「已经结束」，
+            // 表现为子 Agent 详情面板永久卡住，只能刷新页面恢复。
+            projection.complete();
             return;
         }
         // Printer 不是本适配器产生的实例时，按 sessionId 兜底清理，避免残留活投影

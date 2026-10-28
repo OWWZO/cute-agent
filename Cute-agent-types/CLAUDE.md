@@ -28,6 +28,11 @@
 - `Constants`: 通用常量
 - `ResponseCode`: 响应码枚举
 
+### 配置属性（`config/`）
+各能力的 `@ConfigurationProperties` 类集中在这里：`AgentBrowserProperties`、`BrowserRelayProperties`、
+`CodeModeProperties`、`HostCliProperties`、`ImageGenerationProperties`、`OpenCliProperties`、
+`WebSearchProperties`、`AgentExecutorProperties`、`ChannelProperties`（`cute.channel.*`）。
+
 ---
 
 ## 关键依赖与配置

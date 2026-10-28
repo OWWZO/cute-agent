@@ -69,6 +69,18 @@ public interface IExecutionLedgerReadRepository {
 
     List<DialogueSessionView> queryRecentSessions(String userId, int limit);
 
+    /**
+     * 按 IM 渠道绑定查会话，供 owner 查看自己 bot 下的对话。
+     * <p>只返回 {@code session_kind=conversation} 的会话，与侧栏白名单一致。</p>
+     */
+    List<DialogueSessionView> querySessionsByBindingId(Long bindingId, int limit);
+
+    /**
+     * 按树根查整棵会话树：根会话自身 + 其下所有子会话。
+     * <p>根会话的 {@code root_session_id} 指向自己，一条等值查询即可覆盖全树。</p>
+     */
+    List<DialogueSessionView> querySessionsByRootId(String rootSessionId, int limit);
+
     List<DialogueSessionView> queryRecentSessions(String userId, ConversationSessionCursor after, int limit);
 
     List<ArtifactRecord> queryArtifactsByRunIds(List<Long> runIds);

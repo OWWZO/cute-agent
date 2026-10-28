@@ -18,6 +18,7 @@ public enum ResponseCode {
     UN_ERROR("0001", "未知失败"),
     ILLEGAL_PARAMETER("0002", "非法参数"),
     LOGIN_FAILED("0003", "登录失败"),
+    FORBIDDEN("0004", "无权访问"),
     ;
 
     /** 对外传输的结果码。 */

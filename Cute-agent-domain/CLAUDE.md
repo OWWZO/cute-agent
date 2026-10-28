@@ -4,7 +4,7 @@
 
 ## 模块职责
 
-核心业务逻辑层，包含领域模型、领域服务、仓储接口定义。当前 Agent 有界上下文已按 `runtime / ledger / memory / rag / role` 收敛核心能力，并仅保留少量 `service` / `cute` 延期契约与策略节点。
+核心业务逻辑层，包含领域模型、领域服务、仓储接口定义。当前 Agent 有界上下文已按 `runtime / ledger / memory / rag` 收敛核心能力，并仅保留少量 `service` / `cute` 延期契约与策略节点。
 
 Cute Phase 1 之后，本模块不再承载 legacy HTTP controller，也不再承载低风险 Spring 装配类型；这些职责分别回到 `trigger` 与 `app`。当前收敛阶段新增 `ai-agent-station-study-case` 作为应用编排层，`domain` 对外优先保留领域模型、领域服务、仓储端口与外部能力 port 定义，不再新增 HTTP / SSE 协议适配职责。
 
@@ -98,11 +98,24 @@ Cute Phase 1 之后，本模块不再承载 legacy HTTP controller，也不再�
 - `SessionContextMemoryService.buildHistoryDialogue` 仅兼容/调试；history replay 仍只读 ledger
 - 不得再引入 `ai_agent_message*` 或 transcript block 四表作为运行主账本
 
+### Channel（IM 渠道）
+渠道语义全部是纯规则与端口，不依赖 Spring Web / OkHttp / MyBatis。
+
+| 子包 | 内容 |
+|------|------|
+| `channel/model/` | `ChannelTarget` / `ChannelInboundEvent` / `ChannelPushResult` / `ChannelAttachmentRef` / `ChannelChatType` / `ChannelBinding` / `ChannelIdentity` |
+| `channel/policy/` | 纯函数：`ChannelSessionKey`（会话键）、`ReplyWindow`（被动回复窗口）、`ChannelFrameFilter`（只认终答帧）、`ChannelUrlPolicy`（可点击链接判定）、`ChannelAttachmentFormatter`、`MarkdownToPlainText`、`TextChunker`（4000 字切块）、`ChannelUserId`（确定性平台身份） |
+| `channel/port/` | `ChannelAdapter`、`ChannelBindingRepository`、`ChannelIdentityRepository`、`ChannelConnectionPort`、`ChannelQrGateway`、`ChannelActivationListener`、`ChannelInboundPort`、`ChannelBindingOwnershipPort` |
+
+端口都定义在这里而不是 case：infrastructure 的 QQ 连接层需要调用入站编排，而
+infrastructure 不能反向依赖 case。`ChannelBindingOwnershipPort` 放这里是为了让
+`ConversationSessionAuthorizationService`（case）与渠道实现解耦，未启用渠道时走 `deniesAll()`。
+
 ### Agent DDD 最终边界（019）
-- `trigger` 只能依赖 `case` 暴露的 dispatch / role / rag / query / dataagent seam
+- `trigger` 只能依赖 `case` 暴露的 dispatch / rag / query / dataagent seam
 - `domain` 中禁止新增 `SseEmitter`、`new OkHttpClient`、`JdbcDataProvider`、`SpringContextHolder`、`applicationContext.getBean(...)`
 - `RemoteHttpPort`、`RemoteStreamPort`、`FileArtifactPort`、`DataQueryExecutionPort`、`DataQueryMetadataPort` 是当前稳定 seam
-- GPT query / dataagent bridge 已删除，新增逻辑必须优先进入 `runtime / ledger / memory / rag / role`
+- GPT query / dataagent bridge 已删除，新增逻辑必须优先进入 `runtime / ledger / memory / rag`
 - `domain/agent/service`、`domain/agent/cute` 中剩余内容仅允许作为延期契约或策略节点，禁止继续新增 catch-all 主逻辑
 - 已删除的旧 handler bridge：`AgentHandlerService`、`AgentHandlerFactory`、`PlanSolveHandlerImpl`、`ReactHandlerImpl`
 - 明确延期的 legacy contract 包：`cute/config/data/**`、`cute/model/{req,response,multi,dto,imagegeneration}/**`、`cute/service/**`、`service/{execute,armory,runtime}/**`
@@ -163,13 +176,15 @@ A: Cute 是 Agent 执行引擎的核心实现，包含 Agent 生命周期管理�
 | `src/main/java/org/wwz/ai/domain/agent/memory/SessionContextMemoryService.java` | 兼容 historyDialogue 文本（调试/legacy） |
 | `src/main/java/org/wwz/ai/domain/agent/memory/SessionWorkingMemoryService.java` | 跨轮工作记忆 hydrate/persist |
 | `src/main/java/org/wwz/ai/domain/agent/memory/WorkingMemoryProjector.java` | Memory ↔ 行表投影 |
-| `src/main/java/org/wwz/ai/domain/agent/role/IFixRoleService.java` | 角色库领域服务 |
 | `src/main/java/org/wwz/ai/domain/agent/cute/service/IAgentConversationService.java` | 会话服务接口 |
 | `src/main/java/org/wwz/ai/domain/agent/cute/service/IAgentStreamPersistService.java` | 流式持久化接口 |
 
 ---
 
 ## 变更记录 (Changelog)
+
+### 2026-10-27
+- 新增 `channel/` 子域（model / policy / port）。原独立 `Cute-agent-channel` 模块合并回本模块。
 
 ### 2026-04-07
 - 初始化模块文档

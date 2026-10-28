@@ -60,6 +60,19 @@ public final class CuteRuntimeTestSupport {
                 webSearchProperties, imageGenerationProperties);
     }
 
+    /**
+     * 同时指定 HTTP 端口与拆出去的配置。
+     * WebSearch 用例必须走这个重载：漏传 remoteHttpPort 会回落到真实 OkHttp 适配器，
+     * 测试就变成对 api.x.ai 发真请求。
+     */
+    public static CuteRuntimeDependencies runtimeDependencies(CuteConfig cuteConfig,
+                                                              RemoteHttpPort remoteHttpPort,
+                                                              WebSearchProperties webSearchProperties,
+                                                              ImageGenerationProperties imageGenerationProperties) {
+        return runtimeDependencies(cuteConfig, null, new MockEnvironment(), remoteHttpPort,
+                webSearchProperties, imageGenerationProperties);
+    }
+
     public static CuteRuntimeDependencies runtimeDependencies(CuteConfig cuteConfig,
                                                                   RemoteHttpPort remoteHttpPort) {
         return runtimeDependencies(cuteConfig, null, new MockEnvironment(), remoteHttpPort);

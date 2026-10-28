@@ -30,7 +30,8 @@ public class SubAgentSessionPortAdapter implements SubAgentSessionPort {
     public void ensureChildSession(String childSessionId,
                                    String parentSessionId,
                                    String userId,
-                                   String title) {
+                                   String title,
+                                   String subAgentType) {
         if (StringUtils.isAnyBlank(childSessionId, parentSessionId)) {
             throw new IllegalArgumentException("childSessionId 与 parentSessionId 不能为空");
         }
@@ -45,6 +46,8 @@ public class SubAgentSessionPortAdapter implements SubAgentSessionPort {
                 .userId(userId)
                 .sessionKind(SessionKind.SUBAGENT.code())
                 .parentSessionId(parentSessionId)
+                .rootSessionId(resolveRootSessionId(parentSessionId))
+                .subAgentType(StringUtils.trimToNull(subAgentType))
                 .title(StringUtils.defaultIfBlank(title, DEFAULT_TITLE))
                 .status(ExecutionLedgerConstants.STATUS_RUNNING)
                 .runCount(0)
@@ -53,5 +56,18 @@ public class SubAgentSessionPortAdapter implements SubAgentSessionPort {
                 .startedAt(now)
                 .lastActiveAt(now)
                 .build());
+    }
+
+    /**
+     * 解析树根：父会话自己的 {@code rootSessionId} 非空就沿用它，否则父就是根。
+     * <p>{@code parent_session_id} 是权威血缘链，本列只是缓存；父行尚未回填时退化为
+     * 「父即根」，两层结构下与最终值一致。</p>
+     */
+    private String resolveRootSessionId(String parentSessionId) {
+        DialogueSession parent = executionLedgerWriteRepository.querySessionBySessionId(parentSessionId);
+        if (parent == null || StringUtils.isBlank(parent.getRootSessionId())) {
+            return parentSessionId;
+        }
+        return parent.getRootSessionId();
     }
 }

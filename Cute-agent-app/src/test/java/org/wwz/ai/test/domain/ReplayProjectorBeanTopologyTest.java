@@ -142,6 +142,16 @@ public class ReplayProjectorBeanTopologyTest {
             return Mockito.mock(ConversationSessionAuthorizationService.class);
         }
 
+        /**
+         * 会话切换 bootstrap 服务（controller 的 @Resource 依赖）。
+         * 本测试只验证装配拓扑，不跑 bootstrap 逻辑，故用 mock。
+         */
+        @Bean
+        public org.wwz.ai.application.agent.query.ConversationSessionBootstrapApplicationService
+                conversationSessionBootstrapApplicationService() {
+            return Mockito.mock(org.wwz.ai.application.agent.query.ConversationSessionBootstrapApplicationService.class);
+        }
+
         @Bean
         public org.wwz.ai.application.agent.stream.AgentStreamFrameMapper agentStreamFrameMapper() {
             return Mockito.mock(org.wwz.ai.application.agent.stream.AgentStreamFrameMapper.class);

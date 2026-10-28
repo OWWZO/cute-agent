@@ -23,6 +23,14 @@ export interface ConversationSessionItem {
   sessionId: string;
   title: string;
   status: string;
+  /** conversation / subagent；会话树据此区分根与子节点 */
+  sessionKind?: string | null;
+  /** 父会话 ID；根会话为空 */
+  parentSessionId?: string | null;
+  /** 根会话 ID；根会话指向自己 */
+  rootSessionId?: string | null;
+  /** 子智能体类型；为空表示未记录 */
+  subAgentType?: string | null;
   latestQueryText: string;
   runCount: number;
   finishedRunCount: number;
@@ -96,6 +104,12 @@ export interface ConversationHistoryPage {
   title: string;
   status: string;
   deepThink: boolean;
+  /** 会话级模型标识；null/undefined 表示用户从未显式选择过。 */
+  model?: string | null;
+  /** 是否开启深度思考；null/undefined 表示未显式选择。 */
+  thinking?: boolean | null;
+  /** 思考强度（low/medium/high）；null/undefined 表示用默认。 */
+  thinkingEffort?: string | null;
   runCount: number;
   finishedRunCount: number;
   failedRunCount: number;
@@ -118,6 +132,10 @@ export interface ConversationSessionBootstrap {
   askUser: Record<string, unknown>[];
   desktopControl: Record<string, unknown>[];
   planApproval: Record<string, unknown>[];
+  /** 末尾 turn 的 run 回放，key = requestId。 */
+  replays: Record<string, ConversationRunReplay>;
+  /** false 表示未内联（超预算或无可用回放），需走并行补拉。 */
+  replaysIncluded: boolean;
 }
 
 /** 旧 rich detail 的类型别名，保留给已有 replay 测试和调用方。 */
@@ -148,6 +166,37 @@ export const conversationHistoryApi = {
     api.get<ConversationSessionFile[]>(
       `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/files`
     ) as unknown as Promise<ConversationSessionFile[]>,
+  /**
+   * 会话树：给树中任一节点，返回「根 + 全部后代」的扁平列表。
+   * 层级由 parentSessionId 表达，由调用方组树。
+   */
+  getSessionTree: (sessionId: string, limit = 200) =>
+    api.get<ConversationSessionItem[]>(
+      `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/tree`,
+      { limit }
+    ) as unknown as Promise<ConversationSessionItem[]>,
+  /**
+   * 在已有会话（含子会话）上发起新一轮 run。
+   * 偏好四项不传即沿用会话已存值；传了就落库。
+   */
+  submitSessionQuery: (
+    sessionId: string,
+    body: {
+      query: string;
+      model?: string;
+      thinking?: boolean;
+      thinkingEffort?: string;
+      deepThink?: number;
+    }
+  ) =>
+    api.post<{ accepted: boolean; sessionId: string; requestId: string }>(
+      `/api/agent/session/${encodeURIComponent(sessionId)}/query`,
+      body
+    ) as unknown as Promise<{
+      accepted: boolean;
+      sessionId: string;
+      requestId: string;
+    }>,
   getSessionBootstrap: (sessionId: string, params: ConversationHistoryQuery = {}) =>
     api.get<ConversationSessionBootstrap>(
       `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/bootstrap`,

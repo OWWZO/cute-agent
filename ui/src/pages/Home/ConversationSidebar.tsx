@@ -17,6 +17,7 @@ import {
   FolderOpen,
   LogOut,
   Wrench,
+  ChevronRight,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ConversationSessionItem } from "@/services/agentConversation";
@@ -28,6 +29,7 @@ import TaskFileSidebar, { type WorkspaceFileItem } from "@/components/ActionView
 import ConversationSessionActionMenu from "./ConversationSessionActionMenu";
 import { canFeatureConversationSession } from "./featuredConversationAdminModel";
 import type { SidebarView } from "./sidebarViews";
+import { useSessionTree } from "./useSessionTree";
 
 type NavItem = {
   key: SidebarView;
@@ -184,6 +186,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(
     null
   );
+  const sessionTree = useSessionTree();
   const recentSessionsListRef = useRef<HTMLDivElement>(null);
   const lastWheelLoadAtRef = useRef(0);
   const { reduce } = useMotionConfig();
@@ -439,6 +442,9 @@ const ConversationSidebar = memo(function ConversationSidebar(
                     const isActive = session.sessionId === selectedSessionId;
                     const isHovered = session.sessionId === hoveredSessionId;
                     const isExpanded = session.sessionId === expandedSessionId;
+                    const treeOpen = sessionTree.isExpanded(session.sessionId);
+                    const treeLoading = sessionTree.isLoading(session.sessionId);
+                    const children = sessionTree.childrenOf(session.sessionId);
 
                     return (
                       <div
@@ -464,9 +470,35 @@ const ConversationSidebar = memo(function ConversationSidebar(
                             "group relative z-[1] flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors",
                             isActive
                               ? "text-[var(--chat-text)]"
-                              : "text-[var(--chat-text)] hover:bg-black/[0.04]"
+                              : "text-[var(--chat-text)] hover:bg-black/[0.04] active:bg-black/[0.07]"
                           )}
                         >
+                          {/* 展开箭头：点它拉子会话，点行本身仍是切换会话 */}
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            aria-label={treeOpen ? "收起子会话" : "展开子会话"}
+                            aria-expanded={treeOpen}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              sessionTree.toggle(session.sessionId);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                sessionTree.toggle(session.sessionId);
+                              }
+                            }}
+                            className="flex size-4 shrink-0 items-center justify-center rounded text-[var(--chat-text-muted)] transition-colors hover:text-[var(--chat-text)]"
+                          >
+                            <ChevronRight
+                              className={cn(
+                                "h-3.5 w-3.5 transition-transform duration-150",
+                                treeOpen && "rotate-90"
+                              )}
+                            />
+                          </span>
                           <span
                             className={cn(
                               "size-3.5 shrink-0 rounded-full border-[1.5px]",
@@ -498,6 +530,61 @@ const ConversationSidebar = memo(function ConversationSidebar(
                             </button>
                           </span>
                         </button>
+
+                        {/* 子会话分支：一条竖线 + 每个子节点一根横线连到父行，
+                            与「主会话延伸出子会话」的树形直觉一致。 */}
+                        {treeOpen ? (
+                          <div className="relative ml-[18px] border-l border-[var(--chat-border)] pl-2">
+                            {treeLoading ? (
+                              <div className="px-2 py-1.5 text-ui-sm text-[var(--chat-text-muted)]">
+                                加载子会话...
+                              </div>
+                            ) : children.length === 0 ? (
+                              <div className="px-2 py-1.5 text-ui-sm text-[var(--chat-text-muted)]">
+                                无子会话
+                              </div>
+                            ) : (
+                              children.map((node) => {
+                                const child = node.session;
+                                const childActive =
+                                  child.sessionId === selectedSessionId;
+                                return (
+                                  <div
+                                    key={child.sessionId}
+                                    className="relative"
+                                  >
+                                    {/* 横线：从左侧竖线连到子节点 */}
+                                    <span
+                                      aria-hidden
+                                      className="pointer-events-none absolute left-0 top-1/2 h-px w-2 bg-[var(--chat-border)]"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => onSelectSession(child)}
+                                      className={cn(
+                                        "flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left transition-colors",
+                                        childActive
+                                          ? "bg-black/[0.06] text-[var(--chat-text)]"
+                                          : "text-[var(--chat-text-soft)] hover:bg-black/[0.04] hover:text-[var(--chat-text)]"
+                                      )}
+                                      title={child.title || child.sessionId}
+                                    >
+                                      <Bot className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                                      <span className="min-w-0 flex-1 truncate text-ui-sm">
+                                        {child.title || "子会话"}
+                                      </span>
+                                      {child.subAgentType ? (
+                                        <span className="shrink-0 text-ui-xs text-[var(--chat-text-muted)]">
+                                          {child.subAgentType}
+                                        </span>
+                                      ) : null}
+                                    </button>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        ) : null}
 
                         {isExpanded && (
                           <ConversationSessionActionMenu

@@ -117,7 +117,6 @@ public final class ExecutionLedgerFixtureFactory {
                 .sessionId(sessionId)
                 .query("测试执行账本")
                 .toolCollection(toolCollection)
-                .productFiles(new ArrayList<>())
                 .executionRecorder(recorder)
                 .build();
         toolCollection.setAgentContext(context);
@@ -537,8 +536,13 @@ public final class ExecutionLedgerFixtureFactory {
                         .id(store.nextSessionId++)
                         .sessionId(record.getSessionId())
                         // 身份列仅在建行时写入，与生产 SQL 的 ON DUPLICATE 语义一致
+                        .bindingId(record.getBindingId())
                         .sessionKind(defaultSessionKind(record.getSessionKind()))
                         .parentSessionId(record.getParentSessionId())
+                        .rootSessionId(record.getRootSessionId())
+                        .subAgentType(record.getSubAgentType())
+                        // 与生产 SQL 的 IFNULL(#{deepThink}, 0) 一致
+                        .deepThink(record.getDeepThink() == null ? 0 : record.getDeepThink())
                         .createTime(LocalDateTime.now())
                         .deleted(0)
                         .build();
@@ -557,6 +561,19 @@ public final class ExecutionLedgerFixtureFactory {
             session.setFailedRunCount(record.getFailedRunCount());
             session.setStartedAt(record.getStartedAt());
             session.setLastActiveAt(record.getLastActiveAt());
+            // 会话偏好列走「未传不清空」，与生产 SQL 的 COALESCE(VALUES(col), col) 一致
+            if (record.getModel() != null) {
+                session.setModel(record.getModel());
+            }
+            if (record.getThinking() != null) {
+                session.setThinking(record.getThinking());
+            }
+            if (record.getThinkingEffort() != null) {
+                session.setThinkingEffort(record.getThinkingEffort());
+            }
+            if (record.getDeepThink() != null) {
+                session.setDeepThink(record.getDeepThink());
+            }
             session.setUpdateTime(LocalDateTime.now());
             return 1;
         }
@@ -574,8 +591,11 @@ public final class ExecutionLedgerFixtureFactory {
                 session = DialogueSession.builder()
                         .id(store.nextSessionId++)
                         .sessionId(record.getSessionId())
+                        .bindingId(record.getBindingId())
                         .sessionKind(defaultSessionKind(record.getSessionKind()))
                         .parentSessionId(record.getParentSessionId())
+                        .rootSessionId(record.getRootSessionId())
+                        .subAgentType(record.getSubAgentType())
                         .runCount(1)
                         .finishedRunCount(0)
                         .failedRunCount(0)
@@ -597,6 +617,38 @@ public final class ExecutionLedgerFixtureFactory {
             session.setLatestQueryText(record.getLatestQueryText());
             session.setLatestSummaryText(record.getLatestSummaryText());
             session.setLastActiveAt(record.getLastActiveAt());
+            session.setUpdateTime(LocalDateTime.now());
+            return 1;
+        }
+
+        @Override
+        public int updateSessionPreferences(String sessionId,
+                                            String model,
+                                            Boolean thinking,
+                                            String thinkingEffort,
+                                            Integer deepThink) {
+            DialogueSession session = store.sessions.values().stream()
+                    .filter(item -> item.getDeleted() == 0
+                            && sessionId != null
+                            && sessionId.equals(item.getSessionId()))
+                    .findFirst()
+                    .orElse(null);
+            if (session == null) {
+                return 0;
+            }
+            // 与生产 SQL 的 COALESCE 一致：null 不清空已有值
+            if (model != null) {
+                session.setModel(model);
+            }
+            if (thinking != null) {
+                session.setThinking(thinking);
+            }
+            if (thinkingEffort != null) {
+                session.setThinkingEffort(thinkingEffort);
+            }
+            if (deepThink != null) {
+                session.setDeepThink(deepThink);
+            }
             session.setUpdateTime(LocalDateTime.now());
             return 1;
         }
@@ -715,8 +767,33 @@ public final class ExecutionLedgerFixtureFactory {
                     .toList();
         }
 
-        private boolean isAfterSessionCursor(DialogueSession session,
-                                             LocalDateTime afterLastActiveAt,
+        @Override
+        public List<DialogueSessionView> querySessionsByBindingId(Long bindingId, int limit) {
+            return store.sessions.values().stream()
+                    .filter(item -> item.getDeleted() == 0 && equalsNullable(bindingId, item.getBindingId()))
+                    .filter(ExecutionLedgerFixtureFactory::isListableSession)
+                    .sorted(Comparator.comparing(DialogueSession::getLastActiveAt,
+                                    Comparator.nullsLast(Comparator.reverseOrder()))
+                            .thenComparing(DialogueSession::getId, Comparator.reverseOrder()))
+                    .limit(limit)
+                    .map(ExecutionLedgerFixtureFactory::toSessionView)
+                    .toList();
+        }
+
+        @Override
+        public List<DialogueSessionView> querySessionsByRootId(String rootSessionId, int limit) {
+            return store.sessions.values().stream()
+                    .filter(item -> item.getDeleted() == 0)
+                    .filter(item -> equalsNullable(rootSessionId, item.getRootSessionId()))
+                    .sorted(Comparator.comparing(DialogueSession::getCreateTime,
+                                    Comparator.nullsLast(Comparator.naturalOrder()))
+                            .thenComparing(DialogueSession::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+                    .limit(limit)
+                    .map(ExecutionLedgerFixtureFactory::toSessionView)
+                    .toList();
+        }
+
+        private boolean isAfterSessionCursor(DialogueSession session,                                             LocalDateTime afterLastActiveAt,
                                              Long afterId) {
             if (afterId == null) {
                 return true;
@@ -1222,6 +1299,8 @@ public final class ExecutionLedgerFixtureFactory {
                 .userId(session.getUserId())
                 .sessionKind(session.getSessionKind())
                 .parentSessionId(session.getParentSessionId())
+                .rootSessionId(session.getRootSessionId())
+                .subAgentType(session.getSubAgentType())
                 .title(session.getTitle())
                 .status(session.getStatus())
                 .latestRequestId(session.getLatestRequestId())
@@ -1232,6 +1311,10 @@ public final class ExecutionLedgerFixtureFactory {
                 .failedRunCount(session.getFailedRunCount())
                 .startedAt(session.getStartedAt())
                 .lastActiveAt(session.getLastActiveAt())
+                .model(session.getModel())
+                .thinking(session.getThinking())
+                .thinkingEffort(session.getThinkingEffort())
+                .deepThink(session.getDeepThink())
                 .eventSeq(session.getEventSeq())
                 .createTime(session.getCreateTime())
                 .updateTime(session.getUpdateTime())
@@ -1394,6 +1477,8 @@ public final class ExecutionLedgerFixtureFactory {
                 .userId(session.getUserId())
                 .sessionKind(session.getSessionKind())
                 .parentSessionId(session.getParentSessionId())
+                .rootSessionId(session.getRootSessionId())
+                .subAgentType(session.getSubAgentType())
                 .title(session.getTitle())
                 .status(session.getStatus())
                 .latestRequestId(session.getLatestRequestId())
@@ -1404,6 +1489,10 @@ public final class ExecutionLedgerFixtureFactory {
                 .failedRunCount(session.getFailedRunCount())
                 .startedAt(session.getStartedAt())
                 .lastActiveAt(session.getLastActiveAt())
+                .model(session.getModel())
+                .thinking(session.getThinking())
+                .thinkingEffort(session.getThinkingEffort())
+                .deepThink(session.getDeepThink())
                 .createTime(session.getCreateTime())
                 .build();
     }

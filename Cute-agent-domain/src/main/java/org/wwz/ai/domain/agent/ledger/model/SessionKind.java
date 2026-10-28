@@ -16,7 +16,13 @@ public enum SessionKind {
     /** 用户会话：侧栏列表可见，可继续对话。 */
     CONVERSATION("conversation"),
 
-    /** 子智能体隐藏会话：真实落库、可独立订阅，但不进侧栏、不可续聊。 */
+    /**
+     * 子智能体会话：与主会话同构（独立 run / 记忆 / 观察流），可被用户续聊。
+     * <p>
+     * 血缘由 {@code parent_session_id} 表达；「可续聊」由 {@code assertInteractive} 放行，
+     * 与「是否进侧栏列表」是两件事——后者等前端会话树 UI 落地时再放开
+     * （见 {@code 2026-10-26-subagent-first-class-session-plan.md} §7.4）。
+     */
     SUBAGENT("subagent"),
 
     /**
@@ -39,13 +45,17 @@ public enum SessionKind {
 
     /**
      * 是否出现在侧栏会话列表。只有用户会话进列表。
+     * <p>
+     * 子会话暂时不进列表：前端会话树 UI 尚未落地，提前放开只会让子会话以扁平条目
+     * 混进侧栏，缺少父会话上下文。与 SQL 里的 {@code listableSessionKindPredicate} 保持一致，
+     * 两处必须同改。
      */
     public boolean isListable() {
         return this == CONVERSATION;
     }
 
     /**
-     * 是否为子智能体隐藏会话（可被 owner 只读订阅，但不可续聊）。
+     * 是否为子智能体会话。
      */
     public boolean isSubAgent() {
         return this == SUBAGENT;

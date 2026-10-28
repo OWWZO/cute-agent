@@ -61,10 +61,27 @@
 | `AiAgentDrawAdminController` | 绘图配置管理 |
 | `AiAgentDataStatisticsAdminController` | 数据统计 |
 
+#### IM 渠道接口（`http/channel/`）
+| 接口 | 方法 | 说明 |
+|-----|------|------|
+| `GET /api/channel/binding/mine` | `ChannelBindingController.mine` | 当前用户的绑定 + 全局绑定数 + 上限 |
+| `POST /api/channel/binding/qr` | `ChannelBindingController.createQr` | 创建扫码任务（同用户幂等） |
+| `GET /api/channel/binding/qr/{taskId}` | `ChannelBindingController.pollQr` | 轮询扫码状态 |
+| `POST /api/channel/binding/{bindingId}/retry` | `ChannelBindingController.retry` | ERROR 状态重连 |
+| `DELETE /api/channel/binding/{bindingId}` | `ChannelBindingController.unbind` | 解绑并停连接 |
+| `GET /api/channel/binding/{bindingId}/sessions` | `ChannelBindingController.sessions` | owner 查自己 bot 下的会话（不暴露 QQ 身份） |
+
+`ChannelBindingController` 同时带 `@RestController` 与
+`@ConditionalOnProperty(prefix = "cute.channel", name = "enabled")`——两个条件缺一不可：
+`@RestController` 会被组件扫描无条件注册，只靠 `@Bean` 挡不住，开关关闭时启动会因缺依赖失败。
+
+WS 长连接与连接生命周期**不在本模块**：`DddArchitectureGuardTest.triggerMustNotImportInfrastructure`
+禁止 trigger 依赖 infrastructure，所以 `QqBotConnectionManager` 等放在
+`infrastructure/channel/`（与 `browserrelay/` 同一模式）。
+
 ### 定时任务
-| 任务 | 说明 |
-|-----|------|
-| `AgentTaskJob` | Agent 定时任务 |
+本模块当前**没有**定时任务：`AgentTaskJob` 已删除，`xfg-wrench-starter-task-job` 依赖也已注释。
+项目内没有任何调度器（`@Scheduled` / quartz / xxl-job 均无命中）。
 
 ---
 
@@ -168,6 +185,9 @@ A: Admin 接口是面向运营后台的 HTTP 接口，属于触发器职责。
 ---
 
 ## 变更记录 (Changelog)
+
+### 2026-10-27
+- 新增 `http/channel/`（IM 渠道绑定入口）。连接生命周期按边界约束放在 infrastructure。
 
 ### 2026-04-07
 - 初始化模块文档

@@ -6,8 +6,11 @@
         <id column="id" property="id"/>
         <result column="session_id" property="sessionId"/>
         <result column="user_id" property="userId"/>
+        <result column="binding_id" property="bindingId"/>
         <result column="session_kind" property="sessionKind"/>
         <result column="parent_session_id" property="parentSessionId"/>
+        <result column="root_session_id" property="rootSessionId"/>
+        <result column="sub_agent_type" property="subAgentType"/>
         <result column="title" property="title"/>
         <result column="status" property="status"/>
         <result column="latest_request_id" property="latestRequestId"/>
@@ -18,6 +21,10 @@
         <result column="failed_run_count" property="failedRunCount"/>
         <result column="started_at" property="startedAt"/>
         <result column="last_active_at" property="lastActiveAt"/>
+        <result column="model" property="model"/>
+        <result column="thinking" property="thinking"/>
+        <result column="thinking_effort" property="thinkingEffort"/>
+        <result column="deep_think" property="deepThink"/>
         <result column="event_seq" property="eventSeq"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
@@ -30,6 +37,8 @@
         <result column="user_id" property="userId"/>
         <result column="session_kind" property="sessionKind"/>
         <result column="parent_session_id" property="parentSessionId"/>
+        <result column="root_session_id" property="rootSessionId"/>
+        <result column="sub_agent_type" property="subAgentType"/>
         <result column="title" property="title"/>
         <result column="status" property="status"/>
         <result column="latest_request_id" property="latestRequestId"/>
@@ -40,27 +49,32 @@
         <result column="failed_run_count" property="failedRunCount"/>
         <result column="started_at" property="startedAt"/>
         <result column="last_active_at" property="lastActiveAt"/>
+        <result column="model" property="model"/>
+        <result column="thinking" property="thinking"/>
+        <result column="thinking_effort" property="thinkingEffort"/>
+        <result column="deep_think" property="deepThink"/>
         <result column="create_time" property="createTime"/>
     </resultMap>
 
     <sql id="dialogueSessionColumns">
-        id, session_id, user_id, session_kind, parent_session_id, title, status, latest_request_id,
+        id, session_id, user_id, binding_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
         latest_query_text, latest_summary_text, run_count, finished_run_count, failed_run_count,
-        started_at, last_active_at, event_seq, create_time, update_time, deleted
+        started_at, last_active_at, model, thinking, thinking_effort, deep_think,
+        event_seq, create_time, update_time, deleted
     </sql>
 
     <sql id="dialogueSessionViewColumns">
-        id, session_id, user_id, session_kind, parent_session_id, title, status, latest_request_id,
+        id, session_id, user_id, binding_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
         latest_query_text, latest_summary_text, run_count, finished_run_count, failed_run_count,
-        started_at, last_active_at, create_time
+        started_at, last_active_at, model, thinking, thinking_effort, deep_think, create_time
     </sql>
 
     <sql id="dialogueSessionHistoryViewColumns">
-        id, session_id, user_id, session_kind, parent_session_id, title, status, latest_request_id,
+        id, session_id, user_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
         LEFT(latest_query_text, 241) AS latest_query_text,
         LEFT(latest_summary_text, 241) AS latest_summary_text,
         run_count, finished_run_count, failed_run_count,
-        started_at, last_active_at, create_time
+        started_at, last_active_at, model, thinking, thinking_effort, deep_think, create_time
     </sql>
 
     <!-- 侧栏白名单：只有 conversation 进列表。子会话靠 session_kind 隐藏，
@@ -69,24 +83,32 @@
         AND session_kind = 'conversation'
     </sql>
 
-    <!-- session_kind / parent_session_id 只在建行时写入，ON DUPLICATE 段刻意不覆盖：
-         会话身份一旦确定就不该被后续 run 改写，否则子会话可能被父 run 刷回 conversation 漏进侧栏。 -->
+    <!-- 身份列（session_kind / parent_session_id / root_session_id / sub_agent_type）只在建行时写入，ON DUPLICATE 段刻意不覆盖：
+         会话身份一旦确定就不该被后续 run 改写，否则子会话可能被父 run 刷回 conversation 漏进侧栏。
+         会话偏好四列（model / thinking / thinking_effort / deep_think）相反，必须进 ON DUPLICATE 段——
+         用户切换模型时要能更新。前三个用 COALESCE 实现「未传不清空」，deep_think 是 NOT NULL 布尔开关直接覆盖。 -->
     <insert id="upsertSession" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">
         INSERT INTO ai_agent_dialogue_session (
-            session_id, user_id, session_kind, parent_session_id, title, status, latest_request_id,
+            session_id, user_id, binding_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
             latest_query_text, latest_summary_text,
             run_count, finished_run_count, failed_run_count, started_at, last_active_at,
+            model, thinking, thinking_effort, deep_think,
             create_time, update_time, deleted
         ) VALUES (
-            #{sessionId}, #{userId}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId},
+            #{sessionId}, #{userId}, #{bindingId}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
             #{title}, #{status}, #{latestRequestId}, #{latestQueryText}, #{latestSummaryText},
             #{runCount}, #{finishedRunCount}, #{failedRunCount}, #{startedAt}, #{lastActiveAt},
+            #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{deepThink}, 0),
             NOW(), NOW(), 0
         )
         ON DUPLICATE KEY UPDATE
             user_id = CASE
                 WHEN user_id IS NULL OR user_id = '' THEN VALUES(user_id)
                 ELSE user_id
+            END,
+            binding_id = CASE
+                WHEN binding_id IS NULL THEN VALUES(binding_id)
+                ELSE binding_id
             END,
             title = VALUES(title),
             status = VALUES(status),
@@ -98,26 +120,37 @@
             failed_run_count = VALUES(failed_run_count),
             started_at = VALUES(started_at),
             last_active_at = VALUES(last_active_at),
+            model = COALESCE(VALUES(model), model),
+            thinking = COALESCE(VALUES(thinking), thinking),
+            thinking_effort = COALESCE(VALUES(thinking_effort), thinking_effort),
+            deep_think = VALUES(deep_think),
             update_time = NOW()
     </insert>
 
-    <!-- run 启动：已存在则 run_count 原子 +1，保留 started_at 与 finished/failed 计数，避免读-改-写丢更新 -->
+    <!-- run 启动：已存在则 run_count 原子 +1，保留 started_at 与 finished/failed 计数，避免读-改-写丢更新。
+         会话偏好四列同样走「未传不清空」：主链路每轮都会带上用户当前选择，未带时保留库里原值。 -->
     <insert id="upsertSessionOnRunStart" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">
         INSERT INTO ai_agent_dialogue_session (
-            session_id, user_id, session_kind, parent_session_id, title, status, latest_request_id,
+            session_id, user_id, binding_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
             latest_query_text, latest_summary_text,
             run_count, finished_run_count, failed_run_count, started_at, last_active_at,
+            model, thinking, thinking_effort, deep_think,
             create_time, update_time, deleted
         ) VALUES (
-            #{sessionId}, #{userId}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId},
+            #{sessionId}, #{userId}, #{bindingId}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
             #{title}, #{status}, #{latestRequestId}, #{latestQueryText}, #{latestSummaryText},
             1, 0, 0, #{startedAt}, #{lastActiveAt},
+            #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{deepThink}, 0),
             NOW(), NOW(), 0
         )
         ON DUPLICATE KEY UPDATE
             user_id = CASE
                 WHEN user_id IS NULL OR user_id = '' THEN VALUES(user_id)
                 ELSE user_id
+            END,
+            binding_id = CASE
+                WHEN binding_id IS NULL THEN VALUES(binding_id)
+                ELSE binding_id
             END,
             title = VALUES(title),
             status = VALUES(status),
@@ -126,6 +159,10 @@
             latest_summary_text = VALUES(latest_summary_text),
             run_count = run_count + 1,
             last_active_at = VALUES(last_active_at),
+            model = COALESCE(VALUES(model), model),
+            thinking = COALESCE(VALUES(thinking), thinking),
+            thinking_effort = COALESCE(VALUES(thinking_effort), thinking_effort),
+            deep_think = VALUES(deep_think),
             update_time = NOW()
     </insert>
 
@@ -153,7 +190,7 @@
     <select id="querySessionOwnership" resultMap="DialogueSessionMap">
         <!-- session_kind 一并取回：读取路径（history / stream attach）拿到的实体需要能判类型，
              否则调用方对身份列只能看到 null。deleted/归属判定的最小集之一列不多。 -->
-        SELECT id, session_id, user_id, session_kind, deleted
+        SELECT id, session_id, user_id, binding_id, session_kind, deleted
         FROM ai_agent_dialogue_session
         WHERE session_id = #{sessionId}
           AND deleted = 0
@@ -229,9 +266,42 @@
         LIMIT #{limit}
     </select>
 
-    <update id="bumpEventSeq">
-        UPDATE ai_agent_dialogue_session
+    <select id="querySessionsByBindingId" resultMap="DialogueSessionViewMap">
+        SELECT <include refid="dialogueSessionViewColumns"/>
+        FROM ai_agent_dialogue_session
+        WHERE binding_id = #{bindingId}
+          AND deleted = 0
+        <include refid="listableSessionKindPredicate"/>
+        ORDER BY last_active_at DESC, id DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 会话树：根会话的 root_session_id 指向自己，一条等值查询覆盖「根 + 全部后代」。
+         刻意不带 listableSessionKindPredicate —— 树里本来就要包含子会话。 -->
+    <select id="querySessionsByRootId" resultMap="DialogueSessionViewMap">
+        SELECT <include refid="dialogueSessionViewColumns"/>
+        FROM ai_agent_dialogue_session
+        WHERE root_session_id = #{rootSessionId}
+          AND deleted = 0
+        ORDER BY create_time ASC, id ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="bumpEventSeq">        UPDATE ai_agent_dialogue_session
         SET event_seq = GREATEST(IFNULL(event_seq, 0), #{eventSeq}),
+            update_time = NOW()
+        WHERE session_id = #{sessionId}
+          AND deleted = 0
+    </update>
+
+    <!-- 会话偏好：只碰四列，null 不清空。刻意不用 upsertSession —— 那个会整行覆盖
+         title/status/run_count，偏好写入时这些字段全是 null，会把会话头清空。 -->
+    <update id="updateSessionPreferences">
+        UPDATE ai_agent_dialogue_session
+        SET model = COALESCE(#{model}, model),
+            thinking = COALESCE(#{thinking}, thinking),
+            thinking_effort = COALESCE(#{thinkingEffort}, thinking_effort),
+            deep_think = COALESCE(#{deepThink}, deep_think),
             update_time = NOW()
         WHERE session_id = #{sessionId}
           AND deleted = 0

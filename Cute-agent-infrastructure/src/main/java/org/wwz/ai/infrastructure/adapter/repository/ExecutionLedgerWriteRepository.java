@@ -80,6 +80,16 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
     }
 
     @Override
+    public void updateSessionPreferences(String sessionId,
+                                         String model,
+                                         Boolean thinking,
+                                         String thinkingEffort,
+                                         Integer deepThink) {
+        dialogueSessionLedgerDao.updateSessionPreferences(
+                sessionId, model, thinking, thinkingEffort, deepThink);
+    }
+
+    @Override
     public int updateSessionRunFinish(String sessionId,
                                       int status,
                                       String latestSummaryText,

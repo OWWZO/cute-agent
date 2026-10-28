@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.wwz.ai.infrastructure.channel.dao.IAiAgentChannelBindingDao">
+
+    <resultMap id="BindingMap" type="org.wwz.ai.infrastructure.channel.dao.po.AiAgentChannelBindingPO">
+        <id column="id" property="id"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="platform" property="platform"/>
+        <result column="app_id" property="appId"/>
+        <result column="app_secret" property="appSecret"/>
+        <result column="bot_openid" property="botOpenid"/>
+        <result column="status" property="status"/>
+        <result column="last_error" property="lastError"/>
+        <result column="connected_at" property="connectedAt"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="columns">
+        id, owner_user_id, platform, app_id, app_secret, bot_openid, status, last_error,
+        connected_at, create_time, update_time, deleted
+    </sql>
+
+    <select id="queryById" resultMap="BindingMap">
+        SELECT <include refid="columns"/> FROM ai_agent_channel_binding
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="queryByOwner" resultMap="BindingMap">
+        SELECT <include refid="columns"/> FROM ai_agent_channel_binding
+        WHERE owner_user_id = #{ownerUserId} AND platform = #{platform} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="queryByAppId" resultMap="BindingMap">
+        SELECT <include refid="columns"/> FROM ai_agent_channel_binding
+        WHERE platform = #{platform} AND app_id = #{appId} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="queryByStatus" resultMap="BindingMap">
+        SELECT <include refid="columns"/> FROM ai_agent_channel_binding
+        WHERE status = #{status} AND deleted = 0
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM ai_agent_channel_binding WHERE deleted = 0
+    </select>
+
+    <insert id="insert" parameterType="org.wwz.ai.infrastructure.channel.dao.po.AiAgentChannelBindingPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ai_agent_channel_binding (
+            owner_user_id, platform, app_id, app_secret, bot_openid, status, last_error,
+            connected_at, create_time, update_time, deleted
+        ) VALUES (
+            #{ownerUserId}, #{platform}, #{appId}, #{appSecret}, #{botOpenid}, #{status}, #{lastError},
+            #{connectedAt}, NOW(), NOW(), 0
+        )
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE ai_agent_channel_binding
+        SET status = #{status},
+            last_error = #{lastError},
+            connected_at = #{connectedAt},
+            update_time = NOW()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="disable">
+        UPDATE ai_agent_channel_binding
+        SET status = 'DISABLED', deleted = 1, update_time = NOW()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+</mapper>

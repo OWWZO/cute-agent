@@ -56,6 +56,15 @@
 |------------|------|
 | `ITaskService` / `AgentTaskApplicationService` | 查询有效/失效的任务调度，供 trigger 层 `AgentTaskJob` 消费 |
 
+### Channel（IM 渠道编排）
+| 接口 / 实现 | 职责 |
+|------------|------|
+| `ChannelInboundDispatchService` | 一条 IM 消息 → 复用 `submitAgentQuery` 跑一轮 → 挂出站观察者；实现 domain 的 `ChannelInboundPort` |
+| `ChannelSessionBinder` | `submitAgentQuery` 之后回写 `ai_agent_dialogue_session.binding_id` |
+| `ChannelObserverAttacher` / `ChannelObserverStream` / `ChannelFrameAggregator` | 把投影帧流收成一次 IM 出站（只认终答帧，`AtomicBoolean` 幂等）；投影已关闭时回退查执行账本 |
+| `ChannelArtifactResolver` | 查 `ai_agent_artifact`（output + visible），拼「📎 附件」 |
+| `ChannelBindingApplicationService` / `ChannelBindingQrService` / `ChannelOwnerQueryService` | 绑定的查询 / 解绑 / 重试 / 上限，扫码状态机，owner 查会话 |
+
 ### Visitor（匿名访客 + 会话归属）
 | 类型 | 职责 |
 |------|------|
@@ -143,6 +152,7 @@ A: 永远不会。`SseEmitter` 只允许在 `ai-agent-station-study-trigger` 中
 ```
 org.wwz.ai.application.agent
 ├── armory/        # Agent 装配
+├── channel/       # IM 渠道编排（inbound / outbound / binding）
 ├── dataquery/     # 数据问答（chat / NL2SQL / recall）
 ├── dispatch/      # 按 AgentType 分发执行策略
 ├── execute/       # ReAct / PlanSolve / Workflow 三类策略
@@ -185,3 +195,6 @@ org.wwz.ai.application.agent
 
 ### 2026-05-09
 - 初始化模块文档；记录 019/020 后稳定 seam、协议端口与 visitor 子域归属。
+
+### 2026-10-27
+- 新增 `channel/` 子包（IM 渠道编排）。原独立的 `Cute-agent-channel` 五模块拆分合并回现有分层。

@@ -61,4 +61,10 @@ public interface ExecutionLedgerQueryService {
     List<DialogueSessionView> queryRecentSessions(String userId, int limit);
 
     ConversationSessionPage queryRecentSessions(String userId, ConversationSessionCursor after, int limit);
+
+    /**
+     * 查整棵会话树：给定树中任一节点，返回「根 + 全部后代」的扁平列表。
+     * <p>层级由 {@code parentSessionId} 表达，调用方自行组树；列表内根会话在前。</p>
+     */
+    List<DialogueSessionView> querySessionTree(String sessionId, int limit);
 }

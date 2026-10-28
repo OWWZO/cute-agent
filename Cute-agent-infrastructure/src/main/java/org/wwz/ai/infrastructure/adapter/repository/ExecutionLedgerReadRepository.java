@@ -155,6 +155,16 @@ public class ExecutionLedgerReadRepository implements IExecutionLedgerReadReposi
     }
 
     @Override
+    public List<DialogueSessionView> querySessionsByBindingId(Long bindingId, int limit) {
+        return dialogueSessionLedgerDao.querySessionsByBindingId(bindingId, limit);
+    }
+
+    @Override
+    public List<DialogueSessionView> querySessionsByRootId(String rootSessionId, int limit) {
+        return dialogueSessionLedgerDao.querySessionsByRootId(rootSessionId, limit);
+    }
+
+    @Override
     public List<ArtifactRecord> queryArtifactsByRunIds(List<Long> runIds) {
         return artifactLedgerDao.queryByRunIds(runIds);
     }

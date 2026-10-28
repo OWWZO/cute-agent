@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.wwz.ai.api.response.Response;
+import org.wwz.ai.application.agent.authorization.SessionNotInteractiveException;
+import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
 import org.wwz.ai.application.agent.query.AgentQuerySubmitResult;
 import org.wwz.ai.application.agent.query.GptQueryCommand;
 import org.wwz.ai.application.agent.query.IGptQueryApplicationService;
@@ -75,6 +77,12 @@ public class AiAgentController {
             log.warn("{} dispatch busy", requestId, e);
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Response.<Map<String, Object>>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
+                    .info(e.getMessage())
+                    .build());
+        } catch (SessionNotInteractiveException | SessionOwnershipDeniedException e) {
+            log.warn("{} session access denied: {}", requestId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Response.<Map<String, Object>>builder()
+                    .code(ResponseCode.FORBIDDEN.getCode())
                     .info(e.getMessage())
                     .build());
         } catch (IllegalArgumentException | IllegalStateException e) {

@@ -51,6 +51,7 @@ import {
   type FeaturedConversationAdminRecord,
 } from "@/services/featuredConversationAdmin";
 import {
+  hydrateConversationFromSummaryPage,
   isHistoryDetailEmpty,
   mergeConversationHistoryPage,
   mergeRunReplayIntoConversation,
@@ -71,7 +72,9 @@ import {
   toRecentSessionItem,
 } from "./homeState";
 import FeaturedConversationAdminPanel from "./FeaturedConversationAdminPanel";
+import { SessionSwitchSkeleton } from "./SessionSwitchSkeleton";
 import {
+  applyInlineReplays,
   hydrateSessionWithRunningReplay,
   resolveInitialSession,
 } from "./sessionBootstrap";
@@ -116,6 +119,7 @@ const LazyToolCatalog = lazy(() => import("@/pages/ToolCatalog"));
 const LazyFeaturedConversations = lazy(
   () => import("@/pages/FeaturedConversations")
 );
+const LazyChannelAdmin = lazy(() => import("@/pages/ChannelAdmin"));
 
 const WorkspaceLoading: CuteType.FC = () => (
   <Loading loading branded className="h-full min-h-[240px]" />
@@ -266,6 +270,8 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
   const [conversationBootstrapLoading, setConversationBootstrapLoading] =
     useState(false);
   const [historyPageLoading, setHistoryPageLoading] = useState(false);
+  /** 正在切换的远端会话 ID；非空时消息区显示骨架屏，避免先渲染旧会话再整体替换。 */
+  const [switchingSessionId, setSwitchingSessionId] = useState("");
   const historyPageRequestsRef = useRef<Map<string, Promise<void>>>(new Map());
   const runReplayRequestsRef = useRef<
     Map<string, Promise<ConversationRunReplay>>
@@ -422,7 +428,26 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     activeView === "chat" &&
     (hasConversationContent(currentConversation) || inputInfo.message.length > 0);
   const { reduce: reduceMotion } = useMotionConfig();
-  const viewFadeDuration = reduceMotion ? DURATION.reduced : 0.22;
+  /**
+   * 欢迎页 ↔ 对话页的整屏切换。
+   *
+   * 这里刻意保持 `mode="wait"`（先出后进）而不是交叉淡入：两个视图都是文字密集界面，
+   * 叠在一起会让标题、消息流互相透底。代价是没法用 `layoutId` 做输入框变形，
+   * 所以改用「轻微上浮就位」表达方向感 —— 对话页从下方升起，欢迎页从上方落回。
+   */
+  const viewMotion = reduceMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: DURATION.reduced, ease: EASE_OUT },
+      }
+    : {
+        initial: { opacity: 0, y: 6 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -4 },
+        transition: { duration: DURATION.message, ease: EASE_OUT },
+      };
 
   const contentContainerClassName =
     activeView === "chat" && canRenderChatView
@@ -605,6 +630,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       const nextSessionId = override?.sessionId || createSessionId();
       const nextProductType = override?.productType || product.type;
       setActiveView("chat");
+      setSwitchingSessionId("");
       const nextConversation = createConversation({
         sessionId: nextSessionId,
         productType: nextProductType,
@@ -650,10 +676,14 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       );
       if (!localSelection.shouldLoadRemote && localSelection.localConversation) {
         // 新建但尚未发送过消息的会话只存在前端，不能向后端请求不存在的详情。
+        setSwitchingSessionId("");
         setCurrentConversation(localSelection.localConversation);
         resetInput();
         return;
       }
+
+      // 骨架屏即刻生效：否则 bootstrap 返回前消息区仍是上一个会话的内容。
+      setSwitchingSessionId(session.sessionId);
 
       // 切换已有会话始终从后端读取最新详情，避免用前端流式缓存覆盖已完成状态。
       conversationHistoryApi
@@ -674,29 +704,61 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           });
           const detail = bootstrap?.detail;
           if (!detail || isHistoryDetailEmpty(detail)) {
+            setSwitchingSessionId("");
             if (localSelection.localConversation) {
               setCurrentConversation(localSelection.localConversation);
             }
             return;
           }
-          const hydrated = await hydrateSessionWithRunningReplay(
+          const hitlPending = {
+            askUser: bootstrap.askUser || [],
+            desktopControl: bootstrap.desktopControl || [],
+            planApproval: bootstrap.planApproval || [],
+          };
+
+          if (bootstrap.replaysIncluded) {
+            // 回放已内联：摘要壳 + 回放 + HITL 全部在本地合并，不再发请求。
+            // 顺序不能反 —— mergeRunReplayIntoConversation 按 requestId 整块替换 chat，
+            // HITL 卡片挂在 chat 上，先合 HITL 会被回放覆盖掉。
+            const withReplay = applyInlineReplays(
+              hydrateConversationFromSummaryPage(detail),
+              bootstrap.replays
+            );
+            if (selectionVersion !== sessionSelectionVersionRef.current) {
+              return;
+            }
+            setSwitchingSessionId("");
+            setCurrentConversation(applySessionHitlPending(withReplay, hitlPending));
+            resetInput();
+            return;
+          }
+
+          // 未内联（超预算 / 无回放）：先让界面活起来，回放后台并行补。
+          // 用户此刻已能看到完整的一问一答（detail 里的 finalSummaryText），
+          // 工具卡稍后浮现，而不是整页冻结等 N 个 RTT。
+          // 这一步只合 HITL、不补回放，所以卡片会落在摘要壳上；
+          // 回放到达后整块替换 chat，再由下面那次 HITL 合并把卡片补回。
+          setSwitchingSessionId("");
+          setCurrentConversation(hydrateConversationFromSummaryPage(detail));
+          resetInput();
+
+          const withReplay = await hydrateSessionWithRunningReplay(
             detail,
             (requestId) => loadRunReplay(session.sessionId, requestId),
             reportRunningReplayError
           );
-          const restored = applySessionHitlPending(hydrated, {
-            askUser: bootstrap.askUser || [],
-            desktopControl: bootstrap.desktopControl || [],
-            planApproval: bootstrap.planApproval || [],
-          });
           if (selectionVersion !== sessionSelectionVersionRef.current) {
             return;
           }
-          setCurrentConversation(restored);
-          resetInput();
+          setCurrentConversation((previous) =>
+            previous.sessionId === session.sessionId
+              ? applySessionHitlPending(withReplay, hitlPending)
+              : previous
+          );
         })
         .catch((error) => {
           if (selectionVersion === sessionSelectionVersionRef.current) {
+            setSwitchingSessionId("");
             if (localSelection.localConversation) {
               setCurrentConversation(localSelection.localConversation);
               return;
@@ -1084,6 +1146,8 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       setWorkspaceImmersive(false);
       closeMobileSidebar();
       setActiveView(view);
+      // 递增版本会让进行中的 bootstrap 直接 return，骨架屏需要在这里一起清掉。
+      setSwitchingSessionId("");
     },
     [auth.status, closeMobileSidebar, navigate, setActiveView]
   );
@@ -1099,6 +1163,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
 
   const handleSidebarOpenTaskFiles = useCallback(() => {
     sessionSelectionVersionRef.current += 1;
+    setSwitchingSessionId("");
     ensureCurrentSessionWorkspaceFiles();
     setActiveView("chat");
     setWorkspaceImmersive(false);
@@ -1266,19 +1331,17 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
                   initialFeaturedId={featuredEntryId}
                 />
               </WorkspaceContent>
+            ) : activeView === "channels" ? (
+              <WorkspaceContent>
+                <LazyChannelAdmin embedded />
+              </WorkspaceContent>
             ) : (
               <AnimatePresence mode="wait" initial={false}>
                 {canRenderChatView ? (
                   <motion.div
                     key="chat"
-                    className="h-full min-h-0 w-full"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{
-                      duration: viewFadeDuration,
-                      ease: EASE_OUT
-                    }}
+                    className="relative h-full min-h-0 w-full"
+                    {...viewMotion}
                   >
                     <ChatView
                       inputInfo={inputInfo}
@@ -1308,18 +1371,17 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
                       }}
                       onFocusModeChange={setWorkspaceImmersive}
                     />
+                    {false && switchingSessionId ? (
+                      <div className="absolute inset-0 z-10">
+                        <SessionSwitchSkeleton />
+                      </div>
+                    ) : null}
                   </motion.div>
                 ) : (
                   <motion.div
                     key="welcome"
                     className="h-full min-h-0 w-full"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{
-                      duration: viewFadeDuration,
-                      ease: EASE_OUT
-                    }}
+                    {...viewMotion}
                   >
                     <WelcomeView
                       currentConversation={currentConversation}

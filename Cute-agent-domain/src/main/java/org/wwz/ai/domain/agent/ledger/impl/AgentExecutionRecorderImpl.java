@@ -83,6 +83,9 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
             executionLedgerWriteRepository.upsertSessionOnRunStart(DialogueSessionUpsertRecord.builder()
                     .sessionId(record.getSessionId())
                     .userId(record.getUserId())
+                    // 兜底默认「自己即根」：已有子会话行时 ON DUPLICATE 段不覆盖 root_session_id，
+                    // 由 SubAgentSessionPortAdapter 建行时写入的树根值保持不变。
+                    .rootSessionId(record.getSessionId())
                     .title(sessionHead.title())
                     .status(ExecutionLedgerConstants.STATUS_RUNNING)
                     .latestRequestId(record.getRequestId())

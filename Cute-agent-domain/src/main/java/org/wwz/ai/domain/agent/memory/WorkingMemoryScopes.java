@@ -3,7 +3,11 @@ package org.wwz.ai.domain.agent.memory;
 import org.apache.commons.lang3.StringUtils;
 
 /**
- * working_memory 投影作用域：主会话与子 Agent 侧链隔离。
+ * working_memory 投影作用域。
+ *
+ * <p>子会话已统一为 {@link #MAIN}：子 Agent 的记忆按 {@code (childSessionId, main)} 存，
+ * 与主会话完全同构——「父派发子 Agent」与「用户从会话树点进子会话」是同一个会话的两种驱动方式。
+ * 历史上的 {@code sub:{agentId}} 作用域只存在于迁移前的存量数据里。</p>
  */
 public final class WorkingMemoryScopes {
 
@@ -14,24 +18,5 @@ public final class WorkingMemoryScopes {
 
     public static String normalize(String scope) {
         return StringUtils.isBlank(scope) ? MAIN : scope.trim();
-    }
-
-    public static String forSubAgent(String agentId) {
-        if (StringUtils.isBlank(agentId)) {
-            throw new IllegalArgumentException("agentId 不能为空");
-        }
-        return "sub:" + agentId.trim();
-    }
-
-    public static boolean isSubScope(String scope) {
-        String s = normalize(scope);
-        return s.startsWith("sub:") && s.length() > 4;
-    }
-
-    public static String extractSubAgentId(String scope) {
-        if (!isSubScope(scope)) {
-            return null;
-        }
-        return normalize(scope).substring(4);
     }
 }

@@ -3,6 +3,8 @@ package org.wwz.ai.domain.agent.runtime.tool.workspace;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
+import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillDefinition;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillRegistry;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillVirtualPaths;
@@ -11,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +30,17 @@ public class WorkspaceService {
     private final WorkspacePathGuard workspacePathGuard;
     private final SkillRegistry skillRegistry;
     private final SkillVirtualPaths skillVirtualPaths;
+
+    /**
+     * 血缘上溯用。用 setter 注入而非构造参数：本类有 18 个测试直接 new 4 参构造，
+     * 加构造参数会让它们全部要改，而它们都不关心血缘。为 null 时退化为「自己的目录」。
+     */
+    private IExecutionLedgerReadRepository executionLedgerReadRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setExecutionLedgerReadRepository(IExecutionLedgerReadRepository repository) {
+        this.executionLedgerReadRepository = repository;
+    }
 
     public boolean isEnabled() {
         return workspaceRuntimeOptions != null && workspaceRuntimeOptions.isEnabled();
@@ -52,6 +66,43 @@ public class WorkspaceService {
         }
         String expanded = expandTemplate(template, sessionId);
         return Path.of(expanded).toAbsolutePath().normalize();
+    }
+
+    /**
+     * 解析「该会话应使用的工作区根」，沿 {@code parent_session_id} 上溯到根。
+     * <p>
+     * 子会话与父共享工作区（文件双向可见）是既有设计：模式 1（父派发）由
+     * {@code SubAgentContextFactory} 直接继承父的 workspaceRoot。模式 2（用户从会话树点进子会话）
+     * 没有父 context，只能靠血缘查回来。
+     * </p>
+     * <p>上溯失败（父不存在 / 循环）时降级为「自己的目录」，不抛异常——子会话至少要能工作。</p>
+     */
+    public Path resolveSessionWorkspaceRoot(String sessionId) {
+        return resolveAndEnsureRoot(resolveRootSessionId(sessionId));
+    }
+
+    private String resolveRootSessionId(String sessionId) {
+        if (StringUtils.isBlank(sessionId) || executionLedgerReadRepository == null) {
+            return sessionId;
+        }
+        String current = sessionId;
+        Set<String> visited = new HashSet<>();
+        while (StringUtils.isNotBlank(current) && visited.add(current)) {
+            DialogueSession session = executionLedgerReadRepository.querySessionEntity(current);
+            if (session == null) {
+                return current;
+            }
+            if (StringUtils.isNotBlank(session.getRootSessionId())) {
+                // 快速路径：root_session_id 已回填，一次查询到底
+                return session.getRootSessionId();
+            }
+            String parent = session.getParentSessionId();
+            if (StringUtils.isBlank(parent)) {
+                return current;
+            }
+            current = parent;
+        }
+        return sessionId;
     }
 
     /**

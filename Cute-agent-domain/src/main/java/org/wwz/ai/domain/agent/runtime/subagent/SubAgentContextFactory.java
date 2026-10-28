@@ -4,13 +4,14 @@ import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.AgentRunState;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
+import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
 import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanModeState;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
+import org.wwz.ai.domain.agent.runtime.util.DateUtil;
 
-import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -110,18 +111,20 @@ public final class SubAgentContextFactory {
                 // 子 sessionId 是 sub_<agentId>，等子 Agent 首次读取时惰性补建会把子 key
                 // 绑进共享面，父侧 TaskList / TaskOutput 从此全部 miss。
                 // run 级控制面必须独立：turnClosed / inject 队列是 run 的事实，子 finishRun
-                // 不得关闭父回合；父取消令牌经 parentCancellation 只读透传，/stop 杀得到子
+                // 不得关闭父回合；父的取消令牌经 parentCancellation 只读透传，/stop 杀得到子
                 // Agent，子 Agent 的任务级令牌（TaskStop）也不会误伤父。
                 // plan mode 只约束主 Agent，故单独新建。
                 .sessionControl(new SessionControl()
                         .withSessionTaskList(parent.requireSessionTaskList())
                         .withBackgroundTasks(parent.requireBackgroundTasks()))
-                .control(new RunControl().withParentCancellation(parent.getRunCancellation()))
+                .control(childRunControl(parent))
                 .planModeState(PlanModeState.builder().build())
                 .workspaceRoot(parent.getWorkspaceRoot())
                 // 子 Agent 必须自己读取文件，不能复用主 Agent 的 unchanged 判定。
                 .workspaceReadStateByPath(new ConcurrentHashMap<>())
-                .dateInfo(parent.getDateInfo())
+                // 日期每次现算，不继承父的陈旧值：子会话可能隔天才被用户从会话树点进来续聊，
+                // 沿用 spawn 那天的日期会写进 working memory 并一直错下去。
+                .dateInfo(DateUtil.CurrentDateInfo())
                 // 子 Agent 统一走流式 LLM（askTool stream=true），兼容仅支持 stream 的网关；
                 // 过程文仍由 SubAgentPrinter 折叠，不刷主时间线。
                 .isStream(Boolean.TRUE)
@@ -133,7 +136,6 @@ public final class SubAgentContextFactory {
                 .ltmOwner(null)
                 .ltmMemoryContext(null)
                 .agentType(parent.getAgentType())
-                .productFiles(parent.getProductFiles() == null ? new ArrayList<>() : new ArrayList<>(parent.getProductFiles()))
                 // 账本 + 重放：与 SubAgentPrinter SSE 标签同契约
                 .parentToolUseId(parentToolUseId)
                 .subAgentId(agentId)
@@ -166,6 +168,22 @@ public final class SubAgentContextFactory {
         }
         // 即使 parentToolUseId 缺失也必须包装：至少打上 subAgentId，禁止子事件伪装成根结果。
         return new SubAgentPrinter(parentPrinter, parentToolUseId, agentId, agentType, description);
+    }
+
+    /**
+     * 子 Agent 的 run 级控制面：全新实例 + 父令牌链只读透传。
+     *
+     * <p>透传的是<b>整条链</b>而不是 {@code parent.getRunCancellation()}（own 优先的单个令牌）：
+     * 若父 Agent 本身是后台子 Agent，它的 {@code ownCancellation} 已被 {@code SubAgentRunner}
+     * 覆盖为任务级令牌，此时交出单个令牌会把任务令牌当作用户 stop 令牌传下去，
+     * 用户 {@code /stop} 就杀不到再下一层。两个令牌都挂上，任一侧 cancel 都能中止孙 Agent。</p>
+     */
+    private static RunControl childRunControl(AgentContext parent) {
+        RunControl control = new RunControl();
+        for (RunCancellation token : parent.getRunCancellationChain()) {
+            control.bindParentCancellation(token);
+        }
+        return control;
     }
 
     public static String newAgentId() {

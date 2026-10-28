@@ -199,6 +199,12 @@ declare global {
       title: string;
       productType: string;
       deepThink: boolean;
+      /** 会话级模型标识（库值）；null/undefined 表示用户从未显式选择过。 */
+      sessionModel?: string | null;
+      /** 会话级深度思考开关（库值）；null/undefined 表示未显式选择。 */
+      sessionThinking?: boolean | null;
+      /** 会话级思考强度（库值）；null/undefined 表示用默认。 */
+      sessionThinkingEffort?: string | null;
       createdAt: number;
       updatedAt: number;
       chatTitle: string;

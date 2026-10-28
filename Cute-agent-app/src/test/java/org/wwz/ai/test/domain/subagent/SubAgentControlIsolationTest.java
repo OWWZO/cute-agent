@@ -27,6 +27,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *       且 spawn 时用父 sessionKey eager 物化（子 sessionId 是 sub_&lt;agentId&gt;，惰性补建会把子 key 绑进共享面）。</li>
  * </ul>
  *
+ * <p>{@code forkForParallelTask} 走与 {@code SubAgentContextFactory} 同构的规则，一并锁住。</p>
+ *
  * <p>放 app 模块：断言调 {@link AgentDispatchTool#shouldSettleParentStream}，
  * 会触发 @Slf4j 静态初始化，只有 app 模块 classpath 能初始化（同 AgentToolPoolNestingHardeningTest）。</p>
  */
@@ -162,6 +164,57 @@ public class SubAgentControlIsolationTest {
         Assert.assertEquals("给B", childB.drainPendingInjects().get(0).getText());
     }
 
+    // ---- 并发 fork：与子 Agent 同构的 run 级独占规则 ----
+
+    @Test
+    public void parallelForkMustOwnRunControlButShareSessionScope() {
+        AgentContext parent = newParent("sess-iso-12");
+        AgentContext fork = parent.forkForParallelTask("并发子任务");
+
+        Assert.assertNotSame("并发 fork 的 run 级控制面必须独占（finishRun 不得关闭父回合）",
+                parent.control(), fork.control());
+        Assert.assertSame("会话级 Todo 列表必须共享",
+                parent.requireSessionTaskList(), fork.requireSessionTaskList());
+        Assert.assertSame("会话级后台任务表必须共享（TaskOutput 命中并发子任务）",
+                parent.requireBackgroundTasks(), fork.requireBackgroundTasks());
+    }
+
+    @Test
+    public void parallelForkFinishRunMustNotCloseParentTurn() {
+        AgentContext parent = newParent("sess-iso-13");
+        AgentContext fork = parent.forkForParallelTask("并发子任务");
+
+        ExecutionLedgerRunSupport.finishRun(
+                fork, ExecutionLedgerConstants.STATUS_SUCCESS, "并发子任务结论", null, null);
+
+        Assert.assertFalse("并发 fork 结束不得关闭父回合", parent.isTurnClosed());
+    }
+
+    @Test
+    public void parallelForkInjectQueueMustNotReplaceParentQueue() {
+        AgentContext parent = newParent("sess-iso-14");
+        ConcurrentLinkedQueue<PendingInjectMessage> parentQueue = parent.requirePendingInjects();
+        AgentContext fork = parent.forkForParallelTask("并发子任务");
+
+        fork.bindPendingInjectQueue(SessionAgentMailboxHub.queue("sess-iso-14", "fork-14"));
+
+        Assert.assertSame("并发 fork 绑定自己的 inject 队列不得替换父 run 的队列",
+                parentQueue, parent.requirePendingInjects());
+    }
+
+    @Test
+    public void parallelForkMustStillReceiveUserStop() {
+        AgentContext parent = newParent("sess-iso-15");
+        // 用户 stop 令牌在 run 开始时由 ActiveAgentRunRegistry 注入父，早于 fork
+        RunCancellation userToken = new RunCancellation();
+        parent.control().bindCancellation(userToken);
+        AgentContext fork = parent.forkForParallelTask("并发子任务");
+
+        userToken.cancel(RunCancellation.REASON_USER_STOP);
+
+        Assert.assertTrue("父 /stop 必须杀得到并发子任务", fork.isRunCancelled());
+    }
+
     // ---- 取消令牌：令牌链 ----
 
     @Test
@@ -205,5 +258,73 @@ public class SubAgentControlIsolationTest {
 
         userToken.cancel(RunCancellation.REASON_USER_STOP);
         Assert.assertTrue("用户 stop 必须仍杀得到已覆盖任务令牌的子 Agent", child.isRunCancelled());
+    }
+
+    /**
+     * 嵌套第三层：父 Agent 是后台子 Agent 时，它的 own 已被任务令牌覆盖，
+     * 透传给孙 Agent 的必须是整条链而不是 own 优先的单个令牌。
+     *
+     * <p>这是 {@code RunControl.getCancellation()} 的 own 优先语义与令牌链透传的冲突点：
+     * 若只透传单个令牌，用户 /stop 取消 userToken 后，孙 Agent 的 parentCancellation 指向
+     * 任务令牌，永远收不到取消。</p>
+     */
+    @Test
+    public void grandchildMustReceiveUserStopEvenWhenParentIsBackgroundAgent() {
+        AgentContext root = newParent("sess-iso-16");
+        // 用户 stop 令牌：ActiveAgentRunRegistry 注入根 Agent
+        RunCancellation userToken = new RunCancellation();
+        root.control().bindCancellation(userToken);
+
+        AgentContext background = spawnChild(root, "agent-iso-16");
+        // SubAgentRunner:240 —— 后台子 Agent 覆盖自己的任务级令牌
+        RunCancellation taskCancel = new RunCancellation();
+        background.control().bindCancellation(taskCancel);
+
+        AgentContext grandchild = spawnChild(background, "agent-iso-16a");
+
+        userToken.cancel(RunCancellation.REASON_USER_STOP);
+
+        Assert.assertTrue("用户 stop 必须经两层令牌链杀到孙 Agent", grandchild.isRunCancelled());
+    }
+
+    @Test
+    public void grandchildMustNotBeKilledByBackgroundTaskStop() {
+        AgentContext root = newParent("sess-iso-17");
+        RunCancellation userToken = new RunCancellation();
+        root.control().bindCancellation(userToken);
+
+        AgentContext background = spawnChild(root, "agent-iso-17");
+        RunCancellation taskCancel = new RunCancellation();
+        background.control().bindCancellation(taskCancel);
+
+        AgentContext grandchild = spawnChild(background, "agent-iso-17a");
+
+        taskCancel.cancel("task_stop");
+
+        Assert.assertFalse("TaskStop 只杀后台子 Agent，不得经链误伤孙 Agent（孙只认用户 stop）",
+                grandchild.isRunCancelled());
+
+        userToken.cancel(RunCancellation.REASON_USER_STOP);
+        Assert.assertTrue("用户 stop 仍应杀得到孙 Agent", grandchild.isRunCancelled());
+    }
+
+    // ---- dateInfo：每次现算，不继承父 ----
+
+    @Test
+    public void childDateInfoIsComputedFreshInsteadOfInheritingParent() {
+        AgentContext parent = AgentContext.builder()
+                .requestId("req-sess-iso-18")
+                .sessionId("sess-iso-18")
+                .query("父任务")
+                .toolCollection(new ToolCollection())
+                .dateInfo("今天是 2020年1月1日 星期三")
+                .build();
+
+        AgentContext child = spawnChild(parent, "agent-iso-18");
+
+        Assert.assertNotEquals("子 Agent 的 dateInfo 必须是当前日期，不能沿用父的陈旧值",
+                "今天是 2020年1月1日 星期三", child.getDateInfo());
+        Assert.assertTrue("子 Agent 的 dateInfo 必须含当日年份",
+                child.getDateInfo().contains(String.valueOf(java.time.LocalDate.now().getYear())));
     }
 }

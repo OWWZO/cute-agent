@@ -6,6 +6,7 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.cancel.PendingInjectMessage;
 import org.wwz.ai.domain.agent.runtime.subagent.BackgroundSubAgentExecutor;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentContextFactory;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionAgentMailboxHub;
@@ -176,14 +177,13 @@ public class SendMessageTool implements BaseTool {
                     "message", "无法唤醒子 Agent：SubAgentRunner 未注入。"
             ));
         }
-        if (!subAgentRunner.hasPersistedMemory(agentContext.getSessionId(), target.agentId)) {
+        // 记忆按 (childSessionId, main) 存，必须由 agentId 反推子会话 ID 再查
+        if (!subAgentRunner.hasPersistedMemory(
+                SubAgentContextFactory.newChildSessionId(target.agentId))) {
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("ok", false);
             fields.put("to", to);
             fields.put("agentId", target.agentId);
-            if (StringUtils.isNotBlank(target.taskId)) {
-                fields.put("task_id", target.taskId);
-            }
             fields.put("message", "无法唤醒子 Agent：未找到 agentId=" + target.agentId
                     + " 的工作记忆（可能已过期或从未成功结束）。");
             return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, fields);

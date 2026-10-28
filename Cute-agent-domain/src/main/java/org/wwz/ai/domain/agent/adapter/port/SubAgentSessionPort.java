@@ -23,7 +23,12 @@ public interface SubAgentSessionPort {
      * @param parentSessionId 父会话 ID，仅审计与授权穿透，不参与工作记忆 hydrate
      * @param userId          会话归属用户，与父会话一致
      * @param title           展示标题（子 Agent 任务描述）
+     * @param subAgentType    子智能体类型，决定该会话的工具池；空值表示未记录
      * @throws RuntimeException 落库失败时抛出，调用方据此中止子 Agent 启动
      */
-    void ensureChildSession(String childSessionId, String parentSessionId, String userId, String title);
+    void ensureChildSession(String childSessionId,
+                            String parentSessionId,
+                            String userId,
+                            String title,
+                            String subAgentType);
 }

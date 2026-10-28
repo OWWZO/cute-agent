@@ -37,7 +37,9 @@ import org.wwz.ai.types.agent.user.UserRequestContext;
 import org.wwz.ai.types.enums.ResponseCode;
 
 import javax.annotation.Resource;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -128,9 +130,39 @@ public class AgentConversationHistoryController {
         }
     }
 
-    @GetMapping("/sessions/{sessionId}")
-    public Response<ConversationHistoryPageRespVO> detail(
+    /**
+     * 会话树：给树中任一节点，返回「根 + 全部后代」的扁平列表。
+     * <p>层级由 {@code parentSessionId} 表达，前端据此画分支；根会话排在最前。</p>
+     */
+    @GetMapping("/sessions/{sessionId}/tree")
+    public Response<List<ConversationSessionRespVO>> tree(
             @PathVariable("sessionId") String sessionId,
+            @RequestParam(name = "limit", defaultValue = "200") Integer limit) {
+        try {
+            conversationSessionAuthorizationService.ensureExistingSessionAccessible(
+                    UserRequestContext.requireUserId(),
+                    sessionId
+            );
+            List<ConversationSessionRespVO> tree = executionLedgerQueryService
+                    .querySessionTree(sessionId, limit)
+                    .stream()
+                    .map(this::toSessionRespVO)
+                    .collect(Collectors.toList());
+            return Response.<List<ConversationSessionRespVO>>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(tree)
+                    .build();
+        } catch (Exception e) {
+            return Response.<List<ConversationSessionRespVO>>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info(e.getMessage())
+                    .build();
+        }
+    }
+
+    @GetMapping("/sessions/{sessionId}")
+    public Response<ConversationHistoryPageRespVO> detail(            @PathVariable("sessionId") String sessionId,
             @RequestParam(name = "limit", defaultValue = "20") Integer limit,
             @RequestParam(name = "after", required = false) String after) {
         try {
@@ -220,6 +252,10 @@ public class AgentConversationHistoryController {
                 .sessionId(session.getSessionId())
                 .title(session.getTitle())
                 .status(resolveStatusLabel(session.getStatus()))
+                .sessionKind(session.getSessionKind())
+                .parentSessionId(session.getParentSessionId())
+                .rootSessionId(session.getRootSessionId())
+                .subAgentType(session.getSubAgentType())
                 .latestQueryText(session.getLatestQueryText())
                 .runCount(session.getRunCount())
                 .finishedRunCount(session.getFinishedRunCount())
@@ -238,6 +274,9 @@ public class AgentConversationHistoryController {
                 .title(page.getTitle())
                 .status(resolveStatusLabel(page.getStatus()))
                 .deepThink(page.getDeepThink())
+                .model(page.getModel())
+                .thinking(page.getThinking())
+                .thinkingEffort(page.getThinkingEffort())
                 .latestRequestId(page.getLatestRequestId())
                 .latestQueryPreview(page.getLatestQueryPreview())
                 .latestSummaryPreview(page.getLatestSummaryPreview())
@@ -323,7 +362,19 @@ public class AgentConversationHistoryController {
                 .askUser(emptyIfNull(bootstrap.getAskUser()))
                 .desktopControl(emptyIfNull(bootstrap.getDesktopControl()))
                 .planApproval(emptyIfNull(bootstrap.getPlanApproval()))
+                .replays(toReplayRespVOMap(bootstrap.getReplays()))
+                .replaysIncluded(bootstrap.isReplaysIncluded())
                 .build();
+    }
+
+    private Map<String, ConversationRunReplayRespVO> toReplayRespVOMap(
+            Map<String, ConversationRunReplay> replays) {
+        if (replays == null || replays.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, ConversationRunReplayRespVO> result = new LinkedHashMap<>();
+        replays.forEach((requestId, replay) -> result.put(requestId, toReplayRespVO(replay)));
+        return result;
     }
 
     private <T> List<T> emptyIfNull(List<T> list) {

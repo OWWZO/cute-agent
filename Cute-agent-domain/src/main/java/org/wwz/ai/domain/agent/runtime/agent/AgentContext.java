@@ -529,6 +529,16 @@ public class AgentContext {
     }
 
     /**
+     * 本轮取消令牌链的完整上游（任务级 + 用户 stop）。
+     *
+     * <p>派生子 Agent 时透传必须用本方法：{@link #getRunCancellation()} own 优先，
+     * 后台 Agent 覆盖任务级令牌后会交出任务令牌而非用户 stop 令牌。</p>
+     */
+    public List<RunCancellation> getRunCancellationChain() {
+        return control().cancellationChain();
+    }
+
+    /**
      * 把在途模型请求或阻塞调用挂到本轮取消令牌上。没有令牌时返回空注销句柄。
      */
     public Runnable registerRunAbort(Runnable hook) {

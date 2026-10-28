@@ -7,6 +7,7 @@ import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.wwz.ai.application.agent.dispatch.IAgentDispatchService;
 import org.wwz.ai.application.agent.query.AgentQuerySubmitResult;
+import org.wwz.ai.application.agent.query.ConversationSessionPreferencesApplicationService;
 import org.wwz.ai.application.agent.query.GptQueryCommand;
 import org.wwz.ai.application.agent.query.GptQueryApplicationService;
 import org.wwz.ai.application.agent.query.mapper.AgentExecutionCommandMapper;
@@ -160,6 +161,9 @@ public class GptQueryApplicationServiceUserIdBindingTest {
 
     private static GptQueryApplicationService newService() {
         GptQueryApplicationService service = new GptQueryApplicationService();
+        // 会话偏好落库是旁路副作用，本测试只关心 userId / 归属绑定，注入 mock 即可。
+        ReflectionTestUtils.setField(service, "conversationSessionPreferencesApplicationService",
+                Mockito.mock(ConversationSessionPreferencesApplicationService.class));
         ActiveAgentRunRegistry registry = Mockito.mock(ActiveAgentRunRegistry.class);
         Mockito.when(registry.begin(Mockito.any(), Mockito.any(), Mockito.any()))
                 .thenAnswer(invocation -> new ActiveAgentRunRegistry.ActiveRun(

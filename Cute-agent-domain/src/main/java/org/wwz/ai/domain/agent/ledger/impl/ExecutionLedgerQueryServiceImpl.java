@@ -229,6 +229,23 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     }
 
     @Override
+    public List<DialogueSessionView> querySessionTree(String sessionId, int limit) {
+        if (StringUtils.isBlank(sessionId)) {
+            return List.of();
+        }
+        DialogueSessionView current = executionLedgerReadRepository.querySession(sessionId);
+        if (current == null) {
+            return List.of();
+        }
+        // root_session_id 是 parent_session_id 的派生缓存；历史行尚未回填时退化为「自己即根」，
+        // 此时至少能返回该会话本身，不会把调用方打成空树。
+        String rootSessionId = StringUtils.defaultIfBlank(current.getRootSessionId(), sessionId);
+        return restoreSessionTitles(
+                executionLedgerReadRepository.querySessionsByRootId(rootSessionId, normalizeLimit(limit))
+        );
+    }
+
+    @Override
     public ConversationSessionPage queryRecentSessions(String userId,
                                                        ConversationSessionCursor after,
                                                        int limit) {

@@ -16,6 +16,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -29,8 +30,39 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 public class AgentStreamProjection implements AgentSessionStream {
 
-    /** 断流窗口内保留的最近投影帧数（含 tool/结果，不含心跳）。 */
-    static final int REPLAY_BUFFER_SIZE = 512;
+    /**
+     * 断流窗口内保留的投影帧。
+     * <p>
+     * <b>没有条数上限</b>：缓冲按「落库边界」清理（见 {@link #prunePersistedDeltas}），
+     * 长度天然有界于「当前尚未落库的那一次调用」。用帧数裁剪会在长思考 / 长工具流时丢掉
+     * 前半段，而这段内容在落库前没有第二份副本。
+     */
+    private final Deque<AgentSessionStreamFrame> replayBuffer = new ArrayDeque<>();
+    private final Object bufferLock = new Object();
+    private final AgentStreamFrameMapper frameMapper = new AgentStreamFrameMapper();
+
+    /**
+     * 同组末帧到达即代表整组已落库、可清中间 delta 的流式消息类型。
+     * 键是 messageId：同一轮 LLM 的所有 delta 共享一个 messageId。
+     */
+    private static final Set<String> MESSAGE_GROUPED_STREAM_TYPES = Set.of(
+            "agent_stream",
+            "llm_reasoning",
+            "tool_thought"
+    );
+
+    /**
+     * 同组末帧到达即可清中间帧的流式工具类型。键是 resultMap.toolCallId。
+     * 这类工具在一次调用内持续产帧（如 deep_search 的 search / extend 分片），
+     * 结束后由账本的 tool_invocation 一次性表达完整结果。
+     */
+    private static final Set<String> TOOL_GROUPED_STREAM_TYPES = Set.of(
+            "deep_search",
+            "browser",
+            "code",
+            "data_analysis",
+            "knowledge"
+    );
 
     private final List<ObserverSink> observers = new CopyOnWriteArrayList<>();
     private final AgentSessionEventBus eventBus;
@@ -44,9 +76,6 @@ public class AgentStreamProjection implements AgentSessionStream {
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final AtomicLong eventSequence = new AtomicLong();
     private final long startTime = System.currentTimeMillis();
-    private final Deque<AgentSessionStreamFrame> replayBuffer = new ArrayDeque<>();
-    private final Object bufferLock = new Object();
-    private final AgentStreamFrameMapper frameMapper = new AgentStreamFrameMapper();
     /**
      * 主/子 Agent 并行工具会同时 printer.send。Accumulator / agentRespList 不是线程安全的，
      * 投影必须单写，否则 taskId、orderMapping、resultMap 会错配到前端。
@@ -367,11 +396,80 @@ public class AgentStreamProjection implements AgentSessionStream {
             return;
         }
         synchronized (bufferLock) {
-            if (replayBuffer.size() >= REPLAY_BUFFER_SIZE) {
-                replayBuffer.removeFirst();
-            }
             replayBuffer.addLast(result);
+            prunePersistedDeltas(result);
         }
+    }
+
+    /**
+     * 按「落库边界」清理回放缓冲。
+     * <p>
+     * 缓冲的唯一职责是覆盖账本的盲区：某轮 LLM 调用 / 某个流式工具还在产出时，账本里只有
+     * RUNNING 行、没有正文，这些 delta 帧是**唯一副本**，必须完整保留。一旦收到该组
+     * {@code isFinal=true} 的末帧，说明后端已把完整内容落库（{@code finishLlmInvocation} /
+     * {@code finishToolInvocation}），中间 delta 即可移除；末帧本身保留，因为它是该组的
+     * 全文快照，重订时前端要靠它一次性补齐。
+     * <p>
+     * <b>刻意不设帧数 / 时长上限</b>：任何按帧数或时间窗口裁剪，都会在长思考、长工具流时
+     * 丢掉前半段内容，而这段内容在落库前没有第二份副本。按落库边界清理的缓冲长度天然有界于
+     * 「一次调用期间的帧数」，不需要额外阈值。
+     */
+    private void prunePersistedDeltas(AgentSessionStreamFrame finalFrame) {
+        Map<String, Object> eventData = readEventData(finalFrame);
+        if (eventData == null || !Boolean.TRUE.equals(eventData.get("isFinal"))) {
+            return;
+        }
+        String groupKey = resolvePruneGroupKey(eventData);
+        if (groupKey == null) {
+            return;
+        }
+        // 末帧自身保留：它是该组的全文快照，重订时前端要靠它补齐整段内容。
+        replayBuffer.removeIf(frame -> frame != finalFrame
+                && groupKey.equals(resolvePruneGroupKey(readEventData(frame))));
+    }
+
+    /**
+     * 该帧所属的「落库分组」；返回 null 表示该帧不参与清理。
+     * <p>
+     * 只对流式增量帧分组：它们的内容会被同组末帧一次性覆盖进账本。{@code tool_call} /
+     * {@code tool_result} / {@code result} 等骨架帧不参与 —— 数量有限，且重订后前端仍需
+     * 它们重建时间线与卡片。
+     */
+    private static String resolvePruneGroupKey(Map<String, Object> eventData) {
+        if (eventData == null) {
+            return null;
+        }
+        String messageType = asText(eventData.get("messageType"));
+        if (MESSAGE_GROUPED_STREAM_TYPES.contains(messageType)) {
+            String messageId = asText(eventData.get("messageId"));
+            return messageId.isEmpty() ? null : "msg:" + messageId;
+        }
+        if (TOOL_GROUPED_STREAM_TYPES.contains(messageType)) {
+            Object nested = eventData.get("resultMap");
+            String toolCallId = nested instanceof Map<?, ?> map
+                    ? asText(map.get("toolCallId"))
+                    : "";
+            return toolCallId.isEmpty() ? null : "tool:" + toolCallId;
+        }
+        return null;
+    }
+
+    /** 帧的 eventData：与前端 {@code resultMap.eventData} 同源，isFinal / messageType / messageId 都在这里。 */
+    private static Map<String, Object> readEventData(AgentSessionStreamFrame frame) {
+        if (frame == null || !(frame.getResultMap() instanceof Map<?, ?> resultMap)) {
+            return null;
+        }
+        Object eventData = resultMap.get("eventData");
+        if (!(eventData instanceof Map<?, ?> map)) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> typed = (Map<String, Object>) map;
+        return typed;
+    }
+
+    private static String asText(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
     }
 
     private void replayBufferedFrames(AgentSessionStream next, long lastEventSeq, boolean allowClosed) {

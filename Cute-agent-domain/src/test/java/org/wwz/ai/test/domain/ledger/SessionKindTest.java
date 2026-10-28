@@ -27,7 +27,8 @@ public class SessionKindTest {
     @Test
     public void onlyConversationIsListable() {
         Assert.assertTrue(SessionKind.CONVERSATION.isListable());
-        Assert.assertFalse(SessionKind.SUBAGENT.isListable());
+        Assert.assertFalse("子会话暂不进侧栏，等会话树 UI 落地时与 SQL 一起放开",
+                SessionKind.SUBAGENT.isListable());
         Assert.assertFalse(SessionKind.UNKNOWN.isListable());
         Assert.assertTrue(SessionKind.SUBAGENT.isSubAgent());
     }
@@ -53,5 +54,6 @@ public class SessionKindTest {
     public void isListableCodeMatchesKnownConversation() {
         Assert.assertTrue(SessionKind.isListableCode("conversation"));
         Assert.assertFalse(SessionKind.isListableCode("subagent"));
+        Assert.assertFalse("未知类型仍 fail-closed", SessionKind.isListableCode("unknown"));
     }
 }

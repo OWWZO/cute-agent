@@ -250,7 +250,8 @@ public class SessionContextCompactionOutcomeTest {
                         .keepMinTextMessages(1)
                         .keepMaxTokens(200)
                         .auditStoreMessages(false)
-                        .build());
+                        .build(),
+                null);
         List<Message> small = List.of(Message.userMessage("hi", null));
         PromptShape shape = PromptShape.text(null, small);
         service.applyIfNeededMidRun("s-mem", "main", "req-mem", small, null, shape, null);
@@ -358,7 +359,8 @@ public class SessionContextCompactionOutcomeTest {
                             .microKeepRecentToolResults(microKeepRecentToolResults)
                             .persistProjection(persistProjection)
                             .auditStoreMessages(false)
-                            .build());
+                            .build(),
+                    null);
             this.audited = audited;
             this.compactResult = compactResult;
             this.failWith = failWith;

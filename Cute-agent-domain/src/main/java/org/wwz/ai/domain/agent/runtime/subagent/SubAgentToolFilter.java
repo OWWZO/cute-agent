@@ -34,12 +34,13 @@ public final class SubAgentToolFilter {
     }
 
     /**
-     * @param parentInPlanMode 保留参数以兼容旧调用；plan mode 不再剥离子 Agent 写工具
+     * @param allowDispatch 是否允许子 Agent 继续派发子 Agent。
+     *                      当前模式 1（父派发）与模式 2（用户直聊）都传 {@code false}；
+     *                      该参数只为将来开放嵌套预留决策点，不改变现有行为。
      */
-    @SuppressWarnings("unused")
     public static ToolCollection filter(ToolCollection parentTools,
                                         SubAgentDefinition definition,
-                                        boolean parentInPlanMode) {
+                                        boolean allowDispatch) {
         ToolCollection child = new ToolCollection();
         if (parentTools == null || definition == null) {
             return child;
@@ -47,7 +48,7 @@ public final class SubAgentToolFilter {
         child.setMcpToolExecutor(parentTools.getMcpToolExecutor());
         child.restoreTaskScopedState(parentTools.snapshotTaskScopedState());
 
-        Set<String> disallowed = buildDisallowed(definition);
+        Set<String> disallowed = buildDisallowed(definition, allowDispatch);
         if (definition.usesCustomToolPolicy()) {
             copyCustomView(parentTools, child, definition, disallowed);
         } else {
@@ -57,9 +58,11 @@ public final class SubAgentToolFilter {
         return child;
     }
 
-    private static Set<String> buildDisallowed(SubAgentDefinition definition) {
+    private static Set<String> buildDisallowed(SubAgentDefinition definition, boolean allowDispatch) {
         Set<String> disallowed = new HashSet<>();
-        disallowed.add(AgentDispatchTool.NAME);
+        if (!allowDispatch) {
+            disallowed.add(AgentDispatchTool.NAME);
+        }
         disallowed.add(TaskToolNames.TASK_STOP);
         disallowed.add(TaskToolNames.TASK_OUTPUT);
         disallowed.add(TaskToolNames.SEND_MESSAGE);

@@ -73,6 +73,8 @@ public class SubAgentChildSessionPersistenceTest {
         Assert.assertEquals("parent-session", call.parentSessionId);
         Assert.assertEquals("user-1", call.userId);
         Assert.assertEquals("探索前端", call.title);
+        // 类型随身份一起落库：模式 2 靠它重建同一份工具池
+        Assert.assertEquals(SubAgentRegistry.TYPE_GENERAL_PURPOSE, call.subAgentType);
 
         // 落库失败即中止，不启动无主运行
         Assert.assertEquals(SubAgentResult.STATUS_FAILED, result.getStatus());
@@ -94,7 +96,8 @@ public class SubAgentChildSessionPersistenceTest {
                 .build();
     }
 
-    private record PersistCall(String childSessionId, String parentSessionId, String userId, String title) {
+    private record PersistCall(String childSessionId, String parentSessionId, String userId, String title,
+                               String subAgentType) {
     }
 
     private static final class RecordingFailingPort implements SubAgentSessionPort {
@@ -104,8 +107,9 @@ public class SubAgentChildSessionPersistenceTest {
         public void ensureChildSession(String childSessionId,
                                        String parentSessionId,
                                        String userId,
-                                       String title) {
-            calls.add(new PersistCall(childSessionId, parentSessionId, userId, title));
+                                       String title,
+                                       String subAgentType) {
+            calls.add(new PersistCall(childSessionId, parentSessionId, userId, title, subAgentType));
             throw new IllegalStateException("db unavailable");
         }
     }

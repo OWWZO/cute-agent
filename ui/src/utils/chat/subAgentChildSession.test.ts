@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildChildSessionChat,
+  buildChildSessionRounds,
   isTerminalRunStatus,
   pickChildSessionRun,
   readChildSessionEventData,
@@ -252,13 +253,13 @@ describe("buildChildSessionChat", () => {
     expect(chat.conclusion?.result).toBe("AB");
   });
 
-  it("有 replay 时忽略实时帧，避免流式增量被追加两次", () => {
+  it("replay 与实时帧合并：账本打底 + 实时补差，两者都进时间线", () => {
     const chat = buildChildSessionChat({
       childSessionId: "sub_1",
       replay: replayOf("r1", [
         eventData({
-          messageType: "agent_stream",
-          result: "A"
+          messageType: "tool_thought",
+          toolThought: "早期工具轨迹",
         }),
       ]),
       frames: [
@@ -266,13 +267,16 @@ describe("buildChildSessionChat", () => {
           eventSeq: 1,
           ...frameOf(eventData({
             messageType: "agent_stream",
-            result: "B"
+            result: "正在流式的最新正文"
           }))
         },
       ],
     });
 
-    expect(chat.conclusion?.result).toBe("A");
+    // 后端投影缓冲按落库边界清理后，实时帧只剩「账本还没写完的那一段」，
+    // 已落库的早期轮次只在 replay 里 —— 只取其一都会丢内容。
+    expect(JSON.stringify(chat.tasks)).toContain("早期工具轨迹");
+    expect(chat.conclusion?.result).toBe("正在流式的最新正文");
   });
 
   it("子会话 result 无条件作为本会话结论（不做父子结论去重）", () => {
@@ -442,5 +446,162 @@ describe("buildChildSessionChat", () => {
     });
 
     expect(JSON.stringify(raw)).toBe(snapshot);
+  });
+});
+
+describe("buildChildSessionRounds", () => {
+  it("单轮：有回放时直接用回放过程与结论", () => {
+    const rounds = buildChildSessionRounds({
+      childSessionId: "sub_1",
+      history: historyPage([
+        {
+          requestId: "r1",
+          status: "SUCCESS",
+          queryPreview: "查一下",
+          hasReplay: true
+        },
+      ]),
+      replays: {
+        r1: replayOf("r1", [
+          eventData({
+            messageType: "result",
+            result: "子结论"
+          }),
+        ]),
+      },
+    });
+
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0]?.requestId).toBe("r1");
+    expect(rounds[0]?.conclusion?.result).toBe("子结论");
+    expect(rounds[0]?.replayLoaded).toBe(true);
+  });
+
+  it("三轮：每个 run 一轮，缺回放的轮只产出提问 + 结论摘要的轻量壳", () => {
+    const rounds = buildChildSessionRounds({
+      childSessionId: "sub_1",
+      history: historyPage([
+        {
+          requestId: "r1",
+          status: "SUCCESS",
+          queryPreview: "第一问",
+          finalSummaryPreview: "第一答",
+          hasReplay: true
+        },
+        {
+          requestId: "r2",
+          status: "SUCCESS",
+          queryPreview: "第二问",
+          finalSummaryPreview: "第二答",
+          hasReplay: true
+        },
+        {
+          requestId: "r3",
+          status: "SUCCESS",
+          queryPreview: "第三问",
+          hasReplay: true
+        },
+      ]),
+      replays: {
+        r3: replayOf("r3", [
+          eventData({
+            messageType: "result",
+            result: "第三答"
+          }),
+        ]),
+      },
+    });
+
+    expect(rounds.map((round) => round.requestId)).toEqual(["r1", "r2", "r3"]);
+    expect(rounds[0]?.query).toBe("第一问");
+    expect(rounds[0]?.conclusion?.result).toBe("第一答");
+    // 还没点开：可补回放但尚未加载，折叠条据此决定要不要发请求
+    expect(rounds[0]?.replayLoaded).toBe(false);
+    expect(rounds[0]?.replayAvailable).toBe(true);
+    expect(JSON.stringify(rounds[0]?.tasks)).not.toContain("第三答");
+    expect(rounds[2]?.replayLoaded).toBe(true);
+    expect(rounds[2]?.conclusion?.result).toBe("第三答");
+  });
+
+  it("实时帧只归给流所属的 run，不串到历史轮上", () => {
+    const rounds = buildChildSessionRounds({
+      childSessionId: "sub_1",
+      history: historyPage([
+        {
+          requestId: "r1",
+          status: "SUCCESS",
+          queryPreview: "旧问",
+          hasReplay: true
+        },
+        {
+          requestId: "r2",
+          status: "RUNNING",
+          queryPreview: "新问",
+          hasReplay: true
+        },
+      ]),
+      frames: [
+        {
+          reqId: "r2",
+          eventSeq: 1,
+          ...frameOf(
+            eventData({
+              messageType: "agent_stream",
+              result: "最新正文"
+            })
+          ),
+        },
+      ],
+    });
+
+    expect(rounds[0]?.conclusion).toBeUndefined();
+    expect(rounds[1]?.loading).toBe(true);
+    expect(rounds[1]?.conclusion?.result).toBe("最新正文");
+  });
+
+  it("刚提交的 run 先补一条运行中的占位，落库后不重复", () => {
+    const pendingRun = {
+      requestId: "r2",
+      query: "刚发的"
+    };
+
+    const beforeLanding = buildChildSessionRounds({
+      childSessionId: "sub_1",
+      history: historyPage([
+        {
+          requestId: "r1",
+          status: "SUCCESS",
+          queryPreview: "旧问",
+          hasReplay: true
+        },
+      ]),
+      pendingRun,
+    });
+    expect(beforeLanding).toHaveLength(2);
+    expect(beforeLanding[1]?.requestId).toBe("r2");
+    expect(beforeLanding[1]?.query).toBe("刚发的");
+    expect(beforeLanding[1]?.loading).toBe(true);
+
+    const afterLanding = buildChildSessionRounds({
+      childSessionId: "sub_1",
+      history: historyPage([
+        {
+          requestId: "r1",
+          status: "SUCCESS",
+          queryPreview: "旧问",
+          hasReplay: true
+        },
+        {
+          requestId: "r2",
+          status: "RUNNING",
+          queryPreview: "刚发的",
+          hasReplay: true
+        },
+      ]),
+      pendingRun,
+    });
+    // 同 requestId 的真实 run 顶替占位，不能出现两轮同样的提问
+    expect(afterLanding).toHaveLength(2);
+    expect(afterLanding[1]?.query).toBe("刚发的");
   });
 });

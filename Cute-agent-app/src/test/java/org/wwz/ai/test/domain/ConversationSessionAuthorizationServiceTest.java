@@ -111,31 +111,28 @@ public class ConversationSessionAuthorizationServiceTest {
     }
 
     @Test
-    public void shouldRejectSubmittingQueryOnSubAgentSession() {
+    public void shouldAllowSubmittingQueryOnSubAgentSession() {
         ExecutionLedgerFixtureFactory.LedgerTestContext ctx = ExecutionLedgerFixtureFactory.newLedgerTestContext();
         seedSubAgentSession(ctx, "user-001", "sub_agent-3", "parent-001");
         ConversationSessionAuthorizationService service = newService(ctx);
 
-        try {
-            service.ensureSessionAccessible("user-001", "sub_agent-3", "继续这个子会话");
-            Assert.fail("子会话不得作为交互会话提交新 query");
-        } catch (SessionNotInteractiveException expected) {
-            Assert.assertTrue(expected.getMessage().contains("只读会话"));
-        }
+        DialogueSession session =
+                service.ensureSessionAccessible("user-001", "sub_agent-3", "继续这个子会话");
+
+        Assert.assertNotNull("子会话与主会话同构，用户应能继续对话", session);
+        Assert.assertEquals(SessionKind.SUBAGENT.code(), session.getSessionKind());
     }
 
     @Test
-    public void shouldRejectResumeOnSubAgentSession() {
+    public void shouldAllowResumeOnSubAgentSession() {
         ExecutionLedgerFixtureFactory.LedgerTestContext ctx = ExecutionLedgerFixtureFactory.newLedgerTestContext();
         seedSubAgentSession(ctx, "user-001", "sub_agent-4", "parent-001");
         ConversationSessionAuthorizationService service = newService(ctx);
 
-        try {
-            service.ensureInteractiveSessionAccessible("user-001", "sub_agent-4");
-            Assert.fail("子会话不得被 resume");
-        } catch (SessionNotInteractiveException expected) {
-            Assert.assertTrue(expected.getMessage().contains("只读会话"));
-        }
+        DialogueSession session = service.ensureInteractiveSessionAccessible("user-001", "sub_agent-4");
+
+        Assert.assertNotNull("子会话应可被 resume", session);
+        Assert.assertEquals(SessionKind.SUBAGENT.code(), session.getSessionKind());
     }
 
     @Test

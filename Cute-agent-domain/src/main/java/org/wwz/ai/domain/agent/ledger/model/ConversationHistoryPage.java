@@ -26,6 +26,15 @@ public class ConversationHistoryPage {
 
     private Boolean deepThink;
 
+    /** 会话级模型标识；{@code null} 表示用户从未显式选择过。 */
+    private String model;
+
+    /** 是否开启深度思考；{@code null} 表示未显式选择。 */
+    private Boolean thinking;
+
+    /** 思考强度（low/medium/high）；{@code null} 表示用默认。 */
+    private String thinkingEffort;
+
     private String latestRequestId;
 
     private String latestQueryPreview;

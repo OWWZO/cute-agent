@@ -5,8 +5,10 @@ import type {
   ConversationRunReplay,
 } from "@/services/agentConversation";
 import { buildConversationTaskData, combineData } from "@/utils/chat";
+import { hydrateConversationFromSummaryPage } from "@/utils/conversationHistory";
 
 import {
+  applyInlineReplays,
   hydrateSessionWithRunningReplay,
   resolveInitialSession,
   resolveInitialSessionId,
@@ -412,5 +414,61 @@ describe("sessionBootstrap", () => {
       true,
       true,
     ]);
+  });
+});
+
+describe("applyInlineReplays", () => {
+  function createTwoRunPage(): ConversationHistoryPage {
+    return {
+      sessionId: "session-inline",
+      title: "内联回放会话",
+      status: "SUCCESS",
+      deepThink: false,
+      runCount: 2,
+      finishedRunCount: 2,
+      failedRunCount: 0,
+      runs: [
+        {
+          requestId: "req-first",
+          status: "SUCCESS",
+          queryPreview: "第一个问题",
+          finalSummaryText: "第一个结论",
+          hasReplay: true,
+        },
+        {
+          requestId: "req-second",
+          status: "SUCCESS",
+          queryPreview: "第二个问题",
+          finalSummaryText: "第二个结论",
+          hasReplay: true,
+        },
+      ],
+    };
+  }
+
+  it("把内联回放合并成已加载的 chat", async () => {
+    const conversation = hydrateConversationFromSummaryPage(createTwoRunPage());
+    const replays = {
+      "req-second": createReplay("SUCCESS", [], "req-second"),
+    };
+
+    const merged = applyInlineReplays(conversation, replays);
+
+    expect(merged.chatList.map((chat) => chat.requestId)).toEqual([
+      "req-first",
+      "req-second",
+    ]);
+    // 只有带回放的 run 标记为已加载，未内联的仍可被点开补拉。
+    expect(merged.chatList.map((chat) => chat.replayLoaded)).toEqual([
+      false,
+      true,
+    ]);
+  });
+
+  it("回放为空时原样返回，不发散成新对象", () => {
+    const conversation = hydrateConversationFromSummaryPage(createTwoRunPage());
+
+    expect(applyInlineReplays(conversation, null)).toBe(conversation);
+    expect(applyInlineReplays(conversation, {})).toBe(conversation);
   });
 });

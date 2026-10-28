@@ -5,6 +5,9 @@ import org.junit.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.wwz.ai.domain.agent.memory.CompactionBudget;
 import org.wwz.ai.domain.agent.memory.SessionWorkingMemoryService;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
+import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
+import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 import org.wwz.ai.domain.agent.memory.ltm.LtmManager;
 import org.wwz.ai.domain.agent.memory.ltm.LtmServices;
 import org.wwz.ai.domain.agent.memory.ltm.MemoryFlushService;
@@ -37,6 +40,14 @@ public class SubAgentLtmIsolationTest {
         when(dependencies.getOptionalMemoryFlushService()).thenReturn(flushService);
         when(dependencies.getOptionalLtmManager()).thenReturn(ltmManager);
 
+        // 子会话判据已从 memory_scope 换成 session_kind，这里给账本喂一条 SUBAGENT 会话行。
+        IExecutionLedgerReadRepository ledger = mock(IExecutionLedgerReadRepository.class);
+        when(ledger.querySessionEntity("sub_agent-1")).thenReturn(
+                DialogueSession.builder()
+                        .sessionId("sub_agent-1")
+                        .sessionKind(SessionKind.SUBAGENT.code())
+                        .build());
+
         SessionContextCompactionServiceImpl compaction = new SessionContextCompactionServiceImpl(
                 dependenciesProvider,
                 mock(SessionWorkingMemoryService.class),
@@ -53,13 +64,15 @@ public class SubAgentLtmIsolationTest {
                         .persistProjection(false)
                         .auditEnabled(false)
                         .auditStoreMessages(false)
-                        .build());
+                        .build(),
+                ledger);
 
         LtmServices.bind(null, flushService);
         try {
+            // scope 已统一为 main；子会话身份由 session_kind 判定
             List<Message> compacted = compaction.applyIfNeeded(
-                    "session-1",
-                    "sub:agent-1",
+                    "sub_agent-1",
+                    "main",
                     "request-1",
                     List.of(Message.userMessage("x".repeat(200), null)));
 
