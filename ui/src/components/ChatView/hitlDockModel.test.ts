@@ -130,4 +130,21 @@ describe("hitlDockModel", () => {
     const taskList = [approvalTask("pending", "appr-2")];
     expect(resolveHitlDockSlot(undefined, taskList)).toBe("approval");
   });
+
+  // 回归：resolveHitlDockSlot 现在只展开一次任务树，三个 finder 共用结果；
+  // 显式传任务列表必须与 finder 内部自行展开一致。
+  it("显式传入已展开任务时结果一致", () => {
+    const pendingAsk = askTask("pending");
+    const pendingApproval = approvalTask("pending", "appr-3");
+
+    expect(
+      findLatestPendingAskUser(undefined, undefined, [pendingAsk])?.messageId
+    ).toBe(findLatestPendingAskUser(undefined, [pendingAsk])?.messageId);
+    expect(
+      findLatestPendingPlanApproval(undefined, undefined, [pendingApproval])
+        ?.messageId
+    ).toBe(
+      findLatestPendingPlanApproval(undefined, [pendingApproval])?.messageId
+    );
+  });
 });

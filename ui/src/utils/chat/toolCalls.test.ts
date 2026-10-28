@@ -68,6 +68,33 @@ describe("tool result resolution", () => {
 
     expect(resolveTaskToolResultText(task)).toBe("file contents");
   });
+
+  // 回归：调用方同时需要 resolveTaskToolResult 时，传入已解析结果应等价，
+  // 避免对象型 toolResult 在流式每帧重复 JSON.stringify。
+  it("传入已解析结果时与内部自行解析等价", () => {
+    const task = {
+      messageType: "tool_result",
+      resultMap: {
+        resultMap: {
+          toolResult: {
+            toolName: "workspace_grep",
+            toolResult: { matches: ["a", "b"] },
+          },
+        },
+      },
+    } as unknown as CHAT.Task;
+
+    expect(resolveTaskToolResultText(task, resolveTaskToolResult(task))).toBe(
+      resolveTaskToolResultText(task)
+    );
+  });
+
+  it("空 task / 非对象 toolResult 不抛异常", () => {
+    expect(resolveTaskToolResultText(undefined)).toBe("");
+    expect(
+      resolveTaskToolResultText({ toolResult: 42 } as unknown as CHAT.Task)
+    ).toBe("");
+  });
 });
 
 describe("mergeHtmlPreviewIntoToolCall", () => {

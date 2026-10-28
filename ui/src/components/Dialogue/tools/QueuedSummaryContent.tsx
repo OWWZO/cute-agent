@@ -165,8 +165,10 @@ export function QueuedSummaryContent({
     promote(nextContent);
     // createSnapshot 每次渲染都会重建（依赖 primaryText 等 ReactNode），
     // 放进依赖数组会让整个 effect 每帧重跑，等于关掉排队逻辑 —— 与 ZCode 同款处理。
+    // trailingText 同理：当前唯一调用方（ToolRow）不传它，把 ReactNode 放进依赖只会
+    // 每帧重跑；若未来有调用方依赖它刷新，应补 primitive 版本号而不是塞 ReactNode。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contentKey, contentRefreshVersion, shouldAnimate, trailingText]);
+  }, [contentKey, contentRefreshVersion, shouldAnimate]);
 
   useEffect(() => {
     return () => {

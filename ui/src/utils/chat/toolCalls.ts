@@ -171,10 +171,15 @@ export function resolveTaskToolResult(
 
 /** 工具结果正文的统一读取入口，兼容旧事件的 data/answer/codeOutput 兜底字段。 */
 export function resolveTaskToolResultText(
-  task?: Partial<MESSAGE.Task> | Partial<CHAT.Task> | Record<string, unknown>
+  task?: Partial<MESSAGE.Task> | Partial<CHAT.Task> | Record<string, unknown>,
+  /**
+   * 已解析的 toolResult，供同时需要 `resolveTaskToolResult` 的调用方复用。
+   * 对象型 toolResult 在解析时要做 `JSON.stringify`，大结果在流式渲染下
+   * 每帧重复解析是纯浪费。
+   */
+  result: ResolvedToolResult | undefined = resolveTaskToolResult(task)
 ) {
   const record = task as Record<string, unknown> | undefined;
-  const result = resolveTaskToolResult(task);
   if (result?.toolResult?.trim()) {
     return result.toolResult;
   }

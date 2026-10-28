@@ -674,12 +674,18 @@ function estimateDurations(
   steps: Array<{ tool: CHAT.Task; startedAtMs?: number }>,
   options: { loading: boolean; nowMs: number }
 ): Array<number | undefined> {
+  // 反向单遍记录「下一个有 startedAt 的步骤」：避免每个 step 都 slice + find 造成 O(n²)。
+  const nextStartedAt: Array<number | undefined> = new Array(steps.length);
+  let next: number | undefined;
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    nextStartedAt[index] = next;
+    const startedAtMs = steps[index]?.startedAtMs;
+    if (startedAtMs != null) {
+      next = startedAtMs;
+    }
+  }
   return steps.map((step, index) =>
-    resolveSingleToolDuration(
-      step,
-      steps.slice(index + 1).find((next) => next.startedAtMs != null)?.startedAtMs,
-      options
-    )
+    resolveSingleToolDuration(step, nextStartedAt[index], options)
   );
 }
 

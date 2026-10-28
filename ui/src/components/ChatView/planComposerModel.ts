@@ -121,9 +121,9 @@ function isPendingPlanApproval(task?: CHAT.Task): boolean {
 
 function findLatestPendingPlanApproval(
   chat?: CHAT.ChatItem,
-  taskList?: CHAT.Task[]
+  taskList?: CHAT.Task[],
+  tasks: CHAT.Task[] = flattenTasks(chat, taskList)
 ): CHAT.Task | undefined {
-  const tasks = flattenTasks(chat, taskList);
   let fallback: CHAT.Task | undefined;
   for (let i = tasks.length - 1; i >= 0; i -= 1) {
     const task = tasks[i];
@@ -183,12 +183,14 @@ function flattenTasks(chat?: CHAT.ChatItem, taskList?: CHAT.Task[]): CHAT.Task[]
 
 /**
  * 从后往前找最新 plan_approval（有正文的优先）。
+ *
+ * `tasks` 供同一次推导里已经展开过任务树的调用方复用，避免重复遍历。
  */
 export function findLatestPlanApproval(
   chat?: CHAT.ChatItem,
-  taskList?: CHAT.Task[]
+  taskList?: CHAT.Task[],
+  tasks: CHAT.Task[] = flattenTasks(chat, taskList)
 ): CHAT.Task | undefined {
-  const tasks = flattenTasks(chat, taskList);
   // 两件事分开算：先找「最后一个有正文的」，找不到再退回「任意最后一个」。
   // 反向遍历里最先遇到的就是数组末尾那个，所以 fallback 只能在第一次命中时记，
   // 之后不能再覆盖 —— 否则先遇到的空正文卡会被更早的元素顶掉。
@@ -213,10 +215,15 @@ export function buildComposerPlanModel(params: {
 }): ComposerPlanModel | null {
   const { chat, taskList, structuredPlan } = params;
 
-  const latestApprovalTask = findLatestPlanApproval(chat, taskList);
-  const approvalTask = findLatestPendingPlanApproval(chat, taskList);
-  if (approvalTask) {
-    const fields = pickPlanApprovalFields(approvalTask);
+  // 同一棵任务树只展开一次，两个 finder 共用；pickPlanApprovalFields 也尽量只算一次。
+  const tasks = flattenTasks(chat, taskList);
+  const latestApprovalTask = findLatestPlanApproval(chat, taskList, tasks);
+  const approvalTask = findLatestPendingPlanApproval(chat, taskList, tasks);
+  const approvalFields = approvalTask
+    ? pickPlanApprovalFields(approvalTask)
+    : undefined;
+  if (approvalTask && approvalFields) {
+    const fields = approvalFields;
     if (fields.planContent.trim() || fields.approvalId) {
       return {
         source: "plan_approval",
@@ -239,7 +246,10 @@ export function buildComposerPlanModel(params: {
   // 历史中的已决策 approval 只在时间线保留只读记录，不能回到底部再次伪装成审批。
   // 已批准计划没有结构化进度时隐藏旧条，避免历史记录再次显示过期计划。
   if (latestApprovalTask) {
-    const latestFields = pickPlanApprovalFields(latestApprovalTask);
+    const latestFields =
+      latestApprovalTask === approvalTask && approvalFields
+        ? approvalFields
+        : pickPlanApprovalFields(latestApprovalTask);
     const approvedAndSettled =
       latestFields.status !== "pending" && latestFields.approved !== false;
     if (

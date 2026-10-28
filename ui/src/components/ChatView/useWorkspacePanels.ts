@@ -78,8 +78,13 @@ export function useWorkspacePanels() {
     if (typeof next === "number") {
       setLeftPanelWidth(clampWorkspaceLeftWidth(next));
     }
-    workspaceRef.current?.setAttribute("data-workspace-resizing", "true");
-    document.dispatchEvent(new Event(WORKSPACE_RESIZE_START_EVENT));
+    // onLayoutChange 在拖拽的每一帧都会触发，这里只广播一次拖拽开始。
+    // 拖拽结束由 Group 的 onLayoutChanged 统一收口。
+    const workspace = workspaceRef.current;
+    if (workspace?.getAttribute("data-workspace-resizing") !== "true") {
+      workspace?.setAttribute("data-workspace-resizing", "true");
+      document.dispatchEvent(new Event(WORKSPACE_RESIZE_START_EVENT));
+    }
   }, []);
 
   /** 拖拽结束：清掉拖拽态标记，并让图表重新量一次容器。 */
@@ -89,53 +94,54 @@ export function useWorkspacePanels() {
   }, []);
 
   const toggleLeftPanel = useCallback(() => {
-    setIsLeftCollapsed((previous) => {
-      const nextCollapsed = !previous;
-      if (!nextCollapsed) {
-        setLeftPanelWidth(DEFAULT_LEFT_WIDTH);
-      }
-      return nextCollapsed;
-    });
-  }, []);
+    const nextCollapsed = !isLeftCollapsed;
+    setIsLeftCollapsed(nextCollapsed);
+    if (!nextCollapsed) {
+      setLeftPanelWidth(DEFAULT_LEFT_WIDTH);
+    }
+  }, [isLeftCollapsed]);
 
   const toggleRightPanel = useCallback(() => {
     setIsRightCollapsed((previous) => !previous);
   }, []);
 
   const toggleFocusMode = useCallback(() => {
-    setIsFocusMode((previous) => {
-      const next = !previous;
-      if (next) {
-        preFocusLeftWidthRef.current = leftPanelWidth;
-        setIsLeftCollapsed(false);
-        setIsRightCollapsed(false);
-        setLeftPanelWidth(IMMERSIVE_LEFT_WIDTH);
-      } else {
-        setLeftPanelWidth(preFocusLeftWidthRef.current || DEFAULT_LEFT_WIDTH);
-      }
-      return next;
-    });
-  }, [leftPanelWidth]);
+    const next = !isFocusMode;
+    setIsFocusMode(next);
+    if (next) {
+      preFocusLeftWidthRef.current = leftPanelWidth;
+      setIsLeftCollapsed(false);
+      setIsRightCollapsed(false);
+      setLeftPanelWidth(IMMERSIVE_LEFT_WIDTH);
+    } else {
+      setLeftPanelWidth(preFocusLeftWidthRef.current || DEFAULT_LEFT_WIDTH);
+    }
+  }, [isFocusMode, leftPanelWidth]);
 
   const exitFocusMode = useCallback(() => {
-    setIsFocusMode((previous) => {
-      if (!previous) {
-        return previous;
-      }
-      setLeftPanelWidth(preFocusLeftWidthRef.current || DEFAULT_LEFT_WIDTH);
-      return false;
-    });
-  }, []);
+    if (!isFocusMode) {
+      return;
+    }
+    setIsFocusMode(false);
+    setLeftPanelWidth(preFocusLeftWidthRef.current || DEFAULT_LEFT_WIDTH);
+  }, [isFocusMode]);
+
+  // 记录最新宽度供模式切换副作用读取，避免把 leftPanelWidth 放进依赖后
+  // 拖拽每一帧都触发 setLayout / resize-end。
+  const leftPanelWidthRef = useRef(leftPanelWidth);
+  useEffect(() => {
+    leftPanelWidthRef.current = leftPanelWidth;
+  }, [leftPanelWidth]);
 
   // 折叠 / 沉浸模式切换后：
   // 1. 把新宽度推给 Group（defaultSize 不会二次生效）；
   // 2. 让图表重新量一次容器。
   useEffect(() => {
     if (!isLeftCollapsed) {
-      applyLeftWidth(leftPanelWidth);
+      applyLeftWidth(leftPanelWidthRef.current);
     }
     notifyResizeEnd();
-  }, [isLeftCollapsed, isRightCollapsed, isFocusMode, leftPanelWidth, applyLeftWidth, notifyResizeEnd]);
+  }, [isLeftCollapsed, isRightCollapsed, isFocusMode, applyLeftWidth, notifyResizeEnd]);
 
   return {
     leftPanelWidth,

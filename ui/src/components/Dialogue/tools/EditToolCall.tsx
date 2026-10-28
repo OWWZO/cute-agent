@@ -83,7 +83,8 @@ export const EditToolCall = memo(function EditToolCall({
   const summary = showArgStream
     ? streamPath || (argStreaming ? "生成参数中…" : toolSummary(name, arg))
     : toolSummary(name, arg);
-  const inputJson = parseToolJson(arg);
+  // 参数流期间 arg 每帧都在增长，parse 与 LCS diff 都不便宜，必须按内容记忆。
+  const inputJson = useMemo(() => parseToolJson(arg), [arg]);
   const isError = status === "error";
   const errorText = isError ? output.join("\n").trim() : "";
 
@@ -100,11 +101,6 @@ export const EditToolCall = memo(function EditToolCall({
   // toolResult 里现在会带整份 patch，JSON.parse 不宜每次渲染都跑，所以按 tool 记忆。
   const backendPatch = useMemo(() => resolveTaskToolPatch(tool), [tool]);
 
-  // 只算一次 diff 统计：chip 文案与翻页数字节点共用同一份结果，
-  // 避免 formatEditDiffChip 内部再跑一遍 O(n*m) 的 LCS。
-  const diffStats =
-    showArgStream || isError ? null : editDiffStats(name, arg, backendPatch);
-
   // 逐文件摘要。单文件时数组长度为 1，走同一条渲染路径。
   const fileSummaries = useMemo(
     () =>
@@ -113,6 +109,26 @@ export const EditToolCall = memo(function EditToolCall({
         : extractEditFileSummaries(name, arg, backendPatch),
     [name, arg, backendPatch, showArgStream, isError]
   );
+
+  // 只算一次 diff 统计：chip 文案与翻页数字节点共用同一份结果。
+  // 单文件摘要里已经带了 patch 统计，直接复用，避免同一份 old/new 再跑一次 LCS。
+  const diffStats = useMemo(() => {
+    if (showArgStream || isError) return null;
+    const first = fileSummaries[0];
+    // 只有真的产出了 patch / 统计时才复用；replace_all 这类空摘要继续走 editDiffStats 的 null 分支。
+    if (first && (first.patch || first.added || first.removed)) {
+      return {
+        added: first.added,
+        removed: first.removed,
+      };
+    }
+    if (fileSummaries.length <= 1) {
+      return editDiffStats(name, arg, backendPatch);
+    }
+    // 多文件只展示 totalStats，不再白算一份 LCS。
+    return null;
+  }, [showArgStream, isError, fileSummaries, name, arg, backendPatch]);
+
   const isMultiFile = fileSummaries.length > 1;
   const totalStats = useMemo(
     () => (isMultiFile ? summarizeEditFiles(fileSummaries) : null),

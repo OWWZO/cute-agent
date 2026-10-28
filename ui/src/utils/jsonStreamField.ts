@@ -1,34 +1,19 @@
 const STREAM_PREVIEW_FALLBACK_CHARS = 20480;
 
-/**
- * 从尚未闭合的 JSON 工具入参字符串中尽量抽出某个 string 字段。
- * 用于 LLM 仍在生成 tool arguments 时的 live 预览。
- */
-export function pickJsonStringField(
-  key: string,
-  raw: string,
-  partialArgs?: Record<string, unknown>
-): string {
-  const fromPartial = partialArgs?.[key];
-  if (typeof fromPartial === "string" && fromPartial.length > 0) {
-    return fromPartial;
-  }
-
-  const source = typeof raw === "string" ? raw : "";
-  if (!source) {
-    return "";
-  }
-
+/** 尝试按完整 JSON 解析；流式未闭合时返回 null，交给文本扫描。 */
+function parseJsonRecord(raw: string): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(source) as Record<string, unknown>;
-    const value = parsed?.[key];
-    if (typeof value === "string") {
-      return value;
-    }
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
   } catch {
-    /* incomplete JSON while streaming */
+    return null;
   }
+}
 
+/** 未闭合 JSON 的字符串扫描；调用方保证已尝试过完整解析且未取到该字段。 */
+function scanStringField(key: string, source: string): string {
   const needle = `"${key}"`;
   const keyIdx = source.indexOf(needle);
   if (keyIdx === -1) {
@@ -78,16 +63,64 @@ export function pickJsonStringField(
   return out;
 }
 
-/** 按候选 key 顺序取第一个非空 string 字段 */
+/**
+ * 从尚未闭合的 JSON 工具入参字符串中尽量抽出某个 string 字段。
+ * 用于 LLM 仍在生成 tool arguments 时的 live 预览。
+ */
+export function pickJsonStringField(
+  key: string,
+  raw: string,
+  partialArgs?: Record<string, unknown>
+): string {
+  const fromPartial = partialArgs?.[key];
+  if (typeof fromPartial === "string" && fromPartial.length > 0) {
+    return fromPartial;
+  }
+
+  const source = typeof raw === "string" ? raw : "";
+  if (!source) {
+    return "";
+  }
+
+  const parsed = parseJsonRecord(source);
+  const value = parsed?.[key];
+  if (typeof value === "string") {
+    return value;
+  }
+  return scanStringField(key, source);
+}
+
+/** 按候选 key 顺序取第一个非空 string 字段（完整 JSON 只解析一次）。 */
 export function pickJsonStringFieldAny(
   keys: string[],
   raw: string,
   partialArgs?: Record<string, unknown>
 ): string {
   for (const key of keys) {
-    const value = pickJsonStringField(key, raw, partialArgs);
-    if (value) {
+    const value = partialArgs?.[key];
+    if (typeof value === "string" && value.length > 0) {
       return value;
+    }
+  }
+
+  const source = typeof raw === "string" ? raw : "";
+  if (!source) {
+    return "";
+  }
+
+  const parsed = parseJsonRecord(source);
+  for (const key of keys) {
+    const value = parsed?.[key];
+    if (typeof value === "string") {
+      if (value.length > 0) {
+        return value;
+      }
+      continue;
+    }
+    // 完整 JSON 中该 key 不是 string（或不存在）时，保持与单 key 版本一致的回退扫描。
+    const scanned = scanStringField(key, source);
+    if (scanned) {
+      return scanned;
     }
   }
   return "";

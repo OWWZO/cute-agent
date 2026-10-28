@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
  * 避免 React 开发态的重挂把第一次动画误吞掉。表上限 800 条，超出按时间淘汰。
  */
 const MAX_TOOL_ENTRANCE_ANIMATION_KEYS = 800;
+const TOOL_ENTRANCE_ANIMATION_PRUNE_TARGET = 600;
 const TOOL_ENTRANCE_ANIMATION_CLEANUP_MS = 1000;
 
 const toolEntranceAnimationKeys = new Map<string, number>();
@@ -20,9 +21,12 @@ function pruneToolEntranceAnimationKeys() {
     return;
   }
 
+  // 一次多淘汰一些（低水位 600）：否则每条新记录都会刚超 1 条，触发一次全量排序。
+  const removeCount =
+    toolEntranceAnimationKeys.size - TOOL_ENTRANCE_ANIMATION_PRUNE_TARGET;
   const staleKeys = Array.from(toolEntranceAnimationKeys.entries())
     .sort(([, left], [, right]) => left - right)
-    .slice(0, toolEntranceAnimationKeys.size - MAX_TOOL_ENTRANCE_ANIMATION_KEYS)
+    .slice(0, removeCount)
     .map(([key]) => key);
 
   for (const key of staleKeys) {

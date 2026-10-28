@@ -65,6 +65,33 @@ describe("toolDiff", () => {
       })
     ).toBeNull();
   });
+
+  it("LCS 合成结果逐字符稳定（扁平 DP 改造的回归基线）", () => {
+    expect(
+      buildEditDiffCode({
+        name: "Edit",
+        arg: JSON.stringify({
+          path: "f.txt",
+          old_string: "a\nb\nc",
+          new_string: "a\nx\nc",
+        }),
+      })
+    ).toBe("--- a/f.txt\n+++ b/f.txt\n@@\n a\n-b\n+x\n c");
+  });
+
+  it("接近 MAX_DIFF_CELLS 的大矩阵不抛异常", () => {
+    const oldLines = Array.from({ length: 999 }, (_, index) => `old-${index}`);
+    const newLines = Array.from({ length: 999 }, (_, index) => `new-${index}`);
+    const code = buildEditDiffCode({
+      name: "Edit",
+      arg: JSON.stringify({
+        path: "big.txt",
+        old_string: oldLines.join("\n"),
+        new_string: newLines.join("\n"),
+      }),
+    });
+    expect(code).toContain("--- a/big.txt");
+  });
 });
 
 describe("buildEditDiffCode 的三级回退（后端 diff → 片段 LCS → null）", () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   fallbackStreamRawPreview,
   pickJsonStringField,
@@ -32,6 +32,37 @@ describe("jsonStreamField", () => {
 
   it("returns empty when key missing", () => {
     expect(pickJsonStringField("content", '{"path":"x"')).toBe("");
+  });
+
+  it("parses incomplete JSON once across candidate keys", () => {
+    const raw = '{"path":"src/a.ts","content":"def hello():\\n    print(\\"hi';
+    const keys = [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta",
+      "epsilon",
+      "zeta",
+      "eta",
+      "theta",
+      "iota",
+      "kappa",
+      "lambda",
+      "mu",
+      "content",
+    ];
+    const parseSpy = vi.spyOn(JSON, "parse");
+    try {
+      expect(pickJsonStringFieldAny(keys, raw)).toContain("def hello()");
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it("ignores non-string fields in complete JSON", () => {
+    expect(pickJsonStringField("content", '{"content":123}')).toBe("");
+    expect(pickJsonStringFieldAny(["content", "path"], '{"content":123,"path":null}')).toBe("");
   });
 
   it("fallback trims huge raw preview", () => {

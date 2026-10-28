@@ -159,11 +159,19 @@ export function ToolRow({
     };
   }, []);
 
+  const pinScrollFrameRef = useRef<number | null>(null);
+
   const pinScroll = useCallback(() => {
     const el = headRef.current;
     if (!el) return;
+    if (pinScrollFrameRef.current !== null) {
+      cancelAnimationFrame(pinScrollFrameRef.current);
+    }
     const top = el.getBoundingClientRect().top;
-    requestAnimationFrame(() => {
+    pinScrollFrameRef.current = requestAnimationFrame(() => {
+      pinScrollFrameRef.current = null;
+      // 快速切换会话/卸载后节点已脱离文档，此时 rect 全是 0，继续补偿会把外层滚动拉偏。
+      if (!el.isConnected) return;
       const next = el.getBoundingClientRect().top;
       const delta = next - top;
       if (Math.abs(delta) > 1) {
@@ -177,6 +185,14 @@ export function ToolRow({
         }
       }
     });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pinScrollFrameRef.current !== null) {
+        cancelAnimationFrame(pinScrollFrameRef.current);
+      }
+    };
   }, []);
 
   const handleHeadClick = () => {

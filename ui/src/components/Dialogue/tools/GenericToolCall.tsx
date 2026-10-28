@@ -37,6 +37,7 @@ import {
   shouldShowToolArgStream,
 } from "./toolStreamPreview";
 import { parseToolJson } from "./ToolJsonBlock";
+import { safeStringify } from "./safeStringify";
 import { editDiffStats } from "./toolDiff";
 import { ToolDiffCount } from "./ToolDiffCount";
 import { ExecuteOutput } from "./ExecuteOutput";
@@ -163,13 +164,18 @@ export const GenericToolCall = memo(function GenericToolCall({
    * 都挂一份原始 JSON 转储，所以这里按「卡片是否为空」等价折算。
    */
   const showRawFallback = !hasParameters && !hasOutput && !isExecute;
-  const rawFallbackPayload = {
-    input: arg,
-    resultMap: tool.resultMap,
-  };
-  const rawFallbackJson = showRawFallback
-    ? JSON.stringify(rawFallbackPayload, null, 2)
-    : "";
+  const rawFallbackPayload = useMemo(
+    () => ({
+      input: arg,
+      resultMap: tool.resultMap,
+    }),
+    [arg, tool.resultMap]
+  );
+  // 循环引用 / BigInt 会让 JSON.stringify 抛异常；顺带按依赖缓存，避免每帧序列化整份结果。
+  const rawFallbackJson = useMemo(
+    () => (showRawFallback ? safeStringify(rawFallbackPayload) : ""),
+    [showRawFallback, rawFallbackPayload]
+  );
 
   const canExpand =
     hasParameters ||

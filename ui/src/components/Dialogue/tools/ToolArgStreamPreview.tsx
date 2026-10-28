@@ -12,6 +12,9 @@ type ToolArgStreamPreviewProps = {
   prominent?: boolean;
 };
 
+/** 距底部小于这个距离就继续跟随；用户手动上翻后不再抢滚动。 */
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 160;
+
 /**
  * 工具入参流式展示：与终答同款 useStreamingText 逐字追赶 + 闪烁光标。
  */
@@ -23,20 +26,27 @@ export function ToolArgStreamPreview({
   prominent = true,
 }: ToolArgStreamPreviewProps) {
   const scrollerRef = useRef<HTMLPreElement | null>(null);
+  const autoScrollFrameRef = useRef(0);
   const displayed = useStreamingText(text || "", streaming);
 
+  // 流式期间 displayed 每秒变几十次；同步读写 scroll 属性会强制布局回流，
+  // 用 rAF 合并到每帧最多一次。
   useEffect(() => {
     if (!streaming) {
       return;
     }
-    const el = scrollerRef.current;
-    if (!el) {
-      return;
-    }
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distance < 160) {
-      el.scrollTop = el.scrollHeight;
-    }
+    cancelAnimationFrame(autoScrollFrameRef.current);
+    autoScrollFrameRef.current = requestAnimationFrame(() => {
+      const el = scrollerRef.current;
+      if (!el) {
+        return;
+      }
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distance < AUTO_SCROLL_BOTTOM_THRESHOLD_PX) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+    return () => cancelAnimationFrame(autoScrollFrameRef.current);
   }, [displayed, streaming]);
 
   if (!displayed && !text && !streaming) {

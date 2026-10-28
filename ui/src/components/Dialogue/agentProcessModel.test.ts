@@ -753,6 +753,37 @@ describe("agentProcessModel", () => {
     expect(model.totalDurationMs).toBe(20_000);
   });
 
+  it("estimates each legacy step duration from the next step's start", () => {
+    const chat = createChat({
+      tasks: workGroup([
+        tool({
+          id: "legacy-1",
+          messageType: "tool_call",
+          messageTime: String(BASE_TIME_MS + 1_000),
+          finish: true,
+          isFinal: true,
+        }),
+        tool({
+          id: "legacy-2",
+          messageType: "tool_call",
+          messageTime: String(BASE_TIME_MS + 4_000),
+          finish: true,
+          isFinal: true,
+        }),
+      ]),
+    });
+
+    const model = deriveAgentProcessModel({
+      chat,
+      isPlanSolve: false
+    });
+    // 反向单遍与旧的 slice + find 结果一致：第一段取下一个 startedAt 作边界，最后一段没有边界。
+    expect(model.groups[0].steps.map((step) => step.durationMs)).toEqual([
+      3_000,
+      undefined,
+    ]);
+  });
+
   it("prefers runDurationMs over the run timestamp span", () => {
     const chat = createChat({
       startedAt: String(BASE_TIME_MS),

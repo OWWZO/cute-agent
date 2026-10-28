@@ -10,14 +10,16 @@ export const useTypeWriter = (
 ) => {
   const [typedText, setTypedText] = useState('');
 
+  // 只依赖原始值：调用方传内联 options 对象时不会每次渲染都重建 core。
+  const maxStepSeconds = options?.maxStepSeconds;
   const typingCore = useMemo(
     () => new TypeWriterCore(
       {
         onConsume: (str: string) => setTypedText(prev => prev + str),
-        ...options,
+        maxStepSeconds,
       }
     ),
-    [options]
+    [maxStepSeconds]
   );
 
   useEffect(

@@ -49,8 +49,8 @@ export function ToolOutputBlock({
    * 字符串比较虽是 O(n)，但只在依赖数组求值时做一次，远小于省下的序列化成本。
    */
   const jsonOutput = useMemo(
-    () => parseToolJson(windowed.text),
-    [windowed.text]
+    () => (trimmedError ? null : parseToolJson(windowed.text)),
+    [trimmedError, windowed.text]
   );
 
   if (trimmedError) {

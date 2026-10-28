@@ -66,15 +66,16 @@ export function buildEditDiffCode(tool: {
   if (n > MAX_DIFF_ROWS || m > MAX_DIFF_ROWS) return null;
   if ((n + 1) * (m + 1) > MAX_DIFF_CELLS) return null;
 
-  const dp: number[][] = Array.from({ length: n + 1 }, () =>
-    Array.from({ length: m + 1 }, () => 0)
-  );
+  // 扁平 Int32Array：1e6 cell 上限下只分配一块连续内存，避免上百万个小数组。
+  const width = m + 1;
+  const dp = new Int32Array((n + 1) * width);
+  const at = (row: number, column: number) => dp[row * width + column]!;
   for (let i = 1; i <= n; i++) {
     for (let j = 1; j <= m; j++) {
-      dp[i]![j] =
+      dp[i * width + j] =
         oldLines[i - 1] === newLines[j - 1]
-          ? dp[i - 1]![j - 1]! + 1
-          : Math.max(dp[i - 1]![j]!, dp[i]![j - 1]!);
+          ? at(i - 1, j - 1) + 1
+          : Math.max(at(i - 1, j), at(i, j - 1));
     }
   }
 
@@ -87,7 +88,7 @@ export function buildEditDiffCode(tool: {
       ops.push({ type: "context", text: oldLines[i - 1]! });
       i--;
       j--;
-    } else if (j > 0 && (i === 0 || dp[i]![j - 1]! >= dp[i - 1]![j]!)) {
+    } else if (j > 0 && (i === 0 || at(i, j - 1) >= at(i - 1, j))) {
       ops.push({ type: "add", text: newLines[j - 1]! });
       j--;
     } else {

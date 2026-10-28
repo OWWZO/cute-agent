@@ -13,20 +13,23 @@ export default class TypeWriterCore {
   constructor({onConsume, maxStepSeconds}: TypeWriterCoreOptions) {
     this.onConsume = onConsume; // 初始化消费字符的回调
 
-    if (maxStepSeconds !== undefined) {
-      this.maxStepSeconds = maxStepSeconds; // 如果提供了最大步进间隔，则使用提供的值
+    // 只接受正的有限值：0 / 负数 / NaN 都会让定时器延迟退化成 0ms 忙循环。
+    if (
+      typeof maxStepSeconds === "number" &&
+      Number.isFinite(maxStepSeconds) &&
+      maxStepSeconds > 0
+    ) {
+      this.maxStepSeconds = maxStepSeconds; // 如果提供了合法最大步进间隔，则使用提供的值
     }
   }
 
   // 动态计算消费字符的速度
   dynamicSpeed() {
     const speedQueueNum = this.maxQueueNum / this.queueList.length; // 根据队列长度动态调整速度
-    const resNum = +(
-      speedQueueNum > this.maxStepSeconds
-        ? this.maxStepSeconds : speedQueueNum
-    ).toFixed(0); // 确保结果为整数
+    const resNum = Math.round(Math.min(speedQueueNum, this.maxStepSeconds));
 
-    return resNum;
+    // 队列很长时 speedQueueNum 可能取整到 0；0ms 递归 setTimeout 会卡死主线程。
+    return Math.max(1, resNum);
   }
 
   // 将字符串添加到队列中

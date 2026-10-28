@@ -140,4 +140,36 @@ describe("AgentDetailPanel real child session (flag on)", () => {
     expect(html).not.toContain("加载子会话");
     expect(html).toContain("query");
   });
+
+  it("reconnectExhausted 时展示重连失败提示，而不是静默停在原地", async () => {
+    vi.stubEnv("VITE_SUBAGENT_CHILD_SESSION", "1");
+    vi.resetModules();
+
+    // SSR 不跑 effect，hook 的返回值拿不到，直接给订阅钩子喂熔断状态
+    const sessionModule = await import("./useSubAgentSession");
+    vi.spyOn(sessionModule, "useSubAgentSession").mockReturnValue({
+      ready: true,
+      loading: false,
+      error: "",
+      frames: [],
+      history: null,
+      replays: {},
+      replayLoadingIds: [],
+      source: "live",
+      reconnectAttempts: 20,
+      reconnectExhausted: true,
+      loadReplay: vi.fn(),
+      reload: vi.fn(),
+    });
+
+    const { AgentDetailPanel: Panel } = await import("./AgentDetailPanel");
+    const html = renderToStaticMarkup(
+      <Panel tool={childSessionTool} chat={childSessionChat} onClose={vi.fn()} />
+    );
+
+    expect(html).toContain("重连失败");
+    // 提示必须说明「保留最后一次进度」与可操作的下一步，不能只说断开了
+    expect(html).toContain("最后一次收到的进度");
+    expect(html).toContain("刷新");
+  });
 });

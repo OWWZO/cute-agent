@@ -1,8 +1,7 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
-  getLightweightDiffLineParts,
-  parseTruncatedMarkerOmittedLineCount,
+  parseLightweightDiffRows,
   type LightweightDiffLineParts,
 } from "@/lib/patchPreview";
 
@@ -35,25 +34,26 @@ export function LightweightDiffPreview({
   renderLineContent,
   className,
 }: LightweightDiffPreviewProps) {
+  // lines 由上游 useMemo 稳定传入；这里再按引用缓存解析结果，
+  // 父组件因高亮 token / 主题切换重渲染时不再重复解析全部行。
+  const rows = useMemo(() => parseLightweightDiffRows(lines), [lines]);
+
   return (
     <div
       className={cn("kimi-diff-view", wrapLongLines ? "is-wrap" : "is-nowrap", className)}
       data-testid="inline-diff-preview"
     >
       <div className="kimi-diff-scroll" style={{ fontSize: fontSizePx }}>
-        {lines.map((line, index) => {
-          const omittedLineCount = parseTruncatedMarkerOmittedLineCount(line);
-
-          if (omittedLineCount !== null) {
+        {rows.map((row, index) => {
+          if (row.kind === "omitted") {
             return (
               <div className="kimi-diff-omitted" key={index}>
-                已省略 {omittedLineCount} 行
+                已省略 {row.omittedLineCount} 行
               </div>
             );
           }
 
-          const parts = getLightweightDiffLineParts(line);
-
+          const { parts } = row;
           return (
             <div className={cn("kimi-diff-row", `is-${parts.kind}`)} key={index}>
               {showLineNumbers ? (

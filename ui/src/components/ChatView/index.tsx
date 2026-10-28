@@ -1514,6 +1514,9 @@ const ChatView: CuteType.FC<Props> = (props) => {
             onDraftChange={onInputDraftChange}
             product={currentProduct}
             deepThink={conversation.deepThink}
+            sessionModel={conversation.sessionModel}
+            sessionThinking={conversation.sessionThinking}
+            sessionThinkingEffort={conversation.sessionThinkingEffort}
             subAgentCount={subAgentCount}
             subAgentRunningCount={subAgentRunningCount}
             onOpenSubAgents={() => setAgentsPanelVariant("panel")}
@@ -1785,7 +1788,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
 
             <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
               <Conversation
-                key={conversation.id}
                 contextRef={conversationContextRef}
                 className={cn(
                   "chat-fade-bottom min-h-0 flex-1 overflow-hidden",

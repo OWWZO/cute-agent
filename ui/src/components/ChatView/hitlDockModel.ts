@@ -132,9 +132,9 @@ function flattenCandidateTasks(
 /** 从后往前找最新未决 ask_user_question */
 export function findLatestPendingAskUser(
   chat?: CHAT.ChatItem | null,
-  taskList?: CHAT.Task[]
+  taskList?: CHAT.Task[],
+  tasks: CHAT.Task[] = flattenCandidateTasks(chat, taskList)
 ): CHAT.Task | undefined {
-  const tasks = flattenCandidateTasks(chat, taskList);
   return findLastTask(
     tasks,
     (task) =>
@@ -144,9 +144,9 @@ export function findLatestPendingAskUser(
 
 export function findLatestPendingDesktopControl(
   chat?: CHAT.ChatItem | null,
-  taskList?: CHAT.Task[]
+  taskList?: CHAT.Task[],
+  tasks: CHAT.Task[] = flattenCandidateTasks(chat, taskList)
 ): CHAT.Task | undefined {
-  const tasks = flattenCandidateTasks(chat, taskList);
   return findLastTask(
     tasks,
     (task) =>
@@ -157,9 +157,9 @@ export function findLatestPendingDesktopControl(
 /** 最新未决 plan_approval（含正文优先，再回退任意 pending） */
 export function findLatestPendingPlanApproval(
   chat?: CHAT.ChatItem | null,
-  taskList?: CHAT.Task[]
+  taskList?: CHAT.Task[],
+  tasks: CHAT.Task[] = flattenCandidateTasks(chat, taskList)
 ): CHAT.Task | undefined {
-  const tasks = flattenCandidateTasks(chat, taskList);
   let fallback: CHAT.Task | undefined;
 
   for (let i = tasks.length - 1; i >= 0; i--) {
@@ -198,13 +198,15 @@ export function resolveHitlDockSlot(
   chat?: CHAT.ChatItem | null,
   taskList?: CHAT.Task[]
 ): HitlDockSlot {
-  if (findLatestPendingDesktopControl(chat, taskList)) {
+  // 三个 finder 共用一次任务树展开，避免同一帧里遍历三遍。
+  const tasks = flattenCandidateTasks(chat, taskList);
+  if (findLatestPendingDesktopControl(chat, taskList, tasks)) {
     return "desktop";
   }
-  if (findLatestPendingAskUser(chat, taskList)) {
+  if (findLatestPendingAskUser(chat, taskList, tasks)) {
     return "ask";
   }
-  if (findLatestPendingPlanApproval(chat, taskList)) {
+  if (findLatestPendingPlanApproval(chat, taskList, tasks)) {
     return "approval";
   }
   return "composer";

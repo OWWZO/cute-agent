@@ -163,4 +163,18 @@ describe("findLatestPlanApproval 回退顺序", () => {
     const taskList = [approval("a", "计划一"), approval("b", "")];
     expect(findLatestPlanApproval(undefined, taskList)?.messageId).toBe("a");
   });
+
+  // 回归：buildComposerPlanModel 现在先 flatten 一次再传给 finder，
+  // 显式传任务列表必须与 finder 内部自行展开得到同样结果。
+  it("显式传入已展开任务时结果一致", () => {
+    const taskList = [
+      approval("a", "计划一"),
+      approval("b", ""),
+      approval("c", "计划三"),
+    ];
+
+    expect(findLatestPlanApproval(undefined, undefined, taskList)?.messageId).toBe(
+      findLatestPlanApproval(undefined, taskList)?.messageId
+    );
+  });
 });

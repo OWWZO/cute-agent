@@ -2,7 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { resolveSubAgentDisplay } from "@/utils/chat/subagent";
 import { chatItemFromSubAgent } from "@/utils/chat/subAgentChat";
-import { buildChildSessionChat } from "@/utils/chat/subAgentChildSession";
+import { buildChildSessionRounds } from "@/utils/chat/subAgentChildSession";
+import { groupChatsIntoTurns, mergeTurnChats } from "@/lib/turnGroups";
 import { projectAgentMember } from "@/utils/chat/agentRuntimeProjector";
 import { useSubAgentSession } from "./useSubAgentSession";
 import {
@@ -13,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { StatusDot } from "./tools/StatusDot";
 import Dialogue from "./index";
+import SubAgentSessionComposer from "./SubAgentSessionComposer";
 import { getTaskFiles } from "@/utils/taskArtifacts";
 
 /**
@@ -90,39 +92,67 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
     }
   }, [useRealChildSession, childSession.ready]);
 
-  // 真实子会话：history / replay / 实时帧 → 走与主会话同构的渲染链路（不新写 Pane）。
-  const childSessionChat = useMemo(
-    () =>
-      useRealChildSession
-        ? buildChildSessionChat({
-          childSessionId,
-          history: childSession.history,
-          replay: childSession.replay,
-          frames: childSession.frames,
-          fallbackQuery: sub.prompt || sub.description,
-        })
-        : null,
-    [
-      useRealChildSession,
+  // 真实子会话：history / 按 run 的回放 / 实时帧 → 走与主会话同构的渲染链路。
+  // 每轮一个 ChatItem，先切 turn 再合并，最后交给同一个 `Dialogue`。
+  const [pendingRun, setPendingRun] = useState<{
+    requestId: string;
+    query: string;
+  } | null>(null);
+
+  const childSessionRounds = useMemo(() => {
+    if (!useRealChildSession || !realSessionReady) {
+      return [];
+    }
+    return buildChildSessionRounds({
       childSessionId,
-      childSession.history,
-      childSession.replay,
-      childSession.frames,
-      sub.prompt,
-      sub.description,
-    ]
+      history: childSession.history,
+      replays: childSession.replays,
+      frames: childSession.frames,
+      liveRequestId: pendingRun?.requestId,
+      pendingRun,
+      fallbackQuery: sub.prompt || sub.description,
+    });
+  }, [
+    useRealChildSession,
+    realSessionReady,
+    childSessionId,
+    childSession.history,
+    childSession.replays,
+    childSession.frames,
+    pendingRun,
+    sub.prompt,
+    sub.description,
+  ]);
+
+  const childSessionTurns = useMemo(
+    () =>
+      groupChatsIntoTurns(childSessionRounds).map((turn) => ({
+        key: turn.key,
+        chat: mergeTurnChats(turn),
+      })),
+    [childSessionRounds]
   );
 
-  const sourceChat = useMemo(
-    () => (useRealChildSession && childSessionChat ? childSessionChat : syntheticChat),
-    [useRealChildSession, childSessionChat, syntheticChat]
+  const reloadChildSession = childSession.reload;
+  const handleSubmitted = useCallback(
+    (submitted: { query: string; requestId: string }) => {
+      // 乐观轮：新 run 还没落库，先让用户看到自己的提问与「工作中 X」，
+      // 历史返回后按 requestId 去重，由真实 run 顶替。
+      setPendingRun(submitted);
+      reloadChildSession(submitted.requestId);
+    },
+    [reloadChildSession]
   );
 
-  const hasTimeline = sourceChat.tasks.length > 0;
-  const hasConclusion = Boolean(sourceChat.conclusion);
-  const hasConclusionFiles = getTaskFiles(sourceChat.conclusion).length > 0;
+  const hasTimeline = syntheticChat.tasks.length > 0;
+  const hasConclusion = Boolean(syntheticChat.conclusion);
+  const hasConclusionFiles = getTaskFiles(syntheticChat.conclusion).length > 0;
   const hasBody =
-    Boolean(sourceChat.query) || hasTimeline || hasConclusion || hasConclusionFiles;
+    Boolean(syntheticChat.query) || hasTimeline || hasConclusion || hasConclusionFiles;
+  const showEmpty = useRealChildSession
+    ? childSessionTurns.length === 0 &&
+      (realSessionReady || Boolean(childSession.error))
+    : !hasBody;
 
   const handleChangeActiveChat = useCallback(
     (task: CHAT.Task) => {
@@ -166,8 +196,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
     sub.liveText,
     syntheticChat.loading,
     childSession.frames.length,
-    childSession.replay,
-    childSession.history,
+    childSessionTurns.length,
   ]);
 
   return (
@@ -232,19 +261,43 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
           </div>
         ) : null}
 
+        {/* 重订熔断：保留已收到的进度，而不是让它看起来还在加载 */}
+        {childSession.reconnectExhausted ? (
+          <div className="mb-2 rounded-lg border border-[var(--color-warning-bd)] bg-[var(--color-warning-soft)] px-3 py-2 text-ui-caption text-[var(--color-warning)]">
+            子会话流已断开且重连失败，当前显示最后一次收到的进度。切换到其他标签页或刷新可重新加载。
+          </div>
+        ) : null}
+
         {/* 真实子会话模式下 history 拉回前显示骨架，不塞假轨迹（计划书 §5.4） */}
         {useRealChildSession && !realSessionReady && !childSession.error ? (
           <div className="kimi-detail-panel-empty">加载子会话…</div>
         ) : null}
 
-        {hasBody ? (
+        {/* 每一轮一个 Dialogue：折叠态只显示提问 + 结论摘要，点开折叠条才补拉该轮过程 */}
+        {childSessionTurns.map((turn) => (
           <Dialogue
-            key={
-              useRealChildSession
-                ? `child-session-${childSessionId}`
-                : tool.id || tool.messageId || "subagent-dialogue"
-            }
-            chat={sourceChat}
+            key={turn.key || `child-session-${childSessionId}`}
+            chat={turn.chat}
+            deepThink={false}
+            sessionArtifactFiles={sessionArtifactFiles}
+            changeTask={handleChangeActiveChat}
+            changeFile={handleChangeFile}
+            changePlan={changePlan}
+            onOpenThinking={onOpenThinking}
+            onOpenToolDiff={handleOpenToolDiff}
+            onOpenAgent={handleOpenAgent}
+            onOpenWorkspaceFiles={onOpenWorkspaceFiles}
+            onRequestReplay={childSession.loadReplay}
+            replayLoading={childSession.replayLoadingIds.includes(
+              String(turn.chat.requestId || "")
+            )}
+          />
+        ))}
+
+        {!useRealChildSession && hasBody ? (
+          <Dialogue
+            key={tool.id || tool.messageId || "subagent-dialogue"}
+            chat={syntheticChat}
             deepThink={false}
             sessionArtifactFiles={sessionArtifactFiles}
             changeTask={handleChangeActiveChat}
@@ -257,12 +310,24 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
           />
         ) : null}
 
-        {!hasBody && (!useRealChildSession || realSessionReady || childSession.error) ? (
+        {showEmpty ? (
           <div className="kimi-detail-panel-empty">
             暂无详情
           </div>
         ) : null}
       </div>
+
+      {/* 输入框必须在滚动区之外：放进 .kimi-detail-panel-body 会随内容一起滚走，
+          且自动滚到底时会被推到消息上方，看起来像叠在一起。 */}
+      {useRealChildSession ? (
+        <div className="kimi-detail-panel-composer">
+          <SubAgentSessionComposer
+            sessionId={childSessionId}
+            sessionModel={childSession.history?.model ?? null}
+            onSubmitted={handleSubmitted}
+          />
+        </div>
+      ) : null}
     </div>
   );
 });
