@@ -1,11 +1,17 @@
 import { cn } from "@/lib/utils";
-import { Blocks, Bot, Cpu, DatabaseZap, WandSparkles } from "lucide-react";
+import { Blocks, Bot, Cpu, DatabaseZap, MessageSquare, WandSparkles } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ROUTES } from "@/router/routes";
 
 type WorkspaceToolItem = {
-  key: "mrag" | "image-generation" | "sub-agents" | "models" | "capabilities";
+  key:
+    | "mrag"
+    | "image-generation"
+    | "sub-agents"
+    | "models"
+    | "capabilities"
+    | "channels";
   label: string;
   description: string;
   icon: typeof DatabaseZap;
@@ -47,6 +53,13 @@ const workspaceToolItems: WorkspaceToolItem[] = [
     description: "技能 zip / MCP 连接器",
     icon: Blocks,
     to: `${ROUTES.HOME}?view=capabilities`,
+  },
+  {
+    key: "channels",
+    label: "机器人管理",
+    description: "绑定 QQ 机器人，让它接住 IM 消息",
+    icon: MessageSquare,
+    to: `${ROUTES.HOME}?view=channels`,
   },
 ];
 

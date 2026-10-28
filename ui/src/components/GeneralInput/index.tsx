@@ -10,7 +10,7 @@ import {
   Type,
 } from "lucide-react";
 
-import { AI_CHAT_FLOATING_CLASS } from "@/components/ai-elements/ai-chat-surface";
+import { AI_CHAT_FLOATING_CLASS } from "@/components/ai-elements/aiChatSurfaceClass";
 import {
   PromptInput,
   PromptInputAddAttachmentsButton,
@@ -96,6 +96,12 @@ type Props = {
   subAgentRunningCount?: number;
   /** 点击徽标 → 展开右上角智能体面板 */
   onOpenSubAgents?: () => void;
+  /** 会话级模型（库值）：打开会话时回填选择框；null 表示库里没有，走 sessionStorage/默认回退 */
+  sessionModel?: string | null;
+  /** 会话级深度思考开关（库值）；null 表示库里没有 */
+  sessionThinking?: boolean | null;
+  /** 会话级思考强度（库值）；null 表示库里没有 */
+  sessionThinkingEffort?: string | null;
 };
 
 type InputModeKey = "think" | "research";
@@ -182,6 +188,10 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     subAgentCount = 0,
     subAgentRunningCount = 0,
     onOpenSubAgents,
+    /** 会话级偏好（库值）：打开会话时回填模型选择框，null/undefined 走既有回退链 */
+    sessionModel = null,
+    sessionThinking = null,
+    sessionThinkingEffort = null,
   } = props;
 
   const [question, setQuestion] = useState(() =>
@@ -193,8 +203,16 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
   const [markdownBarOpen, setMarkdownBarOpen] = useState(false);
   const [models, setModels] = useState<CatalogModelRecord[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
-  const [thinking, setThinking] = useState(true);
-  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>("high");
+  // 库值为 null（用户从未在这个会话显式选过）时回退到默认；组件按 sessionId 有 key，
+  // 切换会话即重新挂载，初始值读到的就是当前会话的库值。
+  const [thinking, setThinking] = useState(() => sessionThinking ?? true);
+  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>(() =>
+    sessionThinkingEffort === "low" ||
+    sessionThinkingEffort === "medium" ||
+    sessionThinkingEffort === "high"
+      ? sessionThinkingEffort
+      : "high"
+  );
   const [forcePlanMode, setForcePlanMode] = useState(false);
   const tempData = useRef<{ compositing?: boolean }>({});
   const inputShellRef = useRef<HTMLDivElement | null>(null);
@@ -235,10 +253,13 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
         const enabled = Array.from(enabledByModelId.values());
         setModels(enabled);
         setSelectedModel(() => {
-          const stored = window.sessionStorage.getItem(modelStorageKey) || "";
-          const candidate = stored;
-          if (candidate && enabled.some((m) => m.modelId === candidate || m.modelName === candidate)) {
-            return candidate;
+          // 库值优先（用户上次在这个会话用的模型），其次 sessionStorage，最后目录第一个。
+          // 库值也必须通过 enabled 校验——模型可能已被下架。
+          const candidates = [sessionModel, window.sessionStorage.getItem(modelStorageKey) || ""];
+          for (const candidate of candidates) {
+            if (candidate && enabled.some((m) => m.modelId === candidate || m.modelName === candidate)) {
+              return candidate;
+            }
           }
           const fallback = enabled[0]?.modelId || "";
           if (fallback) {
@@ -250,7 +271,7 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
       .catch(() => {
         setModels([]);
       });
-  }, [modelStorageKey]);
+  }, [modelStorageKey, sessionModel]);
 
   const handleModelChange = (modelId: string) => {
     setSelectedModel(modelId);
@@ -704,18 +725,20 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
                       setThinkingEffort(effort);
                     }}
                   />
-
-                  <ModelPicker
-                    models={models}
-                    value={selectedModel}
-                    onChange={handleModelChange}
-                    disabled={disabled}
-                    open={modelMenuOpen}
-                    onOpenChange={setModelMenuOpen}
-                    triggerClassName={toolBtnClassName}
-                  />
                 </>
               ) : null}
+
+              {/* 模型选择不属于「高级工具条」：主会话输入框也要能选，
+                  否则用户只能吃后端默认模型。空列表时组件自身返回 null。 */}
+              <ModelPicker
+                models={models}
+                value={selectedModel}
+                onChange={handleModelChange}
+                disabled={disabled}
+                open={modelMenuOpen}
+                onOpenChange={setModelMenuOpen}
+                triggerClassName={toolBtnClassName}
+              />
             </PromptInputTools>
 
             <PromptInputTools className="cute-composer-tools cute-composer-tools-right ml-auto shrink-0 items-center gap-1.5 self-end">

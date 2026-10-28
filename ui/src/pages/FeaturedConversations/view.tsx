@@ -32,11 +32,11 @@ export function FeaturedConversationsView(
   const featuredCount = props.page.total || props.page.list.length;
 
   return (
-    <div className="h-full w-full overflow-y-auto bg-[var(--chat-bg)] text-[var(--chat-text)]">
-      <div className="mx-auto w-full max-w-[1080px] px-5 pb-16 pt-10 sm:px-8 sm:pt-14">
-        <div className="mb-8 flex items-start justify-between gap-4">
+    <div className="h-full w-full overflow-y-auto bg-[var(--chat-surface-soft)] text-[var(--chat-text)]">
+      <div className="mx-auto w-full max-w-[1180px] px-5 pb-20 pt-10 sm:px-8 sm:pt-16">
+        <div className="mb-10 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-2.5 py-1 text-ui-sm text-[var(--chat-text-muted)]">
+            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-[var(--chat-surface-soft)] px-2.5 py-1 text-ui-sm text-[var(--chat-text-muted)]">
               <Sparkles className="h-3.5 w-3.5" />
               公开案例库
             </div>
@@ -53,7 +53,7 @@ export function FeaturedConversationsView(
               to={ROUTES.HOME}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition hover:text-[var(--chat-text)]"
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-[var(--chat-surface-soft)] px-3.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition-colors hover:text-[var(--chat-text)]"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>返回首页</span>
@@ -63,18 +63,18 @@ export function FeaturedConversationsView(
 
         {hasCards && !props.loading ? (
           <div className="mb-5 flex items-center justify-between gap-3 text-ui-sm text-[var(--chat-text-muted)]">
-            <span>共 {featuredCount} 个案例</span>
+            <span className="tabular-nums">共 {featuredCount} 个案例</span>
             <span>点击卡片查看完整回放</span>
           </div>
         ) : null}
 
         {props.loading ? (
-          <div className="flex min-h-[360px] items-center justify-center rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)]">
+          <div className="flex min-h-[360px] items-center justify-center rounded-2xl bg-[var(--chat-surface)]">
             <Spinner className="size-8" />
           </div>
         ) : hasCards ? (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {props.page.list.map((card) => (
                 <FeaturedConversationCard
                   key={card.featuredId}
@@ -134,7 +134,7 @@ export function FeaturedConversationsView(
             ) : null}
           </>
         ) : (
-          <div className="rounded-3xl border border-dashed border-[var(--chat-border)] bg-[var(--chat-surface)]/70 py-20">
+          <div className="rounded-2xl bg-[var(--chat-surface)]/70 py-20">
             <EmptyState title="暂无已发布的精品对话" />
           </div>
         )}

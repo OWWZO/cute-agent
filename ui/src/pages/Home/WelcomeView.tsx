@@ -2,30 +2,33 @@ import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowUpRight,
   AtSign,
   BarChart3,
   Briefcase,
   Building2,
-  ChevronRight,
   FileSearch,
   FileText,
-  Globe2,
-  Instagram,
   Link2,
   MapPin,
-  MessageCircle,
   Megaphone,
-  Music2,
   Search,
-  Sparkles,
-  ShoppingBag,
   Smartphone,
   UserRound,
   UsersRound,
-  X as XIcon,
-  Youtube,
   type LucideIcon,
 } from "lucide-react";
+
+import amazonIcon from "@/assets/brands/amazon.png";
+import googleIcon from "@/assets/brands/google.svg";
+import instagramIcon from "@/assets/brands/instagram.svg";
+import linkedinIcon from "@/assets/brands/linkedin.svg";
+import metaAdsIcon from "@/assets/brands/meta-ads.svg";
+import openaiIcon from "@/assets/brands/openai.svg";
+import redditIcon from "@/assets/brands/reddit.svg";
+import tiktokIcon from "@/assets/brands/tiktok.svg";
+import xIcon from "@/assets/brands/x.svg";
+import youtubeIcon from "@/assets/brands/youtube.svg";
 
 import FeaturedConversationCard from "@/components/FeaturedConversationCard";
 import GeneralInput from "@/components/GeneralInput";
@@ -40,27 +43,16 @@ import {
 } from "@/utils/constants";
 import type { PromptSelectionRequest } from "@/utils/suggestedPrompts";
 
-const SUGGESTION_ICON_MAP: Record<SuggestedQuestionIcon, LucideIcon> = {
-  youtube: Youtube,
-  instagram: Instagram,
+const SUGGESTION_ICON_MAP: Partial<Record<SuggestedQuestionIcon, LucideIcon>> = {
   creator: UsersRound,
-  tiktok: Music2,
-  x: XIcon,
-  reddit: MessageCircle,
-  shopping: ShoppingBag,
   megaphone: Megaphone,
   search: Search,
   research: FileSearch,
   chart: BarChart3,
-  amazon: ShoppingBag,
-  google: Search,
-  meta: Globe2,
-  openai: Sparkles,
   seo: FileSearch,
   link: Link2,
   mention: AtSign,
   company: Building2,
-  linkedin: UsersRound,
   news: FileText,
   map: MapPin,
   person: UserRound,
@@ -69,33 +61,21 @@ const SUGGESTION_ICON_MAP: Record<SuggestedQuestionIcon, LucideIcon> = {
   app: Smartphone,
 };
 
-const SUGGESTION_ICON_CLASS: Record<SuggestedQuestionIcon, string> = {
-  youtube: "bg-[#ff0000]",
-  instagram: "bg-[#e1306c]",
-  creator: "bg-[#8294e8]",
-  tiktok: "bg-[#111111]",
-  x: "bg-[#111111]",
-  reddit: "bg-[#ff4500]",
-  shopping: "bg-[#e58b2a]",
-  megaphone: "bg-[#e26b50]",
-  search: "bg-[#7468d8]",
-  research: "bg-[#4d83db]",
-  chart: "bg-[#4d83db]",
-  amazon: "bg-[#ff6b00]",
-  google: "bg-[#4285f4]",
-  meta: "bg-[#087eff]",
-  openai: "bg-[#111111]",
-  seo: "bg-[#8b9cfb]",
-  link: "bg-[#8b9cfb]",
-  mention: "bg-[#8b9cfb]",
-  company: "bg-[#087eff]",
-  linkedin: "bg-[#0877b5]",
-  news: "bg-[#8b9cfb]",
-  map: "bg-[#34a853]",
-  person: "bg-[#8b9cfb]",
-  industry: "bg-[#4285f4]",
-  briefcase: "bg-[#8b9cfb]",
-  app: "bg-[#147efb]",
+/**
+ * 平台品牌图标 —— 官方矢量资产，不属于界面语义色（DESIGN.md §11 豁免清单）。
+ * 这些图标自带品牌色，所以卡片不能再套彩色方块底，否则两层颜色互相打架。
+ */
+const SUGGESTION_BRAND_MAP: Partial<Record<SuggestedQuestionIcon, string>> = {
+  youtube: youtubeIcon,
+  instagram: instagramIcon,
+  tiktok: tiktokIcon,
+  x: xIcon,
+  reddit: redditIcon,
+  amazon: amazonIcon,
+  google: googleIcon,
+  meta: metaAdsIcon,
+  openai: openaiIcon,
+  linkedin: linkedinIcon,
 };
 
 const HERO_TYPEWRITER_TEXTS = [
@@ -244,54 +224,49 @@ export default function WelcomeView(props: {
               </div>
             </div>
 
-            <div className="mx-auto w-full max-w-[640px] overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] shadow-[var(--shadow-sm)]">
-              {/* 分类切换时列表整体淡入：key 变化即重挂载，仅动透明度。 */}
-              <motion.div
-                key={activeCategory}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={
-                  reduce ? { duration: DURATION.reduced } : DURATION_QUICK
-                }
-              >
-                {visibleSuggestedQuestions.map((item, index) => {
-                  const Icon = SUGGESTION_ICON_MAP[item.icon] || Search;
-                  // 分隔线从文字起点缩进：px-4 + size-7 + gap-3 = ml-14（iOS 分组列表口径）。
-                  return (
-                    <div key={item.id}>
-                      {index > 0 ? (
-                        <div
-                          aria-hidden="true"
-                          className="ml-14 border-t border-[var(--chat-border)]"
-                        />
-                      ) : null}
-                      <button
-                        type="button"
-                        className="group flex h-[52px] w-full min-w-0 items-center gap-3 px-4 text-left transition-colors hover:bg-black/[0.03] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
-                        onClick={() => props.onSendQuestion(item)}
-                      >
-                        <span
-                          className={cn(
-                            "flex size-7 shrink-0 items-center justify-center rounded-md",
-                            SUGGESTION_ICON_CLASS[item.icon]
-                          )}
-                          aria-hidden="true"
-                        >
-                          <Icon className="size-[15px] stroke-[1.8] text-white" />
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-ui-base font-medium text-[var(--chat-text)]">
-                          {item.label}
-                        </span>
-                        <ChevronRight
-                          className="size-4 shrink-0 text-[var(--chat-text-soft)]"
-                          aria-hidden="true"
-                        />
-                      </button>
-                    </div>
-                  );
-                })}
-              </motion.div>
-            </div>
+            {/* 分类切换时列表整体淡入：key 变化即重挂载，仅动透明度。 */}
+            <motion.div
+              key={activeCategory}
+              className="grid grid-cols-1 gap-2 md:grid-cols-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={
+                reduce ? { duration: DURATION.reduced } : DURATION_QUICK
+              }
+            >
+              {visibleSuggestedQuestions.map((item) => {
+                const brandIcon = SUGGESTION_BRAND_MAP[item.icon];
+                const Icon = SUGGESTION_ICON_MAP[item.icon] || Search;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="group flex min-h-[40px] w-full min-w-0 items-center gap-2.5 rounded-lg bg-[var(--chat-surface-soft)] px-3 py-2 text-left text-ui-caption font-medium leading-5 text-[var(--chat-text)] transition-[background-color,transform] duration-100 ease-out hover:bg-black/[0.06] active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)]"
+                    onClick={() => props.onSendQuestion(item)}
+                  >
+                    {brandIcon ? (
+                      <img
+                        src={brandIcon}
+                        alt=""
+                        aria-hidden="true"
+                        className="size-[15px] shrink-0 object-contain"
+                      />
+                    ) : (
+                      <Icon
+                        className="size-[15px] shrink-0 text-[var(--chat-accent)]"
+                        strokeWidth={1.8}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    <ArrowUpRight
+                      className="size-3.5 shrink-0 text-[var(--chat-text-soft)] opacity-0 transition-opacity duration-100 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })}
+            </motion.div>
           </motion.div>
 
           <motion.div
@@ -379,7 +354,7 @@ export default function WelcomeView(props: {
               <button
                 type="button"
                 onClick={() => props.onOpenFeaturedConversations?.()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition hover:text-[var(--chat-text)]"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--chat-surface-soft)] px-3.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition-colors hover:text-[var(--chat-text)]"
               >
                 <span>查看全部</span>
                 <i className="font_family icon-xinjianjiantou text-ui-xs" />
@@ -387,12 +362,13 @@ export default function WelcomeView(props: {
             </div>
 
             {/* 精品对话始终走公共只读路由，避免和访客自己的会话状态耦合。 */}
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {props.featuredCards.map((card) => (
                 <FeaturedConversationCard
                   key={card.featuredId}
                   card={card}
                   variant="grid"
+                  surface="plain"
                   onSelect={props.onOpenFeaturedDetail}
                 />
               ))}

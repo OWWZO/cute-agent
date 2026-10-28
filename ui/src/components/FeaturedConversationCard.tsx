@@ -9,6 +9,14 @@ import { buildFeaturedConversationDetailPath } from "@/router/routes";
 type FeaturedConversationCardProps = {
   card: FeaturedConversationCardModel;
   variant?: "grid" | "row";
+  /**
+   * 卡片所在页面的底色。
+   *
+   * `muted`（默认）：页面是浅灰底，白卡片靠阴影浮起，无需边框。
+   * `plain`：页面是纯白底（如首页欢迎页），白卡片必须用细边框才看得出边界，
+   *          因为 `--shadow-sm` 在纯白上几乎不可见。
+   */
+  surface?: "muted" | "plain";
   onSelect?: (featuredId: string) => void;
 };
 
@@ -20,20 +28,14 @@ function formatDateTime(value?: string) {
   return parsed.isValid() ? parsed.format("YYYY-MM-DD") : value;
 }
 
-function resolveAccent(indexSeed: string) {
-  // 用稳定字符串 hash 选择配色，保证同一精选会话在列表/详情入口视觉一致。
-  const palette = [
-    "from-[oklch(0.93_0.03_250)] to-[oklch(0.97_0.01_90)]",
-    "from-[oklch(0.93_0.03_180)] to-[oklch(0.97_0.01_90)]",
-    "from-[oklch(0.93_0.03_40)] to-[oklch(0.97_0.01_90)]",
-    "from-[oklch(0.93_0.025_300)] to-[oklch(0.97_0.01_90)]",
-  ];
-  let hash = 0;
-  for (let i = 0; i < indexSeed.length; i += 1) {
-    hash = (hash + indexSeed.charCodeAt(i) * (i + 1)) % palette.length;
-  }
-  return palette[hash];
-}
+/**
+ * 无封面时的占位底。
+ *
+ * 以前按 featuredId 哈希出紫/橙/绿/粉四套渐变，结果 14 张卡像调色板——
+ * 占位底色是「缺省材质」，不是内容，不该抢标题的注意力。收敛成单一中性渐变。
+ */
+const PLACEHOLDER_GRADIENT =
+  "bg-gradient-to-br from-[var(--chat-surface-soft)] to-[var(--chat-surface-muted)]";
 
 function CardShell(props: {
   href: string;
@@ -69,10 +71,9 @@ function CardShell(props: {
 export default function FeaturedConversationCard(
   props: FeaturedConversationCardProps
 ) {
-  const { card, variant = "grid", onSelect } = props;
+  const { card, variant = "grid", surface = "muted", onSelect } = props;
   const tags = Array.isArray(card.tags) ? card.tags : [];
   const publishedLabel = formatDateTime(card.publishedAt);
-  const accent = resolveAccent(card.featuredId || card.title);
   const href = buildFeaturedConversationDetailPath(card.featuredId);
   // 统一在渲染前准备标签、日期和跳转地址，grid/row 两种布局共享同一数据语义。
   const handleSelect = onSelect
@@ -84,10 +85,10 @@ export default function FeaturedConversationCard(
       <CardShell
         href={href}
         onSelect={handleSelect}
-        className="group flex w-full items-stretch gap-4 rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-3 text-left transition duration-200 hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)]/50 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] motion-reduce:translate-none sm:gap-5 sm:p-4"
+        className="group flex w-full items-stretch gap-4 rounded-2xl bg-[var(--chat-surface)] p-3 text-left shadow-[var(--shadow-sm)] transition-[box-shadow,transform,background-color] duration-200 ease-out hover:bg-[var(--chat-surface-soft)]/50 hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5 active:scale-[0.99] motion-reduce:translate-none motion-reduce:active:scale-100 sm:gap-5 sm:p-4"
       >
         <div
-          className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br sm:h-24 sm:w-28 ${accent}`}
+          className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl sm:h-24 sm:w-28 ${PLACEHOLDER_GRADIENT}`}
         >
           {card.coverUrl ? (
             <img
@@ -134,28 +135,26 @@ export default function FeaturedConversationCard(
     );
   }
 
+  // 纯白页面上白卡片只能靠细边框立住；浅灰页面上白卡片靠阴影浮起，加边框反而显脏。
+  const surfaceClass =
+    surface === "plain"
+      ? "border border-[var(--chat-border)]"
+      : "shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)]";
+
   return (
     <CardShell
       href={href}
       onSelect={handleSelect}
-      className="group flex h-full w-full flex-col overflow-hidden rounded-3xl border border-[var(--chat-border)] bg-[var(--chat-surface)] text-left transition duration-200 hover:-translate-y-0.5 hover:border-[var(--chat-border-strong)] hover:shadow-[var(--shadow-md)] motion-reduce:translate-none"
+      className={`group flex h-full w-full flex-col overflow-hidden rounded-2xl bg-[var(--chat-surface)] text-left transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 active:scale-[0.99] motion-reduce:translate-none motion-reduce:active:scale-100 ${surfaceClass}`}
     >
-      <div
-        className={`relative aspect-[16/10] overflow-hidden bg-gradient-to-br ${accent}`}
-      >
+      <div className={`relative aspect-[16/5] overflow-hidden ${PLACEHOLDER_GRADIENT}`}>
         {card.coverUrl ? (
           <img
             src={card.coverUrl}
             alt={card.title}
             className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
           />
-        ) : (
-          <div className="flex h-full items-end p-5">
-            <span className="inline-flex w-fit rounded-full bg-[var(--chat-surface)]/80 px-2.5 py-1 text-ui-sm font-medium text-[var(--chat-text-soft)] backdrop-blur-sm">
-              精品案例
-            </span>
-          </div>
-        )}
+        ) : null}
       </div>
 
       <div className="flex flex-1 flex-col gap-3 p-5">
@@ -181,7 +180,7 @@ export default function FeaturedConversationCard(
             </span>
           ))}
           {publishedLabel ? (
-            <span className="ml-auto text-ui-sm text-[var(--chat-text-muted)]">
+            <span className="ml-auto text-ui-sm tabular-nums text-[var(--chat-text-muted)]">
               {publishedLabel}
             </span>
           ) : null}
