@@ -1,4 +1,4 @@
-@import "@fontsource-variable/geist";
+/* Geist 字体由 global.css 全局加载（见 .ai-chat-floating），这里不再重复引入。 */
 
 .ai-chat-surface {
   font-family:
@@ -7,16 +7,6 @@
     "SF Pro Display",
     "Segoe UI",
     sans-serif;
-}
-
-.ai-chat-floating {
-  font-family:
-    "Geist Variable",
-    "Geist",
-    "SF Pro Display",
-    "Segoe UI",
-    sans-serif;
-  color: var(--foreground);
 }
 
 .ai-chat-surface::before {

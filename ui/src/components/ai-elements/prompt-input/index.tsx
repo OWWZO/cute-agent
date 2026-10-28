@@ -180,7 +180,15 @@ export function PromptInputProvider({
       openFileDialog,
       fileInputRef,
     }),
-    [fileInputRef, openFileDialog, providerAttachments]
+    // 只依赖 hook 里引用稳定的成员，避免每次渲染都重建 context 值。
+    [
+      fileInputRef,
+      openFileDialog,
+      providerAttachments.items,
+      providerAttachments.add,
+      providerAttachments.remove,
+      providerAttachments.clear,
+    ]
   );
 
   const __registerFileInput = useCallback(

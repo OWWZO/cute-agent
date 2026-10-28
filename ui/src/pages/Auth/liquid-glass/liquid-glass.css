@@ -97,19 +97,23 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 0;
-  height: 0;
+  width: 300px;
+  height: 300px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.3);
-  transform: translate(-50%, -50%);
-  transition:
-    width 0.6s,
-    height 0.6s;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 0.6s;
+  pointer-events: none;
 }
 
 .liquid-glass-scope .ripple-effect:active::before {
-  width: 300px;
-  height: 300px;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liquid-glass-scope .ripple-effect::before {
+    transition: none;
+  }
 }
 
 /* 浮空玻璃光斑（无 Tailwind 工具类竞争，常规优先级即可） */
@@ -121,4 +125,16 @@
   box-shadow:
     0 8px 32px rgba(255, 255, 255, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* 不支持 backdrop-filter 时玻璃会退化成一层很淡的半透明白，叠在图片上文字读不清；
+   这里提高不透明度兜底，支持该特性的浏览器不受影响。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .liquid-glass-scope .liquid-glass-orb {
+    background: rgba(255, 255, 255, 0.88);
+  }
+
+  .liquid-glass-scope .glass-effect {
+    background: rgba(255, 255, 255, 0.92);
+  }
 }

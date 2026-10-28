@@ -10,7 +10,6 @@
 
 .workspace-admin-header {
   flex: 0 0 auto;
-  border-bottom: 1px solid var(--color-line);
   background: var(--color-surface-raised);
 }
 
@@ -116,6 +115,7 @@
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
+  background: var(--color-surface);
   padding: 24px;
 }
 
@@ -137,8 +137,7 @@
 .workspace-admin-rail,
 .workspace-admin-panel,
 .workspace-admin-section {
-  border: 1px solid var(--color-line);
-  border-radius: var(--kimi-radius-md);
+  border-radius: var(--radius-xl);
   background: var(--color-surface);
 }
 
@@ -149,6 +148,7 @@
   flex: 0 0 288px;
   flex-direction: column;
   overflow: hidden;
+  background: var(--color-surface-sunken);
 }
 
 .workspace-admin-panel {
@@ -157,6 +157,7 @@
   flex: 1 1 auto;
   overflow-y: auto;
   background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
 }
 
 .workspace-admin-section {
@@ -233,7 +234,7 @@
 .workspace-admin-list-item:hover,
 .workspace-admin-list-item[data-active="true"] {
   border-color: var(--color-line);
-  background: var(--color-hover);
+  background: var(--color-surface-raised);
 }
 
 .workspace-admin-list-item:focus-visible {
@@ -326,15 +327,13 @@
 }
 
 .workspace-admin-form-section + .workspace-admin-form-section {
-  margin-top: 24px;
-  border-top: 1px solid var(--color-line);
-  padding-top: 20px;
+  margin-top: 32px;
 }
 
 .workspace-admin-form-section-title {
   margin-bottom: 12px;
   color: var(--color-text);
-  font: 500 13px/1.5 var(--font-ui);
+  font: 600 13px/1.5 var(--font-ui);
 }
 
 .workspace-admin-field-label {
@@ -352,11 +351,11 @@
 }
 
 .workspace-admin-select {
-  height: 38px;
+  height: 40px;
   width: 100%;
-  border: 1px solid var(--color-line-strong);
-  border-radius: var(--kimi-radius-md);
-  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
   padding: 0 12px;
   color: var(--color-text);
   font: 400 14px/1.5 var(--font-ui);

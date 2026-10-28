@@ -1,5 +1,6 @@
 @import "@fontsource-variable/instrument-sans";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/geist";
 @import "@fontsource/instrument-serif/400.css";
 @import "@fontsource/instrument-serif/400-italic.css";
 @import "@fontsource/jetbrains-mono/400.css";
@@ -1473,6 +1474,26 @@ ol {
   .pulse-glow,
   .shimmer-border {
     animation: none !important;
+  }
+
+  /* 装饰性脉冲（骨架屏、AI 思考图标、语音监听态）：减弱动态时应为静态，
+     而不是继续无限呼吸。加载指示器（.animate-spin）不在此列——
+     它是「正在工作」的唯一反馈，关掉会让界面看起来卡死。 */
+  .animate-pulse {
+    animation: none !important;
+  }
+
+  /* 浮层（下拉 / popover / 对话框 / tooltip）只保留淡入淡出：
+     清除 tw-animate-css 的缩放与位移变量，让 animate-in/out 退化为纯透明度变化。
+     enter 与 exit 使用不同变量名，需分别清除。 */
+  [data-slot$="-content"],
+  [data-slot$="-overlay"] {
+    --tw-enter-scale: 1;
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-scale: 1;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
   }
 }
 
@@ -3638,6 +3659,14 @@ ol {
   overflow: auto;
 }
 
+/* 子会话续聊输入框：固定在面板底部，不参与内容滚动。 */
+.kimi-detail-panel-composer {
+  flex: none;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--color-line);
+  background: var(--color-bg);
+}
+
 .kimi-agent-phase-badge {
   display: inline-flex;
   align-items: center;
@@ -4897,4 +4926,15 @@ ol {
   .kimi-qcard-btn:active:not(:disabled) {
     transform: none;
   }
+}
+
+/* 聊天浮层（Tooltip 等）沿用 Geist 字体链；字体本体在文件头统一引入。 */
+.ai-chat-floating {
+  font-family:
+    "Geist Variable",
+    "Geist",
+    "SF Pro Display",
+    "Segoe UI",
+    sans-serif;
+  color: var(--foreground);
 }

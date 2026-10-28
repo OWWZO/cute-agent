@@ -35,7 +35,9 @@
 | 2.1 | 按钮微交互 | `active:scale-[0.97]` 统一按压反馈：按钮组件、欢迎页推荐卡片、MRAG 工具条；停止按钮 0.92 为破坏性操作刻意强调 | 已验收 |
 | 2.2 | 输入框 | focus 光晕统一为 ring-3 + accent-soft（WelcomeView / ToolCatalog / ToolTaskDialog / ReplayDisclosure）；GeneralInput 图标按钮补回焦点环（无障碍修复） | 已验收 |
 | 2.3 | 全局加载 | Loading `branded` 落地 AnimatedOrb，Home 两处 Loading 已接入 | 已验收 |
-| 2.4 | 欢迎页 → 对话页 | 输入框 `layoutId` 共享布局转场 | 待办 |
+| 2.4 | 欢迎页 → 对话页 | **已评估，放弃 `layoutId`**：`AnimatePresence mode="wait"` 下两视图永不同时在场，共享布局无从对接；改成同时在场会让两个文字密集界面透明度交叉糊成一片，且 `GeneralInput` 双实例并存。改为「轻微上浮就位」表达方向（对话页自下升起 / 欢迎页自上落回），reduced 时纯淡入 | 已验收 |
+| 2.5 | 浮层动效 | 下拉 / popover / hover-card / select / tooltip / dialog / alert-dialog 从 `duration-100` 改走 `--duration-dropdown` / `--duration-tooltip` / `--duration-modal` + `--ease-out` | 已验收 |
+| 2.6 | 减弱动态 | `global.css` 补 `animate-pulse` 停止与浮层缩放/位移清零（`--tw-enter-*` / `--tw-exit-*` 分别清除）。`animate-spin` **刻意不降级**——它是加载反馈，关掉会像卡死 | 已验收 |
 
 ## 逐界面验收清单（Phase 0 全绿后逐项跑）
 
@@ -52,10 +54,10 @@
 | 文件列表 `FileList` / `TaskFileSidebar` / `WorkspaceFileTree` | ☐ | ☐ | ☐ | ☐ | 待办 |
 | 文件预览 `FilePreview` / `FilePreviewSwitch` | ☐ | ☐ | ☐ | ☐ | 待办 |
 | MRAG 工作台 | ☐ | ☐ | ☐ | ☐ | 待办 |
-| 绘图智能体 | ☐ | ☐ | ☐ | ☐ | 待办 |
+| 绘图智能体 | ☑ | ☑ | ☑ | ☑ | 已验收 |
 | SOP 工作台 | ☐ | ☐ | ☐ | ☐ | 待办 |
-| 子 Agent 装配 | ☐ | ☐ | ☐ | ☐ | 待办 |
-| 模型接入 | ☐ | ☐ | ☐ | ☐ | 待办 |
+| 子 Agent 装配 | ☑ | ☑ | ☑ | ☑ | 已验收 |
+| 模型接入 | ☑ | ☑ | ☑ | ☑ | 已验收 |
 | 能力库 | ☐ | ☐ | ☐ | ☐ | 待办 |
 | 工具目录 | ☐ | ☐ | ☐ | ☐ | 待办 |
 | 计划视图 / HITL 交互 | ☐ | ☐ | ☐ | ☐ | 待办 |
@@ -64,7 +66,7 @@
 
 | 门禁 | 命令 | 状态 |
 |------|------|------|
-| 颜色 + 动效零散写 | `pnpm check:tokens`（`scripts/check-design-tokens.mjs`） | 已接入：591 文件 0 违规（含 `duration-[...]` / `ease-[cubic-bezier]` / 内联 transition 校验） |
+| 颜色 + 动效零散写 | `pnpm check:tokens`（`scripts/check-design-tokens.mjs`） | 已接入：591 文件 0 违规（含 `duration-[...]` / `ease-[cubic-bezier]` / 内联 transition 校验）；**2026-10-27 复测：4 处违规，全部在 `pages/ChannelAdmin/`（未进清单的页面）** |
 | 类型检查 | `npx tsc --noEmit` | 已通过 |
 | Lint（改动文件） | `npx eslint <changed files>` | 已通过：本轮改动文件 0 error |
 | 视觉基线 | Playwright 截图对比 | 待接入 |

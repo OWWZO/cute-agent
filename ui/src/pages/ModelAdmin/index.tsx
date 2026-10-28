@@ -32,6 +32,8 @@ import {
   type LlmModelUpsertPayload,
 } from "@/services/llmModelAdmin";
 import { toast } from "sonner";
+import { motion } from "motion/react";
+import { SPRING_SOFT, useMotionConfig } from "@/lib/motion";
 
 import { matchProviderId, PROVIDER_PRESETS, type ProviderPreset } from "./meta";
 
@@ -122,14 +124,14 @@ function Field({
 }) {
   return (
     <label className={cn("block", className)}>
-      <span className="workspace-admin-field-label">
+      <span className="workspace-admin-field-label mb-1.5">
         {label}
         {required ? (
           <span className="text-[var(--color-danger)]"> *</span>
         ) : null}
       </span>
       {children}
-      {hint ? <span className="workspace-admin-field-hint">{hint}</span> : null}
+      {hint ? <span className="workspace-admin-field-hint mt-1.5">{hint}</span> : null}
     </label>
   );
 }
@@ -152,6 +154,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState<EditorState>(() => EMPTY_EDITOR());
+  const { reduce } = useMotionConfig();
 
   const apiMap = useMemo(() => {
     const map = new Map<string, LlmApiRecord>();
@@ -462,11 +465,18 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                       data-active={active}
                       className="workspace-admin-model-item"
                     >
+                      {active ? (
+                        <motion.div
+                          layoutId={reduce ? undefined : "model-admin-active"}
+                          className="pointer-events-none absolute inset-0 rounded-[var(--kimi-radius-sm)] border border-[var(--color-line)] bg-[var(--color-surface-raised)]"
+                          transition={reduce ? { duration: 0 } : SPRING_SOFT}
+                          aria-hidden="true"
+                        />
+                      ) : null}
                       <button
                         type="button"
-                        data-active={active}
                         className={cn(
-                          "workspace-admin-list-item",
+                          "workspace-admin-list-item relative z-[1]",
                           active && "font-medium",
                         )}
                         onClick={() => select(modelKey(m))}
@@ -525,10 +535,10 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
 
             {editor && selected ? (
               <div className="min-w-0 flex-1">
-                <Card className="gap-0 overflow-hidden rounded-[var(--kimi-radius-md)] border border-[var(--color-line)] bg-[var(--color-surface-raised)] py-0 shadow-none ring-0">
+                <Card className="gap-0 overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface-raised)] py-0 shadow-[var(--shadow-sm)] ring-0">
                   <CardHeader className="flex flex-row items-center justify-between gap-2.5 border-b border-[var(--color-line)] px-5 py-3.5">
                     <div>
-                      <div className="workspace-admin-panel-title">
+                      <div className="workspace-admin-panel-title tracking-[-0.01em]">
                         连接配置
                       </div>
                       <div className="workspace-admin-panel-subtitle">
@@ -560,7 +570,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                     <div className="grid grid-cols-1 gap-4 gap-x-[18px] sm:grid-cols-2">
                       <Field label="服务商">
                         <select
-                          className="workspace-admin-select"
+                          className="workspace-admin-select h-10"
                           value={editor.providerId}
                           disabled={editorLocked}
                           onChange={(e) =>
@@ -599,7 +609,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                           value={editor.baseUrl}
                           readOnly={editorLocked || editor.providerId !== "custom"}
                           className={cn(
-                            "font-mono text-ui-caption",
+                            "h-10 font-mono text-ui-caption",
                             editor.providerId !== "custom" &&
                               "bg-[var(--color-surface-sunken)] text-[var(--color-text-muted)]",
                           )}
@@ -619,7 +629,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                         <Input
                           value={editor.modelName}
                           disabled={editorLocked}
-                          className="font-mono text-ui-caption"
+                          className="h-10 font-mono text-ui-caption"
                           placeholder="gpt-4o / claude-3-5-sonnet"
                           onChange={(e) =>
                             patchEditor({
@@ -633,7 +643,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                         <Input
                           value={editor.modelId}
                           disabled
-                          className="bg-[var(--color-surface-sunken)] font-mono text-ui-caption text-[var(--color-text-muted)]"
+                          className="h-10 bg-[var(--color-surface-sunken)] font-mono text-ui-caption text-[var(--color-text-muted)]"
                         />
                       </Field>
                       <Field
@@ -644,7 +654,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                           type="password"
                           value={editor.apiKey}
                           disabled={editorLocked}
-                          className="font-mono text-ui-caption"
+                          className="h-10 font-mono text-ui-caption"
                           placeholder="sk-…"
                           onChange={(e) =>
                             patchEditor({ apiKey: e.target.value })
@@ -655,7 +665,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                         <Input
                           value={editor.completionsPath}
                           disabled={editorLocked}
-                          className="font-mono text-ui-caption"
+                          className="h-10 font-mono text-ui-caption"
                           onChange={(e) =>
                             patchEditor({ completionsPath: e.target.value })
                           }
@@ -665,7 +675,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                         <Input
                           value={editor.modelType}
                           disabled={editorLocked}
-                          className="text-ui-caption"
+                          className="h-10 text-ui-caption"
                           placeholder="openai / deepseek / claude"
                           onChange={(e) =>
                             patchEditor({ modelType: e.target.value })
@@ -700,7 +710,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                           type="number"
                           value={editor.contextWindow ?? ""}
                           disabled={editorLocked}
-                          className="text-ui-caption"
+                          className="h-10 text-ui-caption"
                           placeholder="如 128000"
                           onChange={(e) => {
                             const raw = e.target.value.trim();
@@ -732,7 +742,7 @@ const ModelAdmin: CuteType.FC<ModelAdminProps> = ({ embedded }) => {
                     {testResult?.ok ? (
                       <span className="workspace-admin-status">
                         <Check className="size-[15px]" strokeWidth={2.2} />
-                        连接成功 · 延迟 {testResult.ms}ms
+                        连接成功 · 延迟 <span className="tabular-nums">{testResult.ms}</span>ms
                       </span>
                     ) : null}
                     {testResult && !testResult.ok ? (

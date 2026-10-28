@@ -9,7 +9,15 @@ import {
 import { cn } from "@/lib/utils";
 import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { createContext, memo, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { motion } from "motion/react";
 import { DURATION_QUICK, DURATION_MODAL } from "@/lib/motion";
 import { MessageResponse } from "./message";
@@ -176,7 +184,11 @@ export type ReasoningContentProps = ComponentProps<
 export const ReasoningContent = memo(
   ({ className, children, ...props }: ReasoningContentProps) => {
     const { isStreaming } = useReasoning();
-    const normalizedChildren = normalizeThinkingText(children);
+    // 思考文本可能很长；折叠状态下组件也会渲染，按 children 变化缓存归一化结果。
+    const normalizedChildren = useMemo(
+      () => normalizeThinkingText(children),
+      [children]
+    );
 
     return (
       <CollapsibleContent

@@ -1,5 +1,3 @@
-import type { CSSProperties } from "react";
-
 import { cn } from "@/lib/utils";
 
 type AnimatedOrbProps = {
@@ -41,70 +39,67 @@ export function AnimatedOrb({
 
   return (
     <div
-      className={cn("relative overflow-hidden rounded-full", className)}
+      className={cn("cute-orb-hue relative overflow-hidden rounded-full", className)}
       style={{
         width: size,
         height: size,
         backgroundColor: colors.bg,
-        animation: "orb-hue-rotate 8s linear infinite",
         boxShadow: "rgba(17, 12, 46, 0.15) 0px 48px 100px 0px",
       }}
       aria-hidden="true"
     >
-      <div
-        className="absolute inset-0 flex items-center justify-center"
-        style={
-          {
-            "--orb-blur": `${blurAmount}px`,
-            animation: "orb-hue-rotate-blur 6s linear infinite reverse",
-          } as CSSProperties
-        }
-      >
+      <div className="cute-orb-hue-inner absolute inset-0 flex items-center justify-center">
+        {/* 模糊值恒定，放在静态层里；上面两层只做 hue 旋转，避免每帧重算滤镜参数。 */}
         <div
-          className="orb-circle-1 absolute rounded-full"
-          style={{
-            width: circle1Size,
-            height: circle1Size,
-            opacity: 0.9,
-            backgroundColor: colors.circle1,
-          }}
-        />
-        <div
-          className="orb-circle-2 absolute rounded-full"
-          style={{
-            width: circle2Size,
-            height: circle2Size,
-            opacity: 0.85,
-            backgroundColor: colors.circle2,
-          }}
-        />
-        <div
-          className="orb-circle-3 absolute rounded-full"
-          style={{
-            width: circle3Size,
-            height: circle3Size,
-            opacity: 0.9,
-            backgroundColor: colors.circle3,
-          }}
-        />
-        <div
-          className="orb-circle-4 absolute rounded-full"
-          style={{
-            width: circle4Size,
-            height: circle4Size,
-            opacity: 0.8,
-            backgroundColor: colors.circle4,
-          }}
-        />
-        <div
-          className="orb-circle-5 absolute rounded-full"
-          style={{
-            width: circle5Size,
-            height: circle5Size,
-            opacity: 0.85,
-            backgroundColor: colors.circle5,
-          }}
-        />
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ filter: `blur(${blurAmount}px)` }}
+        >
+          <div
+            className="orb-circle-1 absolute rounded-full"
+            style={{
+              width: circle1Size,
+              height: circle1Size,
+              opacity: 0.9,
+              backgroundColor: colors.circle1,
+            }}
+          />
+          <div
+            className="orb-circle-2 absolute rounded-full"
+            style={{
+              width: circle2Size,
+              height: circle2Size,
+              opacity: 0.85,
+              backgroundColor: colors.circle2,
+            }}
+          />
+          <div
+            className="orb-circle-3 absolute rounded-full"
+            style={{
+              width: circle3Size,
+              height: circle3Size,
+              opacity: 0.9,
+              backgroundColor: colors.circle3,
+            }}
+          />
+          <div
+            className="orb-circle-4 absolute rounded-full"
+            style={{
+              width: circle4Size,
+              height: circle4Size,
+              opacity: 0.8,
+              backgroundColor: colors.circle4,
+            }}
+          />
+          <div
+            className="orb-circle-5 absolute rounded-full"
+            style={{
+              width: circle5Size,
+              height: circle5Size,
+              opacity: 0.85,
+              backgroundColor: colors.circle5,
+            }}
+          />
+        </div>
       </div>
 
       <div

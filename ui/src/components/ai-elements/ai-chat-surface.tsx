@@ -2,11 +2,11 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+import { AI_CHAT_FLOATING_CLASS } from "./aiChatSurfaceClass";
+
 import "./ai-chat-surface.css";
 
 type AiChatSurfaceProps = React.ComponentProps<"section">;
-
-const AI_CHAT_FLOATING_CLASS = "ai-chat-floating";
 
 function AiChatSurface({ className, ...props }: AiChatSurfaceProps) {
   return (

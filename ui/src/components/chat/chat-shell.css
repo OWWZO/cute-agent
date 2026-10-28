@@ -89,22 +89,12 @@
   }
 }
 
-@keyframes orb-hue-rotate-blur {
-  0% {
-    filter: blur(var(--orb-blur, 6px)) hue-rotate(0deg);
-  }
-  25% {
-    filter: blur(var(--orb-blur, 6px)) hue-rotate(45deg);
-  }
-  50% {
-    filter: blur(var(--orb-blur, 6px)) hue-rotate(90deg);
-  }
-  75% {
-    filter: blur(var(--orb-blur, 6px)) hue-rotate(45deg);
-  }
-  100% {
-    filter: blur(var(--orb-blur, 6px)) hue-rotate(0deg);
-  }
+.cute-orb-hue {
+  animation: orb-hue-rotate 8s linear infinite;
+}
+
+.cute-orb-hue-inner {
+  animation: orb-hue-rotate 6s linear infinite reverse;
 }
 
 @keyframes orb-orbit-1 {
@@ -280,6 +270,8 @@
   .composer-intro,
   .text-blur-intro,
   .text-blur-intro-delay,
+  .cute-orb-hue,
+  .cute-orb-hue-inner,
   .orb-circle-1,
   .orb-circle-2,
   .orb-circle-3,
