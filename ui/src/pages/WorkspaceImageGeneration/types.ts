@@ -1,6 +1,6 @@
 export type WorkspaceTab = "decode" | "generate";
 
-export type RequestMode = "images" | "edits" | "chat";
+export type RequestMode = "images" | "edits";
 
 export type ToolFileInfo = {
   fileName?: string;
@@ -22,8 +22,6 @@ export type ImageGenerationToolResponse = {
 };
 
 export type GenerationConfig = {
-  baseUrl: string;
-  apiKey: string;
   model: string;
   mode: RequestMode;
   size: string;

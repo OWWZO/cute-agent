@@ -47,6 +47,8 @@ export function useImageEditor() {
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
   const [brushSize, setBrushSize] = useState(32);
   const [toolMode, setToolMode] = useState<"brush" | "eraser">("brush");
+  // 图片 onLoad 后尺寸才可用，用一个显式版本号唤醒画布同步 effect。
+  const [editorLayoutVersion, setEditorLayoutVersion] = useState(0);
 
   const editorImageRef = useRef<HTMLImageElement>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -163,7 +165,7 @@ export function useImageEditor() {
       cancelled = true;
       window.removeEventListener("resize", handleResize);
     };
-  }, [editingImage]);
+  }, [editingImage, editorLayoutVersion]);
 
   useEffect(() => {
     const canvas = maskCanvasRef.current;
@@ -339,29 +341,32 @@ export function useImageEditor() {
   }, [editingImageId]);
 
   const refreshEditorLayout = useCallback(() => {
-    setImages((previous) => [...previous]);
+    setEditorLayoutVersion((previous) => previous + 1);
   }, []);
 
   const buildMaskCompositeDataUrls = useCallback(async (
     effectiveImages: EditorImageItem[],
     sourceImageDataUrls: string[]
   ) => {
-    const maskFileNames: string[] = [];
-    for (let index = 0; index < effectiveImages.length; index += 1) {
-      const currentImage = effectiveImages[index];
-      if (currentImage.maskDataUrl) {
-        const composite = await buildMaskedComposite({
-          imageSrc: sourceImageDataUrls[index],
-          maskDataUrl: currentImage.maskDataUrl,
-          width: currentImage.naturalWidth,
-          height: currentImage.naturalHeight,
-        });
-        maskFileNames.push(composite);
-      } else {
-        maskFileNames.push("");
-      }
-    }
-    return maskFileNames;
+    // 各图蒙版合成互不依赖，并行处理；单张失败退化为「无蒙版」，不再中断整批。
+    return Promise.all(
+      effectiveImages.map(async (currentImage, index) => {
+        if (!currentImage.maskDataUrl) {
+          return "";
+        }
+        try {
+          return await buildMaskedComposite({
+            imageSrc: sourceImageDataUrls[index],
+            maskDataUrl: currentImage.maskDataUrl,
+            width: currentImage.naturalWidth,
+            height: currentImage.naturalHeight,
+          });
+        } catch (error) {
+          console.error("[useImageEditor] 蒙版合成失败", error);
+          return "";
+        }
+      })
+    );
   }, []);
 
   return {

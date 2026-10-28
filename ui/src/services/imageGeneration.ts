@@ -3,16 +3,8 @@ import type {
   ImageGenerationHistoryPage,
   ImageGenerationToolResponse,
 } from "@/pages/WorkspaceImageGeneration/types";
-import { extractImageFromUnknown, extractTextFromUnknown, trimTrailingSlash } from "@/pages/WorkspaceImageGeneration/utils";
 
 const IMAGE_GENERATION_REQUEST_TIMEOUT_MS = 330_000;
-
-type DirectChatRequest = {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  prompt: string;
-};
 
 type ToolRequest = {
   requestId: string;
@@ -61,49 +53,6 @@ export async function requestImageGenerationTool(
       error instanceof Error ? error.message : "请求失败"
     );
   }
-}
-
-export async function requestDirectChat(payload: DirectChatRequest) {
-  // 直连模式不经过后端 api 封装，因此在这里显式处理鉴权、JSON 解析和 HTTP 状态。
-  const response = await fetch(`${trimTrailingSlash(payload.baseUrl)}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${payload.apiKey}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      model: payload.model,
-      messages: [
-        {
-          role: "user",
-          content: payload.prompt,
-        },
-      ],
-    }),
-  });
-
-  const rawText = await response.text();
-  // 同时保留原始文本和可解析对象，便于兼容不同 OpenAI-compatible 服务的错误格式。
-  let rawResponse: unknown = rawText;
-  try {
-    rawResponse = JSON.parse(rawText);
-  } catch {
-    rawResponse = rawText;
-  }
-
-  if (!response.ok) {
-    throw new ImageGenerationRequestError(
-      `${response.status} ${response.statusText}`,
-      rawResponse
-    );
-  }
-
-  return {
-    rawResponse,
-    image: extractImageFromUnknown(rawResponse),
-    text: extractTextFromUnknown(rawResponse),
-  };
 }
 
 export async function requestImageGenerationHistory(params: {

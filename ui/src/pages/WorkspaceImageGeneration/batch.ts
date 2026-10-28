@@ -63,6 +63,9 @@ export function buildImageBatchPlans(input: {
   }));
 }
 
+/** 单请求最长约 330 秒；一次图片过多时限制在飞数量，避免打满连接池。 */
+const IMAGE_BATCH_CONCURRENCY = 2;
+
 export async function runImageBatchRequests(input: {
   prompt: string;
   model?: string;
@@ -72,38 +75,57 @@ export async function runImageBatchRequests(input: {
   createRequestId: (index: number) => string;
   request: (payload: ImageBatchRequestPayload) => Promise<ImageGenerationToolResponse>;
 }): Promise<ImageBatchExecutionResult[]> {
-  // Promise.all 并行执行，但每个 plan 单独捕获错误，使部分成功结果仍可回显。
-  return await Promise.all(
-    input.plans.map(async (plan, index) => {
-      try {
-        const response = await input.request({
-          requestId: input.createRequestId(index),
-          prompt: input.prompt,
-          mode: "edits",
-          model: input.model,
-          size: input.size,
-          n: input.n,
-          fileNames: plan.fileNames,
-          maskFileNames: plan.maskFileNames,
-          fileName: plan.fileName,
-          fileDescription: `${input.prompt.slice(0, 80)}（批次 ${index + 1}）`,
-        });
-        return {
-          success: true,
-          index,
-          plan,
-          response,
-        };
-      } catch (error) {
-        return {
-          success: false,
-          index,
-          plan,
-          error,
-        };
+  // 固定 worker 数拉取任务，结果按原始 index 回填：
+  // 并发有上限，但返回顺序与逐项成功/失败语义保持不变。
+  const results: ImageBatchExecutionResult[] = new Array(input.plans.length);
+  let nextIndex = 0;
+
+  const runOne = async (index: number) => {
+    const plan = input.plans[index];
+    if (!plan) {
+      return;
+    }
+    try {
+      const response = await input.request({
+        requestId: input.createRequestId(index),
+        prompt: input.prompt,
+        mode: "edits",
+        model: input.model,
+        size: input.size,
+        n: input.n,
+        fileNames: plan.fileNames,
+        maskFileNames: plan.maskFileNames,
+        fileName: plan.fileName,
+        fileDescription: `${input.prompt.slice(0, 80)}（批次 ${index + 1}）`,
+      });
+      results[index] = {
+        success: true,
+        index,
+        plan,
+        response,
+      };
+    } catch (error) {
+      results[index] = {
+        success: false,
+        index,
+        plan,
+        error,
+      };
+    }
+  };
+
+  const workerCount = Math.min(IMAGE_BATCH_CONCURRENCY, input.plans.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < input.plans.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        await runOne(index);
       }
     })
   );
+
+  return results;
 }
 
 function normalizeBatchOutputName(fileName: string, index: number) {

@@ -1,14 +1,9 @@
 import { useEffect, useState } from "react";
 
-import type {
-  GenerationConfig,
-  RequestMode,
-} from "./types";
+import type { GenerationConfig } from "./types";
 import { IMAGE_GENERATION_STORAGE_KEY } from "./utils";
 
 export const createDefaultConfig = (): GenerationConfig => ({
-  baseUrl: "https://www.openclaudecode.cn",
-  apiKey: "",
   model: "gpt-image-2",
   mode: "images",
   size: "1024x1024",
@@ -25,14 +20,23 @@ export const loadStoredConfig = (): GenerationConfig => {
     }
 
     const parsed = JSON.parse(raw) as Partial<GenerationConfig>;
+    // 只回填已知的生成参数。旧版本可能把 baseUrl / apiKey 写进 localStorage，
+    // 这里显式挑字段，避免把这些历史敏感字段再次写回存储。
     return {
-      ...defaults,
-      ...parsed,
-      mode: (parsed.mode as RequestMode) || defaults.mode,
+      model:
+        typeof parsed.model === "string" && parsed.model.trim()
+          ? parsed.model
+          : defaults.model,
+      mode: parsed.mode === "edits" ? "edits" : defaults.mode,
+      size:
+        typeof parsed.size === "string" && parsed.size.trim()
+          ? parsed.size
+          : defaults.size,
       n: Math.max(1, Math.min(10, Number(parsed.n) || defaults.n)),
-      batchMode: typeof parsed.batchMode === "boolean"
-        ? parsed.batchMode
-        : defaults.batchMode,
+      batchMode:
+        typeof parsed.batchMode === "boolean"
+          ? parsed.batchMode
+          : defaults.batchMode,
     };
   } catch {
     return defaults;

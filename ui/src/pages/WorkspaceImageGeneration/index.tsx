@@ -45,7 +45,7 @@ function ResultImageCard({
   onPreview: (url: string) => void;
 }) {
   return (
-    <div className="group relative aspect-square overflow-hidden rounded-2xl bg-[var(--chat-surface-soft)] shadow-[var(--shadow-sm)]">
+    <div className="group relative aspect-square overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface-sunken)] shadow-[var(--shadow-sm)]">
       <button
         type="button"
         onClick={() => onPreview(url)}
@@ -67,7 +67,7 @@ function ResultImageCard({
             target="_blank"
             rel="noreferrer"
             onClick={(event) => event.stopPropagation()}
-            className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--chat-surface)]/95 text-[var(--chat-text)] shadow-sm"
+            className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-surface-raised)]/95 text-[var(--color-text)] shadow-[var(--shadow-sm)]"
             title="下载"
           >
             <Download className="h-3.5 w-3.5" />
@@ -95,7 +95,7 @@ function ImagePreviewModal({
       <img
         src={src}
         alt="预览"
-        className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+        className="max-h-[90vh] max-w-[90vw] rounded-[var(--radius-md)] object-contain shadow-[var(--shadow-xl)]"
         onClick={(e) => e.stopPropagation()}
       />
     </div>
@@ -216,7 +216,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
   };
 
   return (
-    <div className="relative flex h-full flex-col bg-[var(--chat-bg)] text-[var(--chat-text)]">
+    <div className="relative flex h-full flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
       {/* top actions */}
       <div className="absolute right-4 top-4 z-20 flex items-center gap-2 sm:right-6 sm:top-5">
         {!embedded ? (
@@ -224,7 +224,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
             to="/"
             target="_blank"
             rel="noreferrer"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-text-muted)] shadow-[var(--shadow-xs)] transition hover:text-[var(--chat-text)]"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-line)] bg-[var(--color-surface-raised)] text-[var(--color-text-muted)] shadow-[var(--shadow-xs)] transition hover:text-[var(--color-text)]"
             title="返回"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -234,10 +234,10 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
           type="button"
           onClick={() => setShowSettings((v) => !v)}
           className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-full border bg-[var(--chat-surface)] shadow-[var(--shadow-xs)] transition",
+            "flex h-9 w-9 items-center justify-center rounded-full border bg-[var(--color-surface-raised)] shadow-[var(--shadow-xs)] transition",
             showSettings
-              ? "border-[var(--chat-accent)]/30 text-[var(--chat-accent)]"
-              : "border-[var(--chat-border)] text-[var(--chat-text-muted)] hover:text-[var(--chat-text)]"
+              ? "border-[var(--color-accent)]/30 text-[var(--color-accent)]"
+              : "border-[var(--color-line)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
           )}
           title="设置"
         >
@@ -252,17 +252,17 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[980px] px-5 pb-16 pt-14 sm:px-8 sm:pt-16">
-          <h1 className="text-display-xl font-semibold tracking-[-0.02em] text-[var(--chat-text)] sm:text-display-3xl">
+          <h1 className="text-display-xl font-semibold tracking-[-0.02em] text-[var(--color-text)] sm:text-display-3xl">
             图片
           </h1>
 
           {/* capsule composer */}
           <div className="mt-6">
-            <div className="flex items-center gap-2 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-2 py-1.5 shadow-[var(--shadow-md)]">
+            <div className="flex items-center gap-2 rounded-full border border-[var(--color-line)] bg-[var(--color-surface-raised)] px-2 py-1.5 shadow-[var(--shadow-md)]">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--chat-text-muted)] transition hover:bg-[var(--chat-surface-soft)] hover:text-[var(--chat-text)]"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-sunken)] hover:text-[var(--color-text)]"
                 title="上传参考图"
               >
                 <Paperclip className="h-4.5 w-4.5" />
@@ -287,14 +287,14 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                 placeholder={
                   images.length > 0 ? "描述如何修改这些图片..." : "描述新图片"
                 }
-                className="min-w-0 flex-1 border-none bg-transparent py-2.5 text-[length:var(--content-font-size)] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-text-muted)]"
+                className="min-w-0 flex-1 border-none bg-transparent py-2.5 text-[length:var(--content-font-size)] text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-muted)]"
               />
               <div className="flex shrink-0 items-center gap-1.5 pr-0.5">
                 {messages.length > 0 ? (
                   <button
                     type="button"
                     onClick={clearMessages}
-                    className="hidden h-9 items-center gap-1 rounded-full px-2.5 text-ui-sm text-[var(--chat-text-muted)] transition hover:bg-[var(--chat-surface-soft)] hover:text-[var(--chat-text)] sm:inline-flex"
+                    className="hidden h-9 items-center gap-1 rounded-full px-2.5 text-ui-sm text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-sunken)] hover:text-[var(--color-text)] sm:inline-flex"
                     title="清空会话"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -304,7 +304,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                   type="button"
                   onClick={() => void handleSend()}
                   disabled={!prompt.trim() || isGenerating}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-accent)] text-[var(--color-text-on-accent)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
                   title="生成"
                   aria-label="生成"
                 >
@@ -319,21 +319,21 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
 
             {images.length > 0 ? (
               <div className="mt-3 flex flex-wrap items-center gap-2 px-1">
-                <span className="rounded-full bg-[var(--chat-surface-soft)] px-2.5 py-1 text-ui-sm font-medium text-[var(--chat-text-soft)]">
+                <span className="rounded-full bg-[var(--color-surface-sunken)] px-2.5 py-1 text-ui-sm font-medium text-[var(--color-text-muted)]">
                   图生图
                 </span>
-                <span className="text-ui-sm text-[var(--chat-text-muted)]">
+                <span className="text-ui-sm text-[var(--color-text-muted)]">
                   已上传 {images.length} 张参考图，将基于它们修改生成
                 </span>
                 {images.length > 1 ? (
-                  <label className="ml-auto inline-flex items-center gap-1.5 text-ui-sm text-[var(--chat-text-muted)]">
+                  <label className="ml-auto inline-flex items-center gap-1.5 text-ui-sm text-[var(--color-text-muted)]">
                     <input
                       type="checkbox"
                       checked={config.batchMode}
                       onChange={(event) =>
                         updateConfig("batchMode", event.target.checked)
                       }
-                      className="h-3.5 w-3.5 rounded border-[var(--chat-border)]"
+                      className="h-3.5 w-3.5 rounded-[var(--radius-md)] border-[var(--color-line)]"
                     />
                     多图批处理
                   </label>
@@ -344,13 +344,13 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
             {statusText ? (
               <div
                 className={cn(
-                  "mt-3 rounded-2xl px-3.5 py-2.5 text-ui-sm font-medium",
+                  "mt-3 rounded-[var(--radius-xl)] px-3.5 py-2.5 text-ui-sm font-medium",
                   statusTone === "success" &&
                     "bg-[var(--status-success-bg)] text-[var(--status-success-text)]",
                   statusTone === "error" &&
                     "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)]",
                   statusTone === "default" &&
-                    "bg-[var(--chat-surface-soft)] text-[var(--chat-text-muted)]"
+                    "bg-[var(--color-surface-sunken)] text-[var(--color-text-muted)]"
                 )}
               >
                 {statusText}
@@ -362,7 +362,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                 {images.map((item, index) => (
                   <div
                     key={item.id}
-                    className="group relative h-16 w-16 overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] shadow-[var(--shadow-xs)]"
+                    className="group relative h-16 w-16 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-line)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-xs)]"
                   >
                     <img
                       src={item.objectUrl}
@@ -370,7 +370,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                       className="h-full w-full object-cover"
                     />
                     {item.maskDataUrl ? (
-                      <div className="absolute left-1 top-1 rounded bg-[var(--color-danger)] px-1 text-ui-xs text-[var(--color-text-on-accent)]">
+                      <div className="absolute left-1 top-1 rounded-[var(--radius-md)] bg-[var(--color-danger)] px-1 text-ui-xs text-[var(--color-text-on-accent)]">
                         已涂抹
                       </div>
                     ) : null}
@@ -378,7 +378,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                       <button
                         type="button"
                         onClick={() => openEditor(item.id)}
-                        className="rounded-full bg-white px-2 py-0.5 text-ui-xs font-medium text-[var(--chat-text)]"
+                        className="rounded-full bg-white px-2 py-0.5 text-ui-xs font-medium text-[var(--color-text)]"
                       >
                         涂抹
                       </button>
@@ -395,7 +395,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-[var(--chat-border)] text-[var(--chat-text-muted)] transition hover:border-[var(--chat-border-strong)] hover:bg-[var(--chat-surface-soft)]"
+                  className="flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-[var(--radius-xl)] border border-dashed border-[var(--color-line)] text-[var(--color-text-muted)] transition hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface-sunken)]"
                 >
                   <UploadCloud className="h-4 w-4" />
                   <span className="text-ui-xs">添加</span>
@@ -408,13 +408,13 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
           {myImages.length > 0 || isGenerating ? (
             <section className="mt-12">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-ui-xl font-semibold tracking-[-0.02em] text-[var(--chat-text)]">
+                <h2 className="text-ui-xl font-semibold tracking-[-0.02em] text-[var(--color-text)]">
                   我的图片
                 </h2>
                 <button
                   type="button"
                   onClick={() => void loadHistory(1, true)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 py-1.5 text-ui-sm font-medium text-[var(--chat-text-muted)] transition hover:text-[var(--chat-text)]"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-line)] bg-[var(--color-surface-raised)] px-3 py-1.5 text-ui-sm font-medium text-[var(--color-text-muted)] transition hover:text-[var(--color-text)]"
                 >
                   <RefreshCcw
                     className={cn("h-3.5 w-3.5", historyLoading && "animate-spin")}
@@ -424,14 +424,14 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
               </div>
 
               {isGenerating ? (
-                <div className="mb-4 flex items-center gap-2 rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] px-4 py-4 text-ui-caption text-[var(--chat-text-muted)]">
-                  <Sparkles className="h-4 w-4 animate-pulse text-[var(--chat-accent)]" />
+                <div className="mb-4 flex items-center gap-2 rounded-[var(--radius-xl)] border border-[var(--color-line)] bg-[var(--color-surface-raised)] px-4 py-4 text-ui-caption text-[var(--color-text-muted)]">
+                  <Sparkles className="h-4 w-4 animate-pulse text-[var(--color-accent)]" />
                   正在生成图像...
                 </div>
               ) : null}
 
               {historyError ? (
-                <div className="mb-4 rounded-2xl border border-[var(--color-danger-soft)] bg-[var(--color-danger-soft)] px-4 py-3 text-ui-caption text-[var(--color-danger)]">
+                <div className="mb-4 rounded-[var(--radius-xl)] border border-[var(--color-danger-soft)] bg-[var(--color-danger-soft)] px-4 py-3 text-ui-caption text-[var(--color-danger)]">
                   {historyError}
                 </div>
               ) : null}
@@ -454,7 +454,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                       type="button"
                       onClick={() => void loadHistory(historyPageNo + 1, false)}
                       disabled={historyLoadingMore}
-                      className="mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] px-3 py-2.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition hover:text-[var(--chat-text)] disabled:opacity-60"
+                      className="mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-[var(--radius-xl)] border border-[var(--color-line)] bg-[var(--color-surface-raised)] px-3 py-2.5 text-ui-caption font-medium text-[var(--color-text-muted)] transition hover:text-[var(--color-text)] disabled:opacity-60"
                     >
                       <RefreshCcw
                         className={cn(
@@ -481,69 +481,46 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
             className="fixed inset-0 z-30 bg-[oklch(0.2_0.01_60/0.14)]"
             onClick={() => setShowSettings(false)}
           />
-          <aside className="fixed right-0 top-0 z-40 flex h-full w-full max-w-[340px] flex-col border-l border-[var(--chat-border)] bg-[var(--chat-surface)] shadow-[var(--shadow-xl)]">
-            <div className="flex items-center justify-between border-b border-[var(--chat-border)] px-4 py-4">
+          <aside className="fixed right-0 top-0 z-40 flex h-full w-full max-w-[340px] flex-col border-l border-[var(--color-line)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-xl)]">
+            <div className="flex items-center justify-between border-b border-[var(--color-line)] px-4 py-4">
               <div>
-                <div className="text-ui-base font-semibold text-[var(--chat-text)]">生成设置</div>
-                <div className="mt-0.5 text-ui-sm text-[var(--chat-text-muted)]">
+                <div className="text-ui-base font-semibold text-[var(--color-text)]">生成设置</div>
+                <div className="mt-0.5 text-ui-sm text-[var(--color-text-muted)]">
                   模型与输出参数
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowSettings(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--chat-text-muted)] hover:bg-[var(--chat-surface-soft)]"
+                className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-sunken)]"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="space-y-4 overflow-y-auto p-4">
               <label className="block">
-                <span className="mb-1 block text-ui-sm font-medium text-[var(--chat-text-muted)]">
-                  Base URL
-                </span>
-                <input
-                  value={config.baseUrl}
-                  onChange={(event) => updateConfig("baseUrl", event.target.value)}
-                  placeholder="https://..."
-                  className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] px-3 py-2 text-sm text-[var(--chat-text)] outline-none focus:border-[var(--chat-accent)]/30"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-ui-sm font-medium text-[var(--chat-text-muted)]">
-                  API Key
-                </span>
-                <input
-                  type="password"
-                  value={config.apiKey}
-                  onChange={(event) => updateConfig("apiKey", event.target.value)}
-                  placeholder="sk-..."
-                  className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] px-3 py-2 font-mono text-sm tracking-wide text-[var(--chat-text)] outline-none focus:border-[var(--chat-accent)]/30"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-ui-sm font-medium text-[var(--chat-text-muted)]">
+                <span className="mb-1 block text-ui-sm font-medium text-[var(--color-text-muted)]">
                   Model
                 </span>
                 <input
                   value={config.model}
                   onChange={(event) => updateConfig("model", event.target.value)}
-                  className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] px-3 py-2 font-mono text-sm text-[var(--chat-text)] outline-none focus:border-[var(--chat-accent)]/30"
+                  className="w-full rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-surface-sunken)] px-3 py-2 font-mono text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]/30"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-ui-sm font-medium text-[var(--chat-text-muted)]">
+                <span className="mb-1 block text-ui-sm font-medium text-[var(--color-text-muted)]">
                   Size
                 </span>
                 <input
                   value={config.size}
                   onChange={(event) => updateConfig("size", event.target.value)}
                   placeholder="1024x1024"
-                  className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] px-3 py-2 text-sm text-[var(--chat-text)] outline-none focus:border-[var(--chat-accent)]/30"
+                  className="w-full rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-surface-sunken)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]/30"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-ui-sm font-medium text-[var(--chat-text-muted)]">
+                <span className="mb-1 block text-ui-sm font-medium text-[var(--color-text-muted)]">
                   数量 n
                 </span>
                 <input
@@ -552,7 +529,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                   max={8}
                   value={config.n}
                   onChange={(event) => updateConfig("n", Number(event.target.value) || 1)}
-                  className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface-soft)] px-3 py-2 text-sm text-[var(--chat-text)] outline-none focus:border-[var(--chat-accent)]/30"
+                  className="w-full rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-surface-sunken)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]/30"
                 />
               </label>
             </div>
@@ -576,7 +553,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
               <button
                 type="button"
                 onClick={clearCurrentMask}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-ui-caption text-white/80 transition hover:bg-white/20"
+                className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-white/10 px-3 py-1.5 text-ui-caption text-white/80 transition hover:bg-white/20"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 清除涂抹
@@ -584,7 +561,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
               <button
                 type="button"
                 onClick={closeEditor}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 py-1.5 text-ui-caption font-medium text-[var(--color-text-on-accent)] transition hover:bg-[var(--primary)]/90"
+                className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-accent)] px-4 py-1.5 text-ui-caption font-medium text-[var(--color-text-on-accent)] transition hover:bg-[var(--color-accent)]/90"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 完成编辑
@@ -600,11 +577,11 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                 alt="编辑中"
                 draggable={false}
                 onLoad={refreshEditorLayout}
-                className="block max-h-[70vh] max-w-full select-none rounded-lg shadow-2xl"
+                className="block max-h-[70vh] max-w-full select-none rounded-[var(--radius-md)] shadow-[var(--shadow-xl)]"
               />
               <canvas
                 ref={maskCanvasRef}
-                className="absolute inset-0 cursor-crosshair rounded-lg touch-none"
+                className="absolute inset-0 cursor-crosshair rounded-[var(--radius-md)] touch-none"
               />
             </div>
           </div>
@@ -617,7 +594,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-ui-caption font-medium transition",
                   toolMode === "brush"
-                    ? "bg-white/20 text-white shadow-sm"
+                    ? "bg-white/20 text-white shadow-[var(--shadow-sm)]"
                     : "text-white/60 hover:text-white/90"
                 )}
               >
@@ -630,7 +607,7 @@ const WorkspaceImageGeneration: CuteType.FC<WorkspaceImageGenerationProps> = ({e
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-ui-caption font-medium transition",
                   toolMode === "eraser"
-                    ? "bg-white/20 text-white shadow-sm"
+                    ? "bg-white/20 text-white shadow-[var(--shadow-sm)]"
                     : "text-white/60 hover:text-white/90"
                 )}
               >
