@@ -103,6 +103,7 @@ const cases: Record<string, [string, unknown][]> = {
   MovingAvg: [
     ['@MovingAvg([2, 4, 6, 8], "", 2)', [2, 3, 5, 7]],
     ['@MovingAvg([{v: 3}, {v: 6}, {v: 9}], "v", 3).v', [3, 4.5, 6]],
+    ['@MovingAvg([1, 2, 3], "", 5)', [1, 1.5, 2]],
     ['@MovingAvg([1, 2], "", 0)', null],
     ['@MovingAvg([], "", 7)', []],
   ],

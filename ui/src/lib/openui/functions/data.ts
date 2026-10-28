@@ -164,10 +164,16 @@ export const MovingAvg = defineFunction({
     const w = Math.trunc(window);
     if (w < 1) throw new Error("window must be at least 1");
     const values = rows.map((row) => toNum(read(row, field)) ?? 0);
-    const averages = values.map((_, i) => {
-      const span = values.slice(Math.max(0, i - w + 1), i + 1);
-      return span.reduce((a, b) => a + b, 0) / span.length;
-    });
+    // 滑动窗口单遍累加：每行 O(1)，不再 slice + reduce。
+    const averages: number[] = [];
+    let windowSum = 0;
+    for (let i = 0; i < values.length; i += 1) {
+      windowSum += values[i];
+      if (i >= w) {
+        windowSum -= values[i - w];
+      }
+      averages.push(windowSum / Math.min(i + 1, w));
+    }
     return mapField(rows, field, averages);
   },
 });

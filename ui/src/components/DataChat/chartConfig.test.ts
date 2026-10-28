@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildChartConfig } from "./chartConfig";
+import { buildChartConfig, resolveChartType } from "./chartConfig";
 
 describe("chartConfig", () => {
   it("构建图表配置时不应修改输入对象", () => {
@@ -34,5 +34,71 @@ describe("chartConfig", () => {
     expect(result.chartType).toBe("line");
     expect(frozen.chartSuggest).toBe("line");
     expect(frozen.dataList[0]).not.toHaveProperty("gmv_format");
+  });
+
+  // 回归：后端 columnList 与 dimCols/measureCols 不一致时，
+  // findColumn(...)!.name 会抛 TypeError，整块图表白屏。
+  it.each(["line", "bar", "hbar", "pie"])(
+    "列元数据缺失时 %s 图表不应崩溃",
+    (chartSuggest) => {
+      const input = {
+        chartSuggest,
+        dimCols: ["dt"],
+        measureCols: ["gmv"],
+        columnList: [],
+        dataList: [
+          {
+            dt: "2026-05-01",
+            gmv: 10
+          },
+          {
+            dt: "2026-05-02",
+            gmv: 20
+          },
+        ],
+      };
+
+      expect(() => buildChartConfig(input)).not.toThrow();
+    }
+  );
+});
+
+describe("resolveChartType", () => {
+  const build = (order?: number | null) => ({
+    dimCols: ["dt"],
+    measureCols: ["gmv"],
+    dataList: [
+      {
+        dt: "2026-05-01",
+        gmv: 10
+      },
+      {
+        dt: "2026-05-02",
+        gmv: 20
+      },
+    ],
+    columnList: [
+      {
+        guid: "dt",
+        name: "日期",
+        dataType: "STRING"
+      },
+      {
+        guid: "gmv",
+        name: "GMV",
+        order
+      },
+    ],
+  });
+
+  // 回归：order 是可选字段，undefined !== null 为 true，
+  // 导致没有 order 的度量列被误判成 hbar。
+  it("缺少 order 字段时不再误判为 hbar", () => {
+    expect(resolveChartType(build(undefined))).not.toBe("hbar");
+    expect(resolveChartType(build(null))).not.toBe("hbar");
+  });
+
+  it("显式 order 仍使用 hbar", () => {
+    expect(resolveChartType(build(1))).toBe("hbar");
   });
 });

@@ -60,9 +60,10 @@ export function aggregate(rows: unknown[], field: string | undefined, how: Agg):
     case "avg":
       return values.reduce((a, b) => a + b, 0) / values.length;
     case "min":
-      return Math.min(...values);
+      // 展开成参数（Math.min(...values)）在超大行集上会爆栈，逐项比较更稳。
+      return values.reduce((a, b) => Math.min(a, b));
     case "max":
-      return Math.max(...values);
+      return values.reduce((a, b) => Math.max(a, b));
   }
 }
 

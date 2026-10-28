@@ -86,6 +86,14 @@ function findColumn(columns: DataChatColumn[], guid: string) {
   return columns.find((item) => item.guid === guid);
 }
 
+/** 后端列元数据缺失时退回 guid，避免整块图表因取不到列名而崩溃。 */
+function findColumnName(columns: DataChatColumn[], guid: string | undefined) {
+  if (!guid) {
+    return "";
+  }
+  return findColumn(columns, guid)?.name || guid;
+}
+
 function resolveTableColumnKey(column: DataChatColumn) {
   return column.guid || column.col || "";
 }
@@ -249,10 +257,10 @@ function initChartOption(
   if (chartType === "line") {
     const typeOption = clonePlainObject(defaultChartPresets.templateline);
     const option = Object.assign({}, common, typeOption) as Record<string, unknown>;
-    const dimColumn = findColumn(columnList, dimCols[0])!;
+    const dimColumnName = findColumnName(columnList, dimCols[0]);
     option.legend = {
       ...(option.legend as Record<string, unknown>),
-      data: [{ name: dimColumn.name }],
+      data: [{ name: dimColumnName }],
     };
     option.xAxis = {
       ...(option.xAxis as Record<string, unknown>),
@@ -260,7 +268,7 @@ function initChartOption(
     };
     option.series = measureCols.map((measureKey) => ({
       type: "line",
-      name: findColumn(columnList, measureKey)!.name,
+      name: findColumnName(columnList, measureKey),
       data: formatSeriesData(dataList, measureKey),
       smooth: true,
       symbol: "circle",
@@ -284,10 +292,10 @@ function initChartOption(
   if (chartType === "bar") {
     const typeOption = clonePlainObject(defaultChartPresets.templatebar);
     const option = Object.assign({}, common, typeOption) as Record<string, unknown>;
-    const dimColumn = findColumn(columnList, dimCols[0])!;
+    const dimColumnName = findColumnName(columnList, dimCols[0]);
     option.legend = {
       ...(option.legend as Record<string, unknown>),
-      data: [{ name: dimColumn.name }],
+      data: [{ name: dimColumnName }],
     };
     option.xAxis = {
       ...(option.xAxis as Record<string, unknown>),
@@ -295,7 +303,7 @@ function initChartOption(
     };
     option.series = measureCols.map((measureKey) => ({
       type: "bar",
-      name: findColumn(columnList, measureKey)!.name,
+      name: findColumnName(columnList, measureKey),
       label: {
         fontWeight: "bold",
         color: "#1b1b1b",
@@ -323,17 +331,17 @@ function initChartOption(
   if (chartType === "hbar") {
     const typeOption = clonePlainObject(defaultChartPresets.templatehbar);
     const option = Object.assign({}, common, typeOption) as Record<string, unknown>;
-    const dimColumn = findColumn(columnList, dimCols[0])!;
+    const dimColumnName = findColumnName(columnList, dimCols[0]);
     option.legend = {
       ...(option.legend as Record<string, unknown>),
-      data: [{ name: dimColumn.name }],
+      data: [{ name: dimColumnName }],
     };
     option.yAxis = {
       ...(option.yAxis as Record<string, unknown>),
       data: dataList.map((item) => item[dimCols[0]]),
     };
     option.series = measureCols.map((measureKey) => ({
-      name: findColumn(columnList, measureKey)!.name,
+      name: findColumnName(columnList, measureKey),
       data: formatSeriesData(dataList, measureKey),
       label: {
         fontWeight: "bold",
@@ -382,10 +390,10 @@ function initChartOption(
   if (chartType === "pie") {
     const typeOption = clonePlainObject(defaultChartPresets.templatepie);
     const option = Object.assign({}, common, typeOption) as Record<string, unknown>;
-    const dimColumn = findColumn(columnList, dimCols[0])!;
+    const dimColumnName = findColumnName(columnList, dimCols[0]);
     option.series = [
       {
-        name: dimColumn.name,
+        name: dimColumnName,
         type: "pie",
         radius: ["0%", "55%"],
         label: {
@@ -439,7 +447,7 @@ export function resolveChartType(cfg: DataChatSourceConfig): DataChatChartType {
   if (dimCols.length === 1 && measureCols.length > 0 && dataList.length > 1) {
     if (findColumn(columnList, dimCols[0])?.dataType === "DATE") {
       chartType = "line";
-    } else if (findColumn(columnList, measureCols[0])?.order !== null) {
+    } else if (findColumn(columnList, measureCols[0])?.order != null) {
       chartType = "hbar";
     } else if (dataList.length < 6) {
       chartType = "pie";
