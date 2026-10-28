@@ -13,6 +13,7 @@ import {
   loadThree,
 } from "@/lib/lazy/three";
 import { resolveGenUiAssetUrl } from "./assetUrl";
+import { disposeMaterialTextures } from "./disposeThreeMaterialTextures";
 import { useGenUiRenderContext } from "./GenUiRenderContext";
 
 type Props = {
@@ -62,23 +63,47 @@ const GenUiModel3D: FC<Props> = memo(
       requestId
     );
 
-    const options = useMemo(
+    // 场景参数与展示/控制参数拆开：只有 background / wireframe 变化才需要重建 WebGL 场景，
+    // 改标题、高度、旋转速度都不应重新下载 GLB。
+    const sceneOptions = useMemo(
       () => ({
-        height: parseHeight(height),
         background: parseBackground(background),
+        wireframe: Boolean(wireframe),
+      }),
+      [background, wireframe]
+    );
+
+    const controlOptions = useMemo(
+      () => ({
         autoRotate: autoRotate !== false,
         rotateSpeed: parseNumber(rotateSpeed, 1, 0, 3),
-        wireframe: Boolean(wireframe),
-        caption: typeof caption === "string" ? caption : "",
       }),
-      [height, background, autoRotate, rotateSpeed, wireframe, caption]
+      [autoRotate, rotateSpeed]
     );
+    // 初始化是异步的（动态 import three），用 ref 读取「创建那一刻」的最新控制参数。
+    const controlOptionsRef = useRef(controlOptions);
+    controlOptionsRef.current = controlOptions;
+
+    const heightPx = useMemo(() => parseHeight(height), [height]);
+    const captionText = typeof caption === "string" ? caption : "";
+    const controlsRef = useRef<{
+      autoRotate: boolean;
+      autoRotateSpeed: number;
+    } | null>(null);
+
+    useEffect(() => {
+      // 控制器已存在时增量同步，不销毁场景。
+      const controls = controlsRef.current;
+      if (!controls) return;
+      controls.autoRotate = controlOptions.autoRotate;
+      controls.autoRotateSpeed = controlOptions.rotateSpeed * 2;
+    }, [controlOptions]);
 
     useEffect(() => {
       const host = hostRef.current;
       if (!host || !modelUrl) return;
 
-      // 每个 src/options 组合拥有独立场景；清理阶段必须释放观察器、材质、几何体和 renderer。
+      // 每个 src/sceneOptions 组合拥有独立场景；清理阶段必须释放观察器、材质、几何体和 renderer。
       setStatus("loading");
       let disposed = false;
 
@@ -98,7 +123,7 @@ const GenUiModel3D: FC<Props> = memo(
           const { GLTFLoader } = loaderModule;
           const { RoomEnvironment } = environmentModule;
           const scene = new three.Scene();
-          scene.background = new three.Color(options.background);
+          scene.background = new three.Color(sceneOptions.background);
 
           const camera = new three.PerspectiveCamera(50, 1, 0.01, 5000);
           camera.position.set(0, 0.6, 3);
@@ -121,8 +146,9 @@ const GenUiModel3D: FC<Props> = memo(
           const controls = new OrbitControls(camera, renderer.domElement);
           controls.enableDamping = true;
           controls.dampingFactor = 0.08;
-          controls.autoRotate = options.autoRotate;
-          controls.autoRotateSpeed = options.rotateSpeed * 2;
+          controls.autoRotate = controlOptionsRef.current.autoRotate;
+          controls.autoRotateSpeed = controlOptionsRef.current.rotateSpeed * 2;
+          controlsRef.current = controls;
 
           scene.add(new three.AmbientLight(0xffffff, 0.85));
           scene.add(new three.HemisphereLight(0xffffff, 0x334155, 0.7));
@@ -142,7 +168,7 @@ const GenUiModel3D: FC<Props> = memo(
               if (disposed) return;
               // 模型加载后按包围盒居中并重算相机距离，保证不同尺寸的 glb 都能完整入镜。
               modelRoot = gltf.scene;
-              if (options.wireframe) {
+              if (sceneOptions.wireframe) {
                 modelRoot.traverse((child) => {
                   const mesh = child as Three.Mesh;
                   const mat = mesh.material as Three.Material | Three.Material[] | undefined;
@@ -272,13 +298,23 @@ const GenUiModel3D: FC<Props> = memo(
             if (frameId !== null) cancelAnimationFrame(frameId);
             if (resizeFrameId !== null) cancelAnimationFrame(resizeFrameId);
             controls.dispose();
+            controlsRef.current = null;
             if (modelRoot) {
+              // 纹理可能被多个材质共享，跨材质共用同一个 Set 去重。
+              const disposedTextures: Set<{ dispose?: () => void }> = new Set();
               modelRoot.traverse((child) => {
                 const mesh = child as Three.Mesh;
                 mesh.geometry?.dispose?.();
                 const mat = mesh.material as Three.Material | Three.Material[] | undefined;
-                if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-                else mat?.dispose?.();
+                const disposeMaterial = (m: Three.Material) => {
+                  disposeMaterialTextures(
+                    m as unknown as Record<string, unknown>,
+                    disposedTextures
+                  );
+                  m.dispose();
+                };
+                if (Array.isArray(mat)) mat.forEach(disposeMaterial);
+                else if (mat) disposeMaterial(mat);
               });
             }
             environment.dispose();
@@ -300,7 +336,7 @@ const GenUiModel3D: FC<Props> = memo(
         disposed = true;
         cleanup?.();
       };
-    }, [modelUrl, options]);
+    }, [modelUrl, sceneOptions]);
 
     return (
       <figure className="space-y-1">
@@ -308,13 +344,13 @@ const GenUiModel3D: FC<Props> = memo(
           <div
             ref={hostRef}
             role="img"
-            aria-label={options.caption || "3D model"}
+            aria-label={captionText || "3D model"}
             className="w-full min-h-[280px] max-h-[min(60vh,680px)] aspect-[16/10]"
             style={{
               ...(height != null && String(height) !== ""
-                ? { minHeight: options.height, height: options.height, maxHeight: "none", aspectRatio: "auto" }
+                ? { minHeight: heightPx, height: heightPx, maxHeight: "none", aspectRatio: "auto" }
                 : {}),
-              background: options.background,
+              background: sceneOptions.background,
             }}
           />
           {status === "loading" && (
@@ -329,9 +365,9 @@ const GenUiModel3D: FC<Props> = memo(
             </div>
           )}
         </div>
-        {options.caption ? (
+        {captionText ? (
           <figcaption className="text-center text-xs text-[var(--chat-text-soft)]">
-            {options.caption}
+            {captionText}
           </figcaption>
         ) : null}
       </figure>

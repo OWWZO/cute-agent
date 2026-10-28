@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { MRagSessionDetail, MRagSessionSummary } from "./types";
 import {
@@ -79,14 +79,21 @@ export function useMragHistory(toolBaseUrl: string, selectedKnowledgeBaseId: str
     return created;
   }, [selectedKnowledgeBaseId, toolBaseUrl]);
 
+  // 自动打开最新会话只需要「当前有没有选中」这一个瞬时值；
+  // 直接依赖 activeSessionId 会让每次切会话/建会话都重拉一次历史列表。
+  const activeSessionIdRef = useRef(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   useEffect(() => {
     // 首次加载历史后自动打开最新会话；已有 active id 时不抢占用户当前选择。
     void refreshSessions().then((nextSessions) => {
-      if (!activeSessionId && nextSessions[0]?.sessionId) {
+      if (!activeSessionIdRef.current && nextSessions[0]?.sessionId) {
         void loadSessionDetail(nextSessions[0].sessionId);
       }
     });
-  }, [activeSessionId, loadSessionDetail, refreshSessions]);
+  }, [refreshSessions, loadSessionDetail]);
 
   useEffect(() => {
     // 知识库切换后旧会话不再适用，清空它让下一次查询重新建立正确关联。
