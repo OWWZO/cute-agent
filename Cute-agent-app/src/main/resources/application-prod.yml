@@ -60,6 +60,9 @@ cute:
     browser-name-prefix: rb
     profile-name: agent
     profile-save-changes: false
+  # IM 渠道（specs/027-im-channel-qq）。默认开启；CUTE_CHANNEL_ENABLED=false 可整体关闭。
+  channel:
+    enabled: ${CUTE_CHANNEL_ENABLED:true}
 
 #长期记忆 策展有界、单外部 Provider、无 curated 向量
 memory:

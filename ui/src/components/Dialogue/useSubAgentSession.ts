@@ -19,12 +19,13 @@ import { parseAgentAnswer } from "@/utils/sseParsers";
  *
  * 对齐 ZCode「详情打开才订、关闭即断」：enabled=false 时绝不建连，也绝不发请求。
  *
- * 两条互斥的数据源（plan §5.4：heartbeat 不能冒充轨迹）：
+ * 两条数据源，按 run 状态组合（plan §5.4：heartbeat 不能冒充轨迹）：
  * <ul>
- *   <li>运行中 run：子会话 SSE 自带全量回放（lastEventSeq=0 起），直接用实时帧。</li>
- *   <li>终态 run：没有活投影，SSE 立刻 follow_idle，改拉单 run replay（账本事件）。</li>
+ *   <li>运行中 run：先拉一次单 run replay 打底（已落库的轮次只在账本里），
+ *       再接子会话 SSE 补上「账本还没写完的那一段」。</li>
+ *   <li>终态 run：没有活投影，SSE 立刻 follow_idle，只拉单 run replay（账本事件）。</li>
  * </ul>
- * 两者不叠加，否则同一段 agent_stream 增量会被追加两次。
+ * 打底与实时帧天然不重叠：后端投影缓冲按落库边界清理，同一段增量不会出现两次。
  * <p>
  * <b>顺序上先 history 再决定建流</b>：终态 run 根本不开这条连接——它唯一的归宿就是
  * 立刻 follow_idle，建了纯属白跑一次往返、白起一个 emitter 与心跳任务。
@@ -288,8 +289,9 @@ export function subscribeSubAgentSession(
         reconnectExhausted: true,
         loading: false
       });
-      // 重订耗尽：账本回放是最后一条路。有帧时不拉 —— 全量 replay 会把已有轨迹
-      // 替换掉（buildChildSessionChat 在 replayFrames 非空时不消费 frames）。
+      // 重订耗尽：账本回放是最后一条路。只在一条业务帧都没收到时才拉 ——
+      // 已有实时帧再补全量 replay，同一段轨迹会被 replay 与 frames 各走一遍，
+      // 正文和工具卡都会重复。
       if (frameCount === 0) {
         loadReplay(run?.requestId);
       }

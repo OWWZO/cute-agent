@@ -10,8 +10,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "cute.channel")
 public class ChannelProperties {
 
-    /** 总开关。关闭时渠道相关 Bean 全部不注册。 */
-    private boolean enabled = false;
+    /** 总开关，默认开启。关闭时渠道相关 Bean 全部不注册。 */
+    private boolean enabled = true;
 
     /** 全局绑定上限（一个绑定 = 一条 WS 连接）。 */
     private int maxBindings = 10;

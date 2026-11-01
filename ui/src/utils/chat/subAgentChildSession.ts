@@ -21,8 +21,9 @@ import { identityKeys, readTaskIdentity } from "./taskIdentity";
  *       不新写 ChildSessionPane —— 子会话与主会话同构。</li>
  *   <li>子会话没有父 conclusion 可比，父链那套「与父结论去重」的判据在这里全部失效，
  *       因此子会话里的 result / task_summary 一律视为本会话结论。</li>
- *   <li>历史回放与实时流互斥：回放来自账本（终态、权威），实时流只在没有回放时使用，
- *       避免同一段 agent_stream 增量被追加两次（见 §5.4 heartbeat 不能冒充轨迹）。</li>
+ *   <li>历史回放与实时帧互补而非互斥：回放来自账本（已落库、权威），实时帧只剩
+ *       「账本还没写完的那一段」（后端投影缓冲按落库边界清理），两者缺一不可
+ *       （见 §5.4 heartbeat 不能冒充轨迹）。</li>
  * </ul>
  */
 

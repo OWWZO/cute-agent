@@ -10,6 +10,7 @@ import {
   Search,
   MoreHorizontal,
   DatabaseZap,
+  MessageSquare,
   MessagesSquare,
   Star,
   WandSparkles,
@@ -67,6 +68,11 @@ const navItems: NavItem[] = [
     key: "capabilities",
     label: "能力库",
     icon: Blocks,
+  },
+  {
+    key: "channels",
+    label: "机器人",
+    icon: MessageSquare,
   },
   {
     key: "tools",
