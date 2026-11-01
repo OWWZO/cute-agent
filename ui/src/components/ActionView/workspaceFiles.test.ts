@@ -273,6 +273,50 @@ describe("workspaceFiles session aggregation", () => {
     });
   });
 
+  it("同一文件后出现的任务覆盖较旧任务，同时保留 Map 插入顺序", () => {
+    const oldTask = {
+      messageType: "file",
+      messageTime: "1",
+      fileInfo: [
+        {
+          fileName: "report.md",
+          relativePath: "reports/report.md",
+          resourceKey: "workspace/reports/report.md",
+          domainUrl: "https://files.test/old.md",
+        },
+      ],
+    } as any;
+    const otherTask = {
+      messageType: "file",
+      messageTime: "2",
+      fileInfo: [
+        {
+          fileName: "notes.md",
+          relativePath: "notes.md",
+          domainUrl: "https://files.test/notes.md",
+        },
+      ],
+    } as any;
+    const newTask = {
+      messageType: "file",
+      messageTime: "3",
+      fileInfo: [
+        {
+          fileName: "report.md",
+          relativePath: "reports/report.md",
+          resourceKey: "workspace/reports/report.md",
+          domainUrl: "https://files.test/new.md",
+        },
+      ],
+    } as any;
+
+    const files = collectWorkspaceFiles([oldTask, otherTask, newTask]);
+
+    expect(files.map((file) => file.name)).toEqual(["report.md", "notes.md"]);
+    expect(files[0]?.url).toBe("https://files.test/new.md");
+    expect(files[0]?.task).toBe(newTask);
+  });
+
   it("deduplicates manifest files with the same replay artifact", () => {
     const manifestFiles = normalizeSessionArtifactFiles([
       {

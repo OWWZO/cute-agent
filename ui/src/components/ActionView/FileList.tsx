@@ -122,6 +122,8 @@ const getFileTypeGroup = (type?: string): FileTypeFilter => {
 
 const FileList: React.FC<{
   taskList?: PanelItemType[];
+  /** 已由上层收集好的文件列表；传入时跳过本次 collectWorkspaceFiles。 */
+  filesOverride?: FileItem[];
   activeFile?: CHAT.TFile;
   clearActiveFile?: () => void;
   /** 嵌入工作区浏览器时隐藏二级标题栏 */
@@ -131,6 +133,7 @@ const FileList: React.FC<{
 }> = memo((props) => {
   const {
     taskList,
+    filesOverride,
     clearActiveFile,
     activeFile,
     embedded = false,
@@ -148,7 +151,7 @@ const FileList: React.FC<{
   });
 
   const { list: fileList, map: fileMap } = useMemo(() => {
-    const list = collectWorkspaceFiles(taskList);
+    const list = filesOverride ?? collectWorkspaceFiles(taskList);
     const map = Object.fromEntries(
       list.map((item) => [workspaceFileKey(item), item])
     ) as Record<string, FileItem>;
@@ -156,7 +159,7 @@ const FileList: React.FC<{
       list,
       map,
     };
-  }, [taskList]);
+  }, [filesOverride, taskList]);
 
   const visibleFiles = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
@@ -173,6 +176,9 @@ const FileList: React.FC<{
       return name.includes(keyword) || relativePath.includes(keyword);
     });
   }, [fileList, searchText, typeFilter]);
+
+  // 选中文件、复制状态变化不应重建目录树；只有可见文件集合变化时才重算。
+  const treeNodes = useMemo(() => buildWorkspaceTree(visibleFiles), [visibleFiles]);
 
   const fileItem = activeFile || (activeItem ? fileMap[activeItem] : undefined);
   const missing = !!fileItem && "missing" in fileItem && Boolean(fileItem.missing);
@@ -255,7 +261,7 @@ const FileList: React.FC<{
         <div className="min-h-0 flex-1 overflow-auto p-2">
           {visibleFiles.length ? (
             <WorkspaceFileTree
-              nodes={buildWorkspaceTree(visibleFiles)}
+              nodes={treeNodes}
               selectedFileKey={activeItem}
               onSelectFile={(file) => setActiveItem(workspaceFileKey(file))}
             />
@@ -313,7 +319,11 @@ const FileList: React.FC<{
       (isPdfFileLike(fileItem) && !forceSource && Boolean(fileItem.url)) ||
       (!forceSource &&
         ["svg", "markdown", "video", "audio"].includes(
-          resolveFilePreviewKind({ name: fileItem.name, mimeType: fileItem.type, url: fileItem.url })
+          resolveFilePreviewKind({
+            name: fileItem.name,
+            mimeType: fileItem.type,
+            url: fileItem.url,
+          })
         ));
     const isMedia =
       isImageFile ||

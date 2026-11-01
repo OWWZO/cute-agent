@@ -39,6 +39,9 @@ const HEADER_ICON_BTN_CLASS =
 const PILL_ICON_BTN_CLASS =
   "h-7 w-7 shrink-0 rounded-full text-[var(--chat-text-soft)] hover:bg-[var(--chat-surface-muted)] hover:text-[var(--chat-text)]";
 
+/** 流式 HTML 的尾部节流间隔：避免每个 token 都重建 iframe srcDoc。 */
+const HTML_STREAM_FLUSH_INTERVAL_MS = 220;
+
 const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
   const {
     htmlUrl,
@@ -55,8 +58,15 @@ const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
   );
   const [error, setError] = useState<string | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const [displayedHtmlContent, setDisplayedHtmlContent] = useState(
+    htmlContent || ""
+  );
+  const pendingHtmlContentRef = useRef(htmlContent || "");
+  const flushTimerRef = useRef<number | null>(null);
+  const lastFlushAtRef = useRef(0);
 
   const hasFrameContent = Boolean(htmlUrl || htmlContent);
+  const hasInlineContent = Boolean(htmlContent);
   const canPickElement = Boolean(showToolBar) && hasFrameContent && !isStreaming;
 
   const {
@@ -76,17 +86,64 @@ const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
 
   useLayoutEffect(() => {
     setError(null);
-    if (htmlUrl || htmlContent) {
+    if (htmlUrl || hasInlineContent) {
       startLoading();
       // srcDoc 同步可用，短延迟后关 loading
-      if (htmlContent && !htmlUrl) {
+      if (hasInlineContent && !htmlUrl) {
         const t = window.setTimeout(() => stopLoading(), 50);
         return () => window.clearTimeout(t);
       }
     } else {
       stopLoading();
     }
-  }, [htmlUrl, htmlContent, startLoading, stopLoading]);
+  }, [htmlUrl, hasInlineContent, startLoading, stopLoading]);
+
+  // 内容变化时清掉上一次 iframe 的错误，避免流式恢复后仍停在错误页。
+  useEffect(() => {
+    setError(null);
+  }, [htmlContent]);
+
+  // 流式 HTML 只按固定间隔刷新 srcDoc：iframe 每次重载都会重新解析整份文档，
+  // 逐 token 更新会造成明显闪烁和脚本状态丢失。非流式时立即写入最终内容。
+  useEffect(() => {
+    if (htmlUrl) {
+      return;
+    }
+    const next = htmlContent || "";
+    pendingHtmlContentRef.current = next;
+
+    if (!isStreaming) {
+      if (flushTimerRef.current !== null) {
+        window.clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      lastFlushAtRef.current = Date.now();
+      setDisplayedHtmlContent(next);
+      return;
+    }
+
+    if (flushTimerRef.current !== null) {
+      return;
+    }
+    const delay = Math.max(
+      0,
+      HTML_STREAM_FLUSH_INTERVAL_MS - (Date.now() - lastFlushAtRef.current)
+    );
+    flushTimerRef.current = window.setTimeout(() => {
+      flushTimerRef.current = null;
+      lastFlushAtRef.current = Date.now();
+      setDisplayedHtmlContent(pendingHtmlContentRef.current);
+    }, delay);
+  }, [htmlContent, htmlUrl, isStreaming]);
+
+  useEffect(
+    () => () => {
+      if (flushTimerRef.current !== null) {
+        window.clearTimeout(flushTimerRef.current);
+      }
+    },
+    []
+  );
 
   /**
    * HTML 预览右上角的浮动按钮 —— **只留「选择网页元素」**。
@@ -207,7 +264,7 @@ const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
           referrerPolicy="no-referrer-when-downgrade"
           {...(htmlUrl
             ? { src: htmlUrl }
-            : { srcDoc: htmlContent || "" })}
+            : { srcDoc: displayedHtmlContent })}
           onLoad={stopLoading}
           onError={() => {
             setError("引用资源不存在或已失效");

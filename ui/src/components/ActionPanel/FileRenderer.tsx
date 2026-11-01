@@ -19,6 +19,28 @@ const LOADING_CLASS = "mr-32";
 const ERROR_CLASS =
   "m-12 md:m-24 min-w-[260px] max-w-[calc(100%-24px)] md:max-w-[calc(100%-48px)] [&_[data-slot=alert-description]]:break-words [&_[data-slot=alert-description]]:whitespace-normal";
 
+/** 文本预览上限：超过 2 MB 的通用文件不再整块转成字符串。 */
+const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
+
+const BINARY_MIME_PREFIXES = ["image/", "audio/", "video/"];
+// application/octet-stream 仍允许按文本尝试，避免误伤后端未标类型的文本文件。
+const BINARY_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/zip",
+  "application/x-zip-compressed",
+]);
+
+const isBinaryContentType = (contentType: string | null) => {
+  const mime = (contentType || "").split(";", 1)[0]?.trim().toLowerCase() || "";
+  if (!mime) {
+    return false;
+  }
+  return (
+    BINARY_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix)) ||
+    BINARY_MIME_TYPES.has(mime)
+  );
+};
+
 interface FileRendererProps {
   fileUrl: string;
   fileName?: string;
@@ -58,7 +80,11 @@ const FileRenderer: CuteType.FC<FileRendererProps> = React.memo((props) => {
   } = props;
 
   const kind = useMemo(
-    () => resolveFilePreviewKind({ name: fileName, url: fileUrl }),
+    () =>
+      resolveFilePreviewKind({
+        name: fileName,
+        url: fileUrl,
+      }),
     [fileName, fileUrl]
   );
   const language = useMemo(
@@ -95,10 +121,26 @@ const FileRenderer: CuteType.FC<FileRendererProps> = React.memo((props) => {
       if (!response.ok) {
         throw new Error("Network response was not ok");
       }
-      return await response.text();
+      if (isBinaryContentType(response.headers.get("content-type"))) {
+        throw new Error("该文件是二进制格式，无法以文本方式预览");
+      }
+      const declaredSize = Number(response.headers.get("content-length"));
+      if (
+        Number.isFinite(declaredSize) &&
+        declaredSize > MAX_TEXT_PREVIEW_BYTES
+      ) {
+        throw new Error("文件过大（超过 2 MB），无法预览");
+      }
+      const text = await response.text();
+      if (
+        new TextEncoder().encode(text).byteLength > MAX_TEXT_PREVIEW_BYTES
+      ) {
+        throw new Error("文件过大（超过 2 MB），无法预览");
+      }
+      return text;
     },
     {
-      refreshDeps: [fileUrl, missingReason, forceSource],
+      refreshDeps: [fileUrl, missingReason],
       ready: shouldFetchText,
     }
   );

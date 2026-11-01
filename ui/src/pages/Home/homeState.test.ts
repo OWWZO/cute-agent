@@ -156,6 +156,18 @@ describe("homeState", () => {
     ]);
   });
 
+  it("附件引用未变化时返回原 state，避免无意义重渲染", () => {
+    const files = [{ name: "a.png" } as File];
+    const pendingFiles = setConversationPendingFiles({}, "session-a", files);
+
+    expect(setConversationPendingFiles(pendingFiles, "session-a", files)).toBe(
+      pendingFiles
+    );
+    expect(setConversationPendingFiles(pendingFiles, "session-b", [])).toBe(
+      pendingFiles
+    );
+  });
+
   it("本地当前会话应置顶并按 sessionId 覆盖服务端旧条目", () => {
     const merged = mergeRecentSessions(
       [

@@ -29,10 +29,23 @@ export function ExecuteOutput({
   const scroll = useRef<HTMLDivElement>(null);
   const previousTop = useRef(0);
   const hasStreamed = useRef(running);
-  const [frozen, setFrozen] = useState<string | null>(null);
+  const [frozenLength, setFrozenLength] = useState<number | null>(null);
+  const previousTextRef = useRef(text);
 
-  const following = frozen === null;
-  const display = frozen ?? text;
+  // 冻结只记录可见前缀长度，不再复制整段命令输出。
+  const following = frozenLength === null;
+  const display = frozenLength === null ? text : text.slice(0, frozenLength);
+
+  useLayoutEffect(() => {
+    const previousText = previousTextRef.current;
+    if (
+      frozenLength !== null &&
+      (text.length < previousText.length || !text.startsWith(previousText))
+    ) {
+      setFrozenLength(null);
+    }
+    previousTextRef.current = text;
+  }, [frozenLength, text]);
 
   useLayoutEffect(() => {
     if (running) hasStreamed.current = true;
@@ -63,9 +76,9 @@ export function ExecuteOutput({
           el.scrollTop < previousTop.current &&
           !atBottom
         ) {
-          setFrozen(display);
+          setFrozenLength(display.length);
         } else if (!following && atBottom) {
-          setFrozen(null);
+          setFrozenLength(null);
         }
         previousTop.current = el.scrollTop;
       }}

@@ -16,6 +16,12 @@ export type SubAgentRosterItem = DockTaskItem & {
 };
 
 /**
+ * 已完成的历史轮次不会继续追加子 Agent；按 chat 引用缓存投影结果，
+ * 流式时只重算当前活动轮，避免每个 token 都重走全部历史任务树。
+ */
+const idleChatRosterCache = new WeakMap<CHAT.ChatItem, DockTaskItem[]>();
+
+/**
  * 聚合全部子智能体条目（同步 + 后台）。
  *
  * 排序：**运行中优先**，其余保持出现顺序（同一会话内按时间线先后）。
@@ -35,7 +41,13 @@ export function collectSubAgentRoster(
   const seen = new Set<string>();
   const items: SubAgentRosterItem[] = [];
   for (const chat of sourceChats) {
-    for (const task of projectSubAgentItems(chat)) {
+    const cached =
+      chat !== host && !chat.loading ? idleChatRosterCache.get(chat) : undefined;
+    const projected = cached ?? projectSubAgentItems(chat);
+    if (!cached && chat !== host && !chat.loading) {
+      idleChatRosterCache.set(chat, projected);
+    }
+    for (const task of projected) {
       if (!task.id || seen.has(task.id)) {
         continue;
       }

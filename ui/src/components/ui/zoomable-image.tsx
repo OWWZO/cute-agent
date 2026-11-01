@@ -7,6 +7,9 @@ interface ZoomableImageProps {
   alt: string;
   /** 缩略图尺寸样式；放大后不受影响。 */
   style?: CSSProperties;
+  /** 预留缩略图的宽高，图片加载前也不发生布局跳动。 */
+  width?: number;
+  height?: number;
   className?: string;
   /** 点击放大时给用户的提示文案，undefined 表示不显示提示。 */
   maskText?: string;
@@ -23,6 +26,8 @@ export function ZoomableImage({
   alt,
   style,
   className,
+  width,
+  height,
   maskText = "点击放大",
 }: ZoomableImageProps) {
   const [open, setOpen] = useState(false);
@@ -43,6 +48,9 @@ export function ZoomableImage({
           alt={alt}
           loading="lazy"
           decoding="async"
+          width={width}
+          height={height}
+          style={{ aspectRatio: width && height ? `${width} / ${height}` : undefined }}
           className="block h-auto max-w-full"
         />
         {maskText ? (

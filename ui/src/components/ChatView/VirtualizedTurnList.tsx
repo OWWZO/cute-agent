@@ -92,6 +92,10 @@ export function VirtualizedTurnList<T>({
   const heightCacheRef = useRef(new TimelineRowHeightCache());
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  // 调用方常传内联 getItemKey；用 ref 隔离它，避免测量回调链每次渲染都重建。
+  // 身份键语义变化不在本组件监听范围内，需要整表重算时请切换 sessionKey。
+  const getItemKeyRef = useRef(getItemKey);
+  getItemKeyRef.current = getItemKey;
 
   /**
    * 滚动容器：`StickToBottom.Content` 的结构固定为「滚动 div > 内容 div」，
@@ -136,8 +140,8 @@ export function VirtualizedTurnList<T>({
    * 同会话内多行还会互相覆盖。加上 `sessionKey` 前缀后，跨会话天然不碰撞。
    */
   const getScopedItemKey = useCallback(
-    (item: T) => `${sessionKey}\u0000${getItemKey(item)}`,
-    [sessionKey, getItemKey]
+    (item: T) => `${sessionKey}\u0000${getItemKeyRef.current(item)}`,
+    [sessionKey]
   );
 
   const getItemKeyStable = useCallback(

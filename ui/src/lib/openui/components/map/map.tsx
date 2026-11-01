@@ -3,7 +3,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { defineComponent, reactive, useIsStreaming, useStateField } from "@openuidev/react-lang";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MapLibreMap, Marker } from "maplibre-gl";
 import { z } from "zod/v4";
 import { useColorScheme } from "../scheme";
@@ -252,9 +252,23 @@ export const MapView = defineComponent({
       return () => cancelAnimationFrame(frame);
     }, [expanded]);
 
-    const routeNote = routeKind === "street" ? "The line follows streets (OSRM / OpenStreetMap, driving profile); it is an overview, not turn-by-turn directions."
-      : routeKind === "none" ? "" : "The line joins the places in order. Street routing is loading or unavailable.";
-    const routeStatus = { street: "Street route loaded.", overview: "Street routing unavailable. Showing direct connections.", loading: "Street route loading.", none: "" }[routeKind];
+    const routeNote = useMemo(
+      () => routeKind === "street"
+        ? "The line follows streets (OSRM / OpenStreetMap, driving profile); it is an overview, not turn-by-turn directions."
+        : routeKind === "none"
+          ? ""
+          : "The line joins the places in order. Street routing is loading or unavailable.",
+      [routeKind]
+    );
+    const routeStatus = useMemo(
+      () => ({
+        street: "Street route loaded.",
+        overview: "Street routing unavailable. Showing direct connections.",
+        loading: "Street route loading.",
+        none: "",
+      })[routeKind],
+      [routeKind]
+    );
 
     return (
       <div className="iui-map-slot" style={{ minHeight: height }}>

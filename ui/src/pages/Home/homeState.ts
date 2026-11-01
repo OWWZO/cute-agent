@@ -109,13 +109,23 @@ export function setConversationPendingFiles(
     return pendingFiles;
   }
 
-  const next = { ...pendingFiles };
   if (files.length === 0) {
+    if (!Object.prototype.hasOwnProperty.call(pendingFiles, sessionId)) {
+      return pendingFiles;
+    }
+    const next = { ...pendingFiles };
     delete next[sessionId];
-  } else {
-    next[sessionId] = files;
+    return next;
   }
-  return next;
+
+  if (pendingFiles[sessionId] === files) {
+    return pendingFiles;
+  }
+
+  return {
+    ...pendingFiles,
+    [sessionId]: files,
+  };
 }
 
 function resolveConversationStatus(conversation: CHAT.ConversationHistory) {

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useReducedMotion, type Transition } from "motion/react";
 
 /** Strong ease-out for UI enters (AUDIT --ease-out). */
@@ -89,36 +90,42 @@ export const useSpring = (
 };
 
 /** Shared motion config for high-traffic surfaces. */
+const MOTION_FADE = {
+  initial: {
+    opacity: 0,
+    y: 8,
+  },
+  animate: {
+    opacity: 1,
+    y: 0,
+  },
+  exit: {
+    opacity: 0,
+    y: -6,
+  },
+} as const;
+
+const REDUCED_MOTION_FADE = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
+} as const;
+
 export function useMotionConfig() {
   const reduce = !!useReducedMotion();
   // 尊重系统减弱动态设置：缩短过渡并关闭无限循环，避免仅隐藏动画仍持续占用资源。
-  return {
-    reduce,
-    duration: reduce ? DURATION.reduced : DURATION.message,
-    ease: EASE_OUT,
-    fade: reduce
-      ? {
-        initial: { opacity: 0 },
-        animate: { opacity: 1 },
-        exit: { opacity: 0 },
-      }
-      : {
-        initial: {
-          opacity: 0,
-          y: 8
-        },
-        animate: {
-          opacity: 1,
-          y: 0
-        },
-        exit: {
-          opacity: 0,
-          y: -6
-        },
-      },
-    /** When reduce is true, do not pass this as transition.repeat. */
-    loop: reduce ? 0 : Number.POSITIVE_INFINITY,
-  };
+  // 按 reduce 缓存整个返回值，保证 initial/animate/exit 的引用跨渲染稳定。
+  return useMemo(
+    () => ({
+      reduce,
+      duration: reduce ? DURATION.reduced : DURATION.message,
+      ease: EASE_OUT,
+      fade: reduce ? REDUCED_MOTION_FADE : MOTION_FADE,
+      /** When reduce is true, do not pass this as transition.repeat. */
+      loop: reduce ? undefined : Number.POSITIVE_INFINITY,
+    }),
+    [reduce]
+  );
 }
 
 /**

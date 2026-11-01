@@ -28,6 +28,15 @@ describe("useConversationStream helpers", () => {
     expect(claimTurnSettledRefresh("", settled)).toBe(false);
   });
 
+  it("长会话的结算去重记录有容量上限", () => {
+    const settled = new Set<string>();
+    for (let index = 0; index < 130; index += 1) {
+      expect(claimTurnSettledRefresh(`req-${index}`, settled)).toBe(true);
+    }
+    expect(settled.size).toBeLessThanOrEqual(128);
+    expect(claimTurnSettledRefresh("req-129", settled)).toBe(false);
+  });
+
   it("空壳 chat 判定为可全量重放，带内容的 chat 不重放", () => {
     // 历史 hydrate 的 summary 壳：全部内容字段为空。
     const shell = {

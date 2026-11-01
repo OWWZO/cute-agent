@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import gfm from 'remark-gfm';
-import { memo, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { cloneElement, isValidElement, memo, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
 import { usePanelContext } from './PanelProvider';
@@ -22,9 +22,10 @@ import {
 type ReactMarkdownProps = ComponentProps<typeof ReactMarkdown>;
 
 /** react-markdown 默认 pre>code；我们的 fence 自带外壳，必须拆掉外层 pre，否则套住 Shiki 的 pre 会重复渲染 HTML 源码 */
-const MarkdownPre: CuteType.FC<{ children?: ReactNode }> = ({ children }) => (
-  <>{children}</>
-);
+const MarkdownPre: CuteType.FC<{ children?: ReactNode }> = ({ children }) =>
+  isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, { "data-block": "" })
+    : <>{children}</>;
 
 /**
  * components 工厂。
@@ -74,11 +75,17 @@ const buildMarkdownComponents = (
       typeof imgProps.src === 'string' ? imgProps.src : undefined
     );
     const alt = typeof imgProps.alt === 'string' ? imgProps.alt : undefined;
+    const toDimension = (value: unknown) => {
+      const num = Number(value);
+      return Number.isFinite(num) && num > 0 ? num : undefined;
+    };
+    const width = toDimension(imgProps.width);
+    const height = toDimension(imgProps.height);
     const mediaKind = resolveMarkdownMediaKind(src);
     if ((mediaKind === 'video' || mediaKind === 'audio') && src) {
       return <MarkdownMediaPlayer kind={mediaKind} src={src} title={alt} />;
     }
-    return <MarkdownImagePreview src={src || ''} alt={alt} />;
+    return <MarkdownImagePreview src={src || ''} alt={alt} width={width} height={height} />;
   };
 
   return {
@@ -130,9 +137,10 @@ const MarkdownRenderer: CuteType.FC<{
     artifactFiles,
   } = props;
   // Agent 输出按合法 Markdown 原样渲染；仅把相对文件名替换成产物 URL。
-  const normalizedContent = rewriteMarkdownArtifactRefs(
-    markDownContent || '',
-    artifactFiles
+  // 同一份内容 / 文件集在父组件重渲染时不重复扫描全文。
+  const normalizedContent = useMemo(
+    () => rewriteMarkdownArtifactRefs(markDownContent || '', artifactFiles),
+    [markDownContent, artifactFiles]
   );
 
   const { scrollToBottom } = usePanelContext() || {};

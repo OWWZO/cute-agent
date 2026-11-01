@@ -13,13 +13,14 @@ import {
   resolveCodePreviewTheme,
 } from "@/lib/codePreviewSettings";
 import {
-  getLightweightDiffLineParts,
   getPlainTextPatchPreviewLines,
+  parseLightweightDiffRows,
 } from "@/lib/patchPreview";
 import { cn } from "@/lib/utils";
 import { buildDiffViewerStyle } from "./utils";
 import type { CodeViewerStyle } from "./types";
 import Loading from "../Loading";
+import PreviewErrorBoundary from "../PreviewErrorBoundary";
 
 /**
  * `@pierre/diffs` 的 `PatchDiff` 懒加载：自带 shiki + oniguruma WASM，
@@ -73,6 +74,11 @@ export const PatchViewer = memo(function PatchViewer({ patch, className }: Patch
     return lines > MAX_PATCH_SAFE_LINE_COUNT;
   }, [patch]);
 
+  const patchResetKey = useMemo(
+    () => `${patch.length}:${patch.slice(0, 64)}:${patch.slice(-64)}`,
+    [patch]
+  );
+
   const viewerStyle = useMemo<CodeViewerStyle>(
     () => ({
       // 主题适配与 CodeViewer 共用，见 buildDiffViewerStyle 的说明
@@ -115,20 +121,33 @@ export const PatchViewer = memo(function PatchViewer({ patch, className }: Patch
       style={viewerStyle}
     >
       <div className="h-full w-full overflow-auto">
-        <Suspense
+        <PreviewErrorBoundary
+          label="PATCH"
           fallback={
-            <div className="flex h-full min-h-[200px] items-center justify-center">
-              <Loading className={LOADING_CLASS} />
-            </div>
+            <PatchPlainTextFallback
+              patch={patch}
+              wrap={globalWrap}
+              className={className}
+              notice="diff 渲染失败，已切换为纯文本"
+            />
           }
+          resetKey={patchResetKey}
         >
-          <LazyPatchDiff
-            patch={patch}
-            options={options}
-            className="min-h-full w-full"
-            style={viewerStyle}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <div className="flex h-full min-h-[200px] items-center justify-center">
+                <Loading className={LOADING_CLASS} />
+              </div>
+            }
+          >
+            <LazyPatchDiff
+              patch={patch}
+              options={options}
+              className="min-h-full w-full"
+              style={viewerStyle}
+            />
+          </Suspense>
+        </PreviewErrorBoundary>
       </div>
     </div>
   );
@@ -139,12 +158,15 @@ const PatchPlainTextFallback = memo(function PatchPlainTextFallback({
   patch,
   wrap,
   className,
+  notice = "patch 过大，已停用 diff 高亮",
 }: {
   patch: string;
   wrap: boolean;
   className?: string;
+  notice?: string;
 }) {
   const lines = useMemo(() => getPlainTextPatchPreviewLines(patch), [patch]);
+  const rows = useMemo(() => parseLightweightDiffRows(lines), [lines]);
 
   return (
     <div
@@ -154,9 +176,7 @@ const PatchPlainTextFallback = memo(function PatchPlainTextFallback({
       )}
       data-patch-viewer="plain"
     >
-      <div className="px-3 py-2 text-ui-xs text-foreground-subtle">
-        patch 过大，已停用 diff 高亮
-      </div>
+      <div className="px-3 py-2 text-ui-xs text-foreground-subtle">{notice}</div>
       <pre
         className={cn(
           "px-3 pb-3 font-mono text-ui-xs leading-[1.7]",
@@ -164,22 +184,27 @@ const PatchPlainTextFallback = memo(function PatchPlainTextFallback({
         )}
       >
         <code>
-          {lines.map((line, index) => {
-            const parts = getLightweightDiffLineParts(line);
-            return (
+          {rows.map((row, index) =>
+            row.kind === "omitted" ? (
+              <span className="kimi-diff-omitted block" key={index}>
+                已省略 {row.omittedLineCount} 行
+              </span>
+            ) : (
               <span
                 key={index}
                 className={cn(
                   "kimi-diff-line",
-                  parts.kind === "added" && "kimi-diff-add",
-                  parts.kind === "removed" && "kimi-diff-del"
+                  row.parts.kind === "added" && "kimi-diff-add",
+                  row.parts.kind === "removed" && "kimi-diff-del"
                 )}
               >
-                {parts.marker ? <span className="kimi-diff-sign">{parts.marker}</span> : null}
-                <span className="kimi-diff-text">{parts.content}</span>
+                {row.parts.marker ? (
+                  <span className="kimi-diff-sign">{row.parts.marker}</span>
+                ) : null}
+                <span className="kimi-diff-text">{row.parts.content}</span>
               </span>
-            );
-          })}
+            )
+          )}
         </code>
       </pre>
     </div>

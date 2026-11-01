@@ -73,6 +73,20 @@ function clonePlainObject<T>(value: T): T {
   return JSON.parse(JSON.stringify(value ?? {})) as T;
 }
 
+/**
+ * 只复制会被 formatData 写入的行，避免把整份图表配置做 JSON 往返。
+ * 行内值均为标量或嵌套对象引用，浅拷贝即可保证不修改上游数据。
+ */
+function cloneSourceConfig(cfg: DataChatSourceConfig): DataChatSourceConfig {
+  if (!cfg.dataList) {
+    return cfg;
+  }
+  return {
+    ...cfg,
+    dataList: cfg.dataList.map((row) => ({ ...row })),
+  };
+}
+
 function findLastMatchedIndex(values: number[], matcher: (value: number) => boolean) {
   for (let index = values.length - 1; index >= 0; index -= 1) {
     if (matcher(values[index])) {
@@ -311,14 +325,8 @@ function initChartOption(
       },
       data: formatSeriesData(dataList, measureKey),
       barMaxWidth: 32,
-      itemStyle: {
-        borderRadius: 4,
-      },
-      emphasis: {
-        label: {
-          show: false,
-        },
-      },
+      itemStyle: { borderRadius: 4 },
+      emphasis: { label: { show: false } },
     }));
     attachHorizontalZoom(option, (option.xAxis as { data?: unknown[] }).data || []);
     option.tooltip = {
@@ -350,17 +358,9 @@ function initChartOption(
       },
       type: "bar",
       barMaxWidth: 32,
-      itemStyle: {
-        borderRadius: 4,
-      },
-      labelLayout: {
-        hideOverlap: true,
-      },
-      emphasis: {
-        label: {
-          show: false,
-        },
-      },
+      itemStyle: { borderRadius: 4 },
+      labelLayout: { hideOverlap: true },
+      emphasis: { label: { show: false } },
     }));
 
     const yAxisData = (option.yAxis as { data?: unknown[] }).data || [];
@@ -436,6 +436,13 @@ function initChartOption(
   return {};
 }
 
+export function resolveCurrentChartType(
+  cfg: DataChatSourceConfig,
+  typeOverride: string | null
+): string {
+  return typeOverride ?? resolveChartType(cfg);
+}
+
 export function resolveChartType(cfg: DataChatSourceConfig): DataChatChartType {
   // 决策优先保证可读性：无法满足稳定维度/度量关系时退回表格，而不是猜测图表。
   let chartType: DataChatChartType = "table";
@@ -470,12 +477,10 @@ export function resolveChartType(cfg: DataChatSourceConfig): DataChatChartType {
 
 export function buildChartConfig(chartCfg: DataChatSourceConfig): DataChatTransformedConfig {
   // 克隆输入避免格式化函数修改上游 SSE/缓存对象，随后只生成当前视图需要的字段。
-  const nextConfig = clonePlainObject(chartCfg);
+  const nextConfig = cloneSourceConfig(chartCfg);
   formatData(nextConfig);
   const chartType = nextConfig.chartSuggest || "table";
-  const result: DataChatTransformedConfig = {
-    chartType,
-  };
+  const result: DataChatTransformedConfig = { chartType };
 
   if (defaultChartPresets.chartTypes.includes(chartType as never)) {
     result.option = initChartOption(nextConfig, chartType as DataChatChartType);

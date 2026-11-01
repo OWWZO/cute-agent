@@ -11,59 +11,105 @@ type DeepSearchChapterPanelProps = {
 /**
  * 章节工作区：上方该章检索来源列表，下方章节总结。
  */
-const DeepSearchChapterPanel: CuteType.FC<DeepSearchChapterPanelProps> = memo(
-  ({ model }) => {
-    const orderLabel =
-      typeof model.order === "number" && model.order > 0
-        ? `第 ${model.order} 章`
-        : "章节";
+const DeepSearchChapterPanelComponent: CuteType.FC<DeepSearchChapterPanelProps> = ({ model }) => {
+  const orderLabel =
+    typeof model.order === "number" && model.order > 0
+      ? `第 ${model.order} 章`
+      : "章节";
 
-    return (
-      <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-6 px-1 pb-8 pt-2">
-        <section>
-          <div className="mb-3 flex items-center gap-2 px-1">
-            <ListTree className="h-4 w-4 text-[var(--chat-text-muted)]" strokeWidth={1.75} />
-            <p className="text-ui-sm font-medium text-[var(--chat-text-muted)]">
-              本章检索来源
-            </p>
-          </div>
-          <SearchListRenderer
-            list={model.sources}
-            eyebrow="章节来源"
-            title="网页与文档"
-            emptyTitle="暂无本章来源"
-            emptyDescription="该章节还没有可展示的检索结果。"
+  return (
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-6 px-1 pb-8 pt-2">
+      <section>
+        <div className="mb-3 flex items-center gap-2 px-1">
+          <ListTree
+            className="h-4 w-4 text-[var(--chat-text-muted)]"
+            strokeWidth={1.75}
           />
-        </section>
+          <p className="text-ui-sm font-medium text-[var(--chat-text-muted)]">
+            本章检索来源
+          </p>
+        </div>
+        <SearchListRenderer
+          list={model.sources}
+          eyebrow="章节来源"
+          title="网页与文档"
+          emptyTitle="暂无本章来源"
+          emptyDescription="该章节还没有可展示的检索结果。"
+        />
+      </section>
 
-        <section className="rounded-2xl border border-[var(--chat-border)]/50 bg-[var(--chat-surface)] px-4 py-4">
-          <div className="mb-3 flex items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--chat-border)]/40 bg-[var(--chat-surface-muted)] text-[var(--chat-text-muted)]">
-              <BookOpenText className="h-5 w-5" strokeWidth={1.75} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-ui-xs font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]">
-                {orderLabel}
-              </p>
-              <h3 className="mt-1 text-ui-lg font-semibold leading-snug tracking-[-0.01em] text-[var(--chat-text)]">
-                {model.title}
-              </h3>
-            </div>
+      <section className="rounded-2xl border border-[var(--chat-border)]/50 bg-[var(--chat-surface)] px-4 py-4">
+        <div className="mb-3 flex items-start gap-3">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--chat-border)]/40 bg-[var(--chat-surface-muted)] text-[var(--chat-text-muted)]">
+            <BookOpenText className="h-5 w-5" strokeWidth={1.75} />
           </div>
-          {model.summary ? (
-            <div className="rounded-xl bg-[var(--chat-surface-soft)] px-3 py-2">
-              <MarkdownRenderer
-                markDownContent={model.summary}
-                isStreaming={Boolean(model.isStreaming)}
-              />
-            </div>
-          ) : (
-            <p className="text-ui-caption leading-relaxed text-[var(--chat-text-soft)]">
-              章节总结生成中，可先查看上方检索来源。
+          <div className="min-w-0 flex-1">
+            <p className="text-ui-xs font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]">
+              {orderLabel}
             </p>
-          )}
-        </section>
-      </div>
+            <h3 className="mt-1 text-ui-lg font-semibold leading-snug tracking-[-0.01em] text-[var(--chat-text)]">
+              {model.title}
+            </h3>
+          </div>
+        </div>
+        {model.summary ? (
+          <div className="rounded-xl bg-[var(--chat-surface-soft)] px-3 py-2">
+            <MarkdownRenderer
+              markDownContent={model.summary}
+              isStreaming={Boolean(model.isStreaming)}
+            />
+          </div>
+        ) : (
+          <p className="text-ui-caption leading-relaxed text-[var(--chat-text-soft)]">
+            章节总结生成中，可先查看上方检索来源。
+          </p>
+        )}
+      </section>
+    </div>
+  );
+};
+
+const sameSources = (
+  left: DeepSearchChapterWorkspaceModel["sources"],
+  right: DeepSearchChapterWorkspaceModel["sources"]
+) => {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((item, index) => {
+    const other = right[index];
+    return (
+      item.name === other.name &&
+      item.pageContent === other.pageContent &&
+      item.url === other.url &&
+      item.kind === other.kind &&
+      item.interactive === other.interactive &&
+      item.metaLabel === other.metaLabel
+    );
+  });
+};
+
+/**
+ * panelResolver 每次解析都会新建 model 对象；默认浅比较会击穿 memo。
+ * 这里按真正影响渲染的字段比较，避免流式时整块章节面板重渲染。
+ */
+const DeepSearchChapterPanel = memo(
+  DeepSearchChapterPanelComponent,
+  (prev, next) => {
+    const left = prev.model;
+    const right = next.model;
+    if (left === right) {
+      return true;
+    }
+    return (
+      left.title === right.title &&
+      left.summary === right.summary &&
+      left.order === right.order &&
+      left.isStreaming === right.isStreaming &&
+      sameSources(left.sources, right.sources)
     );
   }
 );

@@ -107,6 +107,13 @@ export function claimTurnSettledRefresh(
     return false;
   }
   settledRequestIds.add(requestId);
+  while (settledRequestIds.size > TURN_SETTLED_REFRESH_MAX) {
+    const oldest = settledRequestIds.values().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    settledRequestIds.delete(oldest);
+  }
   return true;
 }
 
@@ -258,6 +265,10 @@ function withoutStaleDisconnectTip(chat: CHAT.ChatItem): CHAT.ChatItem {
 }
 const FOLLOW_RECONNECT_BASE_DELAY = 800;
 const FOLLOW_RECONNECT_MAX_DELAY = 15_000;
+/** 主动释放的观察流只需在回调到达前保留；设上限防止长会话无限累积。 */
+const RELEASED_OBSERVATIONS_MAX = 64;
+/** 同一 requestId 的结算去重表；长会话内也必须有界。 */
+const TURN_SETTLED_REFRESH_MAX = 128;
 /**
  * 连续重连失败的次数上限（每收到一帧就清零）。
  *
@@ -573,6 +584,7 @@ export function useConversationStream(
   const [showAction, setShowAction] = useState(false);
   const [loading, setLoading] = useState(false);
   const [streamingThoughtMap, setStreamingThoughtMap] = useState<Record<string, string>>({});
+  const conversationIdRef = useRef(conversation.id);
   const conversationRef = useRef(conversation);
   const activeRequestIdRef = useRef<string | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null);
@@ -681,7 +693,15 @@ export function useConversationStream(
   });
 
   const markObservationReleased = useMemoizedFn((controller: AbortController) => {
-    releasedObservationsRef.current.add(controller);
+    const released = releasedObservationsRef.current;
+    released.add(controller);
+    while (released.size > RELEASED_OBSERVATIONS_MAX) {
+      const oldest = released.values().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      released.delete(oldest);
+    }
   });
 
   const releaseLiveObservation = useMemoizedFn((conversationId: string) => {
@@ -696,6 +716,12 @@ export function useConversationStream(
     liveStreamsRef.current.delete(conversationId);
     if (streamAbortControllerRef.current === entry.controller) {
       streamAbortControllerRef.current = null;
+    }
+    if (
+      conversationRef.current.id === conversationId &&
+      activeRequestIdRef.current === entry.requestId
+    ) {
+      activeRequestIdRef.current = null;
     }
     entry.controller.abort();
   });
@@ -868,6 +894,11 @@ export function useConversationStream(
   }, [conversation]);
 
   useEffect(() => {
+    // 切会话只清理结算去重记录；同一会话内重复 finished 仍只刷新一次。
+    if (conversationIdRef.current !== conversation.id) {
+      turnSettledRefreshRef.current.clear();
+      conversationIdRef.current = conversation.id;
+    }
     // 切会话只保留当前这一条观察流；断线或仍在跑则先拆再 follow。
     resetWorkspaceTaskThrottle(undefined);
     resetThoughtThrottle({});

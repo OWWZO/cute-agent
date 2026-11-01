@@ -17,6 +17,7 @@
  */
 export function shouldTokenizeCode(code: string, streaming: boolean): boolean {
   if (streaming) return false;
+  if (!code.trim()) return false;
   // 源码若已是 Shiki HTML，说明上游串台；只当纯文本展示，绝不二次注入。
   if (/^\s*<pre\b[^>]*\bshiki\b/i.test(code)) return false;
   return true;

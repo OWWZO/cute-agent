@@ -318,6 +318,8 @@ const WordRenderer: CuteType.FC<WordRendererProps> = React.memo((props) => {
   } = props;
 
   const [renderError, setRenderError] = useState<unknown>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const docLabel = legacyDoc ? "DOC" : "DOCX";
 
   const resolvedUrl = useMemo(
@@ -329,15 +331,19 @@ const WordRenderer: CuteType.FC<WordRendererProps> = React.memo((props) => {
     [downloadUrl, fileUrl, resolvedUrl]
   );
 
-  const { data: buffer, error } = useRequest(
+  const { data: buffer, error, loading } = useRequest(
     async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       if (missingReason) {
         throw new Error(missingReason);
       }
       if (!resolvedUrl) {
         throw new Error("引用资源不存在或已失效");
       }
-      const response = await fetch(resolvedUrl);
+      const response = await fetch(resolvedUrl, { signal: controller.signal });
       if (response.status === 404) {
         throw new OfficeFileMissingError();
       }
@@ -357,10 +363,15 @@ const WordRenderer: CuteType.FC<WordRendererProps> = React.memo((props) => {
       onBefore: () => {
         setRenderError(null);
       },
+      onSuccess: () => {
+        setLoadedUrl(resolvedUrl);
+      },
     }
   );
 
-  const displayError = error ?? renderError;
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const displayError = loading ? null : error ?? renderError;
   if (displayError) {
     return (
       <DocumentFallback
@@ -403,7 +414,14 @@ const WordRenderer: CuteType.FC<WordRendererProps> = React.memo((props) => {
       }
       bodyClassName={cn("p-0", hideChrome ? "h-full min-h-0 flex-1" : "h-[min(72vh,960px)]")}
     >
-      {buffer ? (
+      {loading || !buffer || loadedUrl !== resolvedUrl ? (
+        <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 bg-[var(--chat-surface-muted)]">
+          <Loading className={LOADING_CLASS} />
+          {legacyDoc ? (
+            <span className="text-xs text-muted-foreground">正在解析旧版 Word 文档…</span>
+          ) : null}
+        </div>
+      ) : (
         <PreviewErrorBoundary
           label={docLabel}
           fallback={errorFallback}
@@ -420,13 +438,6 @@ const WordRenderer: CuteType.FC<WordRendererProps> = React.memo((props) => {
             />
           )}
         </PreviewErrorBoundary>
-      ) : (
-        <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 bg-[var(--chat-surface-muted)]">
-          <Loading className={LOADING_CLASS} />
-          {legacyDoc ? (
-            <span className="text-xs text-muted-foreground">正在解析旧版 Word 文档…</span>
-          ) : null}
-        </div>
       )}
     </ViewerPanelShell>
   );

@@ -7,6 +7,7 @@ import {
   resolveTaskResultMap,
   resolveTaskToolResult,
   resolveTaskToolResultText,
+  type ResolvedToolResult,
 } from "@/utils/chat/toolCalls";
 import type { PanelItemType, SearchListItem } from "./type";
 
@@ -124,6 +125,9 @@ interface ResolvePanelViewParams {
   allowShowToolBar?: boolean;
   isFinal?: boolean;
   codeOutput?: string;
+  /** 已解析的 resultMap / toolResult，供上游复用，缺失时回退解析。 */
+  resultMap?: MESSAGE.ResultMap;
+  toolResult?: ResolvedToolResult;
   toolResultText?: string;
   primaryFile?: CHAT.TFile;
 }
@@ -153,6 +157,8 @@ export function resolvePanelView(params: ResolvePanelViewParams): PanelView {
     allowShowToolBar,
     isFinal,
     codeOutput,
+    resultMap,
+    toolResult,
     toolResultText,
     primaryFile,
   } = params;
@@ -161,8 +167,10 @@ export function resolvePanelView(params: ResolvePanelViewParams): PanelView {
     return { type: "empty" };
   }
 
+  const resolvedResultMap = resultMap ?? resolveTaskResultMap(taskItem);
+  const resolvedToolResult = toolResult ?? resolveTaskToolResult(taskItem);
   const resolvedToolResultText =
-    toolResultText || resolveTaskToolResultText(taskItem);
+    toolResultText ?? resolveTaskToolResultText(taskItem, resolvedToolResult);
 
   if (taskItem.messageType === "ask_user_question") {
     return {
@@ -201,7 +209,7 @@ export function resolvePanelView(params: ResolvePanelViewParams): PanelView {
   if (taskItem.messageType === "deep_search") {
     const deepSearchTask = {
       ...taskItem,
-      resultMap: resolveTaskResultMap(taskItem),
+      resultMap: resolvedResultMap,
     } as unknown as Pick<CHAT.Task, "messageType" | "resultMap">;
     const chapterModel = buildDeepSearchChapterWorkspaceModel(deepSearchTask);
     if (chapterModel) {
@@ -220,8 +228,6 @@ export function resolvePanelView(params: ResolvePanelViewParams): PanelView {
     }
   }
 
-  const resolvedResultMap = resolveTaskResultMap(taskItem);
-  const resolvedToolResult = resolveTaskToolResult(taskItem);
   const resolvedToolName =
     resolvedToolResult?.toolName ||
     (typeof resolvedResultMap.toolName === "string"

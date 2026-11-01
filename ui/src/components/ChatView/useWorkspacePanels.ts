@@ -44,6 +44,8 @@ type WorkspaceLayout = Record<string, number> | undefined;
  */
 export function useWorkspacePanels() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(DEFAULT_LEFT_WIDTH);
+  // 拖拽每一帧只更新 ref，松手时再提交一次 state，避免整个 ChatView 跟着重渲染。
+  const leftPanelWidthRef = useRef(DEFAULT_LEFT_WIDTH);
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
   const [isRightCollapsed, setIsRightCollapsed] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -76,7 +78,7 @@ export function useWorkspacePanels() {
   const handleLayoutChange = useCallback((layout: WorkspaceLayout) => {
     const next = layout?.chat;
     if (typeof next === "number") {
-      setLeftPanelWidth(clampWorkspaceLeftWidth(next));
+      leftPanelWidthRef.current = clampWorkspaceLeftWidth(next);
     }
     // onLayoutChange 在拖拽的每一帧都会触发，这里只广播一次拖拽开始。
     // 拖拽结束由 Group 的 onLayoutChanged 统一收口。
@@ -87,8 +89,10 @@ export function useWorkspacePanels() {
     }
   }, []);
 
-  /** 拖拽结束：清掉拖拽态标记，并让图表重新量一次容器。 */
+  /** 拖拽结束：提交最终宽度，清掉拖拽态标记，并让图表重新量一次容器。 */
   const notifyResizeEnd = useCallback(() => {
+    const next = leftPanelWidthRef.current;
+    setLeftPanelWidth((previous) => (previous === next ? previous : next));
     workspaceRef.current?.removeAttribute("data-workspace-resizing");
     document.dispatchEvent(new Event(WORKSPACE_RESIZE_END_EVENT));
   }, []);
@@ -97,6 +101,7 @@ export function useWorkspacePanels() {
     const nextCollapsed = !isLeftCollapsed;
     setIsLeftCollapsed(nextCollapsed);
     if (!nextCollapsed) {
+      leftPanelWidthRef.current = DEFAULT_LEFT_WIDTH;
       setLeftPanelWidth(DEFAULT_LEFT_WIDTH);
     }
   }, [isLeftCollapsed]);
@@ -112,9 +117,12 @@ export function useWorkspacePanels() {
       preFocusLeftWidthRef.current = leftPanelWidth;
       setIsLeftCollapsed(false);
       setIsRightCollapsed(false);
+      leftPanelWidthRef.current = IMMERSIVE_LEFT_WIDTH;
       setLeftPanelWidth(IMMERSIVE_LEFT_WIDTH);
     } else {
-      setLeftPanelWidth(preFocusLeftWidthRef.current || DEFAULT_LEFT_WIDTH);
+      const restored = preFocusLeftWidthRef.current || DEFAULT_LEFT_WIDTH;
+      leftPanelWidthRef.current = restored;
+      setLeftPanelWidth(restored);
     }
   }, [isFocusMode, leftPanelWidth]);
 
@@ -123,12 +131,12 @@ export function useWorkspacePanels() {
       return;
     }
     setIsFocusMode(false);
-    setLeftPanelWidth(preFocusLeftWidthRef.current || DEFAULT_LEFT_WIDTH);
+    const restored = preFocusLeftWidthRef.current || DEFAULT_LEFT_WIDTH;
+    leftPanelWidthRef.current = restored;
+    setLeftPanelWidth(restored);
   }, [isFocusMode]);
 
-  // 记录最新宽度供模式切换副作用读取，避免把 leftPanelWidth 放进依赖后
-  // 拖拽每一帧都触发 setLayout / resize-end。
-  const leftPanelWidthRef = useRef(leftPanelWidth);
+  // 记录程序化修改（折叠 / 沉浸）后的最新宽度，供模式切换副作用读取。
   useEffect(() => {
     leftPanelWidthRef.current = leftPanelWidth;
   }, [leftPanelWidth]);

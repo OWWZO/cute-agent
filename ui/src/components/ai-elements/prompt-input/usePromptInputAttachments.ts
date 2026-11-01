@@ -60,7 +60,13 @@ export function usePromptInputAttachmentState(
     }
 
     const nextItems = createPromptInputAttachmentItems(result.accepted);
-    onAttachmentsAdded?.(nextItems);
+    try {
+      onAttachmentsAdded?.(nextItems);
+    } catch (error) {
+      // 回调抛错时这批 item 不会被收纳，必须就地回收，避免 blob URL 泄漏。
+      revokePromptInputAttachmentUrls(nextItems);
+      throw error;
+    }
     setItems((previous) => previous.concat(nextItems));
   }, [accept, maxFileSize, maxFiles, onAttachmentsAdded, onError]);
 

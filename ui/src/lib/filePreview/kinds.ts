@@ -183,6 +183,18 @@ function resolveKindByMime(mimeType?: string | null): FilePreviewKind | null {
   return null;
 }
 
+/** 不携带任何内容类型信息的 MIME：常见于对象存储，不能据此判断是文本。 */
+const OPAQUE_MIME_TYPES = new Set([
+  "application/octet-stream",
+  "binary/octet-stream",
+  "application/binary",
+]);
+
+function isOpaqueMime(mimeType?: string | null): boolean {
+  const mime = String(mimeType ?? "").split(";", 1)[0]?.trim().toLowerCase();
+  return !!mime && OPAQUE_MIME_TYPES.has(mime);
+}
+
 /**
  * 解析文件预览类型。
  *
@@ -206,6 +218,9 @@ export function resolveFilePreviewKind(
     if (isKnownCodeExtension(extension)) return "code";
     const byMime = resolveKindByMime(normalized.mimeType);
     if (byMime) return byMime;
+    // MIME 明确为 opaque 时说明扩展名和 MIME 都没有可用信息，按二进制处理，
+    // 避免把未知二进制整块读成字符串。
+    if (isOpaqueMime(normalized.mimeType)) return "binary";
     return "text";
   }
 

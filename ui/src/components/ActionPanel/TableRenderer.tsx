@@ -18,14 +18,12 @@ import {
   estimateUtf8Bytes,
   isTableFileTooLarge,
 } from "./tableFileSize";
+import { EXCEL_EXTENSIONS, resolveTableExtension } from "./tableFileType";
 
 const ERROR_CLASS =
   "m-12 md:m-24 min-w-[260px] max-w-[calc(100%-24px)] md:max-w-[calc(100%-48px)] [&_[data-slot=alert-description]]:break-words [&_[data-slot=alert-description]]:whitespace-normal";
 
 const LOADING_CLASS = "mr-32";
-
-/** 走 xlsx 二进制解析的扩展名；其余（含 csv）先转成工作簿再交给同一个查看器。 */
-const EXCEL_EXTENSIONS = new Set(["xlsx", "xlsm", "xlsb", "xls"]);
 
 const resolveUnavailableReason = (error: Error) => {
   const message = error?.message || "";
@@ -65,7 +63,7 @@ const TableRenderer: CuteType.FC<TableRendererProps> = memo((props) => {
   // 卸载时取消还没下完的表格请求；切文件时由 service 自己 abort 上一个。
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const ext = (fileName || fileUrl).split(".").pop()?.toLowerCase();
+  const ext = resolveTableExtension(fileName, fileUrl);
   const fileType: "csv" | "excel" = mode || (ext && EXCEL_EXTENSIONS.has(ext) ? "excel" : "csv");
 
   const resolvedUrl = useMemo(

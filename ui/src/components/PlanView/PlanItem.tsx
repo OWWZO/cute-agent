@@ -11,31 +11,38 @@ const PlanItem: CuteType.FC<{
   const { title, status, className } = props;
   const [ runTime, setRunTime ] = useSafeState<number>();
 
-  const ref = useRef<{t?: NodeJS.Timeout}>({});
+  const hasTitle = Boolean(title);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startedAtRef = useRef<number | null>(null);
 
-  const updateRunTime = useMemoizedFn((val?: number) => {
-    clearTimeout(ref.current.t);
-    if (status !== 'in_progress') {
-      setRunTime(undefined);
+  const clearTimer = useMemoizedFn(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  });
+
+  // 用起始时间推导耗时，避免 setTimeout 累积误差；每秒只触发一次重渲染。
+  const tick = useMemoizedFn(() => {
+    if (startedAtRef.current === null) {
       return;
     }
-    setRunTime(val ?? ((runTime || 0) + 1));
-    ref.current.t = setTimeout(() => {
-      updateRunTime();
-    }, 1000);
+    setRunTime(Math.floor((Date.now() - startedAtRef.current) / 1000));
+    timerRef.current = setTimeout(tick, 1000);
   });
 
   useEffect(() => {
-    if (status === 'in_progress' && title) {
-      updateRunTime(0);
+    clearTimer();
+    if (status === 'in_progress' && hasTitle) {
+      startedAtRef.current = Date.now();
+      setRunTime(0);
+      timerRef.current = setTimeout(tick, 1000);
+    } else {
+      startedAtRef.current = null;
+      setRunTime(undefined);
     }
-  }, [status, title, updateRunTime]);
-
-  useEffect(() => {
-    return () => {
-      clearTimeout(ref.current.t);
-    };
-  }, []);
+    return clearTimer;
+  }, [status, hasTitle, clearTimer, tick, setRunTime]);
 
   return (
     <div

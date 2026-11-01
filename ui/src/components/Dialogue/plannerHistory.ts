@@ -2,9 +2,16 @@ export function buildPlannerRoundsForDisplay(
   chat: CHAT.ChatItem,
   streamingThought?: string
 ): CHAT.PlannerRound[] {
-  // SSE 可能继续原地更新历史 round，因此复制计划内部数组，避免展示快照被悄悄改写。
-  const rounds = Array.isArray(chat.multiAgent?.plannerRounds)
-    ? chat.multiAgent.plannerRounds.map((item) => ({
+  // SSE 只可能继续原地更新最后一轮；历史轮次保持原引用，
+  // 避免每个 token 都深拷贝全部 planner rounds。
+  const sourceRounds = Array.isArray(chat.multiAgent?.plannerRounds)
+    ? chat.multiAgent.plannerRounds
+    : [];
+  const rounds = sourceRounds.map((item, index) => {
+    if (index !== sourceRounds.length - 1) {
+      return item;
+    }
+    return {
       ...item,
       plan: item.plan
         ? {
@@ -15,8 +22,8 @@ export function buildPlannerRoundsForDisplay(
           stepStatus: [...(item.plan.stepStatus || [])],
         }
         : item.plan,
-    }))
-    : [];
+    };
+  });
 
   if (!rounds.length) {
     // 兼容旧协议：没有 rounds 时，从当前 chat 的单轮 plan/thought 构造展示回退项。

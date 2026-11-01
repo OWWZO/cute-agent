@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 interface MermaidBlockProps {
   /** mermaid 源码文本。 */
-  children?: React.ReactNode;
+  code: string;
   className?: string;
 }
 
@@ -15,7 +15,7 @@ interface MermaidBlockProps {
  * 以 `.mermaid` 容器 + `mermaid.contentLoaded()` 的方式交给 mermaid 自行扫描渲染。
  */
 const MermaidBlock: CuteType.FC<MermaidBlockProps> = (props) => {
-  const { children, className } = props;
+  const { code, className } = props;
   const ref = useRef<HTMLDivElement | null>(null);
   const [loadError, setLoadError] = useState(false);
 
@@ -38,15 +38,15 @@ const MermaidBlock: CuteType.FC<MermaidBlockProps> = (props) => {
     return () => {
       cancelled = true;
     };
-  }, [children]);
+  }, [code]);
 
   if (loadError) {
-    return <pre className={cn("overflow-auto", className)}>{children}</pre>;
+    return <pre className={cn("overflow-auto", className)}>{code}</pre>;
   }
 
   return (
     <div className={cn("mermaid", className)} ref={ref}>
-      {children}
+      {code}
     </div>
   );
 };

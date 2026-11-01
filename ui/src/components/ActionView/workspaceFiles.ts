@@ -455,7 +455,7 @@ export function collectWorkspaceFiles(
   for (const task of flattenTasksWithFiles(taskList)) {
     for (const file of getTaskFiles(task)) {
       const key = workspaceFileKey(file);
-      if (!key || seen.has(key)) {
+      if (!key) {
         continue;
       }
       // 后写覆盖：同 key 保留较新 task（会话后轮优先）

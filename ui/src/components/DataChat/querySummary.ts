@@ -40,8 +40,14 @@ function resolveFormula(chartCfg: DataChatSourceConfig) {
   if (formula && keys.length > 0) {
     formula = formula.replace(/^\$\{/, "").replace(/\}$/, "");
     keys.forEach((key) => {
-      const regExp = new RegExp(key, "g");
-      formula = formula.replace(regExp, ` ${overwriteSource[key]} `);
+      if (!key) {
+        return;
+      }
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      formula = formula.replace(
+        new RegExp(escapedKey, "g"),
+        () => ` ${overwriteSource[key]} `
+      );
     });
   }
   return formula;

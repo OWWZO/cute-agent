@@ -16,6 +16,35 @@ const LOADING_CLASS = "mr-32";
 const ERROR_CLASS =
   "m-6 min-w-[260px] max-w-[calc(100%-48px)] [&_[data-slot=alert-description]]:break-words [&_[data-slot=alert-description]]:whitespace-normal";
 
+/** 文本预览上限：超过 2 MB 的 Markdown 不应整块进内存。 */
+const MAX_MARKDOWN_PREVIEW_BYTES = 2 * 1024 * 1024;
+
+const BINARY_MIME_PREFIXES = ["image/", "audio/", "video/"];
+const BINARY_MIME_TYPES = new Set([
+  "application/octet-stream",
+  "binary/octet-stream",
+  "application/binary",
+  "application/pdf",
+  "application/zip",
+  "application/x-zip-compressed",
+]);
+
+const isBinaryContentType = (contentType: string | null) => {
+  const mime = (contentType || "").split(";", 1)[0]?.trim().toLowerCase() || "";
+  if (!mime) return false;
+  return (
+    BINARY_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix)) ||
+    BINARY_MIME_TYPES.has(mime)
+  );
+};
+
+const assertMarkdownPreviewSize = (contentLength: string | null) => {
+  const declared = Number(contentLength);
+  if (Number.isFinite(declared) && declared > MAX_MARKDOWN_PREVIEW_BYTES) {
+    throw new Error("文件过大（超过 2 MB），无法预览");
+  }
+};
+
 interface MarkdownFileRendererProps {
   fileUrl: string;
   fileName?: string;
@@ -68,7 +97,16 @@ const MarkdownFileRenderer: CuteType.FC<MarkdownFileRendererProps> = React.memo(
       if (!resolvedUrl) throw new Error("引用资源不存在或已失效");
       const response = await fetch(resolvedUrl);
       if (!response.ok) throw new Error("Network response was not ok");
-      return response.text();
+      const contentType = response.headers.get("content-type");
+      if (isBinaryContentType(contentType)) {
+        throw new Error("当前文件不是文本格式，无法预览");
+      }
+      assertMarkdownPreviewSize(response.headers.get("content-length"));
+      const text = await response.text();
+      if (new TextEncoder().encode(text).byteLength > MAX_MARKDOWN_PREVIEW_BYTES) {
+        throw new Error("文件过大（超过 2 MB），无法预览");
+      }
+      return text;
     },
     { refreshDeps: [resolvedUrl, missingReason] }
   );

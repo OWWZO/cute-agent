@@ -99,10 +99,18 @@ export const Reasoning = memo(
       setIsOpen(newOpen);
     };
 
+    const contextValue = useMemo(
+      () => ({
+        isStreaming,
+        isOpen,
+        setIsOpen,
+        duration,
+      }),
+      [isStreaming, isOpen, setIsOpen, duration]
+    );
+
     return (
-      <ReasoningContext.Provider
-        value={{ isStreaming, isOpen, setIsOpen, duration }}
-      >
+      <ReasoningContext.Provider value={contextValue}>
         <motion.div
           initial={{ opacity: 1, y: 3 }}
           animate={{ opacity: 1, y: 0 }}

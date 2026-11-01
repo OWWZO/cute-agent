@@ -64,6 +64,11 @@ export interface CodeViewerProps extends HTMLAttributes<HTMLDivElement> {
   fontSizePx?: number;
   firstLineNumber?: number;
   comments?: readonly CodeCommentPreview[];
+  /**
+   * 当前文件身份。变化时清空未提交的评论草稿，避免把旧文件的行号带到新文件。
+   * 缺省时回退到内容缓存键（主题切换也会重建缓存键）。
+   */
+  commentResetKey?: string;
   focusedRange?: CodeCommentRange | null;
   focusRequestId?: string;
   /**

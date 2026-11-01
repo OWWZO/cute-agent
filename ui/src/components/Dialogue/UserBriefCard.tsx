@@ -1,4 +1,4 @@
-import { FC, memo, useMemo } from "react";
+import { FC, memo } from "react";
 import { MessageSquareTextIcon, PaperclipIcon } from "lucide-react";
 import MarkdownRenderer from "@/components/ActionPanel/MarkdownRenderer";
 
@@ -52,12 +52,8 @@ const UserBriefCard: FC<UserBriefCardProps> = memo(({ tool }) => {
   const status = String(
     nested.status || resultMap.status || toolAny.status || "normal"
   ).toLowerCase();
-  const attachments = useMemo(
-    () =>
-      asAttachments(
-        nested.attachments || resultMap.attachments || toolAny.attachments
-      ),
-    [nested.attachments, resultMap.attachments, toolAny.attachments]
+  const attachments = asAttachments(
+    nested.attachments || resultMap.attachments || toolAny.attachments
   );
 
   if (!message && attachments.length === 0) {

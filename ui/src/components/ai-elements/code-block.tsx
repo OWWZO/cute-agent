@@ -101,7 +101,7 @@ export const CodeBlock = ({
   useEffect(() => {
     // code/language 变化会重新高亮；清理函数撤销本轮结果的状态写入资格。
     let cancelled = false;
-    setHtml("");
+    // 首次高亮前为空态；后续更新保留旧 HTML，避免高频内容变化时闪空。
     setHighlightError(false);
     void highlightCode(code, language, showLineNumbers)
       .then(([light]) => {

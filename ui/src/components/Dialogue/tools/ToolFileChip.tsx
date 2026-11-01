@@ -1,4 +1,4 @@
-import { memo, type MouseEvent, type ReactNode } from "react";
+import { type MouseEvent, type ReactNode } from "react";
 import { FileTextIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pathBaseName } from "@/lib/codeViewerSource";
@@ -23,7 +23,7 @@ type ToolFileChipProps = {
  * - `onMouseDown` 还要 `preventDefault`，避免行头抢走焦点后 chip 丢失点击；
  * - 不可点击时退化成 `<span>`，视觉完全一致。
  */
-export const ToolFileChip = memo(function ToolFileChip({
+export const ToolFileChip = function ToolFileChip({
   path,
   label,
   icon,
@@ -73,4 +73,4 @@ export const ToolFileChip = memo(function ToolFileChip({
       <span className="min-w-0 truncate">{leaf}</span>
     </button>
   );
-});
+};

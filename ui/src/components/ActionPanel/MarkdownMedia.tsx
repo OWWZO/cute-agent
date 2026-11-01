@@ -14,7 +14,9 @@ import { Expand } from 'lucide-react';
 export const MarkdownImagePreview: CuteType.FC<{
   src: string;
   alt?: string;
-}> = ({ src, alt }) => {
+  width?: number;
+  height?: number;
+}> = ({ src, alt, width, height }) => {
   if (!src) {
     return null;
   }
@@ -23,6 +25,8 @@ export const MarkdownImagePreview: CuteType.FC<{
       <ZoomableImage
         src={src}
         alt={alt || '图片'}
+        width={width}
+        height={height}
         className="markdown-media-image"
         style={{
           maxWidth: 'min(360px, 100%)',

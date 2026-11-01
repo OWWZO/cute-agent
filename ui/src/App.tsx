@@ -6,14 +6,15 @@ import router from './router';
 // 否则它会以未分层样式出现、盖掉 Tailwind utilities。变量前缀 --openui-* / --iui-*，与现有主题无冲突。
 import '@openuidev/react-ui/layered/styles/index.css';
 import { restoreAuthSession } from '@/services/auth';
-import { useAuth } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 
 /** index.html 里首屏骨架屏的 id（见 ui/index.html 顶部注释）。 */
 const BOOT_SKELETON_ID = 'boot-skeleton';
 
 // App 组件：应用的根组件，设置全局配置和路由
 const App: CuteType.FC = React.memo(() => {
-  const auth = useAuth();
+  // 根组件只关心登录状态；token / user 刷新不应让整个路由树重渲染。
+  const status = useAuthStore((state) => state.status);
 
   // 骨架屏在 index.html 里、#root 之外，这里在 React 首次提交后同步摘掉：
   // useLayoutEffect 跑在 DOM 变更之后、浏览器绘制之前，所以不会闪一下空白。
@@ -26,7 +27,7 @@ const App: CuteType.FC = React.memo(() => {
     void restoreAuthSession();
   }, []);
 
-  return auth.status === 'initializing' ? (
+  return status === 'initializing' ? (
     <div className="flex min-h-screen items-center justify-center">
       <Spinner className="size-8" aria-label="正在恢复登录状态" />
     </div>

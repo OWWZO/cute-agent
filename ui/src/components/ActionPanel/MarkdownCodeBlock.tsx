@@ -48,15 +48,15 @@ function cnInlineCode(className?: string) {
 export const createCodeBlock =
   (streaming: boolean): React.FC<MarkdownCodeBlockProps> =>
     function CodeBlock({ inline, className, children, ...rest }) {
-      // Streamdown 用 data-block 标记围栏；react-markdown 用 inline=false
+      // Streamdown 用 data-block 标记围栏；react-markdown 的 MarkdownPre 会补同一个标记
       const isBlock =
-        !inline || Object.prototype.hasOwnProperty.call(rest, "data-block");
+        inline === false || Object.prototype.hasOwnProperty.call(rest, "data-block");
       const match = /language-(\w+)/.exec(className || "");
       const trimmed = childrenToText(children).replace(/\n$/, "");
 
       // Mermaid 解析 + 渲染比 shiki 更重，流式时先按普通代码块展示。
       if (match?.[1] === "mermaid" && !streaming) {
-        return <MermaidBlock>{children as ReactNode}</MermaidBlock>;
+        return <MermaidBlock code={trimmed} />;
       }
 
       if (isBlock && match?.[1] === "diff") {
@@ -75,8 +75,8 @@ export const createCodeBlock =
         );
       }
 
-      // 无 language 的多行 fence：仍按代码块渲染，避免掉进行内 chip
-      if (isBlock && trimmed.includes("\n")) {
+      // 无 language 的围栏仍按代码块渲染，避免单行内容掉进行内 chip
+      if (isBlock) {
         return (
           <KimiCodeFence code={trimmed} language="text" streaming={streaming} />
         );

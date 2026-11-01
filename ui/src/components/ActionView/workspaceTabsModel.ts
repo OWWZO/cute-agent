@@ -28,12 +28,15 @@ const SCORE_TITLE_CONTAINS = 70;
 const SCORE_HINT_CONTAINS = 40;
 const SCORE_TYPE_CONTAINS = 20;
 
-/** 单条候选的匹配得分；0 表示不匹配（会被过滤掉）。 */
-export function scoreTabSearch(entry: TabSearchEntry, query: string): number {
-  const q = query.trim().toLowerCase();
-  if (!q) {
+/** 已规范化查询词的内部打分；0 表示不匹配（会被过滤掉）。 */
+function scoreTabSearchNormalized(
+  entry: TabSearchEntry,
+  normalizedQuery: string
+): number {
+  if (!normalizedQuery) {
     return 0;
   }
+  const q = normalizedQuery;
   const title = (entry.title || "").toLowerCase();
   if (title) {
     if (title === q) return SCORE_TITLE_EXACT;
@@ -49,6 +52,11 @@ export function scoreTabSearch(entry: TabSearchEntry, query: string): number {
   return 0;
 }
 
+/** 单条候选的匹配得分；0 表示不匹配（会被过滤掉）。 */
+export function scoreTabSearch(entry: TabSearchEntry, query: string): number {
+  return scoreTabSearchNormalized(entry, query.trim().toLowerCase());
+}
+
 /**
  * 过滤 + 排序。
  *
@@ -59,15 +67,15 @@ export function rankTabSearch<T extends TabSearchEntry>(
   entries: T[],
   query: string
 ): T[] {
-  const q = query.trim();
-  if (!q) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
     return entries;
   }
   return entries
     .map((entry, index) => ({
       entry,
       index,
-      score: scoreTabSearch(entry, q),
+      score: scoreTabSearchNormalized(entry, normalizedQuery),
     }))
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score || left.index - right.index)

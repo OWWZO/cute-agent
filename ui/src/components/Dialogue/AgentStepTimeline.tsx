@@ -87,9 +87,13 @@ function normalizeComparableText(value: string): string {
     .toLowerCase();
 }
 
-function textsNearlyEqual(left: string, right: string): boolean {
+function textsNearlyEqual(
+  left: string,
+  right: string,
+  normalizedRight = normalizeComparableText(right)
+): boolean {
   const a = normalizeComparableText(left);
-  const b = normalizeComparableText(right);
+  const b = normalizedRight;
   if (!a || !b) {
     return false;
   }
@@ -130,9 +134,10 @@ function resolveSegmentComparableText(segment: ProcessSegment): string {
 // eslint-disable-next-line react-refresh/only-export-components
 export function isDuplicateOfConclusion(
   segment: ProcessSegment,
-  conclusionText: string
+  conclusionText: string,
+  normalizedConclusion = normalizeComparableText(conclusionText)
 ): boolean {
-  if (!normalizeComparableText(conclusionText)) {
+  if (!normalizedConclusion) {
     return false;
   }
   // 终答区已有 conclusion 时，时间线不再渲染 final_reply
@@ -145,10 +150,10 @@ export function isDuplicateOfConclusion(
     segment.group.steps.every((step) => step.tool.messageType === "task_summary")
   ) {
     const summary = resolveTaskSummaryText(segment.group.steps[0]?.tool);
-    return !summary || textsNearlyEqual(summary, conclusionText);
+    return !summary || textsNearlyEqual(summary, conclusionText, normalizedConclusion);
   }
   const segmentText = resolveSegmentComparableText(segment);
-  return textsNearlyEqual(segmentText, conclusionText);
+  return textsNearlyEqual(segmentText, conclusionText, normalizedConclusion);
 }
 
 function isAgentStep(step: ProcessStepRow): boolean {
@@ -537,7 +542,8 @@ FinalReplySegment.displayName = "FinalReplySegment";
 
 function filterConclusionDuplicateSteps(
   steps: ProcessStepRow[],
-  conclusionText: string
+  conclusionText: string,
+  normalizedConclusion: string
 ): ProcessStepRow[] {
   if (!conclusionText) {
     return steps;
@@ -546,7 +552,8 @@ function filterConclusionDuplicateSteps(
     if (step.tool.messageType === "task_summary") {
       return !textsNearlyEqual(
         resolveTaskSummaryText(step.tool),
-        conclusionText
+        conclusionText,
+        normalizedConclusion
       );
     }
     if (step.kind === "assistant_reply") {
@@ -554,7 +561,8 @@ function filterConclusionDuplicateSteps(
       // 会被当成空文本与终答误判重复而整条删掉
       return !textsNearlyEqual(
         resolveAssistantReplyText(step.tool),
-        conclusionText
+        conclusionText,
+        normalizedConclusion
       );
     }
     return true;
@@ -566,8 +574,9 @@ const ProcessSegmentView: FC<{
   isLast: boolean;
   loading: boolean;
   conclusionText?: string;
+  conclusionNormalized?: string;
   ctx: StepRowContext;
-}> = memo(({ segment, isLast, loading, conclusionText = "", ctx }) => {
+}> = memo(({ segment, isLast, loading, conclusionText = "", conclusionNormalized = "", ctx }) => {
   if (segment.type === "thinking") {
     return <ThinkingSegment step={segment.step} />;
   }
@@ -588,7 +597,8 @@ const ProcessSegmentView: FC<{
 
   const visibleSteps = filterConclusionDuplicateSteps(
     segment.group.steps,
-    conclusionText
+    conclusionText,
+    conclusionNormalized
   );
   if (!visibleSteps.length) {
     return null;
@@ -704,6 +714,10 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
     return null;
   }
 
+  // 终答归一化是全文扫描，只做一次；每个 segment / step 复用同一结果。
+  const conclusionText = resolveTaskSummaryText(chat.conclusion);
+  const normalizedConclusion = normalizeComparableText(conclusionText);
+
   return (
     <div
       className="agent-step-timeline w-full max-w-[min(960px,100%)]"
@@ -742,9 +756,11 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
       {model.segments.length ? (
         <div className="flex flex-col gap-1">
           {model.segments.map((segment, index) => {
-            const conclusionText = resolveTaskSummaryText(chat.conclusion);
             // 终答区已有 conclusion：时间线里不再重复同文案（含误标成思考/过程回复）
-            if (conclusionText && isDuplicateOfConclusion(segment, conclusionText)) {
+            if (
+              conclusionText &&
+              isDuplicateOfConclusion(segment, conclusionText, normalizedConclusion)
+            ) {
               return null;
             }
             const key =
@@ -764,6 +780,7 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
                 isLast={index === model.segments.length - 1}
                 loading={chat.loading}
                 conclusionText={conclusionText}
+                conclusionNormalized={normalizedConclusion}
                 ctx={ctx}
               />
             );

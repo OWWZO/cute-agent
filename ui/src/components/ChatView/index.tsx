@@ -43,6 +43,7 @@ import type {
 } from "@/components/ActionView/workspaceFiles";
 import {
   findAgentTaskByToolCallId,
+  findDerivedAgentTaskByToolCallId,
   findLatestRunningAgentTask,
 } from "@/utils/chat/taskIdentity";
 import PlanComposerBar from "./PlanComposerBar";
@@ -171,6 +172,27 @@ const getRenderedChat = (chat: CHAT.ChatItem, deepThink: boolean) => {
   return buildConversationTaskData(chat, deepThink).currentChat;
 };
 
+/** 已落定的历史轮次投影不会继续变化；按 chat 引用缓存，避免子 Agent tab 反复建树。 */
+const renderedChatCache = new WeakMap<
+  CHAT.ChatItem,
+  { deepThink: boolean; rendered: CHAT.ChatItem }
+>();
+
+const getCachedRenderedChat = (chat: CHAT.ChatItem, deepThink: boolean) => {
+  const cached = renderedChatCache.get(chat);
+  if (cached?.deepThink === deepThink) {
+    return cached.rendered;
+  }
+  const rendered = getRenderedChat(chat, deepThink);
+  if (rendered !== chat) {
+    renderedChatCache.set(chat, {
+      deepThink,
+      rendered,
+    });
+  }
+  return rendered;
+};
+
 const getFileSnapshot = (file: CHAT.TFile) =>
   [
     file.name,
@@ -197,8 +219,16 @@ type SessionFileTaskSnapshotSource = {
   messageTime?: string;
 };
 
-const getSessionFileTaskSnapshot = (task: SessionFileTaskSnapshotSource) =>
-  [
+const getSessionFileTaskSnapshot = (
+  task: SessionFileTaskSnapshotSource,
+  cache?: WeakMap<object, string>
+) => {
+  const cacheKey = task as object;
+  const cached = cache?.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const snapshot = [
     task.id,
     task.messageId,
     task.requestId,
@@ -208,6 +238,9 @@ const getSessionFileTaskSnapshot = (task: SessionFileTaskSnapshotSource) =>
   ]
     .map((value) => String(value ?? ""))
     .join("\u001f");
+  cache?.set(cacheKey, snapshot);
+  return snapshot;
+};
 
 const sameStringList = (previous: string[], next: string[]) =>
   previous.length === next.length &&
@@ -251,18 +284,23 @@ const findTaskByStableKey = (
   const chats = chatList || [];
   for (let index = chats.length - 1; index >= 0; index -= 1) {
     const chat = chats[index];
+    // 派生层已包含事实层任务；只有尚未投影的轮次才回退遍历事实层，
+    // 避免任务 tab 每次渲染都把两套任务树各走一遍。
     for (const group of chat.tasks || []) {
-      for (const task of group || []) {
-        walk(task);
-      }
-    }
-    for (const group of chat.multiAgent?.tasks || []) {
       for (const task of group || []) {
         walk(task);
       }
     }
     if (chat.conclusion) {
       walk(chat.conclusion);
+    }
+    // 派生层优先；只有未命中时才回退事实层，保留事实层独有任务的查找能力。
+    if (!hit) {
+      for (const group of chat.multiAgent?.tasks || []) {
+        for (const task of group || []) {
+          walk(task);
+        }
+      }
     }
     if (hit) {
       return hit;
@@ -1009,6 +1047,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     conversationId: string;
     tasks: SessionFileTasks;
     snapshots: string[];
+    taskSnapshots: WeakMap<object, string>;
     chatTasks: WeakMap<object, PanelItemType[]>;
     liveTaskList?: PanelItemType[];
     liveTasks: PanelItemType[];
@@ -1016,6 +1055,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     conversationId: "",
     tasks: [],
     snapshots: [],
+    taskSnapshots: new WeakMap(),
     chatTasks: new WeakMap(),
     liveTasks: [],
   });
@@ -1024,6 +1064,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     if (cache.conversationId !== conversation.id) {
       cache.conversationId = conversation.id;
       cache.chatTasks = new WeakMap();
+      cache.taskSnapshots = new WeakMap();
       cache.liveTaskList = undefined;
       cache.liveTasks = [];
       cache.tasks = [];
@@ -1031,24 +1072,36 @@ const ChatView: CuteType.FC<Props> = (props) => {
     }
 
     const next: SessionFileTasks = [];
+    const cacheableTasks = new WeakSet<object>();
     if (sessionFileManifestTask) {
       next.push(sessionFileManifestTask);
+      cacheableTasks.add(sessionFileManifestTask as object);
     }
-    for (const chat of conversation.chatList) {
+    const lastChatIndex = conversation.chatList.length - 1;
+    conversation.chatList.forEach((chat, chatIndex) => {
       let chatTasks = cache.chatTasks.get(chat);
       if (!chatTasks) {
         chatTasks = collectChatFileTasks(chat);
         cache.chatTasks.set(chat, chatTasks);
       }
       next.push(...chatTasks);
-    }
+      if (chatIndex !== lastChatIndex) {
+        chatTasks.forEach((task) => cacheableTasks.add(task as object));
+      }
+    });
     if (cache.liveTaskList !== taskList) {
       cache.liveTaskList = taskList;
       cache.liveTasks = flattenTasksWithFiles(taskList);
     }
     next.push(...cache.liveTasks);
 
-    const nextSnapshots = next.map(getSessionFileTaskSnapshot);
+    // 历史轮次的任务快照只受文件内容影响，按任务引用缓存；活动轮 / 流式任务每帧重算。
+    const nextSnapshots = next.map((task) =>
+      getSessionFileTaskSnapshot(
+        task,
+        cacheableTasks.has(task as object) ? cache.taskSnapshots : undefined
+      )
+    );
     if (
       cache.conversationId === conversation.id &&
       sameStringList(cache.snapshots, nextSnapshots)
@@ -1149,8 +1202,25 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const renderAgentTab = useCallback(
     (tab: WorkspaceAgentTab) => {
       let source: { tool: CHAT.Task; chat: CHAT.ChatItem } | null = null;
-      for (const chat of conversation.chatList || []) {
-        const liveChat = getRenderedChat(chat, conversation.deepThink);
+      const chats = conversation.chatList || [];
+      // 最新轮次优先：命中当前子 Agent 后立即停止，避免从第一轮正向扫描全部历史。
+      for (let index = chats.length - 1; index >= 0; index -= 1) {
+        const chat = chats[index];
+        const derivedTool = findDerivedAgentTaskByToolCallId(chat, tab.toolCallId);
+        if (derivedTool) {
+          source = {
+            tool: derivedTool,
+            chat,
+          };
+          break;
+        }
+        // 派生层缺失时才从事实层重建；已落定的历史轮次复用缓存。
+        if (!(chat.multiAgent?.tasks || []).some((group) => group?.length)) {
+          continue;
+        }
+        const liveChat = chat.loading
+          ? getRenderedChat(chat, conversation.deepThink)
+          : getCachedRenderedChat(chat, conversation.deepThink);
         const liveTool = findAgentTaskByToolCallId(liveChat, tab.toolCallId);
         if (liveTool) {
           source = {

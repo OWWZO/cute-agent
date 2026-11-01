@@ -1,4 +1,4 @@
-import { type RefObject, useEffect } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 
 type UsePromptInputDropOptions = {
   add: (files: File[] | FileList) => void;
@@ -11,6 +11,11 @@ type UsePromptInputDropOptions = {
  */
 export function usePromptInputDrop(options: UsePromptInputDropOptions) {
   const { add, formRef, globalDrop } = options;
+  // add 常来自内联回调；用 ref 读取最新值，避免每次渲染重绑拖拽监听。
+  const addRef = useRef(add);
+  useEffect(() => {
+    addRef.current = add;
+  }, [add]);
 
   useEffect(() => {
     const form = formRef.current;
@@ -31,7 +36,7 @@ export function usePromptInputDrop(options: UsePromptInputDropOptions) {
         event.preventDefault();
       }
       if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
-        add(event.dataTransfer.files);
+        addRef.current(event.dataTransfer.files);
       }
     };
 
@@ -41,7 +46,7 @@ export function usePromptInputDrop(options: UsePromptInputDropOptions) {
       form.removeEventListener("dragover", onDragOver);
       form.removeEventListener("drop", onDrop);
     };
-  }, [add, formRef, globalDrop]);
+  }, [formRef, globalDrop]);
 
   useEffect(() => {
     if (!globalDrop) {
@@ -58,7 +63,7 @@ export function usePromptInputDrop(options: UsePromptInputDropOptions) {
         event.preventDefault();
       }
       if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
-        add(event.dataTransfer.files);
+        addRef.current(event.dataTransfer.files);
       }
     };
 
@@ -68,5 +73,5 @@ export function usePromptInputDrop(options: UsePromptInputDropOptions) {
       document.removeEventListener("dragover", onDragOver);
       document.removeEventListener("drop", onDrop);
     };
-  }, [add, globalDrop]);
+  }, [globalDrop]);
 }

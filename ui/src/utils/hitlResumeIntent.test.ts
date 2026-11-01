@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   claimHitlResumeDispatch,
   resetHitlResumeDispatch,
@@ -28,10 +28,24 @@ describe("claimHitlResumeDispatch", () => {
     resetHitlResumeDispatch();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("同一个 resumeRequestId 在窗口内只放行一次", () => {
     expect(claimHitlResumeDispatch("resume_1")).toBe(true);
     expect(claimHitlResumeDispatch("resume_1")).toBe(false);
     expect(claimHitlResumeDispatch("resume_2")).toBe(true);
+  });
+
+  it("过期记录会被清理并允许重新派发", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    expect(claimHitlResumeDispatch("resume_expired")).toBe(true);
+    vi.advanceTimersByTime(15_001);
+
+    expect(claimHitlResumeDispatch("resume_expired")).toBe(true);
   });
 
   it("空 key 不做去重", () => {

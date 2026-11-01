@@ -324,18 +324,48 @@ export async function resolveImageNaturalSize(src: string): Promise<{ width: num
   };
 }
 
+/** 超过这个像素量后按步长采样，避免一次读取几十 MB 的 imageData。 */
+const CANVAS_FULL_SCAN_PIXEL_LIMIT = 1_000_000;
+const CANVAS_SAMPLE_STRIDE = 4;
+
 export function hasCanvasDrawing(canvas: HTMLCanvasElement): boolean {
+  const width = canvas.width;
+  const height = canvas.height;
+  // 空画布调用 getImageData(0, 0, 0, 0) 会抛 IndexSizeError。
+  if (width <= 0 || height <= 0) {
+    return false;
+  }
   const context = canvas.getContext("2d");
   if (!context) {
     return false;
   }
-  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
-  for (let index = 3; index < data.length; index += 4) {
-    if (data[index] > 0) {
-      return true;
+
+  try {
+    if (width * height <= CANVAS_FULL_SCAN_PIXEL_LIMIT) {
+      const { data } = context.getImageData(0, 0, width, height);
+      for (let index = 3; index < data.length; index += 4) {
+        if (data[index] > 0) {
+          return true;
+        }
+      }
+      return false;
     }
+
+    // 大画布只抽样若干行 + 固定列步长；用户蒙版通常成片出现，不必全量扫描。
+    for (let y = 0; y < height; y += CANVAS_SAMPLE_STRIDE) {
+      const { data } = context.getImageData(0, y, width, 1);
+      for (let x = 0; x < width; x += CANVAS_SAMPLE_STRIDE) {
+        if (data[x * 4 + 3] > 0) {
+          return true;
+        }
+      }
+    }
+    return false;
+  } catch (error) {
+    // tainted canvas 读取像素会抛 SecurityError；按「没有可导出的绘制」处理。
+    console.warn("检测画布内容失败", error);
+    return false;
   }
-  return false;
 }
 
 export async function buildMaskedComposite(options: {

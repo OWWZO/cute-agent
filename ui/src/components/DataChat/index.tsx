@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { memo, useState, useMemo } from "react";
 import {
   buildChartConfig,
-  resolveChartType,
+  resolveCurrentChartType,
   type DataChatSourceConfig,
 } from "./chartConfig";
 import { defaultChartPresets } from "./chartPresets";
@@ -19,19 +19,39 @@ import {
   Table2,
 } from "lucide-react";
 
+const CHART_TYPES = [
+  {
+    type: "line",
+    icon: ChartLine,
+    label: "折线",
+  },
+  {
+    type: "bar",
+    icon: BarChart3,
+    label: "柱状",
+  },
+  {
+    type: "hbar",
+    icon: BarChart3,
+    label: "条形",
+  },
+  {
+    type: "pie",
+    icon: ChartPie,
+    label: "饼图",
+  },
+  {
+    type: "table",
+    icon: Table2,
+    label: "表格",
+  },
+] as const;
+
 const TypeBar: CuteType.FC<{
   currentType: string;
   chartCfg: DataChatSourceConfig;
   onChange?: (val: string) => void;
 }> = (props) => {
-  const chartTypes = [
-    { type: "line", icon: ChartLine, label: "折线" },
-    { type: "bar", icon: BarChart3, label: "柱状" },
-    { type: "hbar", icon: BarChart3, label: "条形" },
-    { type: "pie", icon: ChartPie, label: "饼图" },
-    { type: "table", icon: Table2, label: "表格" },
-  ] as const;
-
   const { currentType, chartCfg, onChange } = props;
   const [showQueryArgs, setShowQueryArgs] = useState(true);
   // 查询摘要和图表类型切换都只依赖当前配置，不重新修改后端返回的数据源。
@@ -42,7 +62,7 @@ const TypeBar: CuteType.FC<{
       <div className="mb-3 flex w-full flex-wrap items-center justify-start gap-2">
         {summary.showTypeSwitch ? (
           <div className="flex items-center gap-0.5 rounded-lg border border-[var(--chat-border)]/70 bg-[var(--chat-surface-soft)]/60 p-0.5">
-            {chartTypes.map((item) => {
+            {CHART_TYPES.map((item) => {
               const Icon = item.icon;
               const active = currentType === item.type;
               return (
@@ -148,9 +168,8 @@ const DataChat: CuteType.FC<{
     () => (typeof data === "object" && data ? data : {}),
     [data]
   );
-  const [currentType, setCurrentType] = useState<string>(
-    resolveChartType(chartCfg)
-  );
+  const [typeOverride, setTypeOverride] = useState<string | null>(null);
+  const currentType = resolveCurrentChartType(chartCfg, typeOverride);
 
   const transConfig = useMemo(() => {
     // chartSuggest 只覆盖用户当前选择，其他轴、数据和预设由 buildChartConfig 统一合并。
@@ -165,7 +184,7 @@ const DataChat: CuteType.FC<{
       <TypeBar
         currentType={currentType}
         chartCfg={chartCfg}
-        onChange={(t) => setCurrentType(t)}
+        onChange={(t) => setTypeOverride(t)}
       />
       <div className="w-full rounded-xl border border-[var(--chat-border)]/50 bg-[var(--chat-surface)] p-3 sm:p-4">
         {transConfig.chartType === "kpiGroup" && <Card data={transConfig} />}

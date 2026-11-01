@@ -291,6 +291,33 @@ type BareWorkspaceRefMatcher = {
   urlByNeedle: Map<string, string>;
 };
 
+type ArtifactRewriteIndex = {
+  matcher: BareWorkspaceRefMatcher | null;
+  lookup: Map<string, CHAT.TFile>;
+};
+
+/**
+ * 产物文件数组通常在一轮对话内保持引用稳定；按数组引用缓存索引，
+ * 流式每个 token 不再重建 matcher / lookup。
+ */
+const artifactRewriteIndexCache = new WeakMap<
+  CHAT.TFile[],
+  ArtifactRewriteIndex
+>();
+
+function getArtifactRewriteIndex(files: CHAT.TFile[]): ArtifactRewriteIndex {
+  const cached = artifactRewriteIndexCache.get(files);
+  if (cached) {
+    return cached;
+  }
+  const index = {
+    matcher: buildBareWorkspaceRefMatcher(files),
+    lookup: buildArtifactFileLookup(files),
+  };
+  artifactRewriteIndexCache.set(files, index);
+  return index;
+}
+
 /**
  * 把 refs 编译成**一个**可复用的正则。
  *
@@ -370,9 +397,8 @@ export function rewriteMarkdownArtifactRefs(
     return source;
   }
 
-  // matcher 与 lookup 都只建一次：两者的成本都不该乘上「文本段数 / 链接数」。
-  const matcher = buildBareWorkspaceRefMatcher(files);
-  const lookup = buildArtifactFileLookup(files);
+  // matcher 与 lookup 都只建一次：按文件数组引用缓存，流式 token 不再重复建索引。
+  const { matcher, lookup } = getArtifactRewriteIndex(files);
 
   return source
     .split(CODE_FENCE_SEGMENT_PATTERN)

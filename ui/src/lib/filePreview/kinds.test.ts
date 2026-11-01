@@ -55,6 +55,25 @@ describe("resolveFilePreviewKind — 扩展名命中", () => {
   it("未知扩展名按文本兜底", () => {
     expect(resolveFilePreviewKind({ name: "a.unknownext" })).toBe("text");
   });
+
+  it("未知扩展名 + opaque MIME 按二进制处理", () => {
+    expect(
+      resolveFilePreviewKind({
+        name: "archive.abc",
+        mimeType: "application/octet-stream",
+      })
+    ).toBe("binary");
+    expect(
+      resolveFilePreviewKind({
+        name: "archive.abc",
+        mimeType: "binary/octet-stream",
+      })
+    ).toBe("binary");
+  });
+
+  it("未知扩展名且没有 MIME 证据时仍按文本兜底", () => {
+    expect(resolveFilePreviewKind({ name: "archive.abc" })).toBe("text");
+  });
 });
 
 describe("resolveFilePreviewKind — 大小写 / 路径 / URL", () => {

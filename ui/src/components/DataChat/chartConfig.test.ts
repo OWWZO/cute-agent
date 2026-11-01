@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildChartConfig, resolveChartType } from "./chartConfig";
+import { buildChartConfig, resolveChartType, resolveCurrentChartType } from "./chartConfig";
 
 describe("chartConfig", () => {
   it("构建图表配置时不应修改输入对象", () => {
@@ -61,6 +61,43 @@ describe("chartConfig", () => {
       expect(() => buildChartConfig(input)).not.toThrow();
     }
   );
+});
+
+describe("resolveCurrentChartType", () => {
+  const completeCfg = {
+    dimCols: ["dt"],
+    measureCols: ["gmv"],
+    dataList: [
+      {
+        dt: "2026-05-01",
+        gmv: 10,
+      },
+      {
+        dt: "2026-05-02",
+        gmv: 20,
+      },
+    ],
+    columnList: [
+      {
+        guid: "dt",
+        name: "日期",
+        dataType: "STRING",
+      },
+      {
+        guid: "gmv",
+        name: "GMV",
+      },
+    ],
+  };
+
+  it("未手动选择时跟随当前数据自动重算", () => {
+    expect(resolveCurrentChartType({}, null)).toBe("table");
+    expect(resolveCurrentChartType(completeCfg, null)).toBe("pie");
+  });
+
+  it("用户手动选择后保持覆盖值", () => {
+    expect(resolveCurrentChartType(completeCfg, "bar")).toBe("bar");
+  });
 });
 
 describe("resolveChartType", () => {

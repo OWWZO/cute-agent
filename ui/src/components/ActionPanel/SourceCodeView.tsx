@@ -157,6 +157,7 @@ const SourceCodeView: CuteType.FC<SourceCodeViewProps> = (props) => {
           code={code}
           language="text"
           className={className}
+          commentResetKey={normalizedSourcePath}
           enableLineSelection
           enableGutterUtility
           onSubmitCodeComment={canComment ? handleSubmitCodeComment : undefined}
@@ -175,9 +176,10 @@ const SourceCodeView: CuteType.FC<SourceCodeViewProps> = (props) => {
         )}
       >
         <div className="h-full w-full overflow-auto p-4">
-          <MermaidBlock className="min-h-full rounded-xl border border-[var(--chat-border)]">
-            {code}
-          </MermaidBlock>
+          <MermaidBlock
+            className="min-h-full rounded-xl border border-[var(--chat-border)]"
+            code={code}
+          />
         </div>
         <div className="absolute right-3 top-3 z-10">{modeToggle}</div>
       </div>
@@ -189,6 +191,7 @@ const SourceCodeView: CuteType.FC<SourceCodeViewProps> = (props) => {
       code={code}
       language={String(language)}
       className={className}
+      commentResetKey={normalizedSourcePath}
       enableLineSelection
       enableGutterUtility
       onSubmitCodeComment={canComment ? handleSubmitCodeComment : undefined}

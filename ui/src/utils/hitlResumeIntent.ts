@@ -40,11 +40,18 @@ export function claimHitlResumeDispatch(key: string): boolean {
   if (!key) {
     return true;
   }
+  const now = Date.now();
+  // 顺手清掉过期项，避免去重表随 resume 次数无限增长。
+  for (const [entryKey, at] of dispatchedAt) {
+    if (now - at >= RESUME_DISPATCH_TTL_MS) {
+      dispatchedAt.delete(entryKey);
+    }
+  }
   const at = dispatchedAt.get(key);
-  if (typeof at === "number" && Date.now() - at < RESUME_DISPATCH_TTL_MS) {
+  if (typeof at === "number" && now - at < RESUME_DISPATCH_TTL_MS) {
     return false;
   }
-  dispatchedAt.set(key, Date.now());
+  dispatchedAt.set(key, now);
   return true;
 }
 

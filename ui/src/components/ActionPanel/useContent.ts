@@ -5,6 +5,12 @@ import {
   resolveTaskToolResultText,
 } from "@/utils/chat/toolCalls";
 import { PanelItemType } from "./type";
+import type { ParsedTaskResult } from "./useMsgTypes";
+
+type ResolvedTaskContent = Pick<
+  ParsedTaskResult,
+  "resultMap" | "toolResult" | "toolResultText"
+>;
 
 function buildToolCallMarkdown(resultMap?: PanelItemType["resultMap"]) {
   if (!resultMap) {
@@ -23,7 +29,10 @@ function buildToolCallMarkdown(resultMap?: PanelItemType["resultMap"]) {
   return contentBlocks.join("\n\n");
 }
 
-export const resolveMarkdownContent = (taskItem?: PanelItemType) => {
+export const resolveMarkdownContent = (
+  taskItem?: PanelItemType,
+  resolved?: ResolvedTaskContent
+) => {
   let markDownContent = "";
 
   if (!taskItem) {
@@ -31,8 +40,10 @@ export const resolveMarkdownContent = (taskItem?: PanelItemType) => {
   }
 
   const { messageType } = taskItem;
-  const resultMap = resolveTaskResultMap(taskItem);
-  const toolResultText = resolveTaskToolResultText(taskItem);
+  const resultMap = resolved?.resultMap ?? resolveTaskResultMap(taskItem);
+  const toolResultText =
+    resolved?.toolResultText ??
+    resolveTaskToolResultText(taskItem, resolved?.toolResult);
 
   switch (messageType) {
     case "tool_result":
@@ -92,8 +103,11 @@ export const resolveMarkdownContent = (taskItem?: PanelItemType) => {
   return markDownContent;
 };
 
-const useContent =  (taskItem?: PanelItemType) => {
-  const markDownContent = resolveMarkdownContent(taskItem);
+const useContent = (
+  taskItem?: PanelItemType,
+  resolved?: ResolvedTaskContent
+) => {
+  const markDownContent = resolveMarkdownContent(taskItem, resolved);
 
   // let fileUrl = '';
   return {

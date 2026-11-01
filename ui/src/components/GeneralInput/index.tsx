@@ -318,13 +318,6 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     /grok|o1|o3|reason|r1/i.test(currentModelMeta?.modelName || selectedModel);
 
   useEffect(() => {
-    const root = inputShellRef.current;
-    if (!root) return;
-    const el = root.querySelector("textarea");
-    textareaRef.current = el as HTMLTextAreaElement | null;
-  });
-
-  useEffect(() => {
     const nextDraft = draftValue.slice(0, MAX_QUERY_CHARS);
     setQuestion((previous) => (previous === nextDraft ? previous : nextDraft));
   }, [draftValue]);
@@ -555,6 +548,7 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
             ) : null}
 
             <PromptInputTextarea
+              ref={textareaRef}
               className={cn(
                 "cute-composer-textarea px-4 text-ui-lg leading-[1.5] text-foreground placeholder:text-foreground-subtlest placeholder:opacity-100",
                 size === "big"

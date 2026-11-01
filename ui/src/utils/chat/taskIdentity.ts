@@ -35,7 +35,12 @@ function readRawStreamToolKey(record: Record<string, unknown>): string {
 /** 统一身份：toolCallId > streamToolKey > messageId > id。streamToolKey 只读原始字段，不含 fallback。 */
 export function readTaskIdentity(task?: TaskLike): TaskIdentity {
   if (!task) {
-    return { toolCallId: "", streamToolKey: "", messageId: "", id: "" };
+    return {
+      toolCallId: "",
+      streamToolKey: "",
+      messageId: "",
+      id: "",
+    };
   }
   const record = task as Record<string, unknown>;
   const resultMap = isRecord(record.resultMap) ? record.resultMap : {};
@@ -150,29 +155,61 @@ export function pickBestTaskByKey<T>(
   return best;
 }
 
-function visitTaskTree(task: CHAT.Task | undefined, out: CHAT.Task[]) {
+function visitTaskTree(
+  task: CHAT.Task | undefined,
+  out: CHAT.Task[],
+  seen: Set<string>
+) {
   if (!task) {
     return;
   }
+  // 同一任务可能同时出现在派生层和事实层；用最强身份键去重，避免返回两份。
+  const primaryKey = taskIdentityKeys(task)[0];
+  if (primaryKey) {
+    if (seen.has(primaryKey)) {
+      return;
+    }
+    seen.add(primaryKey);
+  }
   out.push(task);
   for (const child of task.children || []) {
-    visitTaskTree(child, out);
+    visitTaskTree(child, out, seen);
+  }
+}
+
+function visitTaskGroups(
+  groups: CHAT.ChatItem["tasks"] | CHAT.ChatItem["multiAgent"]["tasks"] | undefined,
+  out: CHAT.Task[],
+  seen: Set<string>
+) {
+  for (const group of groups || []) {
+    for (const task of group || []) {
+      visitTaskTree(task as CHAT.Task, out, seen);
+    }
   }
 }
 
 export function walkChatTasks(chat: CHAT.ChatItem): CHAT.Task[] {
   const out: CHAT.Task[] = [];
-  for (const group of chat.tasks || []) {
-    for (const container of group || []) {
-      visitTaskTree(container as CHAT.Task, out);
-    }
-  }
-  for (const group of chat.multiAgent?.tasks || []) {
-    for (const task of group || []) {
-      visitTaskTree(task as CHAT.Task, out);
-    }
-  }
+  const seen = new Set<string>();
+  // 保持派生层优先：它带着已投影的 children，子 Agent 详情依赖这份结构。
+  // 事实层仍纳入遍历，但同一身份的任务会被去重，不再重复返回。
+  visitTaskGroups(chat.tasks, out, seen);
+  visitTaskGroups(chat.multiAgent?.tasks, out, seen);
   return out;
+}
+
+/** 只遍历派生时间线；子 Agent tab 优先在派生层命中，避免为历史轮次重建投影。 */
+export function findDerivedAgentTaskByToolCallId(
+  chat: CHAT.ChatItem,
+  key: string
+): CHAT.Task | undefined {
+  const out: CHAT.Task[] = [];
+  visitTaskGroups(chat.tasks, out, new Set());
+  return pickBestTaskByKey(
+    out.filter((task) => isSubAgentParentTask(task)),
+    key
+  );
 }
 
 export function findBestAgentTask(

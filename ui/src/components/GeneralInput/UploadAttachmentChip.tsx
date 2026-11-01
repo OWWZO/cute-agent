@@ -49,7 +49,7 @@ export function resolveUploadStatusLabel(uploadState?: UploadAttachmentState) {
   }
 }
 
-export default function UploadAttachmentChip(props: {
+const UploadAttachmentChip = React.memo(function UploadAttachmentChip(props: {
   attachment: PromptInputAttachmentItem;
   uploadState?: UploadAttachmentState;
   onRemoveAttachment: (id: string) => void;
@@ -127,4 +127,8 @@ export default function UploadAttachmentChip(props: {
       </button>
     </div>
   );
-}
+});
+
+UploadAttachmentChip.displayName = "UploadAttachmentChip";
+
+export default UploadAttachmentChip;

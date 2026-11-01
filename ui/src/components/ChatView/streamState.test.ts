@@ -227,6 +227,50 @@ describe("streamState presence & attention", () => {
     expect(resolveActionPanelVisibility({ taskList: [task] })).toBe(true);
   });
 
+  it("HITL 卡片合并两个任务来源并递归检查 children", () => {
+    const pendingApproval = {
+      messageType: "plan_approval",
+      resultMap: { status: "pending" },
+    } as unknown as CHAT.Task;
+
+    expect(
+      hasPendingAskUserQuestion({
+        multiAgent: { tasks: [] },
+        tasks: [[pendingApproval]],
+      } as unknown as CHAT.ChatItem)
+    ).toBe(true);
+    expect(
+      hasPendingAskUserQuestion({
+        multiAgent: {
+          tasks: [[
+            {
+              messageType: "tool_call",
+              children: [pendingApproval],
+            } as unknown as CHAT.Task,
+          ]],
+        },
+        tasks: [],
+      } as unknown as CHAT.ChatItem)
+    ).toBe(true);
+  });
+
+  it("DeepSearch extend 终态停止流式状态", () => {
+    expect(
+      isTimelineToolActive({
+        messageType: "deep_search",
+        finish: true,
+        resultMap: { messageType: "extend" },
+      } as unknown as CHAT.Task)
+    ).toBe(false);
+    expect(
+      isTimelineToolActive({
+        messageType: "deep_search",
+        finish: false,
+        resultMap: { messageType: "extend" },
+      } as unknown as CHAT.Task)
+    ).toBe(true);
+  });
+
   it("深度思考任务使用任务级完成标志停止流式状态", () => {
     expect(
       isTimelineToolActive({

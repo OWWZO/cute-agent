@@ -138,6 +138,16 @@ const ImageRenderer: CuteType.FC<ImageRendererProps> = React.memo((props) => {
         <ZoomableImage
           src={imageUrl}
           alt={fileName || "图片预览"}
+          width={
+            pixelRatio > 1 && naturalSize?.source === imageUrl
+              ? naturalSize.width / pixelRatio
+              : undefined
+          }
+          height={
+            pixelRatio > 1 && naturalSize?.source === imageUrl
+              ? naturalSize.height / pixelRatio
+              : undefined
+          }
           className="max-w-full"
           style={imageStyle}
         />

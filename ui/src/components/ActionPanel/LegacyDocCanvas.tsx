@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DocModel } from "@extend-ai/react-docx";
 import { buildLegacyDocModel, loadLegacyDocModule, type LegacyDocModule } from "@/lib/lazy/legacyDocImport";
 import {
@@ -40,6 +40,7 @@ const EditorCanvas: CuteType.FC<EditorCanvasProps> = (props) => {
     initialFileName: fileName,
     initialDocumentTheme: "light",
   });
+  const pageVirtualization = useMemo(() => ({ zoomScale }), [zoomScale]);
 
   return (
     <mod.DocxEditorViewer
@@ -47,7 +48,7 @@ const EditorCanvas: CuteType.FC<EditorCanvasProps> = (props) => {
       editor={editor}
       mode="read-only"
       pageGapBackgroundColor="transparent"
-      pageVirtualization={{ zoomScale }}
+      pageVirtualization={pageVirtualization}
     />
   );
 };

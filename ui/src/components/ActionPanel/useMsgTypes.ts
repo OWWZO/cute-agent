@@ -1,4 +1,4 @@
-import { isHTML, isValidJSON } from "@/utils";
+import { isHTML } from "@/utils";
 import { isSubAgentParentTask } from "@/utils/chat/subagent";
 import {
   buildDeepSearchResultItems,
@@ -8,6 +8,7 @@ import {
   resolveTaskResultMap,
   resolveTaskToolResult,
   resolveTaskToolResultText,
+  type ResolvedToolResult,
 } from "@/utils/chat/toolCalls";
 import { useMemo } from "react";
 import { PanelItemType, SearchListItem } from "./type";
@@ -22,32 +23,46 @@ import {
 import { resolveFilePreviewKind } from "@/lib/filePreview/kinds";
 import { normalizeToolName } from "@/components/Dialogue/tools/toolMeta";
 
-export const getSearchList = (taskItem?: PanelItemType) => {
+export type ParsedTaskResult = {
+  resultMap: MESSAGE.ResultMap;
+  toolResult?: ResolvedToolResult;
+  toolResultText: string;
+  parsedToolResult?: any;
+  isToolResultJsonValid: boolean;
+};
+
+export const getSearchList = (
+  taskItem?: PanelItemType,
+  resolved?: ParsedTaskResult
+) => {
   if (!taskItem) {
     return [];
   }
   const { messageType } = taskItem;
-  const resultMap = resolveTaskResultMap(taskItem);
+  const resultMap = resolved?.resultMap ?? resolveTaskResultMap(taskItem);
 
-  const toolResult = resolveTaskToolResult(taskItem);
+  const toolResult = resolved?.toolResult ?? resolveTaskToolResult(taskItem);
   const toolName = normalizeToolName(String(
     toolResult?.toolName ||
     (typeof resultMap.toolName === "string" ? resultMap.toolName : "")
   ));
   if (messageType === 'tool_result') {
     if (toolName === 'search') {
-      const resultText = resolveTaskToolResultText(taskItem, toolResult);
-      let tool: any = {};
-      try {
-        tool = JSON.parse(resultText || "{}");
-      } catch {
-        tool = {};
+      const resultText =
+        resolved?.toolResultText ?? resolveTaskToolResultText(taskItem, toolResult);
+      let tool = resolved?.parsedToolResult;
+      if (!resolved) {
+        try {
+          tool = JSON.parse(resultText || "{}");
+        } catch {
+          return [];
+        }
       }
       const list =
         [tool?.data, tool?.hits, tool?.results, tool].find((value) =>
           Array.isArray(value)
         ) || [];
-      return isValidJSON(resultText) && list.length
+      return list.length
         ? list.map((item) => {
           const row =
             item && typeof item === "object"
@@ -93,21 +108,40 @@ export const getSearchList = (taskItem?: PanelItemType) => {
 };
 
 export const useMsgTypes = (taskItem?: PanelItemType) => {
-
-  const searchList = useMemo<SearchListItem[]>(() => {
-    return getSearchList(taskItem);
+  const parsedTask = useMemo(() => {
+    if (!taskItem) return null;
+    const resultMap = resolveTaskResultMap(taskItem);
+    const toolResult = resolveTaskToolResult(taskItem);
+    const toolResultText = resolveTaskToolResultText(taskItem, toolResult);
+    let parsedToolResult: any;
+    let isToolResultJsonValid = false;
+    if (taskItem.messageType === "tool_result" && toolResultText) {
+      try {
+        parsedToolResult = JSON.parse(toolResultText);
+        isToolResultJsonValid = true;
+      } catch {
+        parsedToolResult = undefined;
+      }
+    }
+    return {
+      resultMap,
+      toolResult,
+      toolResultText,
+      parsedToolResult,
+      isToolResultJsonValid,
+    } satisfies ParsedTaskResult;
   }, [taskItem]);
 
+  const searchList = useMemo<SearchListItem[]>(() => {
+    return getSearchList(taskItem, parsedTask || undefined);
+  }, [taskItem, parsedTask]);
+
   return useMemo(() => {
-    if (!taskItem) {
+    if (!taskItem || !parsedTask) {
       return;
     }
     const { messageType } = taskItem;
-    const resultMap = resolveTaskResultMap(taskItem);
-    const toolResult = resolveTaskToolResult(taskItem);
-    // 复用上面已解析的结果：否则内部会再跑一次 resolveTaskToolResult，
-    // 对象型 toolResult 在流式每帧都要重新 JSON.stringify。
-    const toolResultText = resolveTaskToolResultText(taskItem, toolResult);
+    const { resultMap, toolResult, toolResultText } = parsedTask;
     const rawToolName = String(toolResult?.toolName || "").toLowerCase();
     const primaryFile = getPrimaryTaskFile(taskItem);
     const fileName = primaryFile?.name || '';
@@ -119,10 +153,10 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
     // 类型判定统一走 resolveFilePreviewKind，不再各自维护扩展名表。
     const primaryKind = primaryFile
       ? resolveFilePreviewKind({
-          name: primaryFile.name,
-          mimeType: primaryFile.mimeType,
-          url: primaryFile.url,
-        })
+        name: primaryFile.name,
+        mimeType: primaryFile.mimeType,
+        url: primaryFile.url,
+      })
       : null;
     const useExcel = !!primaryFile && isExcelFileLike(primaryFile);
     const usePdf = !!primaryFile && isPdfFileLike(primaryFile);
@@ -160,6 +194,10 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
     return {
       useBrowser: messageType === 'browser' || messageType === 'browser_viewport',
       useCode,
+      // 供 ActionPanel / panelResolver 复用，避免同一次渲染重复解析 resultMap / toolResult。
+      resultMap,
+      toolResult,
+      toolResultText,
       useHtml,
       useImage,
       useSvg,
@@ -175,11 +213,11 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
       useJSON:
         messageType === "tool_result" &&
         !!toolResultText &&
-        isValidJSON(toolResultText) &&
+        parsedTask.isToolResultJsonValid &&
         !isSubAgentParentTask(taskItem as unknown as CHAT.Task),
       isHtml,
       searchList,
       usePpt
     };
-  }, [searchList, taskItem]);
+  }, [parsedTask, searchList, taskItem]);
 };

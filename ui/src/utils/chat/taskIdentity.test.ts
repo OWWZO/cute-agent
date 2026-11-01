@@ -6,6 +6,7 @@ import {
   isDistinctToolCallId,
   pickBestTaskByKey,
   readTaskIdentity,
+  walkChatTasks,
 } from "./taskIdentity";
 
 function agentTask(overrides: Partial<CHAT.Task> & { resultMap?: MESSAGE.ResultMap }): CHAT.Task {
@@ -94,6 +95,23 @@ describe("taskIdentity", () => {
     expect(findBestAgentTask(chat, "agent-b")?.resultMap?.toolCallId).toBe(
       "agent-b"
     );
+  });
+
+  it("事实层与派生层出现同一任务时只返回一次", () => {
+    const derivedTask = agentTask({
+      messageId: "shared-task",
+      resultMap: { toolName: "Agent", toolCallId: "shared-call" },
+    });
+    const factTask = agentTask({
+      messageId: "shared-task",
+      resultMap: { toolName: "Agent", toolCallId: "shared-call" },
+    });
+    const chat = {
+      multiAgent: { tasks: [[factTask]] },
+      tasks: [[derivedTask]],
+    } as unknown as CHAT.ChatItem;
+
+    expect(walkChatTasks(chat)).toEqual([derivedTask]);
   });
 
   it("allows stream placeholder upgrade but not merging two real toolCallIds", () => {

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { mapMragError, streamMragQuery } from "@/services/mragWorkspace";
 import { toast } from "sonner";
@@ -15,10 +15,15 @@ export function useMragQuery(
   const [queryAnswer, setQueryAnswer] = useState("");
   const [queryError, setQueryError] = useState("");
   const [queryRawChunks, setQueryRawChunks] = useState<unknown[]>([]);
+  // 输入每个字符都会更新 question；用 ref 读取最新值，避免提交回调跟着重建。
+  const questionRef = useRef(question);
+  useEffect(() => {
+    questionRef.current = question;
+  }, [question]);
 
   const handleSubmitQuery = useCallback(async (overrideSessionId?: string) => {
     // 每次提交先校验知识库和问题，并取消上一条请求，保证只保留一个活动流。
-    const currentQuestion = question.trim();
+    const currentQuestion = questionRef.current.trim();
     if (!selectedKnowledgeBaseId) {
       toast.error("请先选择知识库");
       return;
@@ -66,7 +71,7 @@ export function useMragQuery(
         onCompleted?.();
       }
     }
-  }, [onCompleted, question, selectedKnowledgeBaseId, sessionId, toolBaseUrl]);
+  }, [onCompleted, selectedKnowledgeBaseId, sessionId, toolBaseUrl]);
 
   const handleStopQuery = useCallback(() => {
     // 主动停止走同一 AbortController，错误回调会识别 aborted 并跳过失败提示。

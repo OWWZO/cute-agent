@@ -6,9 +6,13 @@ type KpiItem = {
   value?: string | number;
 };
 
+const EMPTY_KPI_LIST: KpiItem[] = [];
+
 const Card: CuteType.FC<{ data: Record<string, any> }> = (props) => {
   const { data } = props;
-  const kpiList: KpiItem[] = Array.isArray(data?.kpiList) ? data.kpiList : [];
+  const kpiList: KpiItem[] = Array.isArray(data?.kpiList)
+    ? data.kpiList
+    : EMPTY_KPI_LIST;
 
   const items = useMemo(
     // showValue 优先于原始 value，统一成渲染层需要的 label/value/key 结构。

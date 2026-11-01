@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEventHandler,
@@ -160,13 +161,18 @@ export const ThinkingBlock = memo(function ThinkingBlock({
     event.stopPropagation();
   };
 
+  const durationText = useMemo(
+    () => resolveDurationText(durationMs, durationLabel, streaming),
+    [durationMs, durationLabel, streaming]
+  );
+  const streamingSummary = useMemo(
+    () => (!open && streaming ? resolveStreamingSummary(text) : undefined),
+    [open, streaming, text]
+  );
+
   if (!text.trim()) {
     return null;
   }
-
-  const durationText = resolveDurationText(durationMs, durationLabel, streaming);
-  const streamingSummary =
-    !open && streaming ? resolveStreamingSummary(text) : undefined;
 
   if (!isFoldable) {
     return (

@@ -94,6 +94,7 @@ const CodeViewerComponent: CuteType.FC<CodeViewerProps> = (props) => {
     focusedRange = null,
     focusRequestId,
     markedLines,
+    commentResetKey,
     enableLineSelection = false,
     enableGutterUtility = false,
     labels: labelOverrides,
@@ -289,6 +290,12 @@ const CodeViewerComponent: CuteType.FC<CodeViewerProps> = (props) => {
     animationFrame = window.requestAnimationFrame(scrollToFocusedLine);
     return () => window.cancelAnimationFrame(animationFrame);
   }, [file.cacheKey, firstLineNumber, focusedEndLine, focusedStartLine, focusRequestId]);
+
+  const draftResetKey = commentResetKey ?? file.cacheKey;
+  useEffect(() => {
+    setActiveDraftRange(null);
+    setDraftText("");
+  }, [draftResetKey]);
 
   const markedLinesCss = codeViewerMarkedLinesCss(markedLines);
 

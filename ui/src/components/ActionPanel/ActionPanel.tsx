@@ -22,10 +22,7 @@ import { PanelProvider } from ".";
 import { useMemoizedFn } from "ahooks";
 import { getPrimaryTaskFile } from "@/utils/taskArtifacts";
 import { resolvePanelView } from "./panelResolver";
-import {
-  resolveTaskResultMap,
-  resolveTaskToolResultText,
-} from "@/utils/chat/toolCalls";
+import { resolveTaskResultMap } from "@/utils/chat/toolCalls";
 
 interface ActionPanelProps {
   taskItem?: PanelItemType;
@@ -96,10 +93,12 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
   const { taskItem, className, allowShowToolBar, noPadding } = props;
 
   const msgTypes = useMsgTypes(taskItem);
-  const { markDownContent } = useContent(taskItem);
+  // 复用 useMsgTypes 已解析的 resultMap / toolResult，避免同一面板再遍历一次任务树。
+  const { markDownContent } = useContent(taskItem, msgTypes);
 
-  const resultMap = resolveTaskResultMap(taskItem);
-  const toolResultText = resolveTaskToolResultText(taskItem);
+  const resultMap = msgTypes?.resultMap ?? resolveTaskResultMap(taskItem);
+  const toolResult = msgTypes?.toolResult;
+  const toolResultText = msgTypes?.toolResultText ?? "";
   const primaryFile = useMemo(() => getPrimaryTaskFile(taskItem), [taskItem]);
   const htmlUrl = primaryFile?.url;
   const downloadHtmlUrl = primaryFile?.downloadUrl;
@@ -121,6 +120,8 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
       allowShowToolBar,
       isFinal,
       codeOutput,
+      resultMap,
+      toolResult,
       toolResultText,
       primaryFile,
     });
@@ -133,6 +134,8 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
     missingReason,
     allowShowToolBar,
     isFinal,
+    resultMap,
+    toolResult,
     toolResultText,
     primaryFile,
     codeOutput,
@@ -481,7 +484,13 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
   useEffect(() => {
     if (!taskItem || !shouldAutoFollowRef.current) return;
     scrollToFollowTarget(true);
-  }, [scrollToFollowTarget, taskItem?.id, taskItem?.messageId, taskItem?.messageTime]);
+  }, [
+    scrollToFollowTarget,
+    taskItem,
+    taskItem?.id,
+    taskItem?.messageId,
+    taskItem?.messageTime,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -493,7 +502,10 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
   // 流式时 ActionPanel 每帧重渲染，内联对象会让 PanelProvider 的所有消费者
   // 跟着重渲染；ref 是稳定对象，scrollToBottom 是 useMemoizedFn，依赖实际稳定。
   const panelContextValue = useMemo(
-    () => ({ wrapRef: ref, scrollToBottom }),
+    () => ({
+      wrapRef: ref,
+      scrollToBottom,
+    }),
     [ref, scrollToBottom]
   );
 

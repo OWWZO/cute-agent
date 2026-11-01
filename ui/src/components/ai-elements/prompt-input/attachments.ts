@@ -105,6 +105,12 @@ export function validatePromptInputFiles(
   return { accepted };
 }
 
+/**
+ * 创建附件视图项并生成 blob URL。
+ *
+ * 所有权约定：调用方拿到返回值后必须通过 {@link revokePromptInputAttachmentUrls}
+ * 回收；`usePromptInputAttachments` 已统一处理移除、清空和卸载。
+ */
 export function createPromptInputAttachmentItems(
   files: File[]
 ): PromptInputAttachmentItem[] {

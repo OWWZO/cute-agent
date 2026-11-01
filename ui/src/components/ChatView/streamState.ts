@@ -492,7 +492,7 @@ export function isTimelineToolActive(tool?: CHAT.Task) {
       return !isTaskFinal(tool);
     }
     if (stage === "extend") {
-      return true;
+      return !isTaskFinal(tool);
     }
     if (resultMap.chapterStreaming) {
       return true;
@@ -684,13 +684,19 @@ export function resolveWorkspaceCaption(task?: CHAT.Task, loading?: boolean) {
 /** AskUserQuestion 挂起：顶栏 / tip 文案 */
 export const WAITING_USER_HELP_HINT = "需要你的帮助";
 
-function readAskUserStatus(
-  tool?: Partial<CHAT.Task> | Partial<MESSAGE.Task>
-): string {
+type HitlTaskNode = {
+  messageType?: string;
+  resultMap?: unknown;
+  finish?: boolean;
+  isFinal?: boolean;
+  children?: HitlTaskNode[];
+};
+
+function readAskUserStatus(tool?: HitlTaskNode): string {
   if (!tool) {
     return "";
   }
-  const resultMap = (tool.resultMap || {}) as unknown as Record<string, unknown>;
+  const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
   const nested = (resultMap.resultMap || resultMap) as Record<string, unknown>;
   return String(nested.status || resultMap.status || "").trim().toLowerCase();
 }
@@ -721,39 +727,44 @@ export function hasPendingAskUserQuestion(chat?: CHAT.ChatItem | null): boolean 
   } else if (runStatus === "WAITING_INPUT") {
     return true;
   }
-  const groups = chat.multiAgent?.tasks || chat.tasks || [];
-  for (const group of groups) {
-    for (const tool of group || []) {
-      if (
-        tool?.messageType !== "ask_user_question" &&
-        tool?.messageType !== "desktop_control" &&
-        tool?.messageType !== "plan_approval"
-      ) {
-        continue;
-      }
+  const groups = [
+    ...(chat.multiAgent?.tasks || []),
+    ...(chat.tasks || []),
+  ];
+  const hasPendingCard = (tool?: HitlTaskNode): boolean => {
+    if (!tool) {
+      return false;
+    }
+    if (
+      tool.messageType === "ask_user_question" ||
+      tool.messageType === "desktop_control" ||
+      tool.messageType === "plan_approval"
+    ) {
       const status = readAskUserStatus(tool);
       if (status === "pending") {
         return true;
       }
-      if (status) {
-        continue;
+      if (!status) {
+        // 缺 status：已 finish/isFinal 视为已决，避免续跑收尾后误判回 WAITING
+        const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
+        const nested = (resultMap.resultMap || resultMap) as Record<string, unknown>;
+        const settled = Boolean(
+          tool.finish ||
+            tool.isFinal ||
+            resultMap.isFinal === true ||
+            nested.isFinal === true
+        );
+        if (!settled) {
+          return true;
+        }
       }
-      // 缺 status：已 finish/isFinal 视为已决，避免续跑收尾后误判回 WAITING
-      const resultMap = (tool.resultMap || {}) as unknown as Record<
-        string,
-        unknown
-      >;
-      const nested = (resultMap.resultMap || resultMap) as Record<
-        string,
-        unknown
-      >;
-      const settled = Boolean(
-        tool.finish ||
-          tool.isFinal ||
-          resultMap.isFinal === true ||
-          nested.isFinal === true
-      );
-      if (!settled) {
+    }
+    return Boolean(tool.children?.some((child) => hasPendingCard(child)));
+  };
+
+  for (const group of groups) {
+    for (const tool of group || []) {
+      if (hasPendingCard(tool)) {
         return true;
       }
     }

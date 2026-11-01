@@ -3,6 +3,7 @@ import { withBase } from "../../base-path";
 import { coordinate, type LatLng } from "./map-utils";
 
 const cache = new Map<string, LatLng[]>();
+const inFlight = new Map<string, Promise<LatLng[]>>();
 
 /**
  * Street geometry for a "lng,lat;lng,lat" key from /api/street-route, fetched in
@@ -13,28 +14,67 @@ export function useStreetRoute(routingKey: string, enabled: boolean): LatLng[] |
   const [result, setResult] = useState<{ key: string; points: LatLng[] | null } | null>(null);
   useEffect(() => {
     if (!enabled || !routingKey.includes(";") || cache.has(routingKey)) return;
-    const controller = new AbortController();
     let active = true;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const debounce = setTimeout(async () => {
-      timeout = setTimeout(() => controller.abort(), 10000);
-      try {
-        const response = await fetch(withBase(`/api/street-route?coords=${encodeURIComponent(routingKey)}`), { signal: controller.signal });
-        if (!response.ok) throw new Error("Route service unavailable");
-        const data: { points?: unknown[] } = await response.json();
-        const points = (data.points ?? []).flatMap((point) => {
-          const result = Array.isArray(point) ? coordinate({ lat: point[0], lng: point[1] }) : null;
-          return result ? [result] : [];
+    const debounce = setTimeout(() => {
+      let request = inFlight.get(routingKey);
+      if (!request) {
+        const controller = new AbortController();
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        request = new Promise<LatLng[]>((resolve, reject) => {
+          timeout = setTimeout(() => controller.abort(), 10000);
+          void fetch(
+            withBase(`/api/street-route?coords=${encodeURIComponent(routingKey)}`),
+            { signal: controller.signal }
+          )
+            .then(async (response) => {
+              if (!response.ok) throw new Error("Route service unavailable");
+              const data: { points?: unknown[] } = await response.json();
+              const points = (data.points ?? []).flatMap((point) => {
+                const result = Array.isArray(point)
+                  ? coordinate({
+                    lat: point[0],
+                    lng: point[1],
+                  })
+                  : null;
+                return result ? [result] : [];
+              });
+              if (points.length < 2) throw new Error("No street route available");
+              resolve(points);
+            })
+            .catch(reject)
+            .finally(() => {
+              clearTimeout(timeout);
+              inFlight.delete(routingKey);
+            });
         });
-        if (points.length < 2) throw new Error("No street route available");
-        if (cache.size >= 64) cache.delete(cache.keys().next().value!);
-        cache.set(routingKey, points);
-        if (active) setResult({ key: routingKey, points });
-      } catch {
-        if (active) setResult({ key: routingKey, points: null });
-      } finally { clearTimeout(timeout); }
+        inFlight.set(routingKey, request);
+      }
+      void request.then((points) => {
+        if (!cache.has(routingKey)) {
+          if (cache.size >= 64) {
+            cache.delete(cache.keys().next().value!);
+          }
+          cache.set(routingKey, points);
+        }
+        if (active) {
+          setResult({
+            key: routingKey,
+            points,
+          });
+        }
+      }).catch(() => {
+        if (active) {
+          setResult({
+            key: routingKey,
+            points: null,
+          });
+        }
+      });
     }, 700);
-    return () => { active = false; clearTimeout(debounce); clearTimeout(timeout); controller.abort(); };
+    return () => {
+      active = false;
+      clearTimeout(debounce);
+    };
   }, [routingKey, enabled]);
   return cache.get(routingKey) ?? (result?.key === routingKey ? result.points : undefined);
 }

@@ -30,7 +30,7 @@ const AUTO_START = 360;
 // Reports the content height to the parent, so the view fits the page. The
 // parent can ask again ("iui-html-view-measure"): a server-rendered frame may
 // report before the app is listening.
-const REPORTER = `<script>(function(){var last=0;function send(){var h=Math.ceil(document.documentElement.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({type:"iui-html-view-height",height:h},"*")}}addEventListener("message",function(e){if(e.source===parent&&e.data==="iui-html-view-measure"){last=0;send()}});addEventListener("load",send);new ResizeObserver(send).observe(document.documentElement);send()})()</script>`;
+const REPORTER = `<script>(function(){var last=0,queued=false;function send(){var h=Math.ceil(document.documentElement.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({type:"iui-html-view-height",height:h},"*")}}function schedule(){if(queued)return;queued=true;var raf=window.requestAnimationFrame||function(cb){return setTimeout(cb,16)};raf(function(){queued=false;send()})}addEventListener("message",function(e){if(e.source===parent&&e.data==="iui-html-view-measure"){last=0;schedule()}});addEventListener("load",schedule);new ResizeObserver(schedule).observe(document.documentElement);schedule()})()</script>`;
 
 function documentFor(html: string, scheme: "light" | "dark") {
   // The policy comes first, so it covers everything in the model's markup.

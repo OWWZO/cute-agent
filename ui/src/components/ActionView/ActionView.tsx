@@ -1157,6 +1157,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
               >
                 <FileList
                   taskList={taskList}
+                  filesOverride={catalog}
                   activeFile={selectedFile}
                   embedded
                   forceSource={forceSource}
