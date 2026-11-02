@@ -1,5 +1,3 @@
-import type { DeepSearchCardItem } from "@/types/deepSearch";
-
-export type SearchListItem = DeepSearchCardItem
+export type { DeepSearchCardItem as SearchListItem } from "@/types/deepSearch";
 
 export type PanelItemType = CHAT.Task | MESSAGE.Task

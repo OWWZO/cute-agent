@@ -3,7 +3,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info } from "lucide-react";
 import type { BundledLanguage } from "shiki";
 import { useCodePreviewWrap } from "@/hooks/useCodePreviewWrap";
-import { dispatchCodeCommentAddToChat, type CodeCommentRange } from "@/lib/promptContexts";
+import {
+  dispatchCodeCommentAddToChat,
+  getSourceTitle,
+  type CodeCommentRange,
+} from "@/lib/promptContexts";
 import { cn } from "@/lib/utils";
 import { CodeViewer, CodeWrapToggle } from "./codeViewer";
 import MermaidBlock from "./MermaidBlock";
@@ -31,10 +35,6 @@ interface SourceCodeViewProps {
   wrapLongLines?: boolean;
   /** 不显示自动换行开关（外层已有同义控件时）。 */
   hideWrapToggle?: boolean;
-}
-
-function getSourceTitle(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
 /**

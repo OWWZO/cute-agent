@@ -132,7 +132,8 @@ export function buildPromptWithCodeComments(
   return `${content}${content ? "\n\n" : ""}${commentsBlock}`.trim();
 }
 
-function getSourceTitle(path: string): string {
+/** 从路径里取文件名（`SourceCodeView` 的评论标题也复用它）。 */
+export function getSourceTitle(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 

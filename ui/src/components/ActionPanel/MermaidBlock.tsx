@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import { loadMermaid } from "@/lib/lazy/mermaid";
 import { cn } from "@/lib/utils";
 
@@ -20,11 +21,13 @@ const MermaidBlock: CuteType.FC<MermaidBlockProps> = (props) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const reactId = useId();
   const [loadError, setLoadError] = useState(false);
+  // 重试计数：既触发 effect 重跑，也让 mermaid.render 每次用新的元素 id。
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoadError(false);
-    const renderId = `mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+    const renderId = `mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}-${retryToken}`;
 
     void loadMermaid()
       .then(async ({ default: mermaid }) => {
@@ -49,10 +52,28 @@ const MermaidBlock: CuteType.FC<MermaidBlockProps> = (props) => {
     return () => {
       cancelled = true;
     };
-  }, [code, reactId]);
+  }, [code, reactId, retryToken]);
 
   if (loadError) {
-    return <pre className={cn("overflow-auto", className)}>{code}</pre>;
+    return (
+      <div className={cn("flex flex-col gap-2", className)}>
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface-muted)] px-3 py-2 text-ui-sm text-[var(--chat-text-muted)]"
+        >
+          <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">图形渲染失败，已回退为 Mermaid 源码。</span>
+          <button
+            type="button"
+            className="shrink-0 underline hover:text-[var(--chat-text)]"
+            onClick={() => setRetryToken((token) => token + 1)}
+          >
+            重试
+          </button>
+        </div>
+        <pre className="overflow-auto">{code}</pre>
+      </div>
+    );
   }
 
   return (

@@ -114,9 +114,6 @@ const resolveFetchError = (error: unknown) => {
 
 interface DocxCanvasProps {
   buffer: ArrayBuffer;
-  fileName?: string;
-  /** 旧版 .doc 转换后同样走这条链路，但探针/样式需要区分来源 */
-  previewKind?: "docx" | "doc";
   className?: string;
   onRenderError: (error: unknown) => void;
 }
@@ -128,7 +125,7 @@ interface DocxCanvasProps {
  * 并把缩放后的宽高同步回 frame，避免 `transform` 之后仍保留未缩放的横向滚动区。
  */
 const DocxCanvas: CuteType.FC<DocxCanvasProps> = (props) => {
-  const { buffer, className, previewKind = "docx", onRenderError } = props;
+  const { buffer, className, onRenderError } = props;
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -261,7 +258,7 @@ const DocxCanvas: CuteType.FC<DocxCanvasProps> = (props) => {
         "relative h-full min-h-0 w-full min-w-0 bg-[var(--chat-surface-muted)]",
         className
       )}
-      data-office-preview-kind={previewKind}
+      data-office-preview-kind="docx"
     >
       <div
         className={cn(
@@ -432,8 +429,6 @@ const WordRenderer: CuteType.FC<WordRendererProps> = React.memo((props) => {
           ) : (
             <DocxCanvas
               buffer={buffer}
-              fileName={fileName}
-              previewKind="docx"
               onRenderError={setRenderError}
             />
           )}

@@ -1,4 +1,4 @@
-import { Code2, Eye } from "lucide-react";
+import { Code2, Eye, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type PreviewViewMode = "preview" | "source";
@@ -23,7 +23,7 @@ export function PreviewModeToggle(props: PreviewModeToggleProps) {
     sourceLabel = "源码",
   } = props;
 
-  const items: Array<{ key: PreviewViewMode; label: string; Icon: typeof Eye }> = [
+  const items: Array<{ key: PreviewViewMode; label: string; Icon: LucideIcon }> = [
     { key: "preview", label: previewLabel, Icon: Eye },
     { key: "source", label: sourceLabel, Icon: Code2 },
   ];
@@ -46,7 +46,9 @@ export function PreviewModeToggle(props: PreviewModeToggleProps) {
             aria-pressed={active}
             aria-label={label}
             title={label}
-            onClick={() => onChange(key)}
+            onClick={() => {
+              if (!active) onChange(key);
+            }}
             className={cn(
               "inline-flex items-center gap-1 rounded-md px-2 py-1 text-ui-sm transition-colors",
               active

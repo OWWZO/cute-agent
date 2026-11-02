@@ -1,11 +1,10 @@
-import React, { createContext, useContext } from "react";
+import { createContext, useContext } from "react";
 
-type PanelItemType = {
-  wrapRef?: React.RefObject<HTMLElement | null>;
+export type PanelContextValue = {
   scrollToBottom?: () => void;
 };
 
-const PanelContext = createContext<PanelItemType | null>(null);
+const PanelContext = createContext<PanelContextValue | null>(null);
 
 export const usePanelContext = () => {
   return useContext(PanelContext);

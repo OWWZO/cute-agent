@@ -41,6 +41,9 @@ function SelectionMenuPortal({
       )}px`;
     };
     position();
+    // pointerdown 的 preventDefault 保住了选区，也阻止了按钮获得焦点；
+    // 主动聚焦，保证键盘（Tab 后 Enter / Space）同样能操作菜单。
+    menu.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(position);
     observer?.observe(menu);
     return () => observer?.disconnect();
@@ -53,7 +56,6 @@ function SelectionMenuPortal({
       style={{ width: "max-content", left: 12, top: 12 }}
       className="fixed z-50 flex overflow-hidden rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] text-ui-sm text-[var(--chat-text)] shadow-md"
       onPointerDown={(event) => event.preventDefault()}
-      onMouseDown={(event) => event.preventDefault()}
     >
       {tooLong ? (
         <div className="px-2.5 py-1.5 text-[var(--color-warning)]">

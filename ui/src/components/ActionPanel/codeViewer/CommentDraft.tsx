@@ -64,7 +64,6 @@ export function CommentDraft({
         placeholder={labels.commentPlaceholder}
         className="min-h-16 w-full resize-none rounded-lg border-[var(--chat-border)] bg-[var(--chat-surface-soft)] text-ui-base text-[var(--chat-text)] placeholder:text-[var(--chat-text-muted)] focus-visible:ring-0"
         rows={3}
-        autoFocus
       />
       <div className="mt-2 flex items-center justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" title={cancelLabel} aria-label={cancelLabel} onClick={onCancel}>
