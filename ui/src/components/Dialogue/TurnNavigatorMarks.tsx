@@ -4,8 +4,10 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { resolveBarVisualState } from "@/lib/conversationNavigator";
+import { resolveBarVisualState, resolveMarkWindow } from "@/lib/conversationNavigator";
 import { cn } from "@/lib/utils";
+
+const HOVER_PAGE_SIZE = 60;
 
 export type NavigatorItem = {
   key: string;
@@ -33,19 +35,38 @@ export const TurnNavigatorMarks: FC<{
   const [interactionIndex, setInteractionIndex] = useState<number | undefined>(
     undefined
   );
+  const [hoverWindow, setHoverWindow] = useState({
+    start: 0,
+    count: HOVER_PAGE_SIZE,
+  });
   const focusIndex = interactionIndex ?? activeIndex;
+  const markWindow = resolveMarkWindow(items.length, focusIndex);
+  const markItems = items.slice(markWindow.start, markWindow.end);
+  const hoverStart = Math.min(hoverWindow.start, items.length);
+  const hoverEnd = Math.min(items.length, hoverStart + hoverWindow.count);
+  const hoverItems = items.slice(hoverStart, hoverEnd);
 
   return (
     <HoverCard
       openDelay={150}
       closeDelay={120}
-      onOpenChange={(open) =>
-        setInteractionIndex(open ? activeIndex : undefined)
-      }
+      onOpenChange={(open) => {
+        setInteractionIndex(open ? activeIndex : undefined);
+        if (open) {
+          setHoverWindow({
+            start: Math.max(
+              0,
+              activeIndex - Math.floor(HOVER_PAGE_SIZE / 2)
+            ),
+            count: HOVER_PAGE_SIZE,
+          });
+        }
+      }}
     >
       <HoverCardTrigger asChild>
         <div className="pointer-events-auto absolute right-0 top-1/2 flex max-h-[calc(100%-6rem)] w-9 -translate-y-1/2 flex-col items-end justify-center gap-1.5 overflow-y-auto">
-          {items.map((item, index) => {
+          {markItems.map((item, offset) => {
+            const index = markWindow.start + offset;
             const state = resolveBarVisualState(index, focusIndex);
             return (
               <button
@@ -82,7 +103,22 @@ export const TurnNavigatorMarks: FC<{
         sideOffset={12}
         className="w-96 max-h-[70vh] overflow-y-auto scrollbar-thin p-1.5"
       >
-        {items.map((item, index) => {
+        {hoverStart > 0 ? (
+          <button
+            type="button"
+            className="mb-1 block w-full rounded-md px-3 py-2 text-left text-ui-xs text-[var(--chat-text-muted)] transition-colors hover:bg-[var(--chat-nav)]"
+            onClick={() =>
+              setHoverWindow((prev) => ({
+                ...prev,
+                start: Math.max(0, prev.start - HOVER_PAGE_SIZE),
+              }))
+            }
+          >
+            显示更早的 {Math.min(HOVER_PAGE_SIZE, hoverStart)} 轮
+          </button>
+        ) : null}
+        {hoverItems.map((item, offset) => {
+          const index = hoverStart + offset;
           const isActive = index === activeIndex;
           return (
             <button
@@ -123,6 +159,20 @@ export const TurnNavigatorMarks: FC<{
             </button>
           );
         })}
+        {hoverEnd < items.length ? (
+          <button
+            type="button"
+            className="mt-1 block w-full rounded-md px-3 py-2 text-left text-ui-xs text-[var(--chat-text-muted)] transition-colors hover:bg-[var(--chat-nav)]"
+            onClick={() =>
+              setHoverWindow((prev) => ({
+                ...prev,
+                count: prev.count + HOVER_PAGE_SIZE,
+              }))
+            }
+          >
+            显示更多（剩余 {items.length - hoverEnd}）
+          </button>
+        ) : null}
       </HoverCardContent>
     </HoverCard>
   );

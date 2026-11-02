@@ -8,6 +8,7 @@ import {
   resolveActiveItemIndex,
   resolveActiveItemIndexFromVirtualRows,
   resolveBarVisualState,
+  resolveMarkWindow,
   type VirtualRowPosition,
 } from "./conversationNavigator";
 
@@ -95,6 +96,29 @@ describe("buildNavigatorItems", () => {
   it("无 requestId 时用下标兜底 key", () => {
     const items = buildNavigatorItems([createChat({ requestId: "" })]);
     expect(items[0].key).toBe("turn-0");
+  });
+
+  it("超长回复只输出 220 字以内的预览", () => {
+    const response = `${"很长的正文".repeat(2000)}\n\n第二段`;
+    const items = buildNavigatorItems([createChat({ response })]);
+
+    expect(items[0].assistantPreview.length).toBeLessThanOrEqual(
+      DEFAULT_MAX_PREVIEW_CHARS
+    );
+    expect(items[0].assistantPreview.endsWith("...")).toBe(true);
+    expect(items[0].assistantPreview.startsWith("很长的正文")).toBe(true);
+  });
+});
+
+describe("resolveMarkWindow", () => {
+  it("短会话全部渲染", () => {
+    expect(resolveMarkWindow(10, 3)).toEqual({ start: 0, end: 10 });
+  });
+
+  it("长会话围绕焦点开窗且不越界", () => {
+    expect(resolveMarkWindow(500, 250)).toEqual({ start: 190, end: 310 });
+    expect(resolveMarkWindow(500, 0)).toEqual({ start: 0, end: 120 });
+    expect(resolveMarkWindow(500, 499)).toEqual({ start: 380, end: 500 });
   });
 });
 

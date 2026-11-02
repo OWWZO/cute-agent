@@ -83,6 +83,43 @@ export function buildPreviewText(
  * 用户正文会先剥掉上下文尾块（`# Code comments:` / `# Web page elements:` /
  * `# userselect:`），否则浮层里会显示原始 markdown。
  */
+const MAX_ASSISTANT_SOURCE_CHARS =
+  DEFAULT_MAX_PREVIEW_CHARS * DEFAULT_MAX_PREVIEW_PARAGRAPHS * 4;
+
+/** 刻度条只渲染焦点附近的窗口，避免导航 DOM 随总轮数线性增长。 */
+export function resolveMarkWindow(
+  total: number,
+  focusIndex: number,
+  windowSize = 120
+): { start: number; end: number } {
+  if (total <= windowSize) {
+    return {
+      start: 0,
+      end: total,
+    };
+  }
+  const half = Math.floor(windowSize / 2);
+  const start = Math.max(0, Math.min(focusIndex - half, total - windowSize));
+  return {
+    start,
+    end: start + windowSize,
+  };
+}
+
+function buildAssistantPreview(text: string): string {
+  // 长回复先截到「最多两段、最多 220 字」所需的前缀，再走原有整理逻辑；
+  // 不再对整段 response 做 trim / split。
+  const source =
+    text.length > MAX_ASSISTANT_SOURCE_CHARS
+      ? text.slice(0, MAX_ASSISTANT_SOURCE_CHARS)
+      : text;
+  const normalized = source.trim();
+  if (!normalized) {
+    return ASSISTANT_EMPTY_PREVIEW;
+  }
+  return buildPreviewText([normalized], { fallback: ASSISTANT_EMPTY_PREVIEW });
+}
+
 export function buildNavigatorItems(
   chats: readonly CHAT.ChatItem[]
 ): ConversationNavigatorItem[] {
@@ -92,9 +129,9 @@ export function buildNavigatorItems(
       return [];
     }
 
-    const assistantText = (chat.response || "").trim();
-    const assistantPreview = assistantText
-      ? buildPreviewText([assistantText], { fallback: ASSISTANT_EMPTY_PREVIEW })
+    const assistantText = chat.response || "";
+    const assistantPreview = assistantText.trim()
+      ? buildAssistantPreview(assistantText)
       : chat.loading
         ? ASSISTANT_RUNNING_PREVIEW
         : ASSISTANT_EMPTY_PREVIEW;
