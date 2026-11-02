@@ -37,7 +37,13 @@ export function setToolCardOpen(key: string, open: boolean): void {
   }
 }
 
-/** 仅测试使用：清空持久表，避免用例之间互相污染。 */
+/**
+ * 仅测试使用：清空持久表，避免用例之间互相污染。
+ *
+ * 生产构建里做成空操作：这个函数不该被运行时引用，万一误引用也不能一次性
+ * 清空全部卡片的折叠态。
+ */
 export function resetToolCardOpenState(): void {
+  if (!import.meta.env.DEV) return;
   openState.clear();
 }

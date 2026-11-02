@@ -17,13 +17,16 @@ import {
   pathBaseName,
 } from "@/lib/codeViewerSource";
 import { resolveTaskToolResult } from "@/utils/chat/toolCalls";
-import { extractToolFilePath } from "./toolMeta";
+import {
+  extractToolFilePath,
+  normalizeToolName,
+  toolLabel,
+} from "./toolMeta";
 import {
   buildEditDiffCode,
   extractEditFileSummaries,
   extractEditPath,
 } from "./toolDiff";
-import { normalizeToolName, toolLabel } from "./toolMeta";
 import {
   resolveTaskToolArg,
   resolveTaskToolName,

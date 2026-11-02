@@ -218,6 +218,23 @@ describe("editDiffStats 消费后端 patch", () => {
   });
 });
 
+describe("editDiffStats 的 write 分支", () => {
+  it("入参用 text 字段时也能统计（与 buildWriteDiffCode 的字段优先级一致）", () => {
+    expect(
+      editDiffStats(
+        "Write",
+        JSON.stringify({
+          path: "a.ts",
+          text: "one\ntwo"
+        })
+      )
+    ).toEqual({
+      added: 2,
+      removed: 0
+    });
+  });
+});
+
 describe("extractEditFileSummaries", () => {
   it("单文件 edit 产出长度 1 的数组", () => {
     const files = extractEditFileSummaries(

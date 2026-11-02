@@ -173,6 +173,23 @@ export function extractToolFilePath(arg: string): string | undefined {
 }
 
 /**
+ * 命令类工具的字段优先级。execute 卡的展开区（`$ 命令`）与折叠摘要共用这一处，
+ * 避免两边各列一份、逐渐漂移（历史上摘要就漏了 `input`）。
+ *
+ * `source` 是 Cute-agent `code_execution` 的代码字段名，`input` 是 Code-Mode 的入参字段。
+ */
+function commandText(d: Record<string, unknown>): string | undefined {
+  return (
+    str(d.command) ??
+    str(d.cmd) ??
+    str(d.script) ??
+    str(d.code) ??
+    str(d.source) ??
+    str(d.input)
+  );
+}
+
+/**
  * 抽「要执行的命令」全文（不截断），供 execute 卡展开区的 `$ 命令` 行使用。
  *
  * 与 `toolSummary` 的区别：summary 会 clip 到 72 字符用于摘要行，这里要完整命令，
@@ -199,14 +216,7 @@ export function extractExecuteCommand(arg: string): string {
 
   const d = parseArg(raw);
   if (d) {
-    // source 是 Cute-agent `code_execution` 的代码字段名。
-    const cmd =
-      str(d.command) ??
-      str(d.cmd) ??
-      str(d.script) ??
-      str(d.code) ??
-      str(d.source) ??
-      str(d.input);
+    const cmd = commandText(d);
     if (cmd) return cmd;
   }
 
@@ -259,13 +269,7 @@ export function toolSummary(name: string, arg: string, full = false): string {
         return path ? c(path) : fallback();
       }
       case "bash": {
-        // source 是 Cute-agent `code_execution`（Python 解释器）的代码字段名。
-        const cmd =
-          str(d.command) ??
-          str(d.cmd) ??
-          str(d.script) ??
-          str(d.code) ??
-          str(d.source);
+        const cmd = commandText(d);
         return cmd ? c(cmd, BASH_MAX) : fallback();
       }
       case "grep":
