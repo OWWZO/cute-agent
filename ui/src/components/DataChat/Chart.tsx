@@ -32,21 +32,24 @@ const Chart: CuteType.FC<ChartProps> = memo(({ data }) => {
 
     let cancelled = false;
     setChartStatus("loading");
-    void loadEcharts()
-      .then((echarts) => {
+
+    const initChart = async () => {
+      try {
+        const echarts = await loadEcharts();
         if (cancelled || !chartRef.current) return;
         if (!chartInstance.current) {
           chartInstance.current = echarts.init(chartRef.current);
         }
         chartInstance.current.setOption(option, { notMerge: true });
         setChartStatus("ready");
-      })
-      .catch((error) => {
+      } catch (error) {
         if (!cancelled) {
           console.error("加载 ECharts 失败", error);
           setChartStatus("error");
         }
-      });
+      }
+    };
+    void initChart();
 
     return () => {
       cancelled = true;

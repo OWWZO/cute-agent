@@ -1,3 +1,24 @@
+// 三套坐标轴预设共用同一套轴线 / 刻度 / 标签样式，避免单个预设改色后视觉漂移。
+const AXIS_LINE_STYLE = { lineStyle: { color: "#E1E3E6" } } as const;
+
+const AXIS_TICK_STYLE = { lineStyle: { color: "#E1E3E6" } } as const;
+
+const AXIS_LABEL_STYLE = { color: "#898E99" } as const;
+
+const CATEGORY_AXIS_LABEL_STYLE = {
+  ...AXIS_LABEL_STYLE,
+  show: true,
+  interval: "auto",
+  rotate: 0,
+} as const;
+
+const SPLIT_LINE_STYLE = {
+  lineStyle: {
+    type: "dashed",
+    color: "#E1E3E6",
+  },
+} as const;
+
 // 这些预设只描述通用视觉约束；具体数据、坐标轴方向和 series 由 chartConfig 运行时补齐。
 export const defaultChartPresets = {
   chartTypes: ["line", "bar", "hbar", "pie"],
@@ -8,48 +29,17 @@ export const defaultChartPresets = {
       className: "custom_tooltip",
     },
     xAxis: {
-      axisLine: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
-      axisTick: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
-      axisLabel: {
-        color: "#898E99",
-        show: true,
-        interval: "auto",
-        rotate: 0,
-        overHide: true,
-        overHideLen: 10,
-        overHidePos: "mid",
-      },
+      axisLine: AXIS_LINE_STYLE,
+      axisTick: AXIS_TICK_STYLE,
+      axisLabel: CATEGORY_AXIS_LABEL_STYLE,
       type: "category",
       triggerEvent: true,
     },
     yAxis: {
-      splitLine: {
-        lineStyle: {
-          type: "dashed",
-          color: "#E1E3E6",
-        },
-      },
-      axisLabel: {
-        color: "#898E99",
-      },
-      axisLine: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
-      axisTick: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
+      splitLine: SPLIT_LINE_STYLE,
+      axisLabel: AXIS_LABEL_STYLE,
+      axisLine: AXIS_LINE_STYLE,
+      axisTick: AXIS_TICK_STYLE,
       triggerEvent: true,
     },
   },
@@ -66,49 +56,18 @@ export const defaultChartPresets = {
       },
     },
     xAxis: {
-      axisLine: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
-      axisTick: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
-      axisLabel: {
-        color: "#898E99",
-        show: true,
-        interval: "auto",
-        rotate: 0,
-        overHide: true,
-        overHideLen: 10,
-        overHidePos: "mid",
-      },
+      axisLine: AXIS_LINE_STYLE,
+      axisTick: AXIS_TICK_STYLE,
+      axisLabel: CATEGORY_AXIS_LABEL_STYLE,
       data: [],
       dataZoom: {},
       triggerEvent: true,
     },
     yAxis: {
-      splitLine: {
-        lineStyle: {
-          type: "dashed",
-          color: "#E1E3E6",
-        },
-      },
-      axisLabel: {
-        color: "#898E99",
-      },
-      axisLine: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
-      axisTick: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
+      splitLine: SPLIT_LINE_STYLE,
+      axisLabel: AXIS_LABEL_STYLE,
+      axisLine: AXIS_LINE_STYLE,
+      axisTick: AXIS_TICK_STYLE,
       triggerEvent: true,
     },
   },
@@ -125,47 +84,16 @@ export const defaultChartPresets = {
       className: "custom_tooltip",
     },
     xAxis: {
-      axisLine: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
-      axisTick: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
-      axisLabel: {
-        color: "#898E99",
-        show: true,
-        interval: "auto",
-        rotate: 0,
-        overHide: true,
-        overHideLen: 10,
-        overHidePos: "mid",
-      },
+      axisLine: AXIS_LINE_STYLE,
+      axisTick: AXIS_TICK_STYLE,
+      axisLabel: CATEGORY_AXIS_LABEL_STYLE,
       triggerEvent: true,
     },
     yAxis: {
-      splitLine: {
-        lineStyle: {
-          type: "dashed",
-          color: "#E1E3E6",
-        },
-      },
-      axisLabel: {
-        color: "#898E99",
-      },
-      axisLine: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
-      axisTick: {
-        lineStyle: {
-          color: "#E1E3E6",
-        },
-      },
+      splitLine: SPLIT_LINE_STYLE,
+      axisLabel: AXIS_LABEL_STYLE,
+      axisLine: AXIS_LINE_STYLE,
+      axisTick: AXIS_TICK_STYLE,
       data: [],
       inverse: true,
       nameLocation: "start",
@@ -213,8 +141,7 @@ export const defaultChartPresets = {
       itemHeight: 12,
       textStyle: {
         color: "#6a6a6a",
-        fontSizeNum: 12,
-        fontUnit: "px",
+        fontSize: 12,
         fontStyle: "normal",
         fontWeight: "normal",
       },

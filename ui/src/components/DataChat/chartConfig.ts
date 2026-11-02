@@ -203,18 +203,7 @@ function formatData(cfg: DataChatSourceConfig) {
 
         try {
           const formatter = new Function("v", `return ${formatStr}`);
-          let decimalLength = 0;
-          const splitArr = `${value}`.split(".");
-          if (splitArr.length === 2) {
-            decimalLength = splitArr[1].length;
-          }
-          if (decimalLength === 0 || !isNaN(Number(value))) {
-            value = formatter(value);
-          } else {
-            value =
-              formatter(Number(value) * Math.pow(10, decimalLength)) /
-              Math.pow(10, decimalLength);
-          }
+          value = formatter(value);
         } catch (error) {
           console.log(error);
         }
