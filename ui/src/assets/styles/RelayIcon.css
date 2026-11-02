@@ -10,6 +10,7 @@
     font-display: swap;
   }
 
+  /* 装饰性图标请在使用处加 aria-hidden；可交互图标请补可访问名称（aria-label）。 */
   .font_family{
     font-family: 'RelayIcon';
     font-size: 16px;
@@ -20,11 +21,6 @@
     filter: none;
   }
 
-  .font_family::before {
-    text-shadow: none;
-    filter: none;
-  }
-  
   .icon-shenpi::before {
     content: "\f332";
   }
