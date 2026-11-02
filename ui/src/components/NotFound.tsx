@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { ROUTES } from '@/router/routes';
 
 import { jumpUrl } from '@/utils/utils';
 
@@ -12,7 +13,7 @@ const NotFound: CuteType.FC = () => {
           <EmptyDescription>抱歉，您访问的页面不存在。</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button onClick={() => jumpUrl('/')}>返回首页</Button>
+          <Button onClick={() => jumpUrl(ROUTES.HOME)}>返回首页</Button>
         </EmptyContent>
       </Empty>
     </div>
