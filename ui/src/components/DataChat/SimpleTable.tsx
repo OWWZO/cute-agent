@@ -1,5 +1,39 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+
+const ROW_HEIGHT_PX = 28;
+const VISIBLE_OVERSCAN = 10;
+const DEFAULT_VIEWPORT_PX = 420;
+/** 小表直接全量渲染，避免为几行数据引入窗口计算。 */
+const WINDOW_THRESHOLD = 80;
+
+export function resolveVisibleRowRange(
+  total: number,
+  scrollTop: number,
+  viewportHeight: number
+): { start: number; end: number } {
+  if (total <= WINDOW_THRESHOLD) {
+    return {
+      start: 0,
+      end: total,
+    };
+  }
+  const start = Math.min(
+    Math.max(0, Math.floor(scrollTop / ROW_HEIGHT_PX) - VISIBLE_OVERSCAN),
+    Math.max(0, total - 1)
+  );
+  const end = Math.max(
+    start,
+    Math.min(
+      total,
+      Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT_PX) + VISIBLE_OVERSCAN
+    )
+  );
+  return {
+    start,
+    end,
+  };
+}
 
 interface TableColumn {
   title: string;
@@ -39,6 +73,33 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
   const [selected, setSelected] = useState<{ row: number; col: number } | null>(
     null
   );
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT_PX);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (scrollFrameRef.current !== null) {
+        cancelAnimationFrame(scrollFrameRef.current);
+      }
+    },
+    []
+  );
+
+  const handleScroll = () => {
+    const element = scrollRef.current;
+    if (!element || scrollFrameRef.current !== null) {
+      return;
+    }
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      setScrollTop(element.scrollTop);
+      if (element.clientHeight > 0 && element.clientHeight !== viewportHeight) {
+        setViewportHeight(element.clientHeight);
+      }
+    });
+  };
 
   const columns = useMemo(
     // 为缺少 key 的列补稳定标识，并保留用户可见列字母。
@@ -50,6 +111,16 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
       })),
     [columnList]
   );
+
+  const visibleRange = resolveVisibleRowRange(
+    dataList.length,
+    scrollTop,
+    viewportHeight
+  );
+  const visibleRows = dataList.slice(visibleRange.start, visibleRange.end);
+  const topSpacerHeight = visibleRange.start * ROW_HEIGHT_PX;
+  const bottomSpacerHeight =
+    (dataList.length - visibleRange.end) * ROW_HEIGHT_PX;
 
   if (!columns.length) {
     return (
@@ -80,7 +151,11 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
         </div>
       </div>
 
-      <div className="max-h-[420px] overflow-auto">
+      <div
+        ref={scrollRef}
+        className="max-h-[420px] overflow-auto"
+        onScroll={handleScroll}
+      >
         <table className="w-full border-separate border-spacing-0">
           <thead>
             <tr>
@@ -103,41 +178,60 @@ const SimpleTable: CuteType.FC<SimpleTableProps> = ({ data }) => {
             </tr>
           </thead>
           <tbody>
-            {dataList.map((row, rowIndex) => (
-              <tr key={rowIndex} className="odd:bg-white even:bg-[#fcfcfc]">
-                <th
-                  className={cn(
-                    "sticky left-0 z-10 h-7 w-10 min-w-10 border-b border-r border-[#e8e8e8] bg-[#f3f3f3] text-center text-ui-sm font-medium text-[#616161]",
-                    selected?.row === rowIndex && "bg-[#d7e8d3] text-[#0f6b36]"
-                  )}
-                >
-                  {rowIndex + 1}
-                </th>
-                {columns.map((col, colIndex) => {
-                  const raw = row?.[col.dataIndex];
-                  const value = raw == null ? "" : String(raw);
-                  // 数值单元格右对齐，选中单元格同时展示坐标和完整值。
-                  const numeric = isNumericLike(raw);
-                  const isSelected =
-                    selected?.row === rowIndex && selected?.col === colIndex;
-                  return (
-                    <td
-                      key={`${rowIndex}-${col.key}`}
-                      onClick={() => setSelected({ row: rowIndex, col: colIndex })}
-                      className={cn(
-                        "h-7 max-w-[240px] min-w-[96px] cursor-default truncate border-b border-r border-[#ececec] px-2 text-ui-sm leading-[26px] text-[#1f1f1f]",
-                        numeric && "text-right tabular-nums",
-                        isSelected &&
-                          "relative z-[1] bg-[#e8f5e9] outline outline-2 outline-[#107c41] -outline-offset-1"
-                      )}
-                      title={value || undefined}
-                    >
-                      {value}
-                    </td>
-                  );
-                })}
+            {topSpacerHeight > 0 ? (
+              <tr aria-hidden="true">
+                <td colSpan={columns.length + 1} style={{ height: topSpacerHeight }} />
               </tr>
-            ))}
+            ) : null}
+            {visibleRows.map((row, visibleIndex) => {
+              const rowIndex = visibleRange.start + visibleIndex;
+              return (
+                <tr
+                  key={rowIndex}
+                  className={rowIndex % 2 === 0 ? "bg-white" : "bg-[#fcfcfc]"}
+                >
+                  <th
+                    className={cn(
+                      "sticky left-0 z-10 h-7 w-10 min-w-10 border-b border-r border-[#e8e8e8] bg-[#f3f3f3] text-center text-ui-sm font-medium text-[#616161]",
+                      selected?.row === rowIndex && "bg-[#d7e8d3] text-[#0f6b36]"
+                    )}
+                  >
+                    {rowIndex + 1}
+                  </th>
+                  {columns.map((col, colIndex) => {
+                    const raw = row?.[col.dataIndex];
+                    const value = raw == null ? "" : String(raw);
+                    // 数值单元格右对齐，选中单元格同时展示坐标和完整值。
+                    const numeric = isNumericLike(raw);
+                    const isSelected =
+                      selected?.row === rowIndex && selected?.col === colIndex;
+                    return (
+                      <td
+                        key={`${rowIndex}-${col.key}`}
+                        onClick={() => setSelected({ row: rowIndex, col: colIndex })}
+                        className={cn(
+                          "h-7 max-w-[240px] min-w-[96px] cursor-default truncate border-b border-r border-[#ececec] px-2 text-ui-sm leading-[26px] text-[#1f1f1f]",
+                          numeric && "text-right tabular-nums",
+                          isSelected &&
+                            "relative z-[1] bg-[#e8f5e9] outline outline-2 outline-[#107c41] -outline-offset-1"
+                        )}
+                        title={value || undefined}
+                      >
+                        {value}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            {bottomSpacerHeight > 0 ? (
+              <tr aria-hidden="true">
+                <td
+                  colSpan={columns.length + 1}
+                  style={{ height: bottomSpacerHeight }}
+                />
+              </tr>
+            ) : null}
             {!dataList.length ? (
               <tr>
                 <td
