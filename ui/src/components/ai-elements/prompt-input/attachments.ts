@@ -59,10 +59,7 @@ export function validatePromptInputFiles(
   if (incoming.length && acceptedByType.length === 0) {
     return {
       accepted: [],
-      error: {
-        code: "accept",
-        message: "No files match the accepted types.",
-      },
+      error: { code: "accept" },
     };
   }
 
@@ -73,10 +70,7 @@ export function validatePromptInputFiles(
   if (acceptedByType.length > 0 && acceptedBySize.length === 0) {
     return {
       accepted: [],
-      error: {
-        code: "max_file_size",
-        message: "All files exceed the maximum size.",
-      },
+      error: { code: "max_file_size" },
     };
   }
 
@@ -95,10 +89,18 @@ export function validatePromptInputFiles(
   ) {
     return {
       accepted,
-      error: {
-        code: "max_files",
-        message: "Too many files. Some were not added.",
-      },
+      error: { code: "max_files" },
+    };
+  }
+
+  // 部分文件被 accept 或大小过滤掉时也要上报，否则 UI 会把「静默丢弃」当成功。
+  if (
+    acceptedByType.length < incoming.length ||
+    acceptedBySize.length < acceptedByType.length
+  ) {
+    return {
+      accepted,
+      error: { code: "partial" },
     };
   }
 
