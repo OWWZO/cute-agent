@@ -75,12 +75,20 @@ export function diagnoseProgram(text: string): OpenUiDiagnostic {
       orphaned: [...meta.orphaned],
       unresolved: [...meta.unresolved],
     };
-  } catch {
+  } catch (error) {
+    // parser 本身崩溃（而非截断）时也要把原因带给意图修复链路，否则与"输入不完整"无法区分。
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[openui] parser crashed', error);
     return {
       renderable: false,
       incomplete: true,
       hasRoot: false,
-      errors: [],
+      errors: [
+        {
+          code: 'parser-crash',
+          message
+        }
+      ],
       orphaned: [],
       unresolved: []
     };
