@@ -6,12 +6,13 @@ interface ActionViewFrameProps {
   onClickTitle?: () => void;
   footer?: React.ReactNode;
   children: React.ReactNode;
-  className?: string;
+  /** 内容区（内层滚动容器）的样式；frame 本体的布局由组件自己固定。 */
+  contentClassName?: string;
 }
 
 const ActionViewFrame: React.FC<ActionViewFrameProps> = ({
   children,
-  className,
+  contentClassName,
   titleNode,
   footer,
   onClickTitle,
@@ -37,7 +38,7 @@ const ActionViewFrame: React.FC<ActionViewFrameProps> = ({
       <div
         className={cn(
           "flex-1 overflow-auto",
-          className
+          contentClassName
         )}
       >
         {children}

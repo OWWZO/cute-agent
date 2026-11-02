@@ -73,18 +73,13 @@ export function WorkspaceTabOverview({
     () => tabs.map((tab) => resolveWorkspaceTabDisplay(tab)),
     [tabs]
   );
-  const displayByKey = useMemo(() => {
-    const map: Record<string, (typeof displays)[number]> = {};
-    for (const item of displays) {
-      map[item.key] = item;
-    }
-    return map;
-  }, [displays]);
+  // rankTabSearch 返回的就是 display 对象本身，无需再按 key 回查。
   const visible = useMemo(() => rankTabSearch(displays, query), [displays, query]);
+  // key 来自文件路径 / URL / resourceKey，用 Map 避免 __proto__ 之类的键命中原型 setter。
   const openedAtByKey = useMemo(() => {
-    const map: Record<string, number | undefined> = {};
+    const map = new Map<string, number | undefined>();
     for (const tab of tabs) {
-      map[workspaceTabKey(tab)] = workspaceTabOpenedAt(tab);
+      map.set(workspaceTabKey(tab), workspaceTabOpenedAt(tab));
     }
     return map;
   }, [tabs]);
@@ -121,13 +116,9 @@ export function WorkspaceTabOverview({
           <CommandList className="max-h-80">
             <CommandGroup heading="打开的标签页">
               {visible.map((entry) => {
-                const display = displayByKey[entry.key];
-                if (!display) {
-                  return null;
-                }
                 const active = entry.key === activeKey;
                 const relative = formatTabRelativeTime(
-                  openedAtByKey[entry.key],
+                  openedAtByKey.get(entry.key),
                   now
                 );
                 return (
@@ -145,13 +136,13 @@ export function WorkspaceTabOverview({
                       active && "bg-selected text-foreground"
                     )}
                   >
-                    <WorkspaceTabIcon spec={display.icon} size="md" />
+                    <WorkspaceTabIcon spec={entry.icon} size="md" />
                     <span className="min-w-0 flex-1 truncate text-left">
-                      {display.title}
+                      {entry.title}
                     </span>
-                    {display.diffBadge ? (
+                    {entry.diffBadge ? (
                       <span className="shrink-0 text-ui-xs tabular-nums text-foreground-subtlest">
-                        {display.diffBadge}
+                        {entry.diffBadge}
                       </span>
                     ) : null}
                     {relative ? (
@@ -178,7 +169,7 @@ export function WorkspaceTabOverview({
                           ? "opacity-100"
                           : "opacity-0 group-hover/tab-row:opacity-100 group-focus-within/tab-row:opacity-100"
                       )}
-                      aria-label={`关闭 ${display.title}`}
+                      aria-label={`关闭 ${entry.title}`}
                     >
                       <X className="size-3" />
                     </button>

@@ -26,7 +26,8 @@ export function WorkspaceTabIcon({
   const box = size === "md" ? "size-5" : "size-4";
 
   if (spec.kind === "glyph") {
-    const Icon = GLYPH_ICONS[spec.glyph] || BotIcon;
+    // spec.glyph 是封闭联合，GLYPH_ICONS 对它是全覆盖映射，无需兜底分支。
+    const Icon = GLYPH_ICONS[spec.glyph];
     return (
       <Icon className={cn(box, "shrink-0 text-foreground-subtle")} />
     );

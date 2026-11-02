@@ -97,6 +97,20 @@ function openedAtFor(prev: WorkspaceTab[], key: string): number {
   return (existing && workspaceTabOpenedAt(existing)) || Date.now();
 }
 
+/** tab 条边缘渐隐遮罩：左右两侧都可滚时同时挂两边的 mask。 */
+function tabsMaskClass(mask: { left: boolean; right: boolean }): string {
+  if (mask.left && mask.right) {
+    return "mask-both";
+  }
+  if (mask.left) {
+    return "mask-left";
+  }
+  if (mask.right) {
+    return "mask-right";
+  }
+  return "";
+}
+
 /**
  * 打开一个子智能体 tab 的入参。
  *
@@ -818,13 +832,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
                 // 滚动条隐藏：边缘渐隐遮罩（mask-*，见 global.css）已经承担「还能滚」的
                 // 提示，再挂一条细滚动条就是多一条线（ZCode 用 `!scrollbar-hide`）。
                 "cute-workspace-tabs flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-                tabsMask.left && tabsMask.right
-                  ? "mask-both"
-                  : tabsMask.left
-                    ? "mask-left"
-                    : tabsMask.right
-                      ? "mask-right"
-                      : ""
+                tabsMaskClass(tabsMask)
               )}
             >
               {/* 没有「动态」按钮了：旧的动态跟随模式（`panelMode: "follow"`）已删掉，

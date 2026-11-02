@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   Copy,
@@ -16,8 +16,31 @@ import {
 } from "./workspaceFiles";
 import WorkspaceFileTree from "./WorkspaceFileTree";
 import { agentFileApi } from "@/services/agentFile";
-import { copyText } from "@/utils";
+import { copyToClipboard } from "@/utils";
 import { toast } from "sonner";
+
+type ToolbarButtonProps = {
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+};
+
+/** 侧栏工具条按钮：统一尺寸 / 颜色 / 禁用态，title 与 aria-label 同源。 */
+function ToolbarButton({ label, onClick, disabled, children }: ToolbarButtonProps) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-text-muted)] transition-colors hover:bg-black/[0.05] hover:text-[var(--chat-text)] disabled:opacity-40"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
 
 type TaskFileSidebarProps = {
   taskList?: PanelItemType[];
@@ -37,15 +60,34 @@ const TaskFileSidebar = memo(function TaskFileSidebar(props: TaskFileSidebarProp
   const resolveSelected = () =>
     files.find((item) => workspaceFileKey(item) === selectedFileKey) || files[0];
 
-  const handleCopySelectedLink = () => {
+  const handleCopySelectedLink = async () => {
     const selected = resolveSelected();
     const url = selected?.downloadUrl || selected?.url;
     if (!url) {
       toast.warning("暂无可复制链接");
       return;
     }
-    copyText(url);
+    const ok = await copyToClipboard(url);
+    if (!ok) {
+      toast.error("复制失败");
+      return;
+    }
     toast.success("链接已复制");
+  };
+
+  const handleCopySelectedPath = async () => {
+    const selected = resolveSelected();
+    const path = selected ? workspaceRelativePath(selected) || selected.name : "";
+    if (!path) {
+      toast.warning("暂无文件");
+      return;
+    }
+    const ok = await copyToClipboard(path);
+    if (!ok) {
+      toast.error("复制失败");
+      return;
+    }
+    toast.success("路径已复制");
   };
 
   const handleDownloadAll = async () => {
@@ -73,48 +115,32 @@ const TaskFileSidebar = memo(function TaskFileSidebar(props: TaskFileSidebarProp
       <div className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-1">
         <div className="text-ui-caption font-medium text-[var(--chat-text)]">全部文件</div>
         <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-text-muted)] transition-colors hover:bg-black/[0.05] hover:text-[var(--chat-text)] disabled:opacity-40"
-            title="下载全部"
+          <ToolbarButton
+            label="下载全部"
             disabled={archiving || !files.length}
             onClick={() => void handleDownloadAll()}
           >
             <Download className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-text-muted)] transition-colors hover:bg-black/[0.05] hover:text-[var(--chat-text)]"
-            title="复制链接"
-            onClick={handleCopySelectedLink}
+          </ToolbarButton>
+          <ToolbarButton
+            label="复制链接"
+            onClick={() => void handleCopySelectedLink()}
           >
             <Link2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-text-muted)] transition-colors hover:bg-black/[0.05] hover:text-[var(--chat-text)]"
-            title="复制路径"
-            onClick={() => {
-              const selected = resolveSelected();
-              const path = selected ? workspaceRelativePath(selected) || selected.name : "";
-              if (!path) {
-                toast.warning("暂无文件");
-                return;
-              }
-              copyText(path);
-              toast.success("路径已复制");
-            }}
+          </ToolbarButton>
+          <ToolbarButton
+            label="复制路径"
+            onClick={() => void handleCopySelectedPath()}
           >
             <Copy className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-text-muted)] transition-colors hover:bg-black/[0.05] hover:text-[var(--chat-text)]"
-            title="刷新"
+          </ToolbarButton>
+          <ToolbarButton
+            label="刷新"
+            disabled={!onRefresh}
             onClick={() => onRefresh?.()}
           >
             <RefreshCw className="h-3.5 w-3.5" />
-          </button>
+          </ToolbarButton>
         </div>
       </div>
 

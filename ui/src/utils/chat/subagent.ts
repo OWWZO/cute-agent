@@ -459,7 +459,9 @@ export function buildSubAgentAction(task: CHAT.Task) {
   };
 }
 
-export function buildSubAgentMarkdown(task?: CHAT.Task) {
+export function buildSubAgentMarkdown(
+  task?: Partial<CHAT.Task> | Partial<MESSAGE.Task>
+) {
   const display = resolveSubAgentDisplay(task);
   if (!display.isAgent) {
     return "";

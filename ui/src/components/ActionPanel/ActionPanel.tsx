@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { EASE_OUT } from "@/lib/motion";
 import { useMsgTypes } from "./useMsgTypes";
 import HTMLRenderer from "./HTMLRenderer";
-import useContent from "./useContent";
+import resolvePanelContent from "./panelContent";
 import MarkdownRenderer from "./MarkdownRenderer";
 import TableRenderer from "./TableRenderer";
 import FileRenderer from "./FileRenderer";
@@ -90,7 +90,7 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
 
   const msgTypes = useMsgTypes(taskItem);
   // 复用 useMsgTypes 已解析的 resultMap / toolResult，避免同一面板再遍历一次任务树。
-  const { markDownContent } = useContent(taskItem, msgTypes);
+  const { markDownContent } = resolvePanelContent(taskItem, msgTypes);
 
   const resultMap = msgTypes?.resultMap ?? resolveTaskResultMap(taskItem);
   const toolResult = msgTypes?.toolResult;

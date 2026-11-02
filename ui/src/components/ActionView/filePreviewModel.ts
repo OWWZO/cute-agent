@@ -2,6 +2,7 @@ import type { PanelItemType } from "../ActionPanel";
 import {
   resolveDeepSearchStage,
   resolveDeepSearchTitle,
+  shouldRenderDeepSearchPreview,
   shouldRenderDeepSearchWorkspace,
 } from "@/utils/deepSearch";
 import { getStableTaskIdentity } from "@/utils/chat";
@@ -10,6 +11,19 @@ import {
   resolveTaskToolResult,
 } from "@/utils/chat/toolCalls";
 import { isFileListOnlyTask } from "@/utils/taskArtifacts";
+
+/** 有产物文件的 message 类型；标题解析与预览过滤共用，避免两处各写一份漂移。 */
+const FILE_PREVIEW_MESSAGE_TYPES: readonly string[] = [
+  "file",
+  "html",
+  "markdown",
+  "code",
+  "ppt",
+  "data_analysis",
+];
+
+/** 摘要 / 最终结果不是普通产物 tab，预览列表一律排除。 */
+const NON_ARTIFACT_MESSAGE_TYPES: readonly string[] = ["task_summary", "result"];
 
 export interface PreviewRendererFlags {
   useFile?: boolean;
@@ -29,7 +43,7 @@ export function filterPreviewTaskList(taskList?: PanelItemType[]) {
   return (taskList || []).filter(
     (item) =>
       !isFileListOnlyTask(item) &&
-      !["task_summary", "result"].includes(item.messageType) &&
+      !NON_ARTIFACT_MESSAGE_TYPES.includes(item.messageType) &&
       (
         item.messageType !== "deep_search" ||
         shouldRenderDeepSearchWorkspace(resolveTaskResultMap(item).messageType)
@@ -83,9 +97,7 @@ export function resolvePreviewTitle(
   }
 
   if (
-    ["file", "html", "markdown", "code", "ppt", "data_analysis"].includes(
-      messageType
-    )
+    FILE_PREVIEW_MESSAGE_TYPES.includes(messageType)
   ) {
     return primaryFile?.name || messageType;
   }
@@ -111,11 +123,8 @@ export function resolvePreviewLeadingIcon(
   }
 
   const stage = resolveDeepSearchStage(resolveTaskResultMap(taskItem).messageType);
-  return stage === "extend" ||
-    stage === "search" ||
-    stage === "chapter_summary"
-    ? "search"
-    : undefined;
+  // 与左侧预览同一份阶段判定，避免深搜加阶段时前导图标漂移。
+  return shouldRenderDeepSearchPreview(stage) ? "search" : undefined;
 }
 
 export function resolvePreviewCanPreview(

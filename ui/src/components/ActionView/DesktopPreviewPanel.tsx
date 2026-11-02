@@ -41,7 +41,7 @@ const DesktopPreviewPanel: CuteType.FC<DesktopPreviewPanelProps> = ({
           type="button"
           onClick={onClose}
           className={iconButtonClass}
-          title="关闭工作区"
+          title="关闭桌面预览"
           aria-label="关闭桌面预览"
         >
           <PanelRightClose className="h-4 w-4" aria-hidden="true" />

@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 /**
  * tab 标题的悬停提示（移植 ZCode `SidePaneTabTitleTooltip.tsx`）。
@@ -19,23 +20,34 @@ import {
  * 组件内部自带 Provider（ZCode 也是每个 tab 一个）：这样调用方只需替换原来的
  * `<button>`，不用在 tab 列表外面多套一层容器、也不必给整块内容重排缩进。
  */
+type TabTitleTooltipProps = Omit<
+  ComponentProps<"button">,
+  "type" | "onClick" | "children"
+> & {
+  label: string;
+  onActivate: () => void;
+  children: ReactNode;
+};
+
 export function TabTitleTooltip({
   label,
   onActivate,
   children,
-}: {
-  label: string;
-  onActivate: () => void;
-  children: ReactNode;
-}) {
+  className,
+  ...buttonProps
+}: TabTitleTooltipProps) {
   return (
     <TooltipProvider delayDuration={1500} skipDelayDuration={0}>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
+            {...buttonProps}
             type="button"
             onClick={onActivate}
-            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1.5 text-left",
+              className
+            )}
           >
             {children}
           </button>

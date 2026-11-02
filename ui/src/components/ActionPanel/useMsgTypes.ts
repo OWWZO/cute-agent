@@ -27,9 +27,30 @@ export type ParsedTaskResult = {
   resultMap: MESSAGE.ResultMap;
   toolResult?: ResolvedToolResult;
   toolResultText: string;
-  parsedToolResult?: any;
+  parsedToolResult?: unknown;
   isToolResultJsonValid: boolean;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** 搜索结果可能本身就是数组，也可能包在 data / hits / results 字段里。 */
+function pickSearchRows(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (!isRecord(value)) {
+    return [];
+  }
+  const candidates: unknown[] = [value.data, value.hits, value.results];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+  return [];
+}
 
 export const getSearchList = (
   taskItem?: PanelItemType,
@@ -50,18 +71,16 @@ export const getSearchList = (
     if (toolName === 'search') {
       const resultText =
         resolved?.toolResultText ?? resolveTaskToolResultText(taskItem, toolResult);
-      let tool = resolved?.parsedToolResult;
+      let tool: unknown = resolved?.parsedToolResult;
       if (!resolved) {
         try {
           tool = JSON.parse(resultText || "{}");
         } catch {
+          // 工具输出不是合法 JSON：视为没有结构化搜索结果，回退到空列表。
           return [];
         }
       }
-      const list =
-        [tool?.data, tool?.hits, tool?.results, tool].find((value) =>
-          Array.isArray(value)
-        ) || [];
+      const list = pickSearchRows(tool);
       return list.length
         ? list.map((item) => {
           const row =
@@ -113,13 +132,14 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
     const resultMap = resolveTaskResultMap(taskItem);
     const toolResult = resolveTaskToolResult(taskItem);
     const toolResultText = resolveTaskToolResultText(taskItem, toolResult);
-    let parsedToolResult: any;
+    let parsedToolResult: unknown;
     let isToolResultJsonValid = false;
     if (taskItem.messageType === "tool_result" && toolResultText) {
       try {
         parsedToolResult = JSON.parse(toolResultText);
         isToolResultJsonValid = true;
       } catch {
+        // 非法 JSON 保持 isToolResultJsonValid=false，调用方回退到文本渲染。
         parsedToolResult = undefined;
       }
     }
@@ -144,12 +164,6 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
     const { resultMap, toolResult, toolResultText } = parsedTask;
     const rawToolName = String(toolResult?.toolName || "").toLowerCase();
     const primaryFile = getPrimaryTaskFile(taskItem);
-    const fileName = primaryFile?.name || '';
-    const normalizedFileName = fileName.toLowerCase();
-    const normalizedMimeType = (primaryFile?.mimeType || '').toLowerCase();
-    const isHtmlFile = normalizedFileName.endsWith('.html')
-      || normalizedFileName.endsWith('.htm')
-      || normalizedMimeType.includes('text/html');
     // 类型判定统一走 resolveFilePreviewKind，不再各自维护扩展名表。
     const primaryKind = primaryFile
       ? resolveFilePreviewKind({
@@ -170,7 +184,7 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
     } else if (messageType === 'tool_result' && rawToolName === 'code_interpreter' && toolResultText) {
       isHtml = isHTML(toolResultText);
     }
-    const useHtml = messageType === 'html' || (!!primaryFile && isHtmlFile);
+    const useHtml = messageType === 'html' || primaryKind === 'html';
     const usePpt = messageType === 'ppt' || (!!primaryFile && isPptFileLike(primaryFile));
     // 只要主文件是图片就走图片预览（图表/工具产物常见为 tool_result + .png）。
     // 注意 SVG 不算位图：它要「图形 / 源码」双模式，走 useSvg。
@@ -214,7 +228,7 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
         messageType === "tool_result" &&
         !!toolResultText &&
         parsedTask.isToolResultJsonValid &&
-        !isSubAgentParentTask(taskItem as unknown as CHAT.Task),
+        !isSubAgentParentTask(taskItem),
       isHtml,
       searchList,
       usePpt
