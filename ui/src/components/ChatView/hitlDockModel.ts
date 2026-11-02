@@ -49,10 +49,6 @@ function isEffectivelyPending(tool?: CHAT.Task | null): boolean {
   return !isHitlCardSettled(tool);
 }
 
-function isPendingStatus(status: string): boolean {
-  return status === "pending" || !status;
-}
-
 function readHitlId(task: CHAT.Task): string {
   const resultMap = asRecord(task.resultMap);
   const nested = asRecord(resultMap.resultMap);
@@ -210,8 +206,4 @@ export function resolveHitlDockSlot(
     return "approval";
   }
   return "composer";
-}
-
-export function isHitlPendingStatus(status?: string): boolean {
-  return isPendingStatus(String(status || "").trim().toLowerCase());
 }
