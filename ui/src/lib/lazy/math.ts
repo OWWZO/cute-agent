@@ -15,7 +15,12 @@ let mathPluginsPromise: Promise<MathPlugins> | undefined;
  */
 export function loadMathPlugins(): Promise<MathPlugins> {
   return (mathPluginsPromise ??= import("./katexPlugins").then(
-    (module) => module.mathPlugins
+    (module) => module.mathPlugins,
+    (error: unknown) => {
+      // 失败的 chunk 不缓存，否则重试永远拿到同一个 rejection。
+      mathPluginsPromise = undefined;
+      throw error;
+    }
   ));
 }
 

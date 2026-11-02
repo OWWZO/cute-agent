@@ -21,15 +21,24 @@ interface PdfRendererProps {
   className?: string;
 }
 
-const resolveFetchError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error || "");
-  if (
-    message.includes("Failed to fetch") ||
-    message.includes("Network response was not ok") ||
-    message.includes("NetworkError")
-  ) {
-    return "引用资源不存在或已失效";
+/** PDF 取数失败：`status` 为 null 表示请求没拿到响应（网络中断 / CORS 拦截）。 */
+class PdfFetchError extends Error {
+  readonly status: number | null;
+
+  constructor(status: number | null) {
+    super(status === null ? "PDF 请求失败" : `PDF 请求失败（HTTP ${status}）`);
+    this.name = "PdfFetchError";
+    this.status = status;
   }
+}
+
+const resolveFetchError = (error: unknown) => {
+  if (error instanceof PdfFetchError) {
+    return error.status === null
+      ? "引用资源不存在或已失效（网络请求失败，请检查网络或跨域配置）"
+      : `引用资源不存在或已失效（HTTP ${error.status}）`;
+  }
+  const message = error instanceof Error ? error.message : String(error || "");
   return message || "引用资源不存在或已失效";
 };
 
@@ -73,8 +82,15 @@ const PdfRenderer: React.FC<PdfRendererProps> = React.memo((props) => {
       abortRef.current = controller;
       if (missingReason) throw new Error(missingReason);
       if (!resolvedUrl) throw new Error("引用资源不存在或已失效");
-      const response = await fetch(resolvedUrl, { signal: controller.signal });
-      if (!response.ok) throw new Error("Network response was not ok");
+      const response = await fetch(resolvedUrl, { signal: controller.signal }).catch(
+        (error: unknown) => {
+          // fetch 只在网络层失败时 reject（各浏览器的 TypeError 文案并不一致），
+          // 统一归类为网络失败；主动 abort（卸载 / 切 URL）保持原样。
+          if (controller.signal.aborted) throw error;
+          throw new PdfFetchError(null);
+        }
+      );
+      if (!response.ok) throw new PdfFetchError(response.status);
       return await response.arrayBuffer();
     },
     { refreshDeps: [resolvedUrl, missingReason] }

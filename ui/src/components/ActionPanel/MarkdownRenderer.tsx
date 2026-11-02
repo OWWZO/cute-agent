@@ -149,22 +149,27 @@ const MarkdownRenderer: CuteType.FC<{
   // 数学公式按需加载：只有内容里出现 `$...$` / `$$...$$` 时才拉取 katex（含样式）。
   const hasMath = useMemo(() => containsMath(normalizedContent), [normalizedContent]);
   const [mathPlugins, setMathPlugins] = useState<MathPlugins | null>(null);
+  const [mathLoadFailed, setMathLoadFailed] = useState(false);
+  const [mathLoadAttempt, setMathLoadAttempt] = useState(0);
 
   useEffect(() => {
     if (!hasMath || mathPlugins) return;
     let cancelled = false;
     void loadMathPlugins()
       .then((plugins) => {
-        if (!cancelled) setMathPlugins(plugins);
+        if (cancelled) return;
+        setMathPlugins(plugins);
+        setMathLoadFailed(false);
       })
       .catch((error) => {
-        // 公式插件加载失败不影响其余 markdown 渲染，退化成纯文本。
+        // 公式插件加载失败不影响其余 markdown 渲染，退化成纯文本并给出重试入口。
         console.error('加载数学公式插件失败', error);
+        if (!cancelled) setMathLoadFailed(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [hasMath, mathPlugins]);
+  }, [hasMath, mathPlugins, mathLoadAttempt]);
 
   const remarkPlugins = useMemo(
     () => (mathPlugins ? [gfm, ...mathPlugins.remarkPlugins] : [gfm]),
@@ -247,6 +252,24 @@ const MarkdownRenderer: CuteType.FC<{
 
   return (
     <div className={cn('w-full markdown-body kimi-md', className)}>
+      {hasMath && mathLoadFailed ? (
+        <div
+          role="status"
+          className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface-muted)] px-3 py-2 text-ui-sm text-[var(--chat-text-muted)]"
+        >
+          <span className="min-w-0 flex-1">公式渲染组件加载失败，当前按原始文本显示。</span>
+          <button
+            type="button"
+            className="shrink-0 underline hover:text-[var(--chat-text)]"
+            onClick={() => {
+              setMathLoadFailed(false);
+              setMathLoadAttempt((attempt) => attempt + 1);
+            }}
+          >
+            重试
+          </button>
+        </div>
+      ) : null}
       {blockContents.map((content, index) => (
         <MarkdownBlock
           key={index}
