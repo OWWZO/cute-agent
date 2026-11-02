@@ -559,6 +559,64 @@ describe("buildChildSessionRounds", () => {
     expect(rounds[1]?.conclusion?.result).toBe("最新正文");
   });
 
+  it("实时帧只遍历一次并按 run 分组", () => {
+    let iterations = 0;
+    const frames = {
+      [Symbol.iterator]() {
+        iterations += 1;
+        return [
+          {
+            reqId: "r2",
+            eventSeq: 1,
+            ...frameOf(
+              eventData({
+                messageType: "agent_stream",
+                result: "实时正文"
+              })
+            ),
+          },
+        ][Symbol.iterator]();
+      },
+    };
+    const rounds = buildChildSessionRounds({
+      childSessionId: "sub_1",
+      history: historyPage([
+        { requestId: "r1", status: "SUCCESS", queryPreview: "旧问", hasReplay: false },
+        { requestId: "r2", status: "RUNNING", queryPreview: "新问", hasReplay: false },
+      ]),
+      frames,
+    });
+
+    expect(iterations).toBe(1);
+    expect(rounds[1]?.conclusion?.result).toBe("实时正文");
+  });
+
+  it("未变化的历史 run 复用上一次投影", () => {
+    const history = historyPage([
+      {
+        requestId: "r1",
+        status: "SUCCESS",
+        queryPreview: "第一问",
+        hasReplay: true
+      },
+    ]);
+    const replay = replayOf("r1", [
+      eventData({ messageType: "result", result: "结论" }),
+    ]);
+    const first = buildChildSessionRounds({
+      childSessionId: "sub_1",
+      history,
+      replays: { r1: replay },
+    });
+    const second = buildChildSessionRounds({
+      childSessionId: "sub_1",
+      history,
+      replays: { r1: replay },
+    });
+
+    expect(second[0]).toBe(first[0]);
+  });
+
   it("刚提交的 run 先补一条运行中的占位，落库后不重复", () => {
     const pendingRun = {
       requestId: "r2",

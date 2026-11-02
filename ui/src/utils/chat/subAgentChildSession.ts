@@ -62,7 +62,7 @@ export type BuildChildSessionChatInput = {
   /** 单 run 回放（账本事件），终态 run 的唯一轨迹来源 */
   replay?: ConversationRunReplay | null;
   /** 子会话 SSE 实时帧（MESSAGE.Answer 信封） */
-  frames?: unknown[];
+  frames?: Iterable<unknown>;
   /** 父卡兜底文案：history 还没回来时填 query，避免头部空白 */
   fallbackQuery?: string;
 };
@@ -372,7 +372,9 @@ function readReplayFrameEvents(
 }
 
 /** 实时帧按 eventSeq 去重；投影自带全量回放，重复序号直接丢弃。 */
-function readLiveFrameEvents(frames?: unknown[]): ChildSessionFrameEvent[] {
+function readLiveFrameEvents(
+  frames?: Iterable<unknown>
+): ChildSessionFrameEvent[] {
   const events: ChildSessionFrameEvent[] = [];
   let lastSeq = 0;
   for (const frame of frames || []) {
@@ -431,7 +433,7 @@ export function buildChildSessionChat(
    */
   const frameEvents = [
     ...readReplayFrameEvents(replayFrames),
-    ...readLiveFrameEvents(frames),
+    ...readLiveFrameEvents(frames ? [...frames] : undefined),
   ];
 
   // 先收集本会话自身的身份键，再逐帧剥离指向会话之外的父链标签。
@@ -462,7 +464,7 @@ export type BuildChildSessionRoundsInput = {
   /** 按 requestId 索引的回放；未拉取的 run 不在 map 里 */
   replays?: Record<string, ConversationRunReplay>;
   /** 子会话 SSE 实时帧（会话级流，按帧上的 reqId 归属到具体 run） */
-  frames?: unknown[];
+  frames?: Iterable<unknown>;
   /** 实时流当前所属的 run；帧上没有 reqId 时作为兜底归属 */
   liveRequestId?: string;
   /** 刚提交、账本尚未落库的 run：先在列表末尾补一条运行中的壳 */
@@ -472,25 +474,44 @@ export type BuildChildSessionRoundsInput = {
 };
 
 /**
- * 实时帧按 reqId 归属到某个 run；没有 reqId 的帧归给当前 live run。
- * 会话级流的投影只覆盖当前 run，按 reqId 过滤是防止重订拿到旧轮增量后串到新轮上。
+ * 实时帧按 reqId 一次性归属到各 run；没有 reqId 的帧归给当前 live run。
+ * 会话级流的投影只覆盖当前 run，按 reqId 分组是防止重订拿到旧轮增量后串到新轮上。
  */
-function pickRunFrames(
-  frames: unknown[] | undefined,
-  requestId: string,
+function groupRunFrames(
+  frames: Iterable<unknown> | undefined,
   liveRequestId: string
-): unknown[] | undefined {
-  if (!requestId || !frames?.length) {
-    return undefined;
+): Map<string, unknown[]> {
+  const grouped = new Map<string, unknown[]>();
+  if (!frames) {
+    return grouped;
   }
-  const picked = frames.filter((frame) => {
+  for (const frame of frames) {
     const frameRequestId = isRecord(frame) ? asText(frame.reqId) : "";
-    return frameRequestId
-      ? frameRequestId === requestId
-      : requestId === liveRequestId;
-  });
-  return picked.length > 0 ? picked : undefined;
+    const requestId = frameRequestId || liveRequestId;
+    if (!requestId) {
+      continue;
+    }
+    const bucket = grouped.get(requestId);
+    if (bucket) {
+      bucket.push(frame);
+    } else {
+      grouped.set(requestId, [frame]);
+    }
+  }
+  return grouped;
 }
+
+/** 未变化的历史 run 复用上一次投影：帧/回放/兜底文案都没变时不必重建 ChatItem。 */
+const runProjectionCache = new WeakMap<
+  object,
+  {
+    childSessionId: string;
+    replay: unknown;
+    frames: unknown[] | undefined;
+    fallbackQuery: string | undefined;
+    chat: CHAT.ChatItem;
+  }
+>();
 
 /**
  * 每个 run 一个 ChatItem，顺序与 `history.runs` 一致（旧 → 新）。
@@ -523,21 +544,44 @@ export function buildChildSessionRounds(
       buildChildSessionChat({
         childSessionId,
         history,
-        frames,
+        frames: frames ? [...frames] : undefined,
         fallbackQuery
       })
     ];
   }
   const liveRequestId =
     asText(input.liveRequestId) || asText(runs[runs.length - 1]?.requestId);
-  return runs.map((run, index) =>
-    buildChildSessionChat({
+  const framesByRun = groupRunFrames(frames, liveRequestId);
+  return runs.map((run, index) => {
+    const requestId = asText(run.requestId);
+    const runFrames = requestId ? framesByRun.get(requestId) : undefined;
+    const runReplay = replays?.[run.requestId] ?? null;
+    const runFallbackQuery = index === 0 ? fallbackQuery : undefined;
+    const cached = runProjectionCache.get(run);
+    if (
+      cached &&
+      cached.childSessionId === childSessionId &&
+      cached.replay === runReplay &&
+      cached.frames === runFrames &&
+      cached.fallbackQuery === runFallbackQuery
+    ) {
+      return cached.chat;
+    }
+    const chat = buildChildSessionChat({
       childSessionId,
       history,
       run,
-      replay: replays?.[run.requestId] ?? null,
-      frames: pickRunFrames(frames, asText(run.requestId), liveRequestId),
-      fallbackQuery: index === 0 ? fallbackQuery : undefined
-    })
-  );
+      replay: runReplay,
+      frames: runFrames,
+      fallbackQuery: runFallbackQuery
+    });
+    runProjectionCache.set(run, {
+      childSessionId,
+      replay: runReplay,
+      frames: runFrames,
+      fallbackQuery: runFallbackQuery,
+      chat
+    });
+    return chat;
+  });
 }
