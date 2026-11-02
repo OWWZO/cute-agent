@@ -105,7 +105,7 @@
   NSString * const JDIF_ICON_SHUJUYUAN = @"\U0000f097"; // 数据源
   NSString * const JDIF_ICON_MCPTIANCHONG = @"\U0000f478"; // MCP（填充）
   NSString * const JDIF_ICON_AICHATXUANZHONG = @"\U0000e773"; // Ai chat(选中)
-  NSString * const JDIF_ICON_JIA_1 = @"\U0000eed0"; // 清除
+  NSString * const JDIF_ICON_QINGCHU_1 = @"\U0000eed0"; // 清除
   NSString * const JDIF_ICON_CHAJIANTIANCHONG = @"\U0000f4c4"; // 插件（填充）
   NSString * const JDIF_ICON_SUANFAKU = @"\U0000f2bc"; // 算法库
   NSString * const JDIF_ICON_BIAOGE = @"\U0000e9bc"; // 表格
@@ -176,7 +176,7 @@
   NSString * const JDIF_ICON_ZHISHIKU = @"\U0000e571"; // 知识库
   NSString * const JDIF_ICON_BOTSHANGDIANTIANCHONG = @"\U0000e18b"; // bot商店（填充）
   NSString * const JDIF_ICON_TUOZHUAIPAIXU1 = @"\U0000ef7f"; // 拖拽排序
-  NSString * const JDIF_ICON_ZHENGYAN_1 = @"\U0000e073"; // 闭眼
+  NSString * const JDIF_ICON_BIYAN = @"\U0000e073"; // 闭眼
   NSString * const JDIF_ICON_SHIYAN = @"\U0000f47f"; // 实验
   NSString * const JDIF_ICON_JIAN = @"\U0000f2cc"; // 减
   NSString * const JDIF_ICON_YUYINTIANCHONG = @"\U0000eea0"; // 语音(填充)
