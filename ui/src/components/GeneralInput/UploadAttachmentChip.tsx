@@ -56,7 +56,9 @@ const UploadAttachmentChip = React.memo(function UploadAttachmentChip(props: {
   onRetryAttachment: (id: string) => void;
 }) {
   const attachments = usePromptInputAttachments();
-  const isImage = props.attachment.mediaType?.startsWith("image/") && props.attachment.url;
+  const isImage = Boolean(
+    props.attachment.mediaType?.startsWith("image/") && props.attachment.url
+  );
   const isUploading =
     props.uploadState?.status === "pending" ||
     props.uploadState?.status === "uploading";
@@ -112,6 +114,8 @@ const UploadAttachmentChip = React.memo(function UploadAttachmentChip(props: {
       {isError ? (
         <button
           type="button"
+          aria-label="重试上传"
+          title="重试上传"
           className="flex size-5 shrink-0 items-center justify-center rounded-full text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
           onClick={retryAttachment}
         >
@@ -120,6 +124,8 @@ const UploadAttachmentChip = React.memo(function UploadAttachmentChip(props: {
       ) : null}
       <button
         type="button"
+        aria-label="移除附件"
+        title="移除附件"
         className="flex size-5 shrink-0 items-center justify-center rounded-full text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
         onClick={removeAttachment}
       >
