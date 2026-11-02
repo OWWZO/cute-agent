@@ -44,6 +44,7 @@ import SessionTaskList from "./SessionTaskList";
 import UserBriefCard from "./UserBriefCard";
 import { AskUserToolCall } from "./tools/AskUserToolCall";
 import { isAnsweredAskUserTask } from "./timelineAskUser";
+import { TASK_STATUS } from "./taskStatus";
 import {
   StatusDot,
   ToolCallView,
@@ -187,9 +188,9 @@ export const ToolItem: FC<ToolItemProps> = memo(({
       const nested = (resultMap.resultMap || resultMap) as Record<string, unknown>;
       const toolAny = tool as unknown as Record<string, unknown>;
       const approvalStatus = String(
-        nested.status || resultMap.status || toolAny.status || "pending"
+        nested.status || resultMap.status || toolAny.status || TASK_STATUS.pending
       ).toLowerCase();
-      const pending = !approvalStatus || approvalStatus === "pending";
+      const pending = !approvalStatus || approvalStatus === TASK_STATUS.pending;
       if (pending) {
         return (
           <div className="kimi-ui-card kimi-appr">
