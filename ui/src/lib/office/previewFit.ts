@@ -6,6 +6,9 @@
  * 窄面板下若不放缩就会被撑破并出现横向滚动条。
  */
 
+/** A4 纸在 96dpi 下的像素宽度（docx 默认页面宽度）。 */
+export const A4_PAGE_WIDTH_PX = 794;
+
 export interface DocxPreviewFit {
   scale: number;
   width: number;

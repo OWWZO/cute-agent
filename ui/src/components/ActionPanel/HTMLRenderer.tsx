@@ -215,30 +215,23 @@ const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
     );
   }
 
+  const renderMessage = (message: string) => (
+    <div
+      className={cn(
+        "flex h-full min-h-[320px] items-center justify-center p-6 text-[var(--color-danger)]",
+        className
+      )}
+    >
+      {message}
+    </div>
+  );
+
   if (error) {
-    return (
-      <div
-        className={cn(
-          "flex h-full min-h-[320px] items-center justify-center p-6 text-[var(--color-danger)]",
-          className
-        )}
-      >
-        {error}
-      </div>
-    );
+    return renderMessage(error);
   }
 
   if (missingReason && !htmlUrl && !htmlContent) {
-    return (
-      <div
-        className={cn(
-          "flex h-full min-h-[320px] items-center justify-center p-6 text-[var(--color-danger)]",
-          className
-        )}
-      >
-        {missingReason}
-      </div>
-    );
+    return renderMessage(missingReason);
   }
 
   if (htmlUrl || htmlContent) {

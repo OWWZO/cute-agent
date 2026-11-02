@@ -16,6 +16,9 @@ const LOADING_CLASS = "mr-32";
 const ERROR_CLASS =
   "m-6 min-w-[260px] max-w-[calc(100%-48px)] [&_[data-slot=alert-description]]:break-words [&_[data-slot=alert-description]]:whitespace-normal";
 
+/** 取不到文件时的统一文案：网络失败、空 URL、后端标记缺失共用。 */
+const MISSING_RESOURCE_MESSAGE = "引用资源不存在或已失效";
+
 /** 文本预览上限：超过 2 MB 的 Markdown 不应整块进内存。 */
 const MAX_MARKDOWN_PREVIEW_BYTES = 2 * 1024 * 1024;
 
@@ -61,9 +64,9 @@ const resolveFetchError = (error: unknown) => {
     message.includes("Network response was not ok") ||
     message.includes("NetworkError")
   ) {
-    return "引用资源不存在或已失效";
+    return MISSING_RESOURCE_MESSAGE;
   }
-  return message || "引用资源不存在或已失效";
+  return message || MISSING_RESOURCE_MESSAGE;
 };
 
 /**
@@ -94,7 +97,7 @@ const MarkdownFileRenderer: CuteType.FC<MarkdownFileRendererProps> = React.memo(
   const { data: content, loading, error } = useRequest(
     async () => {
       if (missingReason) throw new Error(missingReason);
-      if (!resolvedUrl) throw new Error("引用资源不存在或已失效");
+      if (!resolvedUrl) throw new Error(MISSING_RESOURCE_MESSAGE);
       const response = await fetch(resolvedUrl);
       if (!response.ok) throw new Error("Network response was not ok");
       const contentType = response.headers.get("content-type");

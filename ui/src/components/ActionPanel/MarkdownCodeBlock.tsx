@@ -5,15 +5,15 @@ import {
   KimiCodeFence,
 } from "@/components/Dialogue/markdown/KimiCodeFence";
 import MermaidBlock from "./MermaidBlock";
-import type { BundledLanguage } from "shiki";
 
 import { cn } from "@/lib/utils";
 
 /** 终答 Markdown 的代码围栏渲染器形状（`react-markdown` 的 `components.code`）。 */
 export type MarkdownCodeBlockProps = {
-  inline?: boolean;
   className?: string;
   children?: unknown;
+  /** `MarkdownPre` 给块级代码注入的标记；`react-markdown` v10 不再传 `inline`。 */
+  "data-block"?: string;
 };
 
 function childrenToText(children: unknown): string {
@@ -47,10 +47,9 @@ function cnInlineCode(className?: string) {
  */
 export const createCodeBlock =
   (streaming: boolean): React.FC<MarkdownCodeBlockProps> =>
-    function CodeBlock({ inline, className, children, ...rest }) {
-      // Streamdown 用 data-block 标记围栏；react-markdown 的 MarkdownPre 会补同一个标记
-      const isBlock =
-        inline === false || Object.prototype.hasOwnProperty.call(rest, "data-block");
+    function CodeBlock({ className, children, ...rest }) {
+      // 块级围栏由 MarkdownPre 注入 data-block；行内代码没有这个标记。
+      const isBlock = Object.prototype.hasOwnProperty.call(rest, "data-block");
       const match = /language-(\w+)/.exec(className || "");
       const trimmed = childrenToText(children).replace(/\n$/, "");
 
@@ -64,12 +63,11 @@ export const createCodeBlock =
       }
 
       if (isBlock && match) {
-        const rawLang = match[1];
-        const safeLanguage = rawLang as BundledLanguage;
+        // 未知语言由 KimiCodeFence / Shiki 自行回退为纯文本，这里不做协议校验。
         return (
           <KimiCodeFence
             code={trimmed}
-            language={safeLanguage}
+            language={match[1]}
             streaming={streaming}
           />
         );

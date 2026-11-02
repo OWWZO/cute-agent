@@ -9,7 +9,6 @@ import PptxRenderer from "./PptxRenderer";
 import SvgFileRenderer from "./SvgFileRenderer";
 import TableRenderer from "./TableRenderer";
 import WordRenderer from "./WordRenderer";
-import DocumentFallback from "./DocumentFallback";
 import GenUiModel3D from "@/components/genui/GenUiModel3D";
 import { resolveFilePreviewKind } from "@/lib/filePreview/kinds";
 
@@ -40,20 +39,19 @@ export function FilePreviewSwitch(props: FilePreviewSwitchProps): ReactNode {
 
   const kind = resolveFilePreviewKind({ name: fileName, mimeType, url: fileUrl });
   const resolvedDownload = downloadUrl || fileUrl;
+  // 大多数渲染器共享同一组文件入参；统一在这里维护，新增渲染器不会漏传。
+  const fileProps = {
+    fileUrl,
+    fileName,
+    downloadUrl: resolvedDownload,
+    missingReason,
+  };
 
   // 强制源码模式：**任何**类型都不走专门预览器，一律按纯文本读。
   // 这一条必须在 switch 之前短路 —— 否则 markdown / svg / 图片等「有预览形态」的类型
   // 会绕过 forceSource（历史行为：forceSource 会把它们交给 FileRenderer 取文本）。
   if (forceSource) {
-    return (
-      <FileRenderer
-        fileUrl={fileUrl}
-        fileName={fileName}
-        downloadUrl={resolvedDownload}
-        missingReason={missingReason}
-        forceSource
-      />
-    );
+    return <FileRenderer {...fileProps} forceSource />;
   }
 
   switch (kind) {
@@ -70,10 +68,7 @@ export function FilePreviewSwitch(props: FilePreviewSwitchProps): ReactNode {
     case "svg":
       return (
         <SvgFileRenderer
-          fileUrl={fileUrl}
-          fileName={fileName}
-          downloadUrl={resolvedDownload}
-          missingReason={missingReason}
+          {...fileProps}
           hideChrome={embedded}
           className="h-full"
         />
@@ -82,10 +77,7 @@ export function FilePreviewSwitch(props: FilePreviewSwitchProps): ReactNode {
     case "markdown":
       return (
         <MarkdownFileRenderer
-          fileUrl={fileUrl}
-          fileName={fileName}
-          downloadUrl={resolvedDownload}
-          missingReason={missingReason}
+          {...fileProps}
           hideChrome={embedded}
           className="h-full"
         />
@@ -115,10 +107,7 @@ export function FilePreviewSwitch(props: FilePreviewSwitchProps): ReactNode {
     case "pdf":
       return (
         <PdfRenderer
-          fileUrl={fileUrl}
-          fileName={fileName}
-          downloadUrl={resolvedDownload}
-          missingReason={missingReason}
+          {...fileProps}
           hideChrome={embedded}
           className="h-full"
         />
@@ -128,10 +117,7 @@ export function FilePreviewSwitch(props: FilePreviewSwitchProps): ReactNode {
     case "doc":
       return (
         <WordRenderer
-          fileUrl={fileUrl}
-          fileName={fileName}
-          downloadUrl={resolvedDownload}
-          missingReason={missingReason}
+          {...fileProps}
           legacyDoc={kind === "doc"}
           hideChrome={embedded}
           className="h-full"
@@ -150,57 +136,20 @@ export function FilePreviewSwitch(props: FilePreviewSwitchProps): ReactNode {
       );
 
     case "pptx":
-      // 有可读文件就交给内置渲染引擎；拿不到文件才回落下载引导。
-      if (!fileUrl) {
-        return (
-          <DocumentFallback
-            label="PPT"
-            title="演示文稿暂不可预览"
-            description={
-              missingReason ||
-              "未拿到可读取的演示文稿文件，请下载后用 PowerPoint / WPS 打开。若产物已转为 HTML 演示页，请打开对应 .html 文件。"
-            }
-            fileName={fileName}
-            downloadUrl={resolvedDownload}
-            className="h-full"
-            type="info"
-          />
-        );
-      }
-      return (
-        <PptxRenderer
-          fileUrl={fileUrl}
-          fileName={fileName}
-          downloadUrl={resolvedDownload}
-          missingReason={missingReason}
-          className="h-full"
-        />
-      );
+      // 空 URL / 缺失原因由渲染器自己回落到下载引导，分派层不再单独判断。
+      return <PptxRenderer {...fileProps} className="h-full" />;
 
     case "xlsx":
     case "csv":
       return (
-        <TableRenderer
-          fileUrl={fileUrl}
-          fileName={fileName}
-          downloadUrl={resolvedDownload}
-          missingReason={missingReason}
-          className="h-full min-h-0"
-        />
+        <TableRenderer {...fileProps} className="h-full min-h-0" />
       );
 
     default:
       break;
   }
 
-  return (
-    <FileRenderer
-      fileUrl={fileUrl}
-      fileName={fileName}
-      downloadUrl={resolvedDownload}
-      missingReason={missingReason}
-    />
-  );
+  return <FileRenderer {...fileProps} />;
 }
 
 export default FilePreviewSwitch;

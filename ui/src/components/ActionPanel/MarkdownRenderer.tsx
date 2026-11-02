@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown';
+import type { ExtraProps } from 'react-markdown';
 import gfm from 'remark-gfm';
 import { cloneElement, isValidElement, memo, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
@@ -27,6 +28,19 @@ const MarkdownPre: CuteType.FC<{ children?: ReactNode }> = ({ children }) =>
     ? cloneElement(children as ReactElement<Record<string, unknown>>, { "data-block": "" })
     : <>{children}</>;
 
+/** 剥掉 react-markdown 注入的 AST 节点，避免它被当作属性透传到 DOM。 */
+function stripNode<T extends { node?: unknown }>(props: T): Omit<T, "node"> {
+  const rest = { ...props };
+  delete rest.node;
+  return rest;
+}
+
+/** 只有音视频交给内嵌播放器；图片与其他链接维持默认渲染。 */
+function resolvePlayableMediaKind(href?: string | null): 'video' | 'audio' | null {
+  const kind = resolveMarkdownMediaKind(href);
+  return kind === 'video' || kind === 'audio' ? kind : null;
+}
+
 /**
  * components 工厂。
  *
@@ -44,14 +58,13 @@ const buildMarkdownComponents = (
 
   // 链接统一新标签打开；相对文件名先走产物表解析。
   // 指向 mp4/mp3 等时内嵌 video/audio，避免只显示冷链接。
-  const MarkdownLink = (linkProps: unknown) => {
-    const anchorProps = { ...(linkProps as Record<string, unknown>) };
-    delete anchorProps.node;
+  const MarkdownLink = (linkProps: ComponentProps<'a'> & ExtraProps) => {
+    const anchorProps = stripNode(linkProps);
     const href = resolveHref(
       typeof anchorProps.href === 'string' ? anchorProps.href : undefined
     );
-    const mediaKind = resolveMarkdownMediaKind(href);
-    if ((mediaKind === 'video' || mediaKind === 'audio') && href) {
+    const mediaKind = resolvePlayableMediaKind(href);
+    if (mediaKind && href) {
       const label =
         typeof anchorProps.children === 'string'
           ? anchorProps.children
@@ -60,7 +73,7 @@ const buildMarkdownComponents = (
     }
     return (
       <a
-        {...(anchorProps as ComponentProps<'a'>)}
+        {...anchorProps}
         href={href}
         target="_blank"
         rel="noreferrer"
@@ -68,9 +81,8 @@ const buildMarkdownComponents = (
     );
   };
 
-  const MarkdownImage = (imageProps: unknown) => {
-    const imgProps = { ...(imageProps as Record<string, unknown>) };
-    delete imgProps.node;
+  const MarkdownImage = (imageProps: ComponentProps<'img'> & ExtraProps) => {
+    const imgProps = stripNode(imageProps);
     const src = resolveHref(
       typeof imgProps.src === 'string' ? imgProps.src : undefined
     );
@@ -81,8 +93,8 @@ const buildMarkdownComponents = (
     };
     const width = toDimension(imgProps.width);
     const height = toDimension(imgProps.height);
-    const mediaKind = resolveMarkdownMediaKind(src);
-    if ((mediaKind === 'video' || mediaKind === 'audio') && src) {
+    const mediaKind = resolvePlayableMediaKind(src);
+    if (mediaKind && src) {
       return <MarkdownMediaPlayer kind={mediaKind} src={src} title={alt} />;
     }
     return <MarkdownImagePreview src={src || ''} alt={alt} width={width} height={height} />;

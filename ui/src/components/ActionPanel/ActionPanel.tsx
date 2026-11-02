@@ -42,10 +42,6 @@ const ContentWrapper = ({ children }: { children: React.ReactNode }) => (
       opacity: 1,
       y: 0,
     }}
-    exit={{
-      opacity: 0,
-      y: -6,
-    }}
     transition={{
       duration: 0.18,
       ease: EASE_OUT,

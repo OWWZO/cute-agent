@@ -25,17 +25,23 @@ const TEXT_CLASS = 'mt-6 text-lg text-[var(--chat-text-soft)]';
 const Loading: CuteType.FC<LoadingProps> = React.memo(({ loading, className, children, branded = false }) => {
   if (!loading) return null;
 
+  const label = children || '加载中';
+
   return (
-    <div className={cn(LOADING_CONTAINER_CLASS, className)}>
+    <div
+      className={cn(LOADING_CONTAINER_CLASS, className)}
+      role="status"
+      aria-live="polite"
+    >
       {branded ? (
         // 球体自带呼吸感，不再叠加 spinner：两个动画同时转会互相干扰。
         <>
           <AnimatedOrb size={40} />
-          <p className={TEXT_CLASS}>{children || '加载中'}</p>
+          <p className={TEXT_CLASS}>{label}</p>
         </>
       ) : (
         <LoadingSpinner className='text-[32px]'>
-          <p className={TEXT_CLASS}>{children || '加载中'}</p>
+          <p className={TEXT_CLASS}>{label}</p>
         </LoadingSpinner>
       )}
     </div>

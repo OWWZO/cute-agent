@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { DocModel } from "@extend-ai/react-docx";
 import { buildLegacyDocModel, loadLegacyDocModule, type LegacyDocModule } from "@/lib/lazy/legacyDocImport";
 import {
+  A4_PAGE_WIDTH_PX,
   calculateDocxPreviewFit,
   isSameDocxPreviewFit,
   type DocxPreviewFit,
@@ -182,7 +183,10 @@ const LegacyDocCanvas: CuteType.FC<LegacyDocCanvasProps> = (props) => {
                     zoomScale={fit?.scale ?? 1}
                   />
                 ) : (
-                  <div className="min-h-[300px] w-[794px]" />
+                  <div
+                    className="min-h-[300px]"
+                    style={{ width: A4_PAGE_WIDTH_PX }}
+                  />
                 )}
               </div>
             </div>

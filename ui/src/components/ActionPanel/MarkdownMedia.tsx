@@ -28,15 +28,6 @@ export const MarkdownImagePreview: CuteType.FC<{
         width={width}
         height={height}
         className="markdown-media-image"
-        style={{
-          maxWidth: 'min(360px, 100%)',
-          maxHeight: 280,
-          width: 'auto',
-          height: 'auto',
-          objectFit: 'contain',
-          borderRadius: '0.65rem',
-          cursor: 'zoom-in'
-        }}
       />
     </span>
   );
@@ -53,26 +44,24 @@ export const MarkdownMediaPlayer: CuteType.FC<{
     return null;
   }
 
+  // 内联与放大预览只差 class / autoPlay / title，统一在这里生成，避免四处各自维护。
+  // 普通函数而非嵌套组件：不参与 React 生命周期，也不会引入额外的挂载点。
+  const renderMedia = (preview: boolean) => {
+    const mediaProps = {
+      className: `markdown-media-${kind}${preview ? '-preview' : ''}`,
+      src,
+      controls: true,
+      preload: 'metadata' as const,
+      autoPlay: preview,
+      title: preview ? undefined : title,
+    };
+    return kind === 'video' ? <video {...mediaProps} /> : <audio {...mediaProps} />;
+  };
+
   return (
     <>
       <div className="markdown-media-player-wrap">
-        {kind === 'video' ? (
-          <video
-            className="markdown-media-video"
-            src={src}
-            controls
-            preload="metadata"
-            title={title}
-          />
-        ) : (
-          <audio
-            className="markdown-media-audio"
-            src={src}
-            controls
-            preload="metadata"
-            title={title}
-          />
-        )}
+        {renderMedia(false)}
         <button
           type="button"
           className="markdown-media-expand-btn"
@@ -97,25 +86,8 @@ export const MarkdownMediaPlayer: CuteType.FC<{
               {title || (kind === "video" ? '视频预览' : '音频预览')}
             </DialogTitle>
           </DialogHeader>
-          {open ? (
-            kind === 'video' ? (
-              <video
-                className="markdown-media-video-preview"
-                src={src}
-                controls
-                autoPlay
-                preload="metadata"
-              />
-            ) : (
-              <audio
-                className="markdown-media-audio-preview"
-                src={src}
-                controls
-                autoPlay
-                preload="metadata"
-              />
-            )
-          ) : null}
+          {/* DialogContent 只在打开时挂载子节点，无需再判断 open */}
+          {renderMedia(true)}
         </DialogContent>
       </Dialog>
     </>
