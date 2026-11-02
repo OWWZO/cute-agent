@@ -91,6 +91,9 @@ export function shouldAutoFollowWorkspaceTask(params: {
   return showAction && hasLiveTask;
 }
 
+/** 深度研究任务的 messageType：该阶段有自己的过程面板，自动跟随始终开任务 tab。 */
+export const DEEP_SEARCH_MESSAGE_TYPE = "deep_search";
+
 /**
  * 自动跟随该开哪种 tab。
  *
@@ -110,7 +113,7 @@ export function resolveAutoFollowTabKind(params: {
   messageType?: string;
   hasPrimaryFile: boolean;
 }): "file" | "task" {
-  if (params.messageType === "deep_search") {
+  if (params.messageType === DEEP_SEARCH_MESSAGE_TYPE) {
     return "task";
   }
   return params.hasPrimaryFile ? "file" : "task";

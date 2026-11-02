@@ -48,7 +48,11 @@ export function formatSubAgentRelativeTime(
   timestampMs: number | undefined,
   now: number
 ): string {
-  if (timestampMs == null || !Number.isFinite(timestampMs)) {
+  if (
+    typeof timestampMs !== "number" ||
+    !Number.isFinite(timestampMs) ||
+    !Number.isFinite(now)
+  ) {
     return "";
   }
   const diff = Math.max(0, now - timestampMs);
@@ -66,10 +70,14 @@ export function formatSubAgentRelativeTime(
   return `${Math.floor(hours / 24)} 天`;
 }
 
+/** 状态 → 文案的穷举映射：新增状态时这里会编译报错，不会被静默归入「已完成」。 */
+const SUB_AGENT_STATE_LABELS: Record<"run" | "done" | "fail", string> = {
+  run: "运行中",
+  done: "已完成",
+  fail: "失败",
+};
+
 /** 目录行的状态文案（运行中 / 已完成 / 失败） */
 export function resolveSubAgentStateLabel(state: "run" | "done" | "fail"): string {
-  if (state === "run") {
-    return "运行中";
-  }
-  return state === "fail" ? "失败" : "已完成";
+  return SUB_AGENT_STATE_LABELS[state];
 }

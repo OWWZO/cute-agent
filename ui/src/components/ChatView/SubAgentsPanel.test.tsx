@@ -138,6 +138,12 @@ describe("formatSubAgentRelativeTime", () => {
   it("没有时间戳时不产出文案", () => {
     expect(formatSubAgentRelativeTime(undefined, now)).toBe("");
   });
+
+  it("时间戳或当前时间非有限值时不出文案（避免渲染 NaN 天）", () => {
+    expect(formatSubAgentRelativeTime(Number.NaN, now)).toBe("");
+    expect(formatSubAgentRelativeTime(now, Number.NaN)).toBe("");
+    expect(formatSubAgentRelativeTime(now, Number.POSITIVE_INFINITY)).toBe("");
+  });
 });
 
 describe("SubAgentsPanel", () => {

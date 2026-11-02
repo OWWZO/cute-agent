@@ -85,10 +85,6 @@ function isLlmRetryEvent(eventData?: MESSAGE.EventData | null): boolean {
   );
 }
 
-function isLlmRetryTip(tip?: string): boolean {
-  return !!tip && tip.includes("正在重试");
-}
-
 const SESSION_CONTROL_PACKAGES = new Set([
   "heartbeat",
   "follow_idle",
@@ -154,6 +150,16 @@ const CONNECTION_LOST_HINT = "连接暂时断开，任务仍在后台执行";
 const CONCURRENT_RUN_HINT =
   "已有任务在进行中，请等待完成或先停止后再试";
 
+/** inject 应答 new_run 后允许重开新 run 的次数上限，防止后端持续应答时无限递归。 */
+const MESSAGE_INJECT_RETRY_CAP = 3;
+
+/** 终态失败提示：按状态查表，避免嵌套三元表达式。 */
+const TERMINAL_FAILURE_TIPS: Record<string, string> = {
+  FAILED: "本轮未能完成",
+  STOPPED: "已停止",
+  TIMEOUT: "任务执行超时",
+};
+
 export type ObservationClosePlan = {
   writeDisconnectHint: boolean;
   reconnect: boolean;
@@ -206,6 +212,20 @@ export function planFollowIdleReplay(status?: string): FollowIdleReplayPlan {
   // follow_idle 只说明当前进程没有可挂载的投影，不等于 run 已经结束。
   // Ledger 落终态和投影注销可能存在短暂顺序差，RUNNING/未知状态必须继续观察。
   return "reconnect";
+}
+
+/** follow 流收口时的终态：显式状态优先，其次沿用已有结论 / STOPPED，否则判失败。 */
+export function resolveFollowEndedStatus(
+  chat: CHAT.ChatItem,
+  nextStatus?: string
+): string {
+  if (nextStatus) {
+    return nextStatus;
+  }
+  if (chat.conclusion || chat.metrics?.status === "SUCCESS") {
+    return "SUCCESS";
+  }
+  return chat.metrics?.status === "STOPPED" ? "STOPPED" : "FAILED";
 }
 
 /**
@@ -1131,6 +1151,8 @@ export function useConversationStream(
      * 这类断流必须走账本回放收口（applyFollowIdleReplay），由账本终态决定去留。
      */
     let sawAnyFrame = false;
+    /** 上一条事件是否为 llm_retry；心跳据此保留重试提示，避免依赖文案匹配。 */
+    let llmRetryTipActive = false;
 
     const draftBase: CHAT.ConversationHistory =
       conversationSnapshotsRef.current.get(conversationId) ||
@@ -1271,13 +1293,7 @@ export function useConversationStream(
         tip: "",
         metrics: {
           ...(currentChat.metrics || {}),
-          status:
-            nextStatus ||
-            (currentChat.conclusion || currentChat.metrics?.status === "SUCCESS"
-              ? "SUCCESS"
-              : currentChat.metrics?.status === "STOPPED"
-                ? "STOPPED"
-                : "FAILED"),
+          status: resolveFollowEndedStatus(currentChat, nextStatus),
         },
       };
       // 收口必须停掉转圈，但不能误停别的会话或更新 run 的 loading：
@@ -1356,8 +1372,11 @@ export function useConversationStream(
           hasPendingAskUserQuestion(hydrated)
         ) {
           currentChat = applyWaitingUserInputState(hydrated);
-          clearActiveRun(requestId);
+          clearFollowReconnectTimer(requestId);
+          followReconnectAttemptsRef.current.delete(requestId);
           followReconnectContextsRef.current.delete(requestId);
+          followReconnectSettleRef.current.delete(requestId);
+          clearActiveRun(requestId);
           if (streamStillActive) {
             setLoading(false);
           }
@@ -1576,11 +1595,7 @@ export function useConversationStream(
             plan: currentChat.plan || currentChat.multiAgent?.plan,
           });
           // 重试等待期间心跳不要冲掉「正在重试」提示
-          if (
-            presence.hint &&
-            currentChat.tip !== presence.hint &&
-            !isLlmRetryTip(currentChat.tip)
-          ) {
+          if (presence.hint && !llmRetryTipActive && currentChat.tip !== presence.hint) {
             currentChat = {
               ...currentChat,
               tip: presence.hint,
@@ -1641,6 +1656,7 @@ export function useConversationStream(
       const isPlanThoughtEvent = eventData.messageType === "plan_thought";
       const isPlanThoughtFinal = Boolean(eventData.resultMap?.isFinal || finished);
       currentChat = combineData(eventData, currentChat);
+      llmRetryTipActive = isLlmRetryEvent(eventData);
       // 子 Agent result 带 parentToolUseId，只挂工作区，不能覆盖主对话终答。
       // 根 result 收口：有流式段只并元数据不覆盖正文（ZCode 行模型），无流式段才建结论。
       // 有后台任务时后端会推迟 finished；这里仍收口主对话 loading，SSE 继续接收结算事件。
@@ -1699,11 +1715,7 @@ export function useConversationStream(
           scheduleStreamingThought(currentChat.requestId, finalThought, true);
         }
       } else if (isLlmRetryEvent(eventData)) {
-        // combineData 已写入重试 tip，勿被 presence 覆盖
-        currentChat = {
-          ...currentChat,
-          tip: currentChat.tip,
-        };
+        // combineData 已写入重试 tip，此处保持原样，勿被 presence 覆盖
       } else if (isHitlYieldEvent(eventData) || hasPendingAskUserQuestion(currentChat)) {
         currentChat = {
           ...currentChat,
@@ -1970,7 +1982,7 @@ export function useConversationStream(
       return;
     }
     followActiveRun(requestId);
-  }, [followActiveRun, hasLiveStream, readOnly, runningFollowKey]);
+  }, [followActiveRun, hasConversationLiveStream, readOnly, runningFollowKey]);
 
   const resumeHitlRun = useMemoizedFn((
     detail: AskUserResumeEventDetail | PlanApprovalResumeEventDetail | DesktopControlResumeEventDetail,
@@ -2217,14 +2229,7 @@ export function useConversationStream(
           status === "TIMEOUT"
         ) {
           const failureTip =
-            replay.errorMsg ||
-            (status === "FAILED"
-              ? "本轮未能完成"
-              : status === "STOPPED"
-                ? "已停止"
-                : status === "TIMEOUT"
-                  ? "任务执行超时"
-                  : "");
+            replay.errorMsg || TERMINAL_FAILURE_TIPS[status] || "";
           settleResumeReplay(history, hydrated, status, failureTip);
           return;
         }
@@ -2615,7 +2620,7 @@ export function useConversationStream(
     }
   });
 
-  const sendMessage = useMemoizedFn((inputInfo: CHAT.TInputInfo) => {
+  const sendMessage = useMemoizedFn((inputInfo: CHAT.TInputInfo, injectRetryDepth = 0) => {
     const baseConversation = conversationRef.current;
     const conversationId = baseConversation.id;
     const { message, deepThink } = inputInfo;
@@ -2623,6 +2628,7 @@ export function useConversationStream(
 
     const lastChat = (baseConversation.chatList || [])[baseConversation.chatList.length - 1];
     const parentLoopLive =
+      !injectRetryDepth &&
       !skipInjectRef.current &&
       (isParentLoopLive(lastChat) ||
         [...followReconnectContextsRef.current.values()].some(
@@ -2636,8 +2642,14 @@ export function useConversationStream(
           return;
         }
         if (outcome === "new_run") {
+          // 后端持续应答 new_run 时必须有界：超过上限按并发冲突提示，不无限递归。
+          if (injectRetryDepth >= MESSAGE_INJECT_RETRY_CAP) {
+            console.warn("inject run new_run retry cap reached", injectRetryDepth);
+            toast.warning(CONCURRENT_RUN_HINT);
+            return;
+          }
           skipInjectRef.current = true;
-          sendMessage(inputInfo);
+          sendMessage(inputInfo, injectRetryDepth + 1);
           return;
         }
         toast.warning(CONCURRENT_RUN_HINT);
@@ -2744,6 +2756,8 @@ export function useConversationStream(
     let pendingConversation: CHAT.ConversationHistory | null = null;
     let pendingTaskData: ReturnType<typeof handleTaskData> | null = null;
     let taskDataDirty = false;
+    /** 上一条事件是否为 llm_retry；心跳据此保留重试提示，避免依赖文案匹配。 */
+    let llmRetryTipActive = false;
     // 原始事件先写入 currentChat.multiAgent，再由 handleTaskData 派生工作区/时间线；两类状态不能混为一谈。
     let pendingFlushFrame: number | null = null;
     let lastConversationFlushAt = 0;
@@ -2915,11 +2929,7 @@ export function useConversationStream(
             plan: currentChat.plan || currentChat.multiAgent?.plan,
           });
           // 重试等待期间心跳不要冲掉「正在重试」提示
-          if (
-            presence.hint &&
-            currentChat.tip !== presence.hint &&
-            !isLlmRetryTip(currentChat.tip)
-          ) {
+          if (presence.hint && !llmRetryTipActive && currentChat.tip !== presence.hint) {
             currentChat = {
               ...currentChat,
               tip: presence.hint,
@@ -2967,6 +2977,7 @@ export function useConversationStream(
       const isPlanThoughtFinal = Boolean(eventData.resultMap?.isFinal || finished);
       // combineData 只负责把事件合并进原始会话，后续再根据事件类型触发工作区同步和最终结论覆盖。
       currentChat = combineData(eventData, currentChat);
+      llmRetryTipActive = isLlmRetryEvent(eventData);
       // 根 result 收口：结论区已有流式正文时只并元数据、不覆盖正文（ZCode 行模型）；
       // 没有流式段才用 result 建结论。$$$ 点名由 ConclusionSection 剥离并映射会话文件。
       // 子 Agent result 带 parentToolUseId，只挂工作区，不能覆盖主对话终答。
@@ -3031,10 +3042,7 @@ export function useConversationStream(
           scheduleStreamingThought(currentChat.requestId, finalThought, true);
         }
       } else if (isLlmRetryEvent(eventData)) {
-        currentChat = {
-          ...currentChat,
-          tip: currentChat.tip,
-        };
+        // combineData 已写入重试 tip，此处保持原样，勿被 presence 覆盖
         followReconnectContextsRef.current.set(requestId, {
           conversationId,
           sessionId: baseConversation.sessionId,

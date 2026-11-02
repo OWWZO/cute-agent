@@ -1,18 +1,15 @@
 import { useMemo } from "react";
+import type { DataChatKpiItem } from "./chartConfig";
 
-type KpiItem = {
-  label?: string;
-  showValue?: string | number;
-  value?: string | number;
-};
+const EMPTY_KPI_LIST: DataChatKpiItem[] = [];
 
-const EMPTY_KPI_LIST: KpiItem[] = [];
+/** KPI 值可能是任意后端类型，渲染层只接受可安全展示的字符串/数字。 */
+const toDisplayValue = (value: unknown): string | number =>
+  typeof value === "string" || typeof value === "number" ? value : "—";
 
-const Card: CuteType.FC<{ data: Record<string, any> }> = (props) => {
+const Card: CuteType.FC<{ data: { kpiList?: DataChatKpiItem[] } }> = (props) => {
   const { data } = props;
-  const kpiList: KpiItem[] = Array.isArray(data?.kpiList)
-    ? data.kpiList
-    : EMPTY_KPI_LIST;
+  const kpiList = Array.isArray(data?.kpiList) ? data.kpiList : EMPTY_KPI_LIST;
 
   const items = useMemo(
     // showValue 优先于原始 value，统一成渲染层需要的 label/value/key 结构。
@@ -20,7 +17,7 @@ const Card: CuteType.FC<{ data: Record<string, any> }> = (props) => {
       kpiList.map((item, index) => ({
         key: `kpi-${index}`,
         label: item.label || "未命名",
-        value: item.showValue ?? item.value ?? "—",
+        value: toDisplayValue(item.showValue ?? item.value),
       })),
     [kpiList]
   );
