@@ -1,14 +1,13 @@
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePinScrollOnToggle } from "@/hooks/usePinScrollOnToggle";
 import { QueuedSummaryContent } from "./QueuedSummaryContent";
 import { ToolFailureTip } from "./ToolFailureTip";
 
@@ -109,7 +108,7 @@ export function ToolRow({
   onToggle,
   onOpenWorkspace,
 }: ToolRowProps) {
-  const headRef = useRef<HTMLButtonElement | null>(null);
+  const [headRef, pinScroll] = usePinScrollOnToggle<HTMLElement>();
   /**
    * argNode 里可能嵌套可点击的 button（文件名 chip）。
    * HTML 不允许 button 套 button，因此有 argNode 时行头退化成一个 div + role="button"，
@@ -151,50 +150,6 @@ export function ToolRow({
     };
   }, [open, shouldRenderContent]);
 
-  useEffect(() => {
-    return () => {
-      if (contentUnmountTimerRef.current !== null) {
-        window.clearTimeout(contentUnmountTimerRef.current);
-      }
-    };
-  }, []);
-
-  const pinScrollFrameRef = useRef<number | null>(null);
-
-  const pinScroll = useCallback(() => {
-    const el = headRef.current;
-    if (!el) return;
-    if (pinScrollFrameRef.current !== null) {
-      cancelAnimationFrame(pinScrollFrameRef.current);
-    }
-    const top = el.getBoundingClientRect().top;
-    pinScrollFrameRef.current = requestAnimationFrame(() => {
-      pinScrollFrameRef.current = null;
-      // 快速切换会话/卸载后节点已脱离文档，此时 rect 全是 0，继续补偿会把外层滚动拉偏。
-      if (!el.isConnected) return;
-      const next = el.getBoundingClientRect().top;
-      const delta = next - top;
-      if (Math.abs(delta) > 1) {
-        const scroller = el.closest(
-          "[data-stick-to-bottom], .overflow-y-auto, .overflow-auto"
-        );
-        if (scroller instanceof HTMLElement) {
-          scroller.scrollTop += delta;
-        } else {
-          window.scrollBy(0, delta);
-        }
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (pinScrollFrameRef.current !== null) {
-        cancelAnimationFrame(pinScrollFrameRef.current);
-      }
-    };
-  }, []);
-
   const handleHeadClick = () => {
     if (onOpenWorkspace) {
       onOpenWorkspace();
@@ -231,7 +186,10 @@ export function ToolRow({
       <div className="kimi-tool-row-head">
         {headInteractive ? (
           <button
-            ref={headRef}
+            // 与 div 分支共用 `HTMLElement` 宽的 ref，靠回调收窄类型（不能强转）。
+            ref={(el) => {
+              headRef.current = el;
+            }}
             type="button"
             className="kimi-tool-row-head-main"
             onClick={handleHeadClick}
@@ -255,7 +213,9 @@ export function ToolRow({
           </button>
         ) : (
           <div
-            ref={headRef as unknown as RefObject<HTMLDivElement>}
+            ref={(el) => {
+              headRef.current = el;
+            }}
             role={onOpenWorkspace ? "button" : undefined}
             tabIndex={onOpenWorkspace ? 0 : undefined}
             className="kimi-tool-row-head-main"
