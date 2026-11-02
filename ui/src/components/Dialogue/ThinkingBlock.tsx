@@ -44,15 +44,17 @@ function hasTextSelection(): boolean {
 }
 
 /** 收起 + 流式时，标题右侧滚动显示思考的最后一行（图3 的核心观感）。 */
-function resolveStreamingSummary(text: string): string | undefined {
-  const lines = text.split("\n");
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index].trim();
-    if (line) {
-      return line;
-    }
+export function resolveStreamingSummary(text: string): string | undefined {
+  let lastTextIndex = text.length - 1;
+  while (lastTextIndex >= 0 && /\s/u.test(text[lastTextIndex])) {
+    lastTextIndex -= 1;
   }
-  return undefined;
+  if (lastTextIndex < 0) {
+    return undefined;
+  }
+  const lineStart = text.lastIndexOf("\n", lastTextIndex) + 1;
+  const line = text.slice(lineStart, lastTextIndex + 1).trim();
+  return line || undefined;
 }
 
 /**

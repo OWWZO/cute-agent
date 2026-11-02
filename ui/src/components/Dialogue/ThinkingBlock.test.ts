@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveStreamingSummary } from "./ThinkingBlock";
 
 function splitParagraphs(text: string): string[] {
   return text
@@ -6,6 +7,17 @@ function splitParagraphs(text: string): string[] {
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
 }
+
+describe("resolveStreamingSummary", () => {
+  it("只返回最后一个非空行", () => {
+    expect(resolveStreamingSummary("第一行\n第二行\n  \n最后一行  ")).toBe(
+      "最后一行"
+    );
+    expect(resolveStreamingSummary("空\n\n")).toBe("空");
+    expect(resolveStreamingSummary("\n  \n")).toBeUndefined();
+    expect(resolveStreamingSummary("超长".repeat(1000))).toBe("超长".repeat(1000));
+  });
+});
 
 describe("thinking paragraph fold", () => {
   it("uses last paragraph as teaser", () => {
