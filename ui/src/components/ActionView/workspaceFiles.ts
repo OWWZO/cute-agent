@@ -327,6 +327,26 @@ export function flattenTasksWithFiles(
   return out;
 }
 
+/** `CHAT.TFile` → 任务 `fileInfo` 的公共字段映射（上传附件与会话清单共用）。 */
+function mapTaskFileInfo(file: CHAT.TFile) {
+  return {
+    fileName: file.name,
+    domainUrl: file.previewUrl || file.url || file.downloadUrl || "",
+    ossUrl: file.downloadUrl || file.url || file.previewUrl || "",
+    fileSize: file.size,
+    resourceKey: file.resourceKey,
+    relativePath: file.relativePath,
+    originFileName: file.originFileName,
+    missing: file.missing,
+    missingReason: file.missingReason,
+    mimeType: file.mimeType,
+  };
+}
+
+function filterNamedFiles(files?: CHAT.TFile[] | null): CHAT.TFile[] {
+  return (Array.isArray(files) ? files : []).filter((file) => Boolean(file?.name));
+}
+
 /**
  * 将用户上传附件合成 file 任务，供侧栏/工作区与工具产物同一套 collectWorkspaceFiles 消费。
  */
@@ -337,20 +357,7 @@ export function buildUserUploadFileTask(
   if (!Array.isArray(files) || !files.length) {
     return null;
   }
-  const fileInfo = files
-    .filter((file) => Boolean(file?.name))
-    .map((file) => ({
-      fileName: file.name,
-      domainUrl: file.previewUrl || file.url || file.downloadUrl || "",
-      ossUrl: file.downloadUrl || file.url || file.previewUrl || "",
-      fileSize: file.size,
-      resourceKey: file.resourceKey,
-      relativePath: file.relativePath,
-      originFileName: file.originFileName,
-      missing: file.missing,
-      missingReason: file.missingReason,
-      mimeType: file.mimeType,
-    }));
+  const fileInfo = filterNamedFiles(files).map(mapTaskFileInfo);
   if (!fileInfo.length) {
     return null;
   }
@@ -371,24 +378,13 @@ export function buildSessionFileManifestTask(
   files?: CHAT.TFile[] | null,
   messageTime?: string
 ): PanelItemType | null {
-  const fileInfo = (files || [])
-    .filter((file) => Boolean(file?.name))
-    .map((file) => ({
-      fileName: file.name,
-      displayName: file.name,
-      domainUrl: file.previewUrl || file.url || file.downloadUrl || "",
-      ossUrl: file.downloadUrl || file.url || file.previewUrl || "",
-      previewUrl: file.previewUrl || file.url || file.downloadUrl || "",
-      downloadUrl: file.downloadUrl || file.url || file.previewUrl || "",
-      fileSize: file.size,
-      resourceKey: file.resourceKey,
-      relativePath: file.relativePath,
-      originFileName: file.originFileName,
-      missing: file.missing,
-      missingReason: file.missingReason,
-      mimeType: file.mimeType,
-      artifactType: file.type,
-    }));
+  const fileInfo = filterNamedFiles(files).map((file) => ({
+    ...mapTaskFileInfo(file),
+    displayName: file.name,
+    previewUrl: file.previewUrl || file.url || file.downloadUrl || "",
+    downloadUrl: file.downloadUrl || file.url || file.previewUrl || "",
+    artifactType: file.type,
+  }));
   if (!fileInfo.length) {
     return null;
   }
