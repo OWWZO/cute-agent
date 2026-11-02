@@ -92,28 +92,6 @@ describe("buildToolPreviewSource", () => {
     expect(view!.source.title).toBe("main.ts");
   });
 
-  it("read 命中会话产物 → 给出可读 url，无降级原因", () => {
-    const view = buildToolPreviewSource(
-      toolTask({
-        resultMap: {
-          toolName: "Read",
-          input: { path: "/workspace/src/app/main.ts" },
-        },
-      }),
-      undefined,
-      [
-        {
-          name: "main.ts",
-          relativePath: "src/app/main.ts",
-          previewUrl: "https://files.test/preview/main.ts",
-        },
-      ]
-    );
-
-    expect(view!.fileUrl).toBe("https://files.test/preview/main.ts");
-    expect(view!.unavailableReason).toBeUndefined();
-  });
-
   it("read 未命中产物 → 给出降级原因（决策点 B：前端读不到任意绝对路径）", () => {
     const view = buildToolPreviewSource(
       toolTask({
@@ -121,12 +99,9 @@ describe("buildToolPreviewSource", () => {
           toolName: "Read",
           input: { path: "D:/other/place/foo.ts" },
         },
-      }),
-      undefined,
-      []
+      })
     );
 
-    expect(view!.fileUrl).toBeUndefined();
     expect(view!.unavailableReason).toContain("该文件不在会话产物中，无法预览");
     expect(view!.unavailableReason).toContain("D:/other/place/foo.ts");
   });
@@ -283,9 +258,7 @@ describe("workspace_read 结果自带正文（绕开产物 catalog）", () => {
           input: { path: "src/a.ts" },
           toolResult: readResult("src/a.ts", "const a = 1;\nconst b = 2;")
         },
-      }),
-      undefined,
-      [] // 关键：产物清单为空也照样能预览
+      })
     );
 
     expect(view!.source.type).toBe("text");
@@ -308,7 +281,7 @@ describe("workspace_read 结果自带正文（绕开产物 catalog）", () => {
     expect(view!.source.path).toBe("skills/demo/a.ts");
   });
 
-  it("file_unchanged 占位结果 → 回退到产物 URL 链路并给降级原因", () => {
+  it("file_unchanged 占位结果 → 回退到 file source 并给降级原因", () => {
     const view = buildToolPreviewSource(
       toolTask({
         resultMap: {
@@ -322,9 +295,7 @@ describe("workspace_read 结果自带正文（绕开产物 catalog）", () => {
             lineCount: 100
           })
         },
-      }),
-      undefined,
-      []
+      })
     );
 
     expect(view!.source.type).toBe("file");

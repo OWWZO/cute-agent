@@ -35,8 +35,6 @@ import {
 /** 右侧预览的完整描述：内容来源 + 运行时才知道的附加信息。 */
 export type ToolPreviewSource = {
   source: CodeViewerSource;
-  /** `file` 类型的可读 URL（能映射到会话产物时才有值） */
-  fileUrl?: string;
   /** 降级原因（不在会话产物中 / 已失效 / 超体积上限） */
   unavailableReason?: string;
   /** 工具执行输出，patch 之外的兜底内容 */
@@ -45,49 +43,6 @@ export type ToolPreviewSource = {
   /** 源文件路径（供侧栏判断能否并进同 key 的文件 tab） */
   path?: string;
 };
-
-/** 产物文件的最小形状（避免依赖 ChatView 的 WorkspaceFileItem 类型）。 */
-type ArtifactLike = {
-  resourceKey?: string;
-  relativePath?: string;
-  originFileName?: string;
-  name?: string;
-  previewUrl?: string;
-  url?: string;
-  downloadUrl?: string;
-};
-
-/** 按路径后缀在产物清单里找文件（与 `findWorkspaceFileByPath` 同语义的轻量版）。 */
-function findArtifactByPath<T extends ArtifactLike>(
-  files: T[],
-  path: string
-): T | undefined {
-  const normalize = (value?: string | null) =>
-    (value || "").replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/^\/+/, "");
-  const target = normalize(path);
-  if (!target) return undefined;
-
-  let suffixHit: T | undefined;
-  for (const file of files) {
-    const relative = normalize(
-      file.relativePath || file.originFileName || file.name
-    );
-    if (!relative) continue;
-    if (relative === target) return file;
-    if (
-      !suffixHit &&
-      (target.endsWith(`/${relative}`) || relative.endsWith(`/${target}`))
-    ) {
-      suffixHit = file;
-    }
-  }
-  return suffixHit;
-}
-
-function artifactUrl(file?: ArtifactLike): string {
-  if (!file) return "";
-  return file.previewUrl || file.url || file.downloadUrl || "";
-}
 
 /** 从 write 的入参里取要写入的正文。 */
 function extractWriteContent(arg: string): string | undefined {
@@ -154,8 +109,7 @@ function extractReadResult(tool: CHAT.Task): { content: string; path?: string } 
  */
 export function buildToolPreviewSource(
   task: CHAT.Task,
-  fileIndex?: number,
-  artifactFiles?: ArtifactLike[]
+  fileIndex?: number
 ): ToolPreviewSource | null {
   const name = resolveTaskToolName(task);
   const arg = resolveTaskToolArg(task);
@@ -202,16 +156,13 @@ export function buildToolPreviewSource(
       };
     }
 
-    // 2b. 没拿到正文（file_unchanged / 历史数据）→ 退回产物 URL 链路。
+    // 2b. 没拿到正文（file_unchanged / 历史数据）→ 出 file source；
+    //     产物 URL 与降级提示由 ActionView 按会话产物 catalog 补齐。
     if (readPath) {
-      const hit = findArtifactByPath(artifactFiles || [], readPath);
       return {
         source: buildReadCodeViewerSource({ path: readPath }),
         path: readPath,
-        fileUrl: artifactUrl(hit) || undefined,
-        unavailableReason: hit
-          ? undefined
-          : `该文件不在会话产物中，无法预览：${readPath}`,
+        unavailableReason: `该文件不在会话产物中，无法预览：${readPath}`,
         output,
         status,
       };
