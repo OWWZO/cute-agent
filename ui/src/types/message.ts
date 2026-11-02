@@ -126,6 +126,8 @@ declare global {
       finish: boolean
       isFinal: boolean
       toolThought?: string
+      /** 原生 CoT：llm_reasoning 事件正文（历史事件也可能落在顶层而非 resultMap） */
+      reasoningContent?: string
       digitalEmployee?: string
       plan?: Plan
       result?: string
@@ -213,6 +215,8 @@ declare global {
       downloadUrl?: string
       data?: string
       codeOutput?: string
+      /** 原生 CoT：llm_reasoning 事件正文 */
+      reasoningContent?: string
       requestsId?: string
       resultType?: string;
       eventData?: EventData

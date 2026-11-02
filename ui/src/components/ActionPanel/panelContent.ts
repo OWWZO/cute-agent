@@ -40,6 +40,16 @@ export const resolveMarkdownContent = (
   }
 
   const { messageType } = taskItem;
+
+  // 子智能体父任务（tool_call / tool_result）统一走 SubAgent markdown，
+  // 不再在两个 case 里各写一份。
+  if (
+    (messageType === "tool_call" || messageType === "tool_result") &&
+    isSubAgentParentTask(taskItem)
+  ) {
+    return buildSubAgentMarkdown(taskItem);
+  }
+
   const resultMap = resolved?.resultMap ?? resolveTaskResultMap(taskItem);
   const toolResultText =
     resolved?.toolResultText ??
@@ -47,15 +57,12 @@ export const resolveMarkdownContent = (
 
   switch (messageType) {
     case "tool_result":
-      if (isSubAgentParentTask(taskItem as unknown as CHAT.Task)) {
-        markDownContent = buildSubAgentMarkdown(taskItem as unknown as CHAT.Task);
-      } else {
-        markDownContent = toolResultText;
-      }
+      markDownContent = toolResultText;
       break;
     case "llm_reasoning":
       markDownContent =
-        (taskItem as { reasoningContent?: string }).reasoningContent ||
+        taskItem.reasoningContent ||
+        resultMap?.reasoningContent ||
         taskItem.toolThought ||
         "";
       break;
@@ -64,24 +71,19 @@ export const resolveMarkdownContent = (
       markDownContent = taskItem.toolThought || "";
       break;
     case "tool_call":
-      if (isSubAgentParentTask(taskItem as unknown as CHAT.Task)) {
-        markDownContent = buildSubAgentMarkdown(taskItem as unknown as CHAT.Task);
-      } else {
-        markDownContent = buildToolCallMarkdown(resultMap);
-      }
+      markDownContent = buildToolCallMarkdown(resultMap);
       break;
     case "code":
-      // 细粒度过程区（任务/思考/代码/执行输出）落在 codeOutput；仅有 code 时兜底为 python 代码块
+      // 细粒度过程区（任务/思考/代码/执行输出）落在 codeOutput；仅有 code 时兜底为
+      // 无语言标记的代码块 —— code 事件也用于非 Python 内容，硬编码 python 会误高亮。
       if (resultMap?.codeOutput) {
         markDownContent = resultMap.codeOutput;
       } else if (resultMap?.code) {
-        markDownContent = `\`\`\`python\n${resultMap.code}\n\`\`\``;
+        markDownContent = `\`\`\`\n${resultMap.code}\n\`\`\``;
       }
       break;
     case "markdown":
     case "html":
-      markDownContent = resultMap?.codeOutput || "";
-      break;
     case "data_analysis":
       markDownContent = resultMap?.codeOutput || "";
       break;
@@ -103,17 +105,9 @@ export const resolveMarkdownContent = (
   return markDownContent;
 };
 
-const useContent = (
+const resolvePanelContent = (
   taskItem?: PanelItemType,
   resolved?: ResolvedTaskContent
-) => {
-  const markDownContent = resolveMarkdownContent(taskItem, resolved);
+) => ({ markDownContent: resolveMarkdownContent(taskItem, resolved) });
 
-  // let fileUrl = '';
-  return {
-    markDownContent,
-    // fileUrl
-  };
-};
-
-export default useContent;
+export default resolvePanelContent;

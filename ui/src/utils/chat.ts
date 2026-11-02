@@ -1036,9 +1036,7 @@ function handleLlmReasoningMessage(
 ) {
   const { tasks } = currentChat.multiAgent;
   const { taskId, resultMap } = eventData;
-  const reasoningText =
-    (resultMap as { reasoningContent?: string } | undefined)?.reasoningContent ||
-    "";
+  const reasoningText = resultMap?.reasoningContent || "";
   const { isFinal } = resultMap;
 
   // 字段统一落在 toolThought 仅作展示载体，messageType 必须是 llm_reasoning
