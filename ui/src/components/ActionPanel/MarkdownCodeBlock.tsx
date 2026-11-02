@@ -60,7 +60,7 @@ export const createCodeBlock =
       }
 
       if (isBlock && match?.[1] === "diff") {
-        return <DiffCodeFence code={trimmed} />;
+        return <DiffCodeFence code={trimmed} streaming={streaming} />;
       }
 
       if (isBlock && match) {

@@ -97,27 +97,36 @@ function FenceChrome({
 
 export const DiffCodeFence = memo(function DiffCodeFence({
   code,
+  streaming = false,
 }: {
   code: string;
+  /** 流式进行中：跳过整段 diff 解析与逐行 DOM，落定后再一次性解析。 */
+  streaming?: boolean;
 }) {
-  const rows = parseDiffLines(code);
+  const rows = streaming ? null : parseDiffLines(code);
   return (
     <FenceChrome lang="diff" code={code} className="kimi-diff-wrap">
-      <pre className="kimi-diff-pre">
-        <code>
-          {rows.map((ln, j) => (
-            <span
-              key={j}
-              className={cn("kimi-diff-line", `kimi-diff-${ln.type}`)}
-            >
-              {ln.type !== "hunk" ? (
-                <span className="kimi-diff-sign">{ln.sign}</span>
-              ) : null}
-              <span className="kimi-diff-text">{ln.text}</span>
-            </span>
-          ))}
-        </code>
-      </pre>
+      {rows ? (
+        <pre className="kimi-diff-pre">
+          <code>
+            {rows.map((ln, j) => (
+              <span
+                key={j}
+                className={cn("kimi-diff-line", `kimi-diff-${ln.type}`)}
+              >
+                {ln.type !== "hunk" ? (
+                  <span className="kimi-diff-sign">{ln.sign}</span>
+                ) : null}
+                <span className="kimi-diff-text">{ln.text}</span>
+              </span>
+            ))}
+          </code>
+        </pre>
+      ) : (
+        <pre className="kimi-code-fence-fallback">
+          <code>{code}</code>
+        </pre>
+      )}
     </FenceChrome>
   );
 });

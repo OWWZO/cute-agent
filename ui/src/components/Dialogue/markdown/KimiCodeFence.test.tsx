@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import gfm from "remark-gfm";
 import {
+  DiffCodeFence,
   KimiCodeFence,
   parseDiffLines,
   unwrapShikiPre,
@@ -23,6 +24,27 @@ describe("parseDiffLines", () => {
     ]);
     expect(rows[1]).toEqual({ type: "del", sign: "-", text: "old line" });
     expect(rows[2]).toEqual({ type: "add", sign: "+", text: "new line" });
+  });
+});
+
+describe("DiffCodeFence", () => {
+  it("流式期间按纯文本展示，不构造逐行 diff DOM", () => {
+    const html = renderToStaticMarkup(
+      <DiffCodeFence code={"@@ -1 +1 @@\n-old\n+new"} streaming />
+    );
+
+    expect(html).toContain("kimi-code-fence-fallback");
+    expect(html).not.toContain("kimi-diff-line");
+  });
+
+  it("落定后展示完整 diff 行", () => {
+    const html = renderToStaticMarkup(
+      <DiffCodeFence code={"@@ -1 +1 @@\n-old\n+new"} />
+    );
+
+    expect(html).toContain("kimi-diff-line");
+    expect(html).toContain("kimi-diff-add");
+    expect(html).toContain("kimi-diff-del");
   });
 });
 
