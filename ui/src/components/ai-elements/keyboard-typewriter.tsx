@@ -67,7 +67,13 @@ export function KeyboardTypewriter({
 
   // 统一单句和多句输入，后续状态机只处理非空句子序列。
   const items = useMemo(() => {
-    return (texts && texts.length ? texts : text != null ? [text] : []).filter(Boolean);
+    if (texts && texts.length > 0) {
+      return texts.filter(Boolean);
+    }
+    if (text !== undefined) {
+      return text ? [text] : [];
+    }
+    return [];
   }, [texts, text]);
 
   const reserveText = useMemo(() => {
@@ -90,7 +96,7 @@ export function KeyboardTypewriter({
     setIsTypingDone(false);
 
     const clearTimer = () => {
-      if (timeoutRef.current != null) {
+      if (timeoutRef.current !== undefined) {
         window.clearTimeout(timeoutRef.current);
         timeoutRef.current = undefined;
       }
