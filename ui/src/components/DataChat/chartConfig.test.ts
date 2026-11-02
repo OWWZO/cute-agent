@@ -63,6 +63,44 @@ describe("chartConfig", () => {
   );
 });
 
+describe("buildChartConfig 数值格式化", () => {
+  it("按预设描述补千分位并按 digits 截断小数", () => {
+    const result = buildChartConfig({
+      chartSuggest: "table",
+      columnList: [
+        {
+          guid: "num",
+          name: "数值",
+        },
+        {
+          guid: "dt",
+          name: "日期",
+        },
+      ],
+      dataList: [
+        {
+          num: 1234.5,
+          dt: "a",
+        },
+        {
+          num: -1000,
+          dt: "b",
+        },
+        {
+          num: 12.346,
+          dt: "c",
+        },
+      ],
+    });
+
+    expect(result.dataList?.map((row) => row.num_format)).toEqual([
+      "1,234.5",
+      "-1,000",
+      "12.35",
+    ]);
+  });
+});
+
 describe("resolveCurrentChartType", () => {
   const completeCfg = {
     dimCols: ["dt"],

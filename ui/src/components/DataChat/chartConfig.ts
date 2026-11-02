@@ -87,15 +87,6 @@ function cloneSourceConfig(cfg: DataChatSourceConfig): DataChatSourceConfig {
   };
 }
 
-function findLastMatchedIndex(values: number[], matcher: (value: number) => boolean) {
-  for (let index = values.length - 1; index >= 0; index -= 1) {
-    if (matcher(values[index])) {
-      return index;
-    }
-  }
-  return -1;
-}
-
 function findColumn(columns: DataChatColumn[], guid: string) {
   return columns.find((item) => item.guid === guid);
 }
@@ -163,6 +154,22 @@ function attachHorizontalZoom(option: Record<string, unknown>, labels: unknown[]
   }
 }
 
+function formatChartNumber(
+  value: number,
+  format: typeof defaultChartPresets.dataFormat
+) {
+  const factor = 10 ** format.digits;
+  const rounded = Math.round(value * factor) / factor;
+  const text = rounded.toFixed(format.digits);
+  if (!format.thousandflag) {
+    return text;
+  }
+  // 千分位只作用于整数部分，小数位不插入分隔符。
+  const [integerPart, decimalPart] = text.split(".");
+  const grouped = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return decimalPart ? `${grouped}.${decimalPart}` : grouped;
+}
+
 function formatData(cfg: DataChatSourceConfig) {
   const { dataFormat } = defaultChartPresets;
   const dataList = cfg.dataList || [];
@@ -175,49 +182,7 @@ function formatData(cfg: DataChatSourceConfig) {
 
       let value = typeof row[key] === "undefined" || row[key] === null ? "-" : row[key];
       if (!isNaN(Number(value)) && value !== "-") {
-        const [config, format] =
-          dataFormat.indexOf("|") > -1 ? dataFormat.split("|") : ["{}", dataFormat];
-        let formatStr = "";
-        const {
-          numberLevels = [],
-          numberLevelType,
-          fillZero,
-        } = JSON.parse(config || "{}") as {
-          numberLevels?: number[];
-          numberLevelType?: number;
-          fillZero?: boolean;
-        };
-
-        if (numberLevelType === 1) {
-          const formatArr = JSON.parse(format) as string[];
-          const valueStr = Math.abs(Number(value)).toString();
-          const integerText = valueStr.split(".").shift() || "";
-          const index = findLastMatchedIndex(
-            numberLevels,
-            (item) => integerText.length + 1 > item
-          );
-          formatStr = formatArr[index === -1 ? 0 : index];
-        } else {
-          formatStr = format;
-        }
-
-        try {
-          const formatter = new Function("v", `return ${formatStr}`);
-          let decimalLength = 0;
-          const splitArr = `${value}`.split(".");
-          if (splitArr.length === 2) {
-            decimalLength = splitArr[1].length;
-          }
-          if (decimalLength === 0 || !isNaN(Number(value))) {
-            value = formatter(value);
-          } else {
-            value =
-              formatter(Number(value) * Math.pow(10, decimalLength)) /
-              Math.pow(10, decimalLength);
-          }
-        } catch (error) {
-          console.log(error);
-        }
+        value = formatChartNumber(Number(value), dataFormat);
 
         const [integerPart, decimalPart] = `${value}`.split(".");
         if (decimalPart) {
@@ -227,7 +192,7 @@ function formatData(cfg: DataChatSourceConfig) {
             }
             return result;
           }, "");
-          if (fillZero === false) {
+          if (dataFormat.fillZero === false) {
             const [, trimmed = ""] = Number.parseFloat(`0.${decimalPart}`)
               .toString()
               .split(".");
@@ -271,11 +236,6 @@ function initChartOption(
   if (chartType === "line") {
     const typeOption = clonePlainObject(defaultChartPresets.templateline);
     const option = Object.assign({}, common, typeOption) as Record<string, unknown>;
-    const dimColumnName = findColumnName(columnList, dimCols[0]);
-    option.legend = {
-      ...(option.legend as Record<string, unknown>),
-      data: [{ name: dimColumnName }],
-    };
     option.xAxis = {
       ...(option.xAxis as Record<string, unknown>),
       data: dataList.map((item) => item[dimCols[0]]),
@@ -306,11 +266,6 @@ function initChartOption(
   if (chartType === "bar") {
     const typeOption = clonePlainObject(defaultChartPresets.templatebar);
     const option = Object.assign({}, common, typeOption) as Record<string, unknown>;
-    const dimColumnName = findColumnName(columnList, dimCols[0]);
-    option.legend = {
-      ...(option.legend as Record<string, unknown>),
-      data: [{ name: dimColumnName }],
-    };
     option.xAxis = {
       ...(option.xAxis as Record<string, unknown>),
       data: dataList.map((item) => item[dimCols[0]]),
@@ -339,11 +294,6 @@ function initChartOption(
   if (chartType === "hbar") {
     const typeOption = clonePlainObject(defaultChartPresets.templatehbar);
     const option = Object.assign({}, common, typeOption) as Record<string, unknown>;
-    const dimColumnName = findColumnName(columnList, dimCols[0]);
-    option.legend = {
-      ...(option.legend as Record<string, unknown>),
-      data: [{ name: dimColumnName }],
-    };
     option.yAxis = {
       ...(option.yAxis as Record<string, unknown>),
       data: dataList.map((item) => item[dimCols[0]]),
@@ -482,7 +432,7 @@ export function buildChartConfig(chartCfg: DataChatSourceConfig): DataChatTransf
   const chartType = nextConfig.chartSuggest || "table";
   const result: DataChatTransformedConfig = { chartType };
 
-  if (defaultChartPresets.chartTypes.includes(chartType as never)) {
+  if (defaultChartPresets.chartTypes.includes(chartType)) {
     result.option = initChartOption(nextConfig, chartType as DataChatChartType);
   }
 
