@@ -78,8 +78,11 @@ function runCli(args, label) {
       env: { ...process.env, DO_NOT_TRACK: '1' },
     });
   } catch (error) {
-    const stderr = error.stderr?.toString() ?? '';
-    throw new Error(`${label} 失败：\n${stderr || error.message}`);
+    const stderr = error?.stderr?.toString() ?? '';
+    const stdout = error?.stdout?.toString() ?? '';
+    const detail =
+      [stderr, stdout].filter(Boolean).join('\n') || String(error?.message ?? error);
+    throw new Error(`${label} 失败：\n${detail}`);
   }
 }
 
@@ -113,6 +116,8 @@ function trimBlankLines(lines) {
   return out;
 }
 
+let warnedUngrouped = false;
+
 /** 组件段按 `### Group` 分组；返回组名、签名行（含描述）与组级说明。 */
 function splitComponentGroups(lines) {
   const groups = [];
@@ -124,11 +129,21 @@ function splitComponentGroups(lines) {
       current = { name: heading[1].trim(), signatures: [], notes: [], intro: [] };
       continue;
     }
-    if (/^[A-Z][A-Za-z0-9]*\(/.test(line)) current.signatures.push(line);
+    if (/^[A-Z][A-Za-z0-9]*\(.*\)(?: — .+)?\r?$/.test(line)) current.signatures.push(line);
     else if (line.startsWith('- ')) current.notes.push(line);
     else if (line.trim()) current.intro.push(line);
   }
   groups.push(current);
+  const ungrouped = groups.find(
+    (group) => group.name === null && group.signatures.length > 0
+  );
+  if (!warnedUngrouped && ungrouped) {
+    warnedUngrouped = true;
+    console.warn(
+      `[openui] 警告：${ungrouped.signatures.length} 条组件签名位于第一个 ### Group 之前，已忽略：` +
+        ungrouped.signatures.map(signatureName).join(', ')
+    );
+  }
   return groups.filter((group) => group.name);
 }
 

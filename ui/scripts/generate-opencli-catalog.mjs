@@ -187,12 +187,20 @@ const missingSites = Object.keys(sitePresentation).filter((site) => !siteNames.h
 const missingNoLoginSites = [...noLoginSites].filter(
   (site) => !Object.hasOwn(sitePresentation, site),
 );
+const unpresentedSites = [...siteNames].filter(
+  (site) => !Object.hasOwn(sitePresentation, site),
+);
 
 if (missingSites.length > 0) {
   throw new Error(`OpenCLI manifest is missing requested sites: ${missingSites.join(", ")}`);
 }
 if (missingNoLoginSites.length > 0) {
   throw new Error(`No-login sites are missing presentation metadata: ${missingNoLoginSites.join(", ")}`);
+}
+if (unpresentedSites.length > 0) {
+  console.warn(
+    `[opencli] ${unpresentedSites.length} manifest site(s) have no catalog presentation and are omitted: ${unpresentedSites.sort().join(", ")}`,
+  );
 }
 
 const iconByCategory = {
