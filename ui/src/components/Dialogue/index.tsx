@@ -22,6 +22,13 @@ import TurnWorkStatus from "./TurnWorkStatus";
 import { UserPromptContexts } from "./UserPromptContexts";
 import { parseComposerPromptContexts } from "@/lib/promptContexts";
 
+/** 版本光标步进：在 `[0, maxIndex]` 内夹紧，思考与计划两套游标共用同一份边界规则。 */
+function stepVersionCursor(current: number, delta: -1 | 1, maxIndex: number) {
+  return delta < 0
+    ? Math.max(current - 1, 0)
+    : Math.min(current + 1, maxIndex);
+}
+
 type Props = {
   chat: CHAT.ChatItem;
   streamingThought?: string;
@@ -187,11 +194,11 @@ const DialogueComponent: FC<Props> = (props) => {
   );
 
   const handleThoughtPrev = useCallback(() => {
-    setThoughtVersionIndex((current) => Math.max(current - 1, 0));
-  }, []);
+    setThoughtVersionIndex((current) => stepVersionCursor(current, -1, latestRoundIndex));
+  }, [latestRoundIndex]);
 
   const handleThoughtNext = useCallback(() => {
-    setThoughtVersionIndex((current) => Math.min(current + 1, latestRoundIndex));
+    setThoughtVersionIndex((current) => stepVersionCursor(current, 1, latestRoundIndex));
   }, [latestRoundIndex]);
 
   const planSlot = useMemo(() => {
@@ -202,9 +209,9 @@ const DialogueComponent: FC<Props> = (props) => {
       <PlanSection
         plan={displayedPlan}
         versionLabel={planVersionLabel}
-        onPrev={() => setPlanVersionIndex((current) => Math.max(current - 1, 0))}
+        onPrev={() => setPlanVersionIndex((current) => stepVersionCursor(current, -1, latestRoundIndex))}
         onNext={() =>
-          setPlanVersionIndex((current) => Math.min(current + 1, latestRoundIndex))
+          setPlanVersionIndex((current) => stepVersionCursor(current, 1, latestRoundIndex))
         }
         canPrev={planVersionIndex > 0}
         canNext={planVersionIndex < latestRoundIndex}
