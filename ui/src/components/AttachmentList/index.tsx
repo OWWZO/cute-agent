@@ -97,7 +97,6 @@ function typeLabel(file: CHAT.TFile, kind: FileKind): string {
     case "css":
       return "样式文件 · CSS";
     case "code":
-    case "py":
       return `Code · ${ext || "FILE"}`;
     default:
       return describeFromName(file.name) || (ext ? `File · ${ext}` : "File");
@@ -113,9 +112,68 @@ function describeFromName(name?: string): string {
 }
 
 function displayTitle(file: CHAT.TFile): string {
-  const name = file.name || "未命名文件";
-  // 主卡标题尽量用可读名，去掉过长扩展噪声
-  return name;
+  return file.name || "未命名文件";
+}
+
+function FileThumb({
+  file,
+  kind,
+  className,
+  imageClassName,
+  badgeClassName,
+  imageIconClassName,
+}: {
+  file: CHAT.TFile;
+  kind: FileKind;
+  className: string;
+  imageClassName: string;
+  badgeClassName?: string;
+  imageIconClassName?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-lg",
+        className,
+        FILE_KIND_TONE
+      )}
+    >
+      {isImageFileLike(file) && file.url ? (
+        <img
+          src={file.url}
+          alt=""
+          className={cn("rounded-lg object-cover", imageClassName)}
+        />
+      ) : kind === "img" && imageIconClassName ? (
+        <ImageIcon className={imageIconClassName} strokeWidth={1.6} />
+      ) : (
+        <KindBadge kind={kind} className={badgeClassName} />
+      )}
+    </span>
+  );
+}
+
+function FileMeta({
+  file,
+  kind,
+  className,
+  titleClassName,
+  subtitleClassName,
+}: {
+  file: CHAT.TFile;
+  kind: FileKind;
+  className?: string;
+  titleClassName: string;
+  subtitleClassName: string;
+}) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <div className={cn("truncate", titleClassName)}>{displayTitle(file)}</div>
+      <div className={cn("truncate", subtitleClassName)}>
+        {typeLabel(file, kind)}
+      </div>
+    </div>
+  );
 }
 
 function KindBadge({ kind, className }: { kind: FileKind; className?: string }) {
@@ -134,7 +192,7 @@ function KindBadge({ kind, className }: { kind: FileKind; className?: string }) 
       </span>
     );
   }
-  if (kind === "html" || kind === "code" || kind === "py") {
+  if (kind === "html" || kind === "code") {
     return (
       <span className={cn("text-ui-sm font-semibold", className)}>
         &lt;/&gt;
@@ -176,30 +234,19 @@ const AttachmentList: CuteType.FC<Props> = (props) => {
               className="group flex w-full items-center gap-3 rounded-xl border border-card-border bg-surface px-3.5 py-3 text-left transition-colors hover:bg-surface-hover"
               onClick={() => review?.(primary)}
             >
-              <span
-                className={cn(
-                  "flex size-10 shrink-0 items-center justify-center rounded-lg",
-                  FILE_KIND_TONE
-                )}
-              >
-                {isImageFileLike(primary) && primary.url ? (
-                  <img
-                    src={primary.url}
-                    alt=""
-                    className="size-10 rounded-lg object-cover"
-                  />
-                ) : (
-                  <KindBadge kind={primaryKind} />
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-ui-base font-medium text-foreground">
-                  {displayTitle(primary)}
-                </div>
-                <div className="mt-0.5 truncate text-ui-sm text-foreground-subtle">
-                  {typeLabel(primary, primaryKind)}
-                </div>
-              </div>
+              <FileThumb
+                file={primary}
+                kind={primaryKind}
+                className="size-10"
+                imageClassName="size-10"
+              />
+              <FileMeta
+                file={primary}
+                kind={primaryKind}
+                className="flex-1"
+                titleClassName="text-ui-base font-medium text-foreground"
+                subtitleClassName="mt-0.5 text-ui-sm text-foreground-subtle"
+              />
               <span className="inline-flex h-8 shrink-0 items-center rounded-lg border border-card-border bg-card px-3.5 text-ui-sm font-medium text-foreground transition-colors group-hover:bg-hover">
                 打开文件
               </span>
@@ -217,32 +264,20 @@ const AttachmentList: CuteType.FC<Props> = (props) => {
                       onClick={() => review?.(file)}
                       title={file.name}
                     >
-                      <span
-                        className={cn(
-                          "flex size-7 shrink-0 items-center justify-center rounded-lg",
-                          FILE_KIND_TONE
-                        )}
-                      >
-                        {isImageFileLike(file) && file.url ? (
-                          <img
-                            src={file.url}
-                            alt=""
-                            className="size-7 rounded-lg object-cover"
-                          />
-                        ) : kind === "img" ? (
-                          <ImageIcon className="size-3.5" strokeWidth={1.6} />
-                        ) : (
-                          <KindBadge kind={kind} className="text-ui-sm" />
-                        )}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-ui-sm font-medium leading-tight text-foreground">
-                          {displayTitle(file)}
-                        </span>
-                        <span className="mt-0.5 block truncate text-ui-xs text-foreground-subtlest">
-                          {typeLabel(file, kind)}
-                        </span>
-                      </span>
+                      <FileThumb
+                        file={file}
+                        kind={kind}
+                        className="size-7"
+                        imageClassName="size-7"
+                        badgeClassName="text-ui-sm"
+                        imageIconClassName="size-3.5"
+                      />
+                      <FileMeta
+                        file={file}
+                        kind={kind}
+                        titleClassName="text-ui-sm font-medium leading-tight text-foreground"
+                        subtitleClassName="mt-0.5 text-ui-xs text-foreground-subtlest"
+                      />
                     </button>
                   );
                 })}
@@ -267,30 +302,20 @@ const AttachmentList: CuteType.FC<Props> = (props) => {
             key={`${file.resourceKey || file.name}-${index}`}
             className="group relative flex max-w-sm items-center gap-2 rounded-xl border border-card-border bg-surface px-2.5 py-2"
           >
-            <span
-              className={cn(
-                "flex size-8 shrink-0 items-center justify-center rounded-lg",
-                FILE_KIND_TONE
-              )}
-            >
-              {isImageFileLike(file) && file.url ? (
-                <img
-                  src={file.url}
-                  alt=""
-                  className="size-8 rounded-lg object-cover"
-                />
-              ) : (
-                <KindBadge kind={kind} className="text-ui-sm" />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-ui-base font-medium text-foreground">
-                {displayTitle(file)}
-              </div>
-              <div className="truncate text-ui-xs text-foreground-subtle">
-                {typeLabel(file, kind)}
-              </div>
-            </div>
+            <FileThumb
+              file={file}
+              kind={kind}
+              className="size-8"
+              imageClassName="size-8"
+              badgeClassName="text-ui-sm"
+            />
+            <FileMeta
+              file={file}
+              kind={kind}
+              className="flex-1"
+              titleClassName="text-ui-base font-medium text-foreground"
+              subtitleClassName="text-ui-xs text-foreground-subtle"
+            />
             {remove ? (
               <button
                 type="button"
