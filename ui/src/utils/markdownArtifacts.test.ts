@@ -345,6 +345,33 @@ describe("markdownArtifacts", () => {
       "report.md",
     ]);
   });
+
+  it("repeat collection reuses historical chat projections", () => {
+    let historicalReads = 0;
+    const historical = {
+      get tasks() {
+        historicalReads += 1;
+        return [];
+      },
+      multiAgent: { tasks: [] },
+      files: [],
+    };
+    const active = {
+      tasks: [],
+      multiAgent: { tasks: [] },
+      files: [],
+    };
+    const cache = new WeakMap<object, CHAT.TFile[]>();
+    const chatList = [historical, active] as unknown as CHAT.ChatItem[];
+
+    const first = collectSessionArtifactFiles(chatList, cache);
+    expect(historicalReads).toBe(1);
+
+    const second = collectSessionArtifactFiles(chatList, cache);
+    // 活动轮每帧重算，历史轮按引用复用；否则流式每帧重扫全部历史产物。
+    expect(historicalReads).toBe(1);
+    expect(second).toEqual(first);
+  });
 });
 
 /**

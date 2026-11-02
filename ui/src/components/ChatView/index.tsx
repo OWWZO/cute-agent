@@ -1128,10 +1128,12 @@ const ChatView: CuteType.FC<Props> = (props) => {
     conversationId: string;
     files: CHAT.TFile[];
     snapshots: string[];
+    chatFiles: WeakMap<object, CHAT.TFile[]>;
   }>({
     conversationId: "",
     files: [],
     snapshots: [],
+    chatFiles: new WeakMap(),
   });
   /**
    * StickToBottom 的 context：消息导航跳转前要 `stopScroll()` 解锁吸底，
@@ -1142,9 +1144,16 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const sessionArtifactFiles = useMemo(() => {
     const merged: CHAT.TFile[] = [];
     const seen = new Set<string>();
+    const cache = sessionArtifactFilesCacheRef.current;
+    if (cache.conversationId !== conversation.id) {
+      cache.conversationId = conversation.id;
+      cache.files = [];
+      cache.snapshots = [];
+      cache.chatFiles = new WeakMap();
+    }
     for (const file of [
       ...collectWorkspaceFiles(sessionFileTasks),
-      ...collectSessionArtifactFiles(deferredChatList),
+      ...collectSessionArtifactFiles(deferredChatList, cache.chatFiles),
     ]) {
       const key =
         file.resourceKey ||
@@ -1160,7 +1169,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
     }
     const next = merged;
     const nextSnapshots = next.map(getFileSnapshot);
-    const cache = sessionArtifactFilesCacheRef.current;
     if (
       cache.conversationId === conversation.id &&
       sameStringList(cache.snapshots, nextSnapshots)
@@ -1171,6 +1179,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       conversationId: conversation.id,
       files: next,
       snapshots: nextSnapshots,
+      chatFiles: cache.chatFiles,
     };
     return next;
   }, [conversation.id, deferredChatList, sessionFileTasks]);

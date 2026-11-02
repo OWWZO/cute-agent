@@ -519,19 +519,29 @@ export function collectChatArtifactFiles(
 /**
  * 会话级产物：跨多轮聚合，供终答相对引用与文件侧栏共用。
  */
+type SessionArtifactChat = Pick<
+  CHAT.ChatItem,
+  "tasks" | "conclusion" | "generatedFiles" | "multiAgent" | "files"
+>;
+
 export function collectSessionArtifactFiles(
-  chatList?: Array<
-    Pick<
-      CHAT.ChatItem,
-      "tasks" | "conclusion" | "generatedFiles" | "multiAgent" | "files"
-    > | null | undefined
-  > | null
+  chatList?: Array<SessionArtifactChat | null | undefined> | null,
+  cache?: WeakMap<object, CHAT.TFile[]>
 ): CHAT.TFile[] {
+  const chats = chatList || [];
   const collected: CHAT.TFile[] = [];
-  for (const chat of chatList || []) {
-    for (const file of collectChatArtifactFiles(chat)) {
-      collected.push(file);
+  chats.forEach((chat, index) => {
+    let files: CHAT.TFile[] | undefined;
+    if (index < chats.length - 1 && chat && cache) {
+      files = cache.get(chat);
+      if (!files) {
+        files = collectChatArtifactFiles(chat);
+        cache.set(chat, files);
+      }
+    } else {
+      files = collectChatArtifactFiles(chat);
     }
-  }
+    collected.push(...files);
+  });
   return dedupeArtifactFiles(collected);
 }
