@@ -1,5 +1,7 @@
 type InputModeKey = "think" | "research";
 
+const DEFAULT_THINKING_EFFORT = "high";
+
 /**
  * 组装发送载荷。
  * 标准 Agent 只透传 deepThink；dataAgent 仍由独立问数入口处理。
@@ -17,28 +19,28 @@ export function buildSubmitPayload(params: {
   const model = params.model?.trim() || undefined;
   const thinking = params.thinking;
   const thinkingEffort = params.thinking
-    ? params.thinkingEffort || "high"
+    ? params.thinkingEffort?.trim() || DEFAULT_THINKING_EFFORT
     : undefined;
-
-  if (params.isDataAgent) {
-    return {
-      message: params.question.trim(),
-      outputStyle: "dataAgent" as const,
-      deepThink: false,
-      files: params.uploadedFiles.length > 0 ? params.uploadedFiles : undefined,
-      model,
-      thinking,
-      thinkingEffort,
-    };
-  }
-
-  return {
+  // 两个分支共用的字段只在这里拼一次，避免后续新增字段时漏改其中一支。
+  const base = {
     message: params.question.trim(),
-    deepThink: params.visibleMode === "research",
     files: params.uploadedFiles.length > 0 ? params.uploadedFiles : undefined,
     model,
     thinking,
     thinkingEffort,
+  };
+
+  if (params.isDataAgent) {
+    return {
+      ...base,
+      outputStyle: "dataAgent" as const,
+      deepThink: false,
+    };
+  }
+
+  return {
+    ...base,
+    deepThink: params.visibleMode === "research",
     ...(params.forcePlanMode ? { forcePlanMode: true } : {}),
   };
 }
