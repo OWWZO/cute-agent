@@ -4939,3 +4939,14 @@ ol {
     sans-serif;
   color: var(--foreground);
 }
+
+/* Sonner 的配色来自自身 CSS 变量；在全局表里桥接语义 token，
+   组件内不再每次渲染都写一份静态 inline style。
+   选择器叠加 data-sonner-theme 是为了压过 sonner 注入的
+   [data-sonner-toaster][data-sonner-theme=…] 默认值。 */
+[data-sonner-toaster][data-sonner-theme].toaster {
+  --normal-bg: var(--popover);
+  --normal-text: var(--popover-foreground);
+  --normal-border: var(--border);
+  --border-radius: var(--radius);
+}
