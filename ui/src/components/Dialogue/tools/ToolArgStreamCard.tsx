@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ToolArgStreamPreview } from "./ToolArgStreamPreview";
@@ -37,6 +37,8 @@ export function ToolArgStreamCard({
   testId,
 }: ToolArgStreamCardProps) {
   const [open, setOpen] = useToolCardOpen(testId ?? "", false);
+  // aria-controls 指向展开区的 id：只在展开时挂，收起时不引用不存在的节点。
+  const bodyId = useId();
 
   return (
     <div
@@ -47,6 +49,7 @@ export function ToolArgStreamCard({
         type="button"
         className="kimi-tool-arg-stream-head"
         aria-expanded={open}
+        aria-controls={open ? bodyId : undefined}
         aria-label={open ? "收起工具入参" : "展开工具入参"}
         onClick={() => setOpen((v) => !v)}
       >
@@ -66,12 +69,14 @@ export function ToolArgStreamCard({
         />
       </button>
       {open ? (
-        <ToolArgStreamPreview
-          text={text}
-          label="参数"
-          streaming={streaming}
-          prominent
-        />
+        <div id={bodyId}>
+          <ToolArgStreamPreview
+            text={text}
+            label="参数"
+            streaming={streaming}
+            prominent
+          />
+        </div>
       ) : null}
     </div>
   );

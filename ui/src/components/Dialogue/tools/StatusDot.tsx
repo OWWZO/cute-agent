@@ -5,6 +5,15 @@ import { SPRING_SNAPPY, useSpring } from "@/lib/motion";
 
 type DotKind = "ok" | "error" | "running" | "suspended" | "idle";
 
+/** 圆点承载的状态文案：组件可能被单独复用，不能只靠相邻文本传达状态。 */
+const DOT_LABELS: Record<DotKind, string> = {
+  ok: "完成",
+  error: "失败",
+  running: "运行中",
+  suspended: "已暂停",
+  idle: "空闲",
+};
+
 function normalize(status?: string): DotKind {
   switch (status) {
     case "ok":
@@ -42,7 +51,8 @@ export function StatusDot({ status }: { status?: string }) {
   return (
     <motion.span
       className={cn("kw-dot", "kw-dot--" + kind)}
-      aria-hidden
+      role="img"
+      aria-label={DOT_LABELS[kind]}
       initial={justSettled ? {
         scale: 0.5,
         opacity: 0.6

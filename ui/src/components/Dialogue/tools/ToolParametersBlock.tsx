@@ -18,7 +18,9 @@ export function ToolParametersBlock({
 }) {
   const trimmedText = (text ?? "").trim();
 
-  if (!value && !trimmedText) {
+  // 显式判 `undefined` / `null`：按真值判断会把 `0` / `false` / `""` 这类合法
+  // 结果误当成「无入参」，静默退回原始文本。
+  if ((value === undefined || value === null) && !trimmedText) {
     return null;
   }
 
@@ -26,7 +28,7 @@ export function ToolParametersBlock({
     <section className="kimi-tool-section">
       <h4 className="kimi-tool-section-title">Parameters</h4>
       <div className="kimi-tool-section-body" data-testid="tool-parameters">
-        {value ? (
+        {value !== undefined && value !== null ? (
           <ToolJsonBlock data={value} />
         ) : (
           <div className="kimi-tool-section-text">{trimmedText}</div>
