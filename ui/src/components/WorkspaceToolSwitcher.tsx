@@ -2,64 +2,44 @@ import { cn } from "@/lib/utils";
 import { Blocks, Bot, Cpu, DatabaseZap, MessageSquare, WandSparkles } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { ROUTES } from "@/router/routes";
+import { buildHomeViewPath, type SidebarView } from "@/pages/Home/sidebarViews";
 
 type WorkspaceToolItem = {
-  key:
-    | "mrag"
-    | "image-generation"
-    | "sub-agents"
-    | "models"
-    | "capabilities"
-    | "channels";
+  key: SidebarView;
   label: string;
-  description: string;
   icon: typeof DatabaseZap;
-  to: string;
 };
 
 const workspaceToolItems: WorkspaceToolItem[] = [
   {
     key: "mrag",
     label: "MRAG 文件工作台",
-    description: "知识库、文件与检索调试",
     icon: DatabaseZap,
-    to: `${ROUTES.HOME}?view=mrag`,
   },
   {
     key: "image-generation",
     label: "绘图智能体",
-    description: "图片生成与 Base64 解析",
     icon: WandSparkles,
-    to: `${ROUTES.HOME}?view=image-generation`,
   },
   {
     key: "sub-agents",
     label: "子 Agent 装配",
-    description: "自定义 prompt 与工具调度",
     icon: Bot,
-    to: `${ROUTES.HOME}?view=sub-agents`,
   },
   {
     key: "models",
     label: "模型接入",
-    description: "API Key / 模型热配置",
     icon: Cpu,
-    to: `${ROUTES.HOME}?view=models`,
   },
   {
     key: "capabilities",
     label: "能力库",
-    description: "技能 zip / MCP 连接器",
     icon: Blocks,
-    to: `${ROUTES.HOME}?view=capabilities`,
   },
   {
     key: "channels",
     label: "机器人管理",
-    description: "绑定 QQ 机器人，让它接住 IM 消息",
     icon: MessageSquare,
-    to: `${ROUTES.HOME}?view=channels`,
   },
 ];
 
@@ -83,7 +63,7 @@ const WorkspaceToolSwitcher: CuteType.FC = ({ className }) => {
         return (
           <Link
             key={item.key}
-            to={item.to}
+            to={buildHomeViewPath(item.key)}
             aria-current={active ? "page" : undefined}
             className={cn(
               "group inline-flex min-h-[30px] shrink-0 items-center gap-1.5 rounded-md border border-transparent px-2.5 text-ui-caption font-medium transition-[background-color,border-color,color] duration-[var(--duration-base)] ease-[var(--ease-out)]",
