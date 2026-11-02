@@ -22,10 +22,8 @@ import { useToolCardOpen } from "./useToolCardOpen";
 
 type McpToolCallProps = {
   tool: CHAT.Task;
-  chat: CHAT.ChatItem;
   stackPosition?: ToolRowStackPosition;
   defaultExpanded?: boolean;
-  changeActiveChat: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
 };
 
 const iconBtn =

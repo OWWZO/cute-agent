@@ -15,11 +15,7 @@ type ReadToolCallProps = {
   tool: CHAT.Task;
   chat: CHAT.ChatItem;
   stackPosition?: ToolRowStackPosition;
-  defaultExpanded?: boolean;
-  changeActiveChat: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
-  changePlan?: () => void;
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
-  onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
 };
 
 /**

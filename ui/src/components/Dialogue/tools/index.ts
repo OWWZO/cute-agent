@@ -8,7 +8,7 @@ export {
   aggregateToolStatuses,
   resolveStackPosition,
 } from "./GenericToolCall";
-export { EditToolCall, type ToolPreviewRequest } from "./EditToolCall";
+export { EditToolCall } from "./EditToolCall";
 export { ReadToolCall } from "./ReadToolCall";
 export { McpToolCall } from "./McpToolCall";
 export {

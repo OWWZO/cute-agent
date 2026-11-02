@@ -33,6 +33,7 @@ import { useToolCardOpen } from "./useToolCardOpen";
 import {
   formatToolStreamChip,
   isToolArgStreaming,
+  resolveToolStreamBody,
   resolveToolStreamPath,
   shouldShowToolArgStream,
 } from "./toolStreamPreview";
@@ -87,9 +88,6 @@ type GenericToolCallProps = {
   defaultExpanded?: boolean;
   changeActiveChat: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
   changeFile?: CHAT.OpenFileHandler;
-  changePlan?: () => void;
-  onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
-  onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
 };
 
 /**
@@ -127,7 +125,9 @@ export const GenericToolCall = memo(function GenericToolCall({
   const inputJson = parseToolJson(arg);
   // 摘要行已不再挂任何文本 chip（ZCode 的摘要只有图标 + 类别 + 主文本 + diffCount）；
   // 仅入参流预览还保留一个参数统计 chip。
-  const chip = showArgStream ? formatToolStreamChip(arg, arg) : "";
+  const chip = showArgStream
+    ? formatToolStreamChip(arg, resolveToolStreamBody(name, arg))
+    : "";
 
   // 变更计数走翻页节点（对齐 ZCode）。Edit/Write 正常由 EditToolCall 接管，
   // 这里只是让 registry 分流变化时同一份 diff 语义不会退化成静态字符串。
@@ -208,7 +208,8 @@ export const GenericToolCall = memo(function GenericToolCall({
   }, [canExpand, defaultExpanded, userToggled, setOpen]);
 
   const stacked = stackPosition !== "single";
-  const expandable = showArgStream || canExpand;
+  // `canExpand` 已包含 `showArgStream`，这里不再重复或运算。
+  const expandable = canExpand;
 
   // 入参流：铺在工具名下方（不依赖折叠 body / status），入参本身默认折叠
   if (showArgStream) {
