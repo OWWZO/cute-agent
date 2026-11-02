@@ -11,9 +11,8 @@ import { SPRING_GENTLE } from "@/lib/motion";
 import querySSE from "@/utils/querySSE";
 import { buildConversationTaskData, getStableTaskIdentity } from "@/utils/chat";
 import {
-  collectPendingReplayIds,
+  buildChatTurnView,
   groupChatsIntoTurns,
-  mergeTurnChats,
 } from "@/lib/turnGroups";
 import Dialogue from "@/components/Dialogue";
 import DataDialogue from "@/components/Dialogue/DataDialogue";
@@ -441,21 +440,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
    * 合并结果必须 memo：`Dialogue` 是 memo 组件，靠 `chat` 引用相等判断是否重渲染。
    */
   const chatTurns = useMemo(
-    () =>
-      groupChatsIntoTurns(deferredChatList).map((turn) => ({
-        key: turn.key,
-        chat: mergeTurnChats(turn),
-        /**
-         * 整个 turn 的 requestId。历史回放是**按 run** 懒加载的，而合并后的
-         * `Dialogue` 只认最后一个 run 的 requestId —— 只补它会让 turn 内其它 run
-         * （尤其是 AskUserQuestion 之前那个）永远拿不到过程数据，工具卡整段消失。
-         */
-        requestIds: turn.chats
-          .map((item) => String(item.requestId || ""))
-          .filter(Boolean),
-        /** 仍需补回放的 run；补齐后随 `deferredChatList` 更新自动缩短。 */
-        pendingReplayIds: collectPendingReplayIds(turn.chats),
-      })),
+    () => groupChatsIntoTurns(deferredChatList).map(buildChatTurnView),
     [deferredChatList]
   );
   /**

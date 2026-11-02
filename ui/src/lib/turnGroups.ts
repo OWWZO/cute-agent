@@ -22,6 +22,13 @@ export type ChatTurn = {
   chats: CHAT.ChatItem[];
 };
 
+export type ChatTurnView = {
+  key: string;
+  chat: CHAT.ChatItem;
+  requestIds: string[];
+  pendingReplayIds: string[];
+};
+
 /**
  * 该 run 是否是「续跑」（用户回答 HITL 后由后端发起的 continuation run）。
  *
@@ -40,21 +47,52 @@ export function isContinuationRun(chat: CHAT.ChatItem): boolean {
  * 把 chatList 切成 turn。首个 run（或任何非续跑 run）开启新 turn，
  * 其后的续跑 run 归入当前 turn。
  */
+const turnCache = new WeakMap<
+  CHAT.ChatItem,
+  { chats: CHAT.ChatItem[]; turn: ChatTurn }
+>();
+const mergedTurnCache = new WeakMap<ChatTurn, CHAT.ChatItem>();
+const turnViewCache = new WeakMap<ChatTurn, ChatTurnView>();
+
 export function groupChatsIntoTurns(
   chats: readonly CHAT.ChatItem[]
 ): ChatTurn[] {
   const turns: ChatTurn[] = [];
-  for (const chat of chats) {
-    const current = turns[turns.length - 1];
-    if (current && isContinuationRun(chat)) {
-      current.chats.push(chat);
-      continue;
+  let currentChats: CHAT.ChatItem[] = [];
+  const flush = (cacheable: boolean) => {
+    if (!currentChats.length) return;
+    const first = currentChats[0];
+    const cached = cacheable ? turnCache.get(first) : undefined;
+    const sameChats = cached &&
+      cached.chats.length === currentChats.length &&
+      cached.chats.every((chat, index) => chat === currentChats[index]);
+    let turn: ChatTurn;
+    if (sameChats) {
+      turn = cached.turn;
+    } else {
+      turn = {
+        key: String(first.requestId || ""),
+        chats: currentChats,
+      };
+      if (cacheable) {
+        turnCache.set(first, {
+          chats: currentChats,
+          turn,
+        });
+      }
     }
-    turns.push({
-      key: String(chat.requestId || ""),
-      chats: [chat]
-    });
+    turns.push(turn);
+    currentChats = [];
+  };
+
+  for (const chat of chats) {
+    if (currentChats.length && !isContinuationRun(chat)) {
+      flush(currentChats.every((item) => !item.loading));
+    }
+    currentChats.push(chat);
   }
+  // 末轮可能正处于流式状态，即使 chat 对象被原地更新，也必须重新合并它。
+  flush(false);
   return turns;
 }
 
@@ -78,6 +116,25 @@ export function collectPendingReplayIds(
     .map((chat) => String(chat.requestId));
 }
 
+export function buildChatTurnView(turn: ChatTurn): ChatTurnView {
+  const cached = turnViewCache.get(turn);
+  if (cached && !turn.chats.some((chat) => chat.loading)) {
+    return cached;
+  }
+  const view = {
+    key: turn.key,
+    chat: mergeTurnChats(turn),
+    requestIds: turn.chats
+      .map((item) => String(item.requestId || ""))
+      .filter(Boolean),
+    pendingReplayIds: collectPendingReplayIds(turn.chats),
+  };
+  if (!turn.chats.some((chat) => chat.loading)) {
+    turnViewCache.set(turn, view);
+  }
+  return view;
+}
+
 /**
  * 把 turn 内的多个 run 合并成一个 chat，供 `Dialogue` 单 chat 渲染。
  *
@@ -91,8 +148,13 @@ export function collectPendingReplayIds(
  * - `runDurationMs` 求和，让「已工作 X」覆盖整轮而不是只覆盖一个 run。
  */
 export function mergeTurnChats(turn: ChatTurn): CHAT.ChatItem {
+  const cached = mergedTurnCache.get(turn);
+  if (cached) {
+    return cached;
+  }
   const { chats } = turn;
   if (chats.length === 1) {
+    mergedTurnCache.set(turn, chats[0]);
     return chats[0];
   }
 
@@ -103,7 +165,7 @@ export function mergeTurnChats(turn: ChatTurn): CHAT.ChatItem {
     0
   );
 
-  return {
+  const merged = {
     ...last,
     // 身份：代表「当前状态」的最后一个 run
     requestId: last.requestId,
@@ -137,4 +199,6 @@ export function mergeTurnChats(turn: ChatTurn): CHAT.ChatItem {
     replayAvailable: chats.some((chat) => chat.replayAvailable),
     replayLoaded: chats.every((chat) => chat.replayLoaded),
   };
+  mergedTurnCache.set(turn, merged);
+  return merged;
 }

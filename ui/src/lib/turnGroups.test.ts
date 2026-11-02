@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildChatTurnView,
   collectPendingReplayIds,
   groupChatsIntoTurns,
   isContinuationRun,
@@ -89,6 +90,36 @@ describe("groupChatsIntoTurns", () => {
     expect(turns).toHaveLength(2);
     expect(turns[0].chats).toHaveLength(3);
     expect(turns[1].chats).toHaveLength(1);
+  });
+});
+
+describe("轮次增量缓存", () => {
+  it("未变化的历史轮复用 turn、合并结果与导航元数据", () => {
+    const first = chat({ requestId: "req-1", query: "第一问" });
+    const live = chat({ requestId: "req-2", query: "第二问", loading: true });
+    const initialTurns = groupChatsIntoTurns([first, live]);
+    const historyView = buildChatTurnView(initialTurns[0]);
+
+    const updatedLive = { ...live, response: "流式增量" };
+    const nextTurns = groupChatsIntoTurns([first, updatedLive]);
+    const nextHistoryView = buildChatTurnView(nextTurns[0]);
+
+    expect(nextTurns[0]).toBe(initialTurns[0]);
+    expect(nextHistoryView).toBe(historyView);
+    expect(nextHistoryView.chat).toBe(historyView.chat);
+    expect(nextHistoryView.requestIds).toBe(historyView.requestIds);
+  });
+
+  it("末轮仍 loading 时即使复用引用也重新合并最新事实", () => {
+    const active = chat({ requestId: "req-live", query: "正在执行", loading: true });
+    const turns = groupChatsIntoTurns([active]);
+    const firstView = buildChatTurnView(turns[0]);
+
+    active.response = "更新后的正文";
+    const secondView = buildChatTurnView(turns[0]);
+
+    expect(secondView).not.toBe(firstView);
+    expect(secondView.chat.response).toBe("更新后的正文");
   });
 });
 
