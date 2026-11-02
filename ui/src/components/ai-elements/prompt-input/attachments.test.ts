@@ -90,6 +90,33 @@ describe("prompt-input attachment helpers", () => {
     expect(result.error?.code).toBe("max_file_size");
   });
 
+  it("部分文件类型不匹配时保留匹配项并返回 partial 错误", () => {
+    const files = [
+      new File(["1"], "a.png", { type: "image/png" }),
+      new File(["2"], "b.exe", { type: "application/x-msdownload" }),
+    ];
+
+    const result = validatePromptInputFiles(files, { accept: "image/*" });
+
+    expect(result.accepted.map((file) => file.name)).toEqual(["a.png"]);
+    expect(result.error?.code).toBe("partial");
+  });
+
+  it("部分文件超过大小上限时保留其余文件并返回 partial 错误", () => {
+    const files = [
+      new File(["1"], "small.png", { type: "image/png" }),
+      new File(["12345"], "big.png", { type: "image/png" }),
+    ];
+
+    const result = validatePromptInputFiles(files, {
+      accept: "image/*",
+      maxFileSize: 2,
+    });
+
+    expect(result.accepted.map((file) => file.name)).toEqual(["small.png"]);
+    expect(result.error?.code).toBe("partial");
+  });
+
   it("清理附件时会回收 object url", () => {
     const revokeSpy = vi
       .spyOn(URL, "revokeObjectURL")

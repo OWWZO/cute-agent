@@ -109,6 +109,20 @@ export function normalizeToolBaseUrlForBrowser(rawUrl?: string | null): string {
   }
 }
 
+/**
+ * 工具代理路径前缀的唯一清单：新增工具路由时只改这里，
+ * GenUI 资源解析和下面的相对路径兜底才不会出现一套认识、一套不认识。
+ */
+export function isToolFilePath(value: string): boolean {
+  return (
+    value.startsWith("/tool/") ||
+    value.startsWith("preview/") ||
+    value.startsWith("/preview/") ||
+    value.startsWith("download/") ||
+    value.startsWith("/download/")
+  );
+}
+
 export function normalizeFileUrlForBrowser(rawUrl?: string | null): string {
   const normalized = (rawUrl || "").trim();
   if (!normalized) {
@@ -136,16 +150,15 @@ export function normalizeFileUrlForBrowser(rawUrl?: string | null): string {
     return currentToolUrl.toString();
   } catch {
     // 相对路径无法被 URL 解析时，仅补当前 origin，不猜测其它外部主机。
-    const currentToolBaseUrl = buildCurrentToolBaseUrl();
-    if (currentToolBaseUrl && (normalized.startsWith("preview/") || normalized.startsWith("download/"))) {
-      return `${currentToolBaseUrl}/v1/file_tool/${normalized}`;
-    }
-    if (currentToolBaseUrl && (normalized.startsWith("/preview/") || normalized.startsWith("/download/"))) {
-      return `${currentToolBaseUrl}/v1/file_tool${normalized}`;
-    }
     if (normalized.startsWith("/tool/")) {
       const currentOrigin = buildCurrentToolOrigin();
       return currentOrigin ? `${currentOrigin}${normalized}` : normalized;
+    }
+    const currentToolBaseUrl = buildCurrentToolBaseUrl();
+    if (currentToolBaseUrl && isToolFilePath(normalized)) {
+      return normalized.startsWith("/")
+        ? `${currentToolBaseUrl}/v1/file_tool${normalized}`
+        : `${currentToolBaseUrl}/v1/file_tool/${normalized}`;
     }
     return normalized;
   }

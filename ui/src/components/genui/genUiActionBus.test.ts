@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import {
   normalizeAction,
   dispatchGenUiAction,
@@ -9,6 +9,10 @@ import {
 describe("genUiActionBus", () => {
   beforeEach(() => {
     resetGenUiActionAdapters();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("does not treat bare actionId as send_message", () => {
@@ -45,6 +49,29 @@ describe("genUiActionBus", () => {
     expect(result).toEqual({ ok: true, type: "patch_ui" });
     expect(patchUi).toHaveBeenCalledTimes(1);
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("logs adapter failures and keeps the error result", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failure = new Error("boom");
+    registerGenUiActionAdapters({
+      sendMessage: () => {
+        throw failure;
+      },
+    });
+
+    const result = await dispatchGenUiAction({
+      type: "send_message",
+      payload: { content: "hi" },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      type: "send_message",
+      reason: "error",
+      error: failure,
+    });
+    expect(consoleError).toHaveBeenCalledTimes(1);
   });
 
   it("returns invalid when action cannot be normalized", async () => {

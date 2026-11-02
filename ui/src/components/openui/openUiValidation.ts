@@ -2,7 +2,9 @@ import { createParser, type LibraryJSONSchema } from '@openuidev/lang-core';
 
 import spec from '@/generated/openui/spec.json';
 
-const parser = createParser(spec.schema as unknown as LibraryJSONSchema, spec.root);
+// spec.json 由 scripts/openui-generate.mjs 生成；单层断言仍会做结构兼容检查，
+// 生成器改动导致 shape 漂移时会在编译期而不是 parse 时才暴露。
+const parser = createParser(spec.schema as LibraryJSONSchema, spec.root);
 
 export interface OpenUiDiagnosticError {
   code?: string;
@@ -37,17 +39,22 @@ export function isRenderableProgram(text: string): boolean {
   return diagnoseProgram(text).renderable;
 }
 
+/** 空输入与 parse 异常共用的「尚不可渲染」诊断，避免两处字面量漂移。 */
+function emptyDiagnostic(): OpenUiDiagnostic {
+  return {
+    renderable: false,
+    incomplete: true,
+    hasRoot: false,
+    errors: [],
+    orphaned: [],
+    unresolved: []
+  };
+}
+
 /** 跑一次 parser 并保留完整诊断信息；parse 抛异常时按"结构崩坏"处理。 */
 export function diagnoseProgram(text: string): OpenUiDiagnostic {
   if (!text.trim()) {
-    return {
-      renderable: false,
-      incomplete: true,
-      hasRoot: false,
-      errors: [],
-      orphaned: [],
-      unresolved: []
-    };
+    return emptyDiagnostic();
   }
   try {
     const result = parser.parse(text);
@@ -76,13 +83,6 @@ export function diagnoseProgram(text: string): OpenUiDiagnostic {
       unresolved: [...meta.unresolved],
     };
   } catch {
-    return {
-      renderable: false,
-      incomplete: true,
-      hasRoot: false,
-      errors: [],
-      orphaned: [],
-      unresolved: []
-    };
+    return emptyDiagnostic();
   }
 }

@@ -3,7 +3,6 @@ import {
   BuiltinActionType,
   Renderer,
   type ActionEvent,
-  type LibraryActionEvent,
 } from '@openuidev/react-lang';
 
 import { runLibraryAction } from '@/lib/openui/actions';
@@ -31,13 +30,13 @@ export interface OpenUiRenderProps {
  */
 export function OpenUiRender({ text, streaming, onAction, onStateUpdate }: OpenUiRenderProps) {
   const handleAction = useCallback(
-    (event: LibraryActionEvent<typeof library>) => {
-      const libraryHandled = runLibraryAction(event as ActionEvent);
+    (event: ActionEvent) => {
+      const libraryHandled = runLibraryAction(event);
       if (libraryHandled) {
         void libraryHandled;
         return;
       }
-      onAction?.(event as ActionEvent);
+      onAction?.(event);
     },
     [onAction]
   );

@@ -89,7 +89,6 @@ export function usePromptInputAttachmentState(
 
   return {
     items,
-    setItems,
     add,
     remove,
     clear,

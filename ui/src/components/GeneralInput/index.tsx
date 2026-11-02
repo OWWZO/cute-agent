@@ -370,6 +370,10 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     }
     if (error.code === "max_files") {
       toast.warning("一次添加的文件过多，部分未加入");
+      return;
+    }
+    if (error.code === "partial") {
+      toast.warning("部分文件类型或大小不符合要求，已忽略");
     }
   }, []);
 
@@ -585,6 +589,7 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
           <PromptInputFooter className="cute-composer-footer items-center justify-between gap-2 px-2.5 pb-2 pt-0.5">
             <PromptInputTools className="cute-composer-tools cute-composer-tools-left min-w-0 flex-1 flex-wrap items-center gap-0.5">
               <PromptInputAddAttachmentsButton
+                label="上传附件，可一次多选"
                 size="icon-sm"
                 variant="ghost"
                 disabled={disabled}
