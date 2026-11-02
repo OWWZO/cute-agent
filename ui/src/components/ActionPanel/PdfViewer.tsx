@@ -427,8 +427,6 @@ export function PdfViewer({
   const railElementsRef = useRef(new Map<number, HTMLButtonElement>());
   const pendingZoomAnchorRef = useRef<{ page: number; ratio: number } | null>(null);
   const didInitialFitRef = useRef(false);
-  const onLoadErrorRef = useRef(onLoadError);
-  onLoadErrorRef.current = onLoadError;
 
   const pageNumbers = useMemo(
     () => (numPages ? Array.from({ length: numPages }, (_, index) => index + 1) : []),

@@ -48,40 +48,44 @@ const MediaFileRenderer: CuteType.FC<MediaFileRendererProps> = React.memo((props
   }, []);
 
   const handleError = useCallback((event: SyntheticEvent<HTMLMediaElement>) => {
-    // 媒体元素在 src 为空时也会触发 error，这里只在确实有 URL 时判为解码失败。
-    if (!resolvedUrl) return;
     console.error("[MediaFileRenderer] 媒体加载失败", event.currentTarget.error);
     setStatus("error");
-  }, [resolvedUrl]);
+  }, []);
+
+  const renderError = (params: {
+    variant: React.ComponentProps<typeof Alert>["variant"];
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+  }) => (
+    <div className={cn("flex h-full items-center justify-center bg-white p-6", className)}>
+      <Alert
+        variant={params.variant}
+        className={ERROR_CLASS}
+      >
+        {params.icon}
+        <AlertTitle>{params.title}</AlertTitle>
+        <AlertDescription>{params.description}</AlertDescription>
+      </Alert>
+    </div>
+  );
 
   if (missingReason || !resolvedUrl) {
-    return (
-      <div className={cn("flex h-full items-center justify-center bg-white p-6", className)}>
-        <Alert
-          variant="destructive"
-          className={ERROR_CLASS}
-        >
-          <CircleAlert />
-          <AlertTitle>{kind === "video" ? "视频不可播放" : "音频不可播放"}</AlertTitle>
-          <AlertDescription>{missingReason || "引用资源不存在或已失效"}</AlertDescription>
-        </Alert>
-      </div>
-    );
+    return renderError({
+      variant: "destructive",
+      icon: <CircleAlert />,
+      title: kind === "video" ? "视频不可播放" : "音频不可播放",
+      description: missingReason || "引用资源不存在或已失效",
+    });
   }
 
   if (status === "error") {
-    return (
-      <div className={cn("flex h-full items-center justify-center bg-white p-6", className)}>
-        <Alert
-          variant="warning"
-          className={ERROR_CLASS}
-        >
-          <TriangleAlert />
-          <AlertTitle>{kind === "video" ? "无法播放该视频" : "无法播放该音频"}</AlertTitle>
-          <AlertDescription>当前浏览器不支持该文件使用的编码，或文件已损坏。请下载后用本地播放器打开。</AlertDescription>
-        </Alert>
-      </div>
-    );
+    return renderError({
+      variant: "warning",
+      icon: <TriangleAlert />,
+      title: kind === "video" ? "无法播放该视频" : "无法播放该音频",
+      description: "当前浏览器不支持该文件使用的编码，或文件已损坏。请下载后用本地播放器打开。",
+    });
   }
 
   const Icon = kind === "video" ? FileVideo : FileAudio;

@@ -94,6 +94,45 @@ const SvgFileRenderer: CuteType.FC<SvgFileRendererProps> = React.memo((props) =>
 
   const displayError = error ? resolveFetchError(error) : null;
 
+  const renderBody = () => {
+    if (loading) {
+      return (
+        <div className="flex h-full min-h-[240px] items-center justify-center">
+          <Loading className={LOADING_CLASS} />
+        </div>
+      );
+    }
+
+    if (displayError) {
+      return (
+        <div className="p-4">
+          <Alert variant="destructive" className={ERROR_CLASS}>
+            <CircleAlert />
+            <AlertTitle>SVG 不可预览</AlertTitle>
+            <AlertDescription>{displayError}</AlertDescription>
+          </Alert>
+        </div>
+      );
+    }
+
+    if (mode === "source") {
+      return <SourceCodeView code={content || ""} language="xml" sourcePath={fileName} />;
+    }
+
+    return (
+      <div
+        className={cn("flex h-full min-h-[240px] items-center justify-center overflow-auto p-6")}
+        style={CHECKERBOARD_STYLE}
+      >
+        <img
+          src={graphicSource}
+          alt={fileName || "SVG 预览"}
+          className="h-auto max-h-full w-auto max-w-full object-contain"
+        />
+      </div>
+    );
+  };
+
   return (
     <ViewerPanelShell
       label="SVG"
@@ -113,32 +152,7 @@ const SvgFileRenderer: CuteType.FC<SvgFileRendererProps> = React.memo((props) =>
       }
       bodyClassName="min-h-0 flex-1 p-0"
     >
-      {loading ? (
-        <div className="flex h-full min-h-[240px] items-center justify-center">
-          <Loading className={LOADING_CLASS} />
-        </div>
-      ) : displayError ? (
-        <div className="p-4">
-          <Alert variant="destructive" className={ERROR_CLASS}>
-            <CircleAlert />
-            <AlertTitle>SVG 不可预览</AlertTitle>
-            <AlertDescription>{displayError}</AlertDescription>
-          </Alert>
-        </div>
-      ) : mode === "source" ? (
-        <SourceCodeView code={content || ""} language="xml" sourcePath={fileName} />
-      ) : (
-        <div
-          className={cn("flex h-full min-h-[240px] items-center justify-center overflow-auto p-6")}
-          style={CHECKERBOARD_STYLE}
-        >
-          <img
-            src={graphicSource}
-            alt={fileName || "SVG 预览"}
-            className="h-auto max-h-full w-auto max-w-full object-contain"
-          />
-        </div>
-      )}
+      {renderBody()}
     </ViewerPanelShell>
   );
 });

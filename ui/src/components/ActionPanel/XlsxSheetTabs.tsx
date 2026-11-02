@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import { useId, type KeyboardEvent } from "react";
 import type { XlsxViewerController } from "@extend-ai/react-xlsx";
 import { cn } from "@/lib/utils";
 
@@ -40,10 +40,18 @@ interface XlsxSheetTabsProps {
   controller: XlsxViewerController;
   /** tablist 的无障碍标签。 */
   label: string;
+  /**
+   * 工作表内容区（tabpanel）的元素 id。
+   *
+   * 面板由 `@extend-ai/react-xlsx` 自己渲染，本组件拿不到它的节点；调用方
+   * 能给面板挂 id 时传进来，tab 才会通过 `aria-controls` 与其关联。
+   */
+  panelId?: string;
 }
 
-export function XlsxSheetTabs({ controller, label }: XlsxSheetTabsProps) {
+export function XlsxSheetTabs({ controller, label, panelId }: XlsxSheetTabsProps) {
   const { activeTabIndex, setActiveTabIndex, tabs } = controller;
+  const idPrefix = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 
   if (tabs.length <= 1) {
     return null;
@@ -80,6 +88,7 @@ export function XlsxSheetTabs({ controller, label }: XlsxSheetTabsProps) {
         const isActive = tabIndex === activeTabIndex;
         return (
           <button
+            aria-controls={panelId}
             aria-selected={isActive}
             className={cn(
               "h-7 max-w-48 shrink-0 truncate rounded-md px-2 text-ui-sm transition-colors",
@@ -87,6 +96,7 @@ export function XlsxSheetTabs({ controller, label }: XlsxSheetTabsProps) {
                 ? "bg-[var(--chat-surface-muted)] font-medium text-[var(--chat-text)]"
                 : "text-[var(--chat-text-soft)] hover:bg-[var(--chat-surface-muted)] hover:text-[var(--chat-text)]"
             )}
+            id={`${idPrefix}-tab-${tabIndex}`}
             key={tab.id}
             onClick={() => selectTab(tabIndex)}
             onKeyDown={(event) => handleKeyDown(event, tabIndex)}
