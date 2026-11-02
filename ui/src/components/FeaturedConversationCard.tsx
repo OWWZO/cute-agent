@@ -68,6 +68,50 @@ function CardShell(props: {
   );
 }
 
+/**
+ * 标签 + 发布日期：row / grid 两种布局共用同一套展示规则（最多 3 个标签、日期缺省不渲染），
+ * 只有间距与对齐不同，用 `compact` 区分。
+ */
+function CardMeta(props: {
+  tags: string[];
+  publishedLabel: string;
+  compact: boolean;
+}) {
+  return (
+    <div
+      className={
+        props.compact
+          ? "mt-2.5 flex flex-wrap items-center gap-2"
+          : "mt-auto flex flex-wrap items-center gap-2 pt-1"
+      }
+    >
+      {props.tags.slice(0, 3).map((tag) => (
+        <span
+          key={tag}
+          className={
+            props.compact
+              ? "rounded-full bg-[var(--chat-surface-soft)] px-2 py-0.5 text-ui-sm text-[var(--chat-text-soft)]"
+              : "rounded-full bg-[var(--chat-surface-soft)] px-2.5 py-1 text-ui-sm text-[var(--chat-text-soft)]"
+          }
+        >
+          {tag}
+        </span>
+      ))}
+      {props.publishedLabel ? (
+        <span
+          className={
+            props.compact
+              ? "text-ui-sm text-[var(--chat-text-muted)]"
+              : "ml-auto text-ui-sm tabular-nums text-[var(--chat-text-muted)]"
+          }
+        >
+          {props.publishedLabel}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export default function FeaturedConversationCard(
   props: FeaturedConversationCardProps
 ) {
@@ -115,21 +159,7 @@ export default function FeaturedConversationCard(
           <p className="mt-1.5 line-clamp-2 text-ui-caption leading-6 text-[var(--chat-text-muted)]">
             {card.summary}
           </p>
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            {tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full bg-[var(--chat-surface-soft)] px-2 py-0.5 text-ui-sm text-[var(--chat-text-soft)]"
-              >
-                {tag}
-              </span>
-            ))}
-            {publishedLabel ? (
-              <span className="text-ui-sm text-[var(--chat-text-muted)]">
-                {publishedLabel}
-              </span>
-            ) : null}
-          </div>
+          <CardMeta tags={tags} publishedLabel={publishedLabel} compact />
         </div>
       </CardShell>
     );
@@ -170,21 +200,7 @@ export default function FeaturedConversationCard(
           </p>
         </div>
 
-        <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
-          {tags.slice(0, 3).map((tag) => (
-            <span
-              key={tag}
-              className="rounded-full bg-[var(--chat-surface-soft)] px-2.5 py-1 text-ui-sm text-[var(--chat-text-soft)]"
-            >
-              {tag}
-            </span>
-          ))}
-          {publishedLabel ? (
-            <span className="ml-auto text-ui-sm tabular-nums text-[var(--chat-text-muted)]">
-              {publishedLabel}
-            </span>
-          ) : null}
-        </div>
+        <CardMeta tags={tags} publishedLabel={publishedLabel} compact={false} />
       </div>
     </CardShell>
   );
