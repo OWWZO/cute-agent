@@ -1,5 +1,8 @@
 import {
+  createContext,
+  memo,
   useCallback,
+  useContext,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -317,6 +320,44 @@ const findTaskByStableKey = (
 };
 
 type SessionFileTasks = ReturnType<typeof collectSessionFileTasks>;
+
+type TaskTabLiveState = {
+  chatList: CHAT.ChatItem[];
+  taskList: PanelItemType[];
+  workspaceStreamTask?: CHAT.Task;
+};
+
+const TaskTabLiveStateContext = createContext<TaskTabLiveState | null>(null);
+
+const LiveTaskTabView = memo(function LiveTaskTabView({
+  tab,
+  sessionFileTasks,
+}: {
+  tab: WorkspaceTaskTab;
+  sessionFileTasks: SessionFileTasks;
+}) {
+  const liveState = useContext(TaskTabLiveStateContext);
+  const liveTask =
+    (liveState &&
+      findTaskByStableKey(
+        liveState.chatList,
+        liveState.taskList,
+        tab.taskKey
+      )) ||
+    (liveState?.workspaceStreamTask &&
+    getTaskStableKey(liveState.workspaceStreamTask) === tab.taskKey
+      ? liveState.workspaceStreamTask
+      : undefined) ||
+    tab.fallbackTask;
+  return (
+    <FilePreview
+      key={`task-tab-${tab.taskKey}`}
+      taskItem={liveTask}
+      taskList={sessionFileTasks}
+      className="h-full"
+    />
+  );
+});
 
 const ChatView: CuteType.FC<Props> = (props) => {
   const {
@@ -1275,25 +1316,20 @@ const ChatView: CuteType.FC<Props> = (props) => {
    * 渲染复用既有 `FilePreview`（carousel + ActionPanel 路由），**不要**另写一套
    * 工具预览逻辑。
    */
+  const taskTabLiveState = useMemo<TaskTabLiveState>(
+    () => ({
+      chatList: conversation.chatList,
+      taskList,
+      workspaceStreamTask,
+    }),
+    [conversation.chatList, taskList, workspaceStreamTask]
+  );
+  /** tab 框架只依赖会话级文件任务；实时任务经 context 下发，避免任务帧变化时重建整个 ActionView。 */
   const renderTaskTab = useCallback(
-    (tab: WorkspaceTaskTab) => {
-      const liveTask =
-        findTaskByStableKey(conversation.chatList, taskList, tab.taskKey) ||
-        (workspaceStreamTask &&
-        getTaskStableKey(workspaceStreamTask) === tab.taskKey
-          ? workspaceStreamTask
-          : undefined) ||
-        tab.fallbackTask;
-      return (
-        <FilePreview
-          key={`task-tab-${tab.taskKey}`}
-          taskItem={liveTask}
-          taskList={sessionFileTasks}
-          className="h-full"
-        />
-      );
-    },
-    [conversation.chatList, sessionFileTasks, taskList, workspaceStreamTask]
+    (tab: WorkspaceTaskTab) => (
+      <LiveTaskTabView tab={tab} sessionFileTasks={sessionFileTasks} />
+    ),
+    [sessionFileTasks]
   );
 
   /**
@@ -2033,33 +2069,35 @@ const ChatView: CuteType.FC<Props> = (props) => {
                 原因：ActionView 持有工作区 tab 列表（文件 / 子智能体详情 / 目录），
                 一旦被独占面板顶掉就会卸载、tab 全部丢失 —— 而从子智能体详情里点
                 思考块恰恰会走 openThinkingPanel，等于自毁当前 tab。 */}
-          <ActionView
-            key={conversation.id}
-            pendingPreviewFile={pendingPreviewFile}
-            onPendingPreviewFileConsumed={clearPendingPreviewFile}
-            pendingSourceTab={pendingSourceTab}
-            onPendingSourceTabConsumed={() => setPendingSourceTab(null)}
-            pendingAgentTab={pendingAgentTab}
-            onPendingAgentTabConsumed={() => setPendingAgentTab(null)}
-            pendingAgentDirectoryTab={pendingAgentDirectory}
-            onPendingAgentDirectoryTabConsumed={() =>
-              setPendingAgentDirectory(false)
-            }
-            pendingTaskTab={pendingTaskTab}
-            onPendingTaskTabConsumed={() => setPendingTaskTab(null)}
-            agentRoster={subAgentRoster}
-            onOpenAgent={openAgentPanel}
-            renderAgentTab={renderAgentTab}
-            renderTaskTab={renderTaskTab}
-            onTabsChange={handleWorkspaceTabsChange}
-            workspaceCaption={workspaceCaption}
-            taskList={sessionFileTasks}
-            plan={plan}
-            isFocusMode={isFocusMode}
-            onToggleFocusMode={toggleFocusMode}
-            ref={actionViewRef}
-            onClose={closeActionView}
-          />
+          <TaskTabLiveStateContext.Provider value={taskTabLiveState}>
+            <ActionView
+              key={conversation.id}
+              pendingPreviewFile={pendingPreviewFile}
+              onPendingPreviewFileConsumed={clearPendingPreviewFile}
+              pendingSourceTab={pendingSourceTab}
+              onPendingSourceTabConsumed={() => setPendingSourceTab(null)}
+              pendingAgentTab={pendingAgentTab}
+              onPendingAgentTabConsumed={() => setPendingAgentTab(null)}
+              pendingAgentDirectoryTab={pendingAgentDirectory}
+              onPendingAgentDirectoryTabConsumed={() =>
+                setPendingAgentDirectory(false)
+              }
+              pendingTaskTab={pendingTaskTab}
+              onPendingTaskTabConsumed={() => setPendingTaskTab(null)}
+              agentRoster={subAgentRoster}
+              onOpenAgent={openAgentPanel}
+              renderAgentTab={renderAgentTab}
+              renderTaskTab={renderTaskTab}
+              onTabsChange={handleWorkspaceTabsChange}
+              workspaceCaption={workspaceCaption}
+              taskList={sessionFileTasks}
+              plan={plan}
+              isFocusMode={isFocusMode}
+              onToggleFocusMode={toggleFocusMode}
+              ref={actionViewRef}
+              onClose={closeActionView}
+            />
+          </TaskTabLiveStateContext.Provider>
 
           {pendingDesktopStreamUrl ? (
             <div className="absolute inset-0 z-20 flex min-h-0 flex-col bg-background">
