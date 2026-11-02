@@ -502,9 +502,6 @@ export function isTimelineToolActive(tool?: CHAT.Task) {
     }
     return !resolveChapterSummary(resultMap);
   }
-  if (CRAFTING_MESSAGE_TYPES.has(tool.messageType || "")) {
-    return !isTaskFinal(tool);
-  }
   return !isTaskFinal(tool);
 }
 
@@ -722,9 +719,7 @@ export function hasPendingAskUserQuestion(chat?: CHAT.ChatItem | null): boolean 
   }
   const runStatus = String(chat.metrics?.status || "").toUpperCase();
   // 续跑中 / 已成功时不再因历史 WAITING 标记误判
-  if (runStatus === "RUNNING" || runStatus === "SUCCESS" || runStatus === "FAILED") {
-    // fall through to card status only
-  } else if (runStatus === "WAITING_INPUT") {
+  if (runStatus === "WAITING_INPUT") {
     return true;
   }
   const groups = [
@@ -973,6 +968,7 @@ export function markAskUserQuestionsAnswered(
 export function markPlanApprovalsDecided(
   chat: CHAT.ChatItem,
   approvalId?: string,
+  // 与 ask_user / desktop_control 共用 markDecided 四参签名；计划审批没有 answers 输入。
   _answers?: Record<string, string>,
   approved?: boolean
 ): CHAT.ChatItem {
