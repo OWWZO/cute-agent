@@ -36,21 +36,22 @@ export function useToolCardOpen(key: string, defaultOpen: boolean): [boolean, Se
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, persistable]);
 
-  return [
-    open,
-    useCallback<SetOpen>(
-      (next) => {
-        const value =
-          typeof next === "function"
-            ? (next as (previous: boolean) => boolean)(openRef.current)
-            : next;
-        openRef.current = value;
-        if (persistable) {
-          setToolCardOpen(key, value);
-        }
-        setOpenState(value);
-      },
-      [key, persistable]
-    ),
-  ];
+  // 具名声明而非内联在返回数组里：hooks 顺序只由这一行保证，
+  // 以后在 return 前加早退分支时不容易漏看。
+  const setOpen = useCallback<SetOpen>(
+    (next) => {
+      const value =
+        typeof next === "function"
+          ? (next as (previous: boolean) => boolean)(openRef.current)
+          : next;
+      openRef.current = value;
+      if (persistable) {
+        setToolCardOpen(key, value);
+      }
+      setOpenState(value);
+    },
+    [key, persistable]
+  );
+
+  return [open, setOpen];
 }
