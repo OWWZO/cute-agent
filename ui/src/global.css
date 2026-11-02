@@ -3720,13 +3720,14 @@ ol {
   text-align: center;
   opacity: 0;
   animation-name: ui-moon-frame;
-  animation-duration: 960ms;
+  /* 时长由 MoonSpinner.tsx 按帧数 × 帧时长计算后下发 */
+  animation-duration: var(--moon-duration);
   animation-timing-function: steps(1, end);
   animation-iteration-count: infinite;
   animation-delay: var(--moon-frame-delay);
 }
 .ui-moon--fast .ui-moon__frame {
-  animation-duration: 480ms;
+  animation-duration: var(--moon-duration-fast);
   animation-delay: var(--moon-frame-fast-delay);
 }
 @keyframes ui-moon-frame {
