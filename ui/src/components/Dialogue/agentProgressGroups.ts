@@ -1,9 +1,10 @@
 import { formatSubAgentDuration } from "@/utils/chat/subagent";
-import type { AgentPhase } from "@/types/agentRuntime";
+import type { AgentMember, AgentPhase } from "@/types/agentRuntime";
 
 export function resolveAgentPhaseLabel(
-  phase: AgentPhase | string | undefined,
-  status: string
+  phase: AgentPhase | undefined,
+  /** 子 Agent 投影可能还没有确定状态（unknown），其余直接复用运行时联合类型。 */
+  status: AgentMember["status"] | "unknown"
 ): string {
   const normalized = (phase || "").toLowerCase();
   switch (normalized) {

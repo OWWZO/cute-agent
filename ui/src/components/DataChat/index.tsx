@@ -47,6 +47,30 @@ const CHART_TYPES = [
   },
 ] as const;
 
+const CHIP_CLASS = "rounded-md px-2 py-0.5";
+
+/**
+ * 分析参数标签。配色属于 DataChat 的数据编码色板（该目录在 check:tokens 中豁免），
+ * 卡片本身固定白底，因此不跟随暗色主题的界面 token 切换。
+ */
+function renderChips(label: string, items: string[], toneClass: string) {
+  if (!items.length) {
+    return null;
+  }
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="w-8 shrink-0 whitespace-nowrap">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item, i) => (
+          <span key={i} className={cn(CHIP_CLASS, toneClass)}>
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const TypeBar: CuteType.FC<{
   currentType: string;
   chartCfg: DataChatSourceConfig;
@@ -100,51 +124,9 @@ const TypeBar: CuteType.FC<{
       </div>
       {showQueryArgs ? (
         <div className="mb-3 flex w-full flex-col gap-2 text-ui-sm leading-6 text-[var(--chat-text-soft)]">
-          {summary.dims.length > 0 ? (
-            <div className="flex items-baseline gap-2">
-              <span className="w-8 shrink-0 whitespace-nowrap">维度</span>
-              <div className="flex flex-wrap gap-1.5">
-                {summary.dims.map((item, i) => (
-                  <span
-                    key={i}
-                    className="rounded-md bg-[#edeffd] px-2 py-0.5 text-[#4a5fe8]"
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {summary.measures.length > 0 ? (
-            <div className="flex items-baseline gap-2">
-              <span className="w-8 shrink-0 whitespace-nowrap">指标</span>
-              <div className="flex flex-wrap gap-1.5">
-                {summary.measures.map((item, i) => (
-                  <span
-                    key={i}
-                    className="rounded-md bg-[#eaf8ec] px-2 py-0.5 text-[#2fbc44]"
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {summary.filters.length > 0 ? (
-            <div className="flex items-baseline gap-2">
-              <span className="w-8 shrink-0 whitespace-nowrap">筛选</span>
-              <div className="flex flex-wrap gap-1.5">
-                {summary.filters.map((item, i) => (
-                  <span
-                    key={i}
-                    className="rounded-md bg-[#f2eafe] px-2 py-0.5 text-[#8031f5]"
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          {renderChips("维度", summary.dims, "bg-[#edeffd] text-[#4a5fe8]")}
+          {renderChips("指标", summary.measures, "bg-[#eaf8ec] text-[#2fbc44]")}
+          {renderChips("筛选", summary.filters, "bg-[#f2eafe] text-[#8031f5]")}
           {summary.formula ? (
             <div className="flex items-baseline gap-2">
               <span className="w-8 shrink-0 whitespace-nowrap">公式</span>
@@ -189,9 +171,9 @@ const DataChat: CuteType.FC<{
       <div className="w-full rounded-xl border border-[var(--chat-border)]/50 bg-[var(--chat-surface)] p-3 sm:p-4">
         {transConfig.chartType === "kpiGroup" && <Card data={transConfig} />}
         {transConfig.chartType === "table" && <SimpleTable data={transConfig} />}
-        {defaultChartPresets.chartTypes.includes(
-          transConfig.chartType as never
-        ) && <Chart data={transConfig} />}
+        {defaultChartPresets.chartTypes.includes(transConfig.chartType) && (
+          <Chart data={transConfig} />
+        )}
       </div>
     </div>
   );

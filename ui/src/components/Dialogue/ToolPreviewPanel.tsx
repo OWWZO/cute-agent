@@ -44,6 +44,19 @@ type ToolPreviewPanelProps = {
 const headerIconBtnClass =
   "flex h-7 w-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-surface-hover hover:text-foreground";
 
+/** file / image / fetch 失败共用的「无法预览」降级块，标题与描述只在这里维护一份。 */
+function renderUnavailable(reason: string) {
+  return (
+    <div className="p-4">
+      <Alert variant="info">
+        <Info />
+        <AlertTitle>该文件不在会话产物中，无法预览</AlertTitle>
+        <AlertDescription>{reason}</AlertDescription>
+      </Alert>
+    </div>
+  );
+}
+
 /**
  * 右侧工具预览面板（`ToolDiffPanel` 的泛化版）。
  *
@@ -164,14 +177,8 @@ export const ToolPreviewPanel = memo(function ToolPreviewPanel({
     if (source.type === "image") {
       // 图片链路复用会话产物 URL：能映射到就渲染，映射不到给降级说明。
       if (!fileUrl) {
-        return (
-          <div className="p-4">
-            <Alert variant="info">
-              <Info />
-              <AlertTitle>该文件不在会话产物中，无法预览</AlertTitle>
-              <AlertDescription>{source.path}</AlertDescription>
-            </Alert>
-          </div>
+        return renderUnavailable(
+          unavailableReason || source.path || source.title
         );
       }
       return (
@@ -187,15 +194,7 @@ export const ToolPreviewPanel = memo(function ToolPreviewPanel({
 
     // source.type === "file"
     if (unavailableReason) {
-      return (
-        <div className="p-4">
-          <Alert variant="info">
-            <Info />
-            <AlertTitle>该文件不在会话产物中，无法预览</AlertTitle>
-            <AlertDescription>{unavailableReason}</AlertDescription>
-          </Alert>
-        </div>
-      );
+      return renderUnavailable(unavailableReason);
     }
     if (loading) {
       return (
@@ -205,15 +204,7 @@ export const ToolPreviewPanel = memo(function ToolPreviewPanel({
       );
     }
     if (error) {
-      return (
-        <div className="p-4">
-          <Alert variant="info">
-            <Info />
-            <AlertTitle>该文件不在会话产物中，无法预览</AlertTitle>
-            <AlertDescription>{source.path}</AlertDescription>
-          </Alert>
-        </div>
-      );
+      return renderUnavailable(error.message || source.path || source.title);
     }
     return (
       <SourceCodeView

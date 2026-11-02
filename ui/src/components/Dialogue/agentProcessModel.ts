@@ -73,21 +73,18 @@ export type ProcessSegment =
   | { type: "group"; group: ProcessStepGroup }
   | { type: "thinking"; step: ProcessStepRow }
   | { type: "assistant_reply"; step: ProcessStepRow; text: string }
-  | { type: "user_message"; step: ProcessStepRow }
-  | { type: "final_reply"; step: ProcessStepRow; text: string };
+  | { type: "user_message"; step: ProcessStepRow };
 
 export type AgentProcessModel = {
   hasProcess: boolean;
   loading: boolean;
   thought?: ProcessThoughtBlock;
-  /** 短意图句：思考首行或 tip，不重复 thought 全文 */
+  /** 短意图句：思考首行，不重复 thought 全文 */
   intentLine?: string;
   /** 有序分段（主渲染源） */
   segments: ProcessSegment[];
   /** 兼容：仅 collapsible 工作组 */
   groups: ProcessStepGroup[];
-  /** 末轮无 tool 的思考，作为最终回复（不进折叠组） */
-  finalReply?: { text: string; step: ProcessStepRow };
   totalStepCount: number;
   totalDurationMs?: number;
   totalDurationLabel?: string;
@@ -776,7 +773,6 @@ function buildGroupTitle(
  * - 空 assistant_reply → 不切开、不展示
  * - thinking 无后续非空回复时 → 融入「执行了 N 步」组内作为一步
  * - user_brief → 常显并切开
- * - 末尾仅非空过程文且无 tool → final_reply
  */
 export function segmentProcessSteps(
   steps: ProcessStepRow[],
@@ -928,15 +924,11 @@ export function segmentProcessSteps(
   // 末组是否 active 由组内步骤状态决定，不因整轮 loading 强制保持展开
   flushWorkGroup(false);
 
-  // 终答只走 chat.conclusion / result，不再把过程文提升为 final_reply（避免与结论重复）
+  // 终答只走 chat.conclusion / result，不再把过程文提升为独立终答段（避免与结论重复）
   return segments;
 }
 
-function extractIntentLine(thoughtText?: string, tip?: string): string | undefined {
-  const tipText = asText(tip);
-  if (tipText && !/正在|加载|排队|请稍候|思考中/i.test(tipText)) {
-    // tip 往往是系统状态，不当作意图句
-  }
+function extractIntentLine(thoughtText?: string): string | undefined {
   const thought = asText(thoughtText);
   if (!thought) {
     return undefined;
@@ -1216,12 +1208,6 @@ export function deriveAgentProcessTaskModel(input: {
     for (const segment of sliced) {
       if (segment.type === "group") {
         groupSerial += 1;
-        segment.group.id = `${
-          slice.container?.id ||
-          slice.container?.messageId ||
-          slice.container?.taskId ||
-          "group"
-        }:${slice.groupIndex}:${slice.containerIndex}:${groupSerial}`;
       }
       segments.push(segment);
     }
@@ -1233,12 +1219,6 @@ export function deriveAgentProcessTaskModel(input: {
     )
     .map((segment) => segment.group);
 
-  const finalReplySegment = [...segments]
-    .reverse()
-    .find((segment) => segment.type === "final_reply") as
-    | Extract<ProcessSegment, { type: "final_reply" }>
-    | undefined;
-
   const totalStepCount = groups.reduce((sum, group) => sum + group.stepCount, 0);
   const totalDurationMs = resolveRunDurationMs(chat, startedAtMs, nowMs);
 
@@ -1247,12 +1227,6 @@ export function deriveAgentProcessTaskModel(input: {
     loading,
     segments,
     groups,
-    finalReply: finalReplySegment
-      ? {
-        text: finalReplySegment.text,
-        step: finalReplySegment.step,
-      }
-      : undefined,
     totalStepCount,
     totalDurationMs,
     totalDurationLabel: formatProcessDuration(totalDurationMs),
@@ -1312,7 +1286,6 @@ export function buildAgentProcessViewModel(
         }
         if (
           segment.type === "user_message" ||
-          segment.type === "final_reply" ||
           segment.type === "thinking" ||
           segment.type === "assistant_reply"
         ) {
@@ -1336,7 +1309,7 @@ export function buildAgentProcessViewModel(
     ...base,
     hasProcess: Boolean(thought || base.segments.length),
     thought,
-    intentLine: extractIntentLine(thoughtText, chat.tip),
+    intentLine: extractIntentLine(thoughtText),
   };
 }
 
@@ -1346,7 +1319,7 @@ export function buildAgentProcessViewModel(
  *
  * 规则：
  * 1. SendUserMessage(user_brief) 永不折叠，并切开前后「执行了 N 步」
- * 2. 终答只走 chat.conclusion；过程文/CoT 不提升为 final_reply
+ * 2. 终答只走 chat.conclusion；过程文/CoT 不提升为独立终答段
  */
 export function deriveAgentProcessModel(
   input: DeriveAgentProcessModelInput

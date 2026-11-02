@@ -586,7 +586,7 @@ describe("agentProcessModel", () => {
     }
   });
 
-  it("does not promote lone assistant-reply to final_reply (终答只走 conclusion)", () => {
+  it("keeps lone assistant-reply as assistant_reply (终答只走 conclusion)", () => {
     const chat = createChat({
       loading: false,
       tasks: [
@@ -614,7 +614,6 @@ describe("agentProcessModel", () => {
     });
     expect(model.segments).toHaveLength(1);
     expect(model.segments[0].type).toBe("assistant_reply");
-    expect(model.finalReply).toBeUndefined();
   });
 
   it("uses the task timing priority for step duration", () => {

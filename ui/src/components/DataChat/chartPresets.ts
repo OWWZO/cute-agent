@@ -135,25 +135,16 @@ export const defaultChartPresets = {
       left: "4%",
       containLabel: true,
     },
-    legend: {
-      type: "plain",
-      itemWidth: 14,
-      itemHeight: 12,
-      textStyle: {
-        color: "#6a6a6a",
-        fontSize: 12,
-        fontStyle: "normal",
-        fontWeight: "normal",
-      },
-      itemGap: 20,
-      itemStyle: {
-        borderWidth: 0,
-      },
-      left: 0,
-      top: 0,
-      show: false,
-    },
   },
-  dataFormat:
-    "{\"type\":\"number\",\"digits\":2,\"numberLevel\":0,\"minus\":\"default\",\"thousandflag\":true,\"numberLevelType\":0,\"numberLevels\":[],\"fillZero\":false}|((Math.round(v*100)/100/1).toFixed(2)+'').replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',').replace(/(?<=\\.\\d*),/g, '')",
-} as const;
+  /**
+   * 数值格式化描述，由 chartConfig 的固定实现消费。
+   *
+   * 不再携带可执行 JS 字符串：`new Function` 既是注入面，`(?<=...)` 这类后行断言
+   * 在旧浏览器上还会直接抛语法错误。这里只保留真正生效的字段，避免两半配置漂移。
+   */
+  dataFormat: {
+    digits: 2,
+    thousandflag: true,
+    fillZero: false,
+  },
+};

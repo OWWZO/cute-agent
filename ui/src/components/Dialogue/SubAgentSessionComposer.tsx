@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpIcon, LoaderCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -33,12 +33,19 @@ const SubAgentSessionComposer = ({
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // 会话切换时 submit 的异步结果可能晚到：用它过滤对旧 sessionId 的状态回写。
+  const latestSessionIdRef = useRef(sessionId);
+  latestSessionIdRef.current = sessionId;
 
   useEffect(() => {
-    // 目录失败不阻断对话：空列表等于交给后端默认模型。
-    void catalogApi
-      .listModels()
-      .then((list) => {
+    let cancelled = false;
+    // 目录失败不阻断对话：空列表等于交给后端默认模型，但要留日志可排查。
+    const loadModels = async () => {
+      try {
+        const list = await catalogApi.listModels();
+        if (cancelled) {
+          return;
+        }
         const enabled = (Array.isArray(list) ? list : []).filter(
           (item) => (item.status ?? 1) === 1
         );
@@ -51,8 +58,18 @@ const SubAgentSessionComposer = ({
           }
           return enabled[0]?.modelId ?? "";
         });
-      })
-      .catch(() => setModels([]));
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        console.error("加载模型目录失败，子会话输入框退回默认模型", error);
+        setModels([]);
+      }
+    };
+    void loadModels();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const canSubmit = useMemo(
@@ -60,30 +77,38 @@ const SubAgentSessionComposer = ({
     [disabled, submitting, query]
   );
 
-  const submit = useCallback(() => {
+  const submit = useCallback(async () => {
     const text = query.trim();
     if (!text || submitting) {
       return;
     }
     setSubmitting(true);
     setError("");
-    conversationHistoryApi
-      .submitSessionQuery(sessionId, {
+    try {
+      // 面板在提交后可能立刻切走：只把 latest 会话的响应当有效，晚到的旧结果直接忽略。
+      const accepted = await conversationHistoryApi.submitSessionQuery(sessionId, {
         query: text,
         // 未选模型时不下发该字段，后端沿用会话已存值
         ...(model ? { model } : {}),
-      })
-      .then((accepted) => {
-        setQuery("");
-        onSubmitted?.({
-          query: text,
-          requestId: accepted.requestId
-        });
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => setSubmitting(false));
+      });
+      if (latestSessionIdRef.current !== sessionId) {
+        return;
+      }
+      setQuery("");
+      onSubmitted?.({
+        query: text,
+        requestId: accepted.requestId
+      });
+    } catch (err: unknown) {
+      if (latestSessionIdRef.current !== sessionId) {
+        return;
+      }
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (latestSessionIdRef.current === sessionId) {
+        setSubmitting(false);
+      }
+    }
   }, [model, onSubmitted, query, sessionId, submitting]);
 
   return (

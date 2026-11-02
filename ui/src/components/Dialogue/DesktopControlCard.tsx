@@ -120,6 +120,6 @@ export function readDesktopStreamUrl(tool?: CHAT.Task | null): string {
 
 export function isPendingDesktopControl(tool?: CHAT.Task | null): boolean {
   if (!tool || tool.messageType !== "desktop_control") return false;
-  const status = readDesktopFields(tool).status;
-  return status === "pending" || !status;
+  // readDesktopFields 会把缺失状态归一为 "pending"，因此只需要比较这一个值。
+  return readDesktopFields(tool).status === "pending";
 }

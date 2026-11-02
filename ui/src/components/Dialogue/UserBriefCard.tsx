@@ -44,7 +44,7 @@ function basename(path: string): string {
 const UserBriefCard: FC<UserBriefCardProps> = memo(({ tool }) => {
   const resultMap = asRecord(tool.resultMap);
   const nested = asRecord(resultMap.resultMap);
-  const toolAny = tool as unknown as Record<string, unknown>;
+  const toolAny = asRecord(tool);
 
   const message = String(
     nested.message || resultMap.message || toolAny.message || ""

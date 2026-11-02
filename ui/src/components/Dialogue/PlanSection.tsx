@@ -54,6 +54,10 @@ const resolvePlanStepDetail = (
   return plan.steps[index] || "";
 };
 
+/** 进度徽标与历史快照共用同一套容器样式。 */
+const PLAN_PROGRESS_BADGE_CLASS =
+  "shrink-0 rounded-full bg-[var(--chat-surface)] px-3 py-1 text-ui-sm font-medium text-[var(--chat-text-soft)]";
+
 const resolvePlanStepTone = (status?: string) => {
   // 状态只决定颜色、圆点和文案，未知值按未开始处理以保持安全默认值。
   switch (status) {
@@ -122,10 +126,7 @@ export const PlanSection: FC<PlanSectionProps> = memo(({
             <p className="text-ui-xs font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]">
               研究路线
             </p>
-            <p
-              className="text-ui-lg font-semibold leading-snug tracking-[-0.02em] text-[var(--chat-text)]"
-              style={{ fontFamily: "var(--font-sans)" }}
-            >
+            <p className="font-sans text-ui-lg font-semibold leading-snug tracking-[-0.02em] text-[var(--chat-text)]">
               {normalizedPlan.title}
             </p>
           </div>
@@ -152,15 +153,11 @@ export const PlanSection: FC<PlanSectionProps> = memo(({
               </button>
             </div>
           ) : null}
-          {!staticSnapshot ? (
-            <div className="shrink-0 rounded-full bg-[var(--chat-surface)] px-3 py-1 text-ui-sm font-medium text-[var(--chat-text-soft)]">
-              {completedCount}/{normalizedPlan.stages.length}
-            </div>
-          ) : (
-            <div className="shrink-0 rounded-full bg-[var(--chat-surface)] px-3 py-1 text-ui-sm font-medium text-[var(--chat-text-soft)]">
-              历史快照
-            </div>
-          )}
+          <div className={PLAN_PROGRESS_BADGE_CLASS}>
+            {!staticSnapshot
+              ? `${completedCount}/${normalizedPlan.stages.length}`
+              : "历史快照"}
+          </div>
         </div>
       </div>
       <div className="space-y-2.5">

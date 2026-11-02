@@ -116,9 +116,14 @@ const ConversationTurnNavigator: FC<ConversationTurnNavigatorProps> = ({
     const syncVirtual = () => {
       const rows = virtualRowsRef.current;
       // 滚动容器是 nav 父级（对话区）内的滚动 div，从这里取视口与偏移。
-      const scrollArea =
-        area.querySelector<HTMLElement>("[data-virtualized-turns]") ?? null;
-      const scroller = scrollArea?.parentElement?.parentElement ?? area;
+      const scrollArea = area.querySelector<HTMLElement>("[data-virtualized-turns]");
+      const scroller = scrollArea?.parentElement?.parentElement;
+      if (!scrollArea || !scroller) {
+        // 虚拟列表结构缺失时退回 DOM 测量：拿 area 顶替会得到与列表无关的
+        // scrollTop/clientHeight，活跃刻度会静默偏移，而不是降级。
+        syncDom();
+        return;
+      }
       /**
        * 虚拟行的 `start` 是相对**虚拟容器**的偏移，而虚拟容器排在 `headerSlot`
        * （「加载更早记录」）之后。`scrollTop` 是内容坐标系，必须扣掉 header

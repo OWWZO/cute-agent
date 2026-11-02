@@ -701,12 +701,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
     setPendingTaskTab(null);
   });
 
-  const openThinkingPanel = useMemoizedFn((text: string) => {
-    setThinkingDetail(text);
-    resetPendingOpenIntents();
-    openRightWorkspace();
-  });
-
   const syncThinkingPanel = useMemoizedFn((text: string) => {
     setThinkingDetail((prev) => (prev == null ? prev : text));
   });
@@ -1296,7 +1290,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
           changeActiveChat={(task, chat) => changeTask(task, chat)}
           changePlan={changePlan}
           changeFile={handleChangeFile}
-          onOpenThinking={openThinkingPanel}
           onOpenToolDiff={(task, _chat, fileIndex) =>
             openToolDiffPanel(task, resolved.chat, fileIndex)
           }
@@ -1313,7 +1306,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
       conversation.deepThink,
       onOpenTaskFiles,
       openAgentPanel,
-      openThinkingPanel,
       openToolDiffPanel,
       sessionArtifactFiles,
     ]
@@ -1751,7 +1743,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
           : undefined
       }
       thinkingPanelOpen={thinkingDetail != null}
-      onOpenThinking={openThinkingPanel}
       onSyncThinking={syncThinkingPanel}
       onOpenToolDiff={handleOpenToolDiffForChat}
       onOpenAgent={openAgentPanel}
@@ -2081,8 +2072,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
         >
           {/* ActionView 常驻挂载，独占面板改为**覆盖层**。
                 原因：ActionView 持有工作区 tab 列表（文件 / 子智能体详情 / 目录），
-                一旦被独占面板顶掉就会卸载、tab 全部丢失 —— 而从子智能体详情里点
-                思考块恰恰会走 openThinkingPanel，等于自毁当前 tab。 */}
+                一旦被独占面板顶掉就会卸载、tab 全部丢失。 */}
           <TaskTabLiveStateContext.Provider value={taskTabLiveState}>
             <ActionView
               key={conversation.id}

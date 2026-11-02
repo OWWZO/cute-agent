@@ -33,7 +33,6 @@ type Props = {
   changePlan?: () => void;
   onUndo?: () => void;
   thinkingPanelOpen?: boolean;
-  onOpenThinking?: (text: string) => void;
   onSyncThinking?: (text: string) => void;
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
@@ -72,7 +71,6 @@ const DialogueComponent: FC<Props> = (props) => {
     changePlan,
     onUndo,
     thinkingPanelOpen = false,
-    onOpenThinking,
     onSyncThinking,
     onOpenToolDiff,
     onOpenAgent,
@@ -178,13 +176,6 @@ const DialogueComponent: FC<Props> = (props) => {
       onSyncThinking?.(thoughtText);
     }
   }, [thinkingPanelOpen, thoughtText, onSyncThinking]);
-
-  const handleOpenThinking = useCallback(
-    (text: string) => {
-      onOpenThinking?.(text);
-    },
-    [onOpenThinking]
-  );
 
   const handleThoughtPrev = useCallback(() => {
     setThoughtVersionIndex((current) => Math.max(current - 1, 0));
@@ -321,7 +312,6 @@ const DialogueComponent: FC<Props> = (props) => {
                 changeActiveChat={changeActiveChat}
                 changePlan={changePlan}
                 changeFile={changeFile}
-                onOpenThinking={handleOpenThinking}
                 onOpenToolDiff={onOpenToolDiff}
                 onOpenAgent={onOpenAgent}
               />
@@ -358,7 +348,6 @@ const Dialogue = memo(
     prev.changePlan === next.changePlan &&
     prev.onUndo === next.onUndo &&
     prev.thinkingPanelOpen === next.thinkingPanelOpen &&
-    prev.onOpenThinking === next.onOpenThinking &&
     prev.onSyncThinking === next.onSyncThinking &&
     prev.onOpenToolDiff === next.onOpenToolDiff &&
     prev.onOpenAgent === next.onOpenAgent &&
