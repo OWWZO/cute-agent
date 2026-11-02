@@ -58,6 +58,7 @@ import {
   resolveParentToolUseId,
 } from "./chat/subagent";
 import type { SubAgentProgressKind } from "@/types/agentRuntime";
+import { hashContent } from "@/lib/hashContent";
 
 type NestedTaskResultMap = MESSAGE.ResultMap & {
   resultMap?: MESSAGE.ResultMap;
@@ -2332,10 +2333,65 @@ export const handleTaskData = (
  * 这里统一把缓存下来的任务结果重新整理成界面消费结构，
  * 避免组件层直接依赖流式过程中产生的临时对象形态。
  */
+type ConversationTaskData = ReturnType<typeof handleTaskData>;
+
+const conversationTaskCache = new WeakMap<
+  object,
+  { signature: string; data: ConversationTaskData }
+>();
+
+/**
+ * 时间线兜底投影（事实层 → tasks）按任务事实签名缓存。
+ *
+ * 流式正文、终答等非任务事实更新会频繁换 chat 引用，但 `multiAgent` 对象稳定；
+ * 签名不变时复用已派生任务树，只把当前 chat 的最新展示字段覆盖回去。
+ */
 export const buildConversationTaskData = (
   chat: CHAT.ChatItem,
   deepThink?: boolean
 ) => {
+  const multiAgent = chat.multiAgent;
+  const cacheable = Boolean(multiAgent && typeof multiAgent === "object");
+  const conclusion = chat.conclusion;
+  const signature = cacheable
+    ? [
+      deepThink ? "1" : "0",
+      buildTaskFactsSignature(multiAgent),
+      JSON.stringify(multiAgent.plan ?? null),
+      String(multiAgent.plan_thought || ""),
+      conclusion
+        ? [
+          conclusion.messageType || "",
+          hashContent(String(conclusion.result || "")),
+          hashContent(String(conclusion.toolThought || "")),
+          hashContent(JSON.stringify(conclusion.artifactRefs ?? [])),
+          hashContent(JSON.stringify(conclusion.fileList ?? [])),
+          (conclusion.artifactRefs || []).length,
+          (conclusion.fileList || []).length,
+        ].join(":")
+        : "",
+    ].join("|")
+    : "";
+  if (cacheable) {
+    const cached = conversationTaskCache.get(multiAgent as object);
+    if (cached?.signature === signature) {
+      return {
+        ...cached.data,
+        currentChat: {
+          ...cached.data.currentChat,
+          ...chat,
+          tasks: cached.data.currentChat.tasks,
+          plan: cached.data.currentChat.plan,
+          planList: cached.data.currentChat.planList,
+          conclusion: cached.data.currentChat.conclusion,
+          multiAgent: cached.data.currentChat.multiAgent,
+          files: [...(chat.files || [])],
+          timeline: [...(chat.timeline || [])],
+        },
+      };
+    }
+  }
+
   const snapshotChat = {
     ...chat,
     files: [...(chat.files || [])],
@@ -2350,9 +2406,15 @@ export const buildConversationTaskData = (
     timeline: [...(chat.timeline || [])],
   } as CHAT.ChatItem;
 
-  return handleTaskData(snapshotChat, deepThink, snapshotChat.multiAgent);
+  const data = handleTaskData(snapshotChat, deepThink, snapshotChat.multiAgent);
+  if (cacheable) {
+    conversationTaskCache.set(multiAgent as object, {
+      signature,
+      data,
+    });
+  }
+  return data;
 };
-
 type TaskAction = { action: string; tool: string; name?: string };
 
 /**

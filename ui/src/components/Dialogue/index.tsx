@@ -11,6 +11,7 @@ import { PlanSection } from "./PlanSection";
 import { AgentStepTimeline } from "./AgentStepTimeline";
 import { MessageToolbar } from "./MessageToolbar";
 import { buildConversationTaskData } from "@/utils/chat";
+import { buildTaskFactsSignature } from "@/utils/chat/renderTasks";
 import {
   Collapsible,
   CollapsibleContent,
@@ -87,17 +88,18 @@ const DialogueComponent: FC<Props> = (props) => {
     () => parseComposerPromptContexts(chat.query || ""),
     [chat.query]
   );
+  const fallbackFactsSignature = buildTaskFactsSignature(chat.multiAgent);
   const timelineChat = useMemo(() => {
     const hasTimelineChildren = (chat.tasks || []).some((group) =>
       (group || []).some((container) => (container.children || []).length > 0)
     );
-    if (hasTimelineChildren || !(chat.multiAgent?.tasks || []).length) {
+    if (hasTimelineChildren || !fallbackFactsSignature) {
       return chat;
     }
     // 工作区使用 taskList，主对话使用 chat.tasks；流式快照短暂不同步时，
     // 从事实层重建一次时间线，避免主 Agent 的思考和执行步骤消失。
     return buildConversationTaskData(chat, deepThink).currentChat;
-  }, [chat, deepThink]);
+  }, [chat, deepThink, fallbackFactsSignature]);
   const plannerRounds = useMemo(
     () => buildPlannerRoundsForDisplay(chat, streamingThought),
     [chat, streamingThought]
