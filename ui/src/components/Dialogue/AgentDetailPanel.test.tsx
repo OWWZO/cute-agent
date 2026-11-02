@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentDetailPanel } from "./AgentDetailPanel";
+import { FrameBuffer } from "@/utils/chat/frameBuffer";
 
 const childSessionTool = {
   id: "agent-1",
@@ -151,7 +152,7 @@ describe("AgentDetailPanel real child session (flag on)", () => {
       ready: true,
       loading: false,
       error: "",
-      frames: [],
+      frames: FrameBuffer.empty(),
       history: null,
       replays: {},
       replayLoadingIds: [],

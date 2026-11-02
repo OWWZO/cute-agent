@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {FOLLOW_MAX_DELAY_MS,} from "@/components/ChatView/followObservation";
+import { FrameBuffer } from "@/utils/chat/frameBuffer";
 import {
   mergePatch,
   subscribeSubAgentSession,
@@ -186,7 +187,9 @@ describe("subscribeSubAgentSession", () => {
     abort();
     const livePatches = patches.filter((patch) => patch.source === "live");
     expect(livePatches).toHaveLength(1);
-    expect(livePatches[0]?.frames?.[0]).toMatchObject({ packageType: "result" });
+    expect(livePatches[0]?.frames?.toArray()[0]).toMatchObject({
+      packageType: "result",
+    });
   });
 
   it("终态 run 走账本 replay，且根本不建实时流", async () => {
@@ -554,7 +557,7 @@ describe("mergePatch 帧缓冲清理", () => {
     ready: false,
     loading: false,
     error: "",
-    frames: [],
+    frames: FrameBuffer.empty(),
     history: null,
     replays: {},
     replayLoadingIds: [],
@@ -594,7 +597,7 @@ describe("mergePatch 帧缓冲清理", () => {
     mergePatch(state, {
       ready: true,
       source: "live",
-      frames: [frame],
+      frames: FrameBuffer.from([frame]),
       pruneFinalFrame: isFinalFrame(frame) ? frame : undefined,
     });
 
@@ -604,8 +607,8 @@ describe("mergePatch 帧缓冲清理", () => {
         ?.eventData?.isFinal === true
     );
 
-  const texts = (state: { frames: unknown[] }) =>
-    state.frames.map(
+  const texts = (state: { frames: Iterable<unknown> }) =>
+    [...state.frames].map(
       (frame) =>
         (frame as { resultMap: { eventData: { result: string } } }).resultMap
           .eventData.result
@@ -619,8 +622,7 @@ describe("mergePatch 帧缓冲清理", () => {
 
     // 700 帧远超旧的 512 上限：长思考不能在落库前丢掉前半段
     expect(state.frames).toHaveLength(700);
-    expect(texts(state)[0]).toBe("delta-0");
-  });
+    expect(texts(state)[0]).toBe("delta-0");  });
 
   it("收到某组末帧后只清该组中间 delta，末帧保留", () => {
     let state = IDLE;

@@ -13,6 +13,7 @@ import {
 } from "@/utils/chat/subAgentChildSession";
 import querySSE from "@/utils/querySSE";
 import { parseAgentAnswer } from "@/utils/sseParsers";
+import { FrameBuffer } from "@/utils/chat/frameBuffer";
 
 /**
  * 子会话实时订阅 + 历史回放。
@@ -41,8 +42,8 @@ export type SubAgentSessionState = {
   ready: boolean;
   loading: boolean;
   error: string;
-  /** 最近一次会话流帧（原始 SSE 事件） */
-  frames: unknown[];
+  /** 持久化帧链：追加只创建新节点，消费者按需遍历或转数组。 */
+  frames: FrameBuffer<unknown>;
   /** 会话级历史（runs 摘要），决定 query / status / requestId */
   history: ConversationHistoryPage | null;
   /** 按 requestId 索引的单 run 回放（终态 run 的轨迹来源） */
@@ -66,7 +67,7 @@ const IDLE_STATE: SubAgentSessionState = {
   ready: false,
   loading: false,
   error: "",
-  frames: [],
+  frames: FrameBuffer.empty(),
   history: null,
   replays: {},
   replayLoadingIds: [],
@@ -348,7 +349,7 @@ export function subscribeSubAgentSession(
           onState({
             ready: true,
             source: "live",
-            frames: [frame],
+            frames: FrameBuffer.from([frame]),
             pruneFinalFrame: isFinalEventFrame(frame) ? frame : undefined,
             reconnectAttempts: follow.attempts()
           });
@@ -523,31 +524,20 @@ export function mergePatch(
   }
   // 帧以「增量追加」语义合并，避免调用方自己拼帧
   if (patch.frames && patch.frames.length > 0) {
-    next.frames = pruneBufferedFrames(
-      [...prev.frames, ...patch.frames],
-      patch.pruneFinalFrame
-    );
+    const appended = FrameBuffer.append(prev.frames, patch.frames);
+    const finalGroup = resolvePruneGroupKey(patch.pruneFinalFrame);
+    next.frames = finalGroup
+      ? appended.filter(
+        (frame) =>
+          frame === patch.pruneFinalFrame ||
+          resolvePruneGroupKey(frame) !== finalGroup
+      )
+      : appended;
   }
   if (patch.source !== "live") {
     next.source = next.source === "idle" ? "history" : next.source;
   }
   return next;
-}
-
-/**
- * 按「落库边界」清理帧缓冲，与后端 {@code AgentStreamProjection} 同一套规则。
- * <p>
- * 只在收到某组 {@code isFinal=true} 末帧时清该组中间 delta；末帧自身保留（全文快照）。
- * 没收到末帧的组**永不清** —— 那段内容在落库前没有第二份副本。
- */
-function pruneBufferedFrames(frames: unknown[], finalFrame: unknown): unknown[] {
-  const groupKey = resolvePruneGroupKey(finalFrame);
-  if (!groupKey) {
-    return frames;
-  }
-  return frames.filter(
-    (frame) => frame === finalFrame || resolvePruneGroupKey(frame) !== groupKey
-  );
 }
 
 export default useSubAgentSession;
