@@ -3,11 +3,7 @@ import { isSubAgentParentTask } from "@/utils/chat/subagent";
 import { AskUserToolCall } from "./AskUserToolCall";
 import DesktopControlCard from "../DesktopControlCard";
 import { EditToolCall } from "./EditToolCall";
-import {
-  GenericToolCall,
-  resolveStackPosition,
-  aggregateToolStatuses,
-} from "./GenericToolCall";
+import { GenericToolCall } from "./GenericToolCall";
 import { McpToolCall } from "./McpToolCall";
 import { isMcpToolName } from "./mcpToolName";
 import { ReadToolCall } from "./ReadToolCall";
@@ -109,4 +105,3 @@ export function ToolCallView(props: ToolCallViewProps) {
   );
 }
 
-export { resolveStackPosition, aggregateToolStatuses };

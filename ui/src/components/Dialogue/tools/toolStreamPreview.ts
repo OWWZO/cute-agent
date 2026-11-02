@@ -1,7 +1,6 @@
 import { normalizeToolName } from "./toolMeta";
 import {
   fallbackStreamRawPreview,
-  pickJsonStringField,
   pickJsonStringFieldAny,
 } from "@/utils/jsonStreamField";
 
@@ -22,9 +21,8 @@ const BODY_KEYS_BY_TOOL: Record<string, string[]> = {
   edit: ["new_string", "newString", "replacement", "content", "text"],
   multi_edit: ["new_string", "newString", "replacement", "content", "text"],
   bash: ["command", "cmd", "script", "code", "source"],
+  // code_interpreter / code_execution 已被 normalizeToolName 归一到 bash，这里不要重复登记。
   code_execute: ["code", "script", "command", "source"],
-  code_execution: ["code", "script", "command", "source"],
-  code_interpreter: ["code", "script", "command", "source"],
   search: ["query", "q", "pattern", "regex"],
   grep: ["pattern", "query", "regex", "q"],
   web_fetch: ["url", "uri"],
@@ -169,7 +167,7 @@ export function resolveToolStreamPreview(
   let header = "";
   if (path) {
     header = path;
-  } else if (key === "bash" || key === "code_execute" || key === "code_execution") {
+  } else if (key === "bash" || key === "code_execute") {
     header = body ? body.split("\n")[0] || body : "";
   } else if (body) {
     const firstLine = body.split("\n")[0] || body;
@@ -206,8 +204,4 @@ export function formatToolStreamChip(arg: string, body: string): string {
     return `${n} chars`;
   }
   return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
-}
-
-export function pickJsonFieldForTests(key: string, raw: string): string {
-  return pickJsonStringField(key, raw);
 }

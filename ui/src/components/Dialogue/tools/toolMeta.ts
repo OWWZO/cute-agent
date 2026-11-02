@@ -60,6 +60,12 @@ const NAME_ALIASES: Record<string, string> = {
   workspace_grep: "grep",
   workspace_list: "ls",
   /**
+   * 必须与 `toolRegistry.resolveToolRendererKind` 的派发键保持同一套归一化语义：
+   * 后端可能以 snake_case 注册这两个工具，不别名就会被判成 generic。
+   */
+  ask_user_question: "askuserquestion",
+  request_desktop_control: "requestdesktopcontrol",
+  /**
    * Code Mode（GraalJS 同 JVM 执行 JS）入参是 `source` / `workspaceFile` / `inputs` /
    * `timeoutMs`，与 `code_execution` 同族，按 execute 卡渲染源码。
    * 缺这条别名会一路落到 generic，表现为没有源码预览、点不开右侧面板。
