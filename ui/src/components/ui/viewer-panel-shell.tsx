@@ -29,6 +29,8 @@ export function ViewerPanelShell({
         hideHeader && "rounded-none shadow-none",
         className
       )}
+      role="region"
+      aria-label={label}
       {...props}
     >
       {hideHeader ? null : (
