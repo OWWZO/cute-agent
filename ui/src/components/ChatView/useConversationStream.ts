@@ -23,7 +23,7 @@ import {
 import { resolveParentToolUseId } from "@/utils/chat/subagent";
 import { mergeRunReplayIntoConversation } from "@/utils/conversationHistory";
 import querySSE from "@/utils/querySSE";
-import { parseAgentAnswer } from "@/utils/sseParsers";
+import { parseAgentAnswer, type AgentAnswerEnvelope } from "@/utils/sseParsers";
 import {
   conversationHistoryApi,
   type ConversationRunReplay,
@@ -784,7 +784,7 @@ export function useConversationStream(
   const patchChatByRequestId = useMemoizedFn((
     conversationId: string,
     targetRequestId: string,
-    data: MESSAGE.Answer
+    data: AgentAnswerEnvelope
   ) => {
     const snapshot =
       conversationSnapshotsRef.current.get(conversationId) ||
@@ -1493,7 +1493,7 @@ export function useConversationStream(
       applyFollowIdleReplay({ allowReconnect: false })
     );
 
-    const handleMessage = (data: MESSAGE.Answer) => {
+    const handleMessage = (data: AgentAnswerEnvelope) => {
       const live = liveStreamsRef.current.get(conversationId);
       if (!live || live.controller !== abortController) {
         return;
@@ -2253,7 +2253,7 @@ export function useConversationStream(
       }
     };
 
-    const handleMessage = (data: MESSAGE.Answer) => {
+    const handleMessage = (data: AgentAnswerEnvelope) => {
       const live = liveStreamsRef.current.get(conversationId);
       if (!live || live.controller !== abortController) {
         return;
@@ -2831,7 +2831,7 @@ export function useConversationStream(
       });
     };
 
-    const handleMessage = (data: MESSAGE.Answer) => {
+    const handleMessage = (data: AgentAnswerEnvelope) => {
       const live = liveStreamsRef.current.get(conversationId);
       if (!live || live.controller !== abortController) {
         return;

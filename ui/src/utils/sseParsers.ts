@@ -44,11 +44,17 @@ const dataChatEventSchema = z.discriminatedUnion("eventType", [
 ]);
 
 /**
+ * 解析结果的诚实类型：只承诺 `answerEnvelopeSchema` 校验过的字段，其余透传字段
+ * 一律为 `unknown`，消费方必须先收窄再使用，避免把未校验字段当成 `MESSAGE.Answer`。
+ */
+export type AgentAnswerEnvelope = z.infer<typeof answerEnvelopeSchema>;
+
+/**
  * 这里只校验 SSE 顶层协议骨架，内部 payload 继续交给业务解析层消费，
  * 避免前端跟后端富结构结果做过紧耦合。
  */
-export function parseAgentAnswer(raw: unknown): MESSAGE.Answer {
-  return answerEnvelopeSchema.parse(raw) as unknown as MESSAGE.Answer;
+export function parseAgentAnswer(raw: unknown): AgentAnswerEnvelope {
+  return answerEnvelopeSchema.parse(raw);
 }
 
 /**
