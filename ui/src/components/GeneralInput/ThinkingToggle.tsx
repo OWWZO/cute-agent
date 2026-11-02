@@ -21,6 +21,10 @@ type Props = {
   triggerClassName?: (active?: boolean, disabled?: boolean) => string;
 };
 
+/** 未传 triggerClassName 时的独立使用样式（与工具条按钮同一套视觉）。 */
+const DEFAULT_TRIGGER_CLASS =
+  "inline-flex h-8 items-center gap-1 rounded-md px-2 text-ui-sm text-foreground-subtle transition-colors hover:bg-black/[0.04] hover:text-foreground disabled:opacity-40";
+
 const OPTIONS: Array<{ key: ThinkingEffort; label: string }> = [
   {
     key: null,
@@ -65,7 +69,7 @@ const ThinkingToggle: CuteType.FC<Props> = ({
           className={
             triggerClassName
               ? triggerClassName(thinking, disabled)
-              : undefined
+              : DEFAULT_TRIGGER_CLASS
           }
           title={thinking ? `深度思考：${label}` : "开启深度思考"}
         >

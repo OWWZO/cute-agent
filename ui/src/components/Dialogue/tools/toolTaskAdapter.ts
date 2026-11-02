@@ -29,14 +29,23 @@ function pickArgumentsText(
 ): string {
   for (const source of sources) {
     if (!source) continue;
+    // 非空 argumentsText 已由 resolveToolCallArgumentsText 覆盖，无需再查一次。
     const direct = resolveToolCallArgumentsText(source as MESSAGE.ResultMap);
     if (direct) return direct;
-    if (typeof (source as { argumentsText?: unknown }).argumentsText === "string") {
-      const text = (source as { argumentsText: string }).argumentsText;
-      if (text) return text;
-    }
   }
   return "";
+}
+
+/** 入参对象 → JSON 文本；空对象或不可序列化时返回空串，交由调用方继续回退。 */
+function stringifyRecord(value: unknown): string {
+  if (!isRecord(value) || Object.keys(value).length === 0) {
+    return "";
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
 }
 
 export function resolveTaskToolName(tool: CHAT.Task): string {
@@ -64,8 +73,8 @@ export function resolveTaskToolName(tool: CHAT.Task): string {
 export function resolveTaskToolArg(tool: CHAT.Task): string {
   const top = tool as unknown as Record<string, unknown>;
   const resultMap = resolveTaskResultMap(tool);
-  const nested = isRecord(resultMap?.resultMap)
-    ? (resultMap!.resultMap as MESSAGE.ResultMap)
+  const nested = isRecord(resultMap.resultMap)
+    ? (resultMap.resultMap as MESSAGE.ResultMap)
     : undefined;
   // 执行态已有完整 input 时优先用 input（避免旧 argumentsText 盖住终态）
   const status = pickStatus(
@@ -93,41 +102,26 @@ export function resolveTaskToolArg(tool: CHAT.Task): string {
   if (preferRawArgs && argumentsText) {
     return argumentsText;
   }
-  const input = resolveToolCallInput(resultMap);
-  if (Object.keys(input).length > 0) {
-    try {
-      return JSON.stringify(input);
-    } catch {
-      /* fall through */
-    }
+  const input = stringifyRecord(resolveToolCallInput(resultMap));
+  if (input) {
+    return input;
   }
 
   // buildTaskFromEventData 可能把 input 摊到 task 顶层
-  if (isRecord(top.input) && Object.keys(top.input).length > 0) {
-    try {
-      return JSON.stringify(top.input);
-    } catch {
-      /* fall through */
-    }
+  const topInput = stringifyRecord(top.input);
+  if (topInput) {
+    return topInput;
   }
 
-  const toolParam = resolveTaskToolResult(tool)?.toolParam;
-  if (isRecord(toolParam) && Object.keys(toolParam).length > 0) {
-    try {
-      return JSON.stringify(toolParam);
-    } catch {
-      /* fall through */
-    }
+  const toolParam = stringifyRecord(resolveTaskToolResult(tool)?.toolParam);
+  if (toolParam) {
+    return toolParam;
   }
 
   if (nested) {
-    const nestedInput = resolveToolCallInput(nested);
-    if (Object.keys(nestedInput).length > 0) {
-      try {
-        return JSON.stringify(nestedInput);
-      } catch {
-        /* fall through */
-      }
+    const nestedInput = stringifyRecord(resolveToolCallInput(nested));
+    if (nestedInput) {
+      return nestedInput;
     }
   }
 
@@ -143,8 +137,8 @@ export function resolveTaskToolStatus(
 ): "running" | "ok" | "error" {
   const top = tool as unknown as Record<string, unknown>;
   const resultMap = resolveTaskResultMap(tool);
-  const nested = isRecord(resultMap?.resultMap)
-    ? (resultMap!.resultMap as Record<string, unknown>)
+  const nested = isRecord(resultMap.resultMap)
+    ? (resultMap.resultMap as Record<string, unknown>)
     : undefined;
   const status = pickStatus(
     resultMap as Record<string, unknown> | undefined,

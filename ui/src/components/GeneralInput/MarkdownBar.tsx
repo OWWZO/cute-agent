@@ -1,4 +1,5 @@
 import { Bold, Code2, Heading2, List, ListOrdered } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -9,6 +10,12 @@ type Props = {
   disabled?: boolean;
 };
 
+type SelectionResult = {
+  next: string;
+  selectionStart: number;
+  selectionEnd: number;
+};
+
 /** 在 textarea 选区插入 Markdown 包裹/前缀（轻量 Aa 工具条，不对齐 Tiptap） */
 function wrapSelection(
   value: string,
@@ -17,12 +24,25 @@ function wrapSelection(
   before: string,
   after: string,
   placeholder: string
-) {
+): SelectionResult {
   const selected = value.slice(start, end);
   const body = selected || placeholder;
   const next = value.slice(0, start) + before + body + after + value.slice(end);
-  const cursor = start + before.length + body.length + after.length;
-  return { next, cursor };
+  const bodyStart = start + before.length;
+  // 空选区插入占位文本时选中占位符，用户可直接输入覆盖；已有选区时光标落在包裹块之后。
+  if (!selected) {
+    return {
+      next,
+      selectionStart: bodyStart,
+      selectionEnd: bodyStart + body.length,
+    };
+  }
+  const cursor = bodyStart + body.length + after.length;
+  return {
+    next,
+    selectionStart: cursor,
+    selectionEnd: cursor,
+  };
 }
 
 function prefixLines(
@@ -30,7 +50,7 @@ function prefixLines(
   start: number,
   end: number,
   prefix: string
-) {
+): SelectionResult {
   const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
   const segment = value.slice(lineStart, end);
   const lines = segment.split("\n");
@@ -38,11 +58,57 @@ function prefixLines(
     .map((line) => (line.startsWith(prefix) ? line : `${prefix}${line || ""}`))
     .join("\n");
   const next = value.slice(0, lineStart) + rewritten + value.slice(end);
-  return { next, cursor: lineStart + rewritten.length };
+  const cursor = lineStart + rewritten.length;
+  return {
+    next,
+    selectionStart: cursor,
+    selectionEnd: cursor,
+  };
 }
 
 const btnClass =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-black/[0.04] hover:text-foreground disabled:opacity-40";
+
+type MarkdownAction = {
+  title: string;
+  content: ReactNode;
+  className?: string;
+  run: (value: string, start: number, end: number) => SelectionResult;
+};
+
+const ACTIONS: MarkdownAction[] = [
+  {
+    title: "加粗",
+    content: <Bold className="size-3.5" />,
+    run: (v, s, e) => wrapSelection(v, s, e, "**", "**", "加粗"),
+  },
+  {
+    title: "二级标题",
+    content: <Heading2 className="size-3.5" />,
+    run: (v, s, e) => prefixLines(v, s, e, "## "),
+  },
+  {
+    title: "无序列表",
+    content: <List className="size-3.5" />,
+    run: (v, s, e) => prefixLines(v, s, e, "- "),
+  },
+  {
+    title: "有序列表",
+    content: <ListOrdered className="size-3.5" />,
+    run: (v, s, e) => prefixLines(v, s, e, "1. "),
+  },
+  {
+    title: "行内代码",
+    content: <Code2 className="size-3.5" />,
+    run: (v, s, e) => wrapSelection(v, s, e, "`", "`", "code"),
+  },
+  {
+    title: "代码块",
+    content: "</>",
+    className: "w-auto px-1.5 text-ui-xs font-medium",
+    run: (v, s, e) => wrapSelection(v, s, e, "```\n", "\n```", "code"),
+  },
+];
 
 const MarkdownBar: CuteType.FC<Props> = ({
   textareaRef,
@@ -50,17 +116,16 @@ const MarkdownBar: CuteType.FC<Props> = ({
   onChange,
   disabled,
 }) => {
-  const apply = (fn: (v: string, s: number, e: number) => { next: string; cursor: number }) => {
+  const apply = (fn: MarkdownAction["run"]) => {
     const el = textareaRef.current;
     const start = el?.selectionStart ?? value.length;
     const end = el?.selectionEnd ?? value.length;
-    const { next, cursor } = fn(value, start, end);
+    const { next, selectionStart, selectionEnd } = fn(value, start, end);
     onChange(next);
     requestAnimationFrame(() => {
       if (!el) return;
       el.focus();
-      el.selectionStart = cursor;
-      el.selectionEnd = cursor;
+      el.setSelectionRange(selectionStart, selectionEnd);
     });
   };
 
@@ -70,70 +135,18 @@ const MarkdownBar: CuteType.FC<Props> = ({
         "flex flex-wrap items-center gap-0.5 border-b border-black/[0.04] px-2.5 py-1"
       )}
     >
-      <button
-        type="button"
-        disabled={disabled}
-        className={btnClass}
-        title="加粗"
-        onClick={() =>
-          apply((v, s, e) => wrapSelection(v, s, e, "**", "**", "加粗"))
-        }
-      >
-        <Bold className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        className={btnClass}
-        title="二级标题"
-        onClick={() =>
-          apply((v, s, e) => prefixLines(v, s, e, "## "))
-        }
-      >
-        <Heading2 className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        className={btnClass}
-        title="无序列表"
-        onClick={() => apply((v, s, e) => prefixLines(v, s, e, "- "))}
-      >
-        <List className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        className={btnClass}
-        title="有序列表"
-        onClick={() => apply((v, s, e) => prefixLines(v, s, e, "1. "))}
-      >
-        <ListOrdered className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        className={btnClass}
-        title="行内代码"
-        onClick={() =>
-          apply((v, s, e) => wrapSelection(v, s, e, "`", "`", "code"))
-        }
-      >
-        <Code2 className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        className={cn(btnClass, "w-auto px-1.5 text-ui-xs font-medium")}
-        title="代码块"
-        onClick={() =>
-          apply((v, s, e) =>
-            wrapSelection(v, s, e, "```\n", "\n```", "code")
-          )
-        }
-      >
-        {"</>"}
-      </button>
+      {ACTIONS.map((action) => (
+        <button
+          key={action.title}
+          type="button"
+          disabled={disabled}
+          className={cn(btnClass, action.className)}
+          title={action.title}
+          onClick={() => apply(action.run)}
+        >
+          {action.content}
+        </button>
+      ))}
     </div>
   );
 };

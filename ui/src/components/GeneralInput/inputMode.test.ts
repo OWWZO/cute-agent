@@ -82,4 +82,20 @@ describe("inputMode", () => {
       thinkingEffort: "high",
     });
   });
+
+  it("思考强度只有空白字符时同样回落到默认高", () => {
+    expect(
+      buildSubmitPayload({
+        question: "分析这个问题",
+        visibleMode: "think",
+        isDataAgent: false,
+        uploadedFiles: [],
+        thinking: true,
+        thinkingEffort: "  ",
+      })
+    ).toMatchObject({
+      thinking: true,
+      thinkingEffort: "high",
+    });
+  });
 });

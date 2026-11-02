@@ -27,8 +27,7 @@ const ModelPicker: CuteType.FC<Props> = ({
   onOpenChange,
   triggerClassName,
 }) => {
-  if (!models.length) return null;
-
+  const isEmpty = models.length === 0;
   const current =
     models.find((m) => m.modelId === value || m.modelName === value) ??
     models[0];
@@ -38,13 +37,14 @@ const ModelPicker: CuteType.FC<Props> = ({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          disabled={disabled}
+          // 目录未就绪时保留触发器（禁用），避免工具条因控件消失而抖动。
+          disabled={disabled || isEmpty}
           className={
             triggerClassName
-              ? triggerClassName(Boolean(value), disabled)
+              ? triggerClassName(Boolean(value), disabled || isEmpty)
               : undefined
           }
-          title="选择本轮模型"
+          title={isEmpty ? "模型列表加载中" : "选择本轮模型"}
         >
           <Cpu className="size-3.5 shrink-0 opacity-80" />
           <span className="max-w-[100px] truncate">

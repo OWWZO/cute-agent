@@ -16,15 +16,17 @@ const sizeMap = {
 const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   className,
   children,
-  color = "white",
+  color = "var(--color-accent)",
   size = "md",
 }) => {
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <div className={cn("relative shrink-0", sizeMap[size])}>
+    <div className="flex items-center gap-2">
+      {/* className 作用于 spinner 本体：调用方传 h-4 w-4 之类的尺寸类时，
+          环形随容器一起缩放，而不是外框缩了、内环仍按 sizeMap 溢出。 */}
+      <div className={cn("relative shrink-0", sizeMap[size], className)}>
         <div
           className="cute-spinner absolute inset-0 rounded-full"
-          style={{ color: color === "white" ? "var(--color-accent)" : color }}
+          style={{ color }}
         />
       </div>
       {children}

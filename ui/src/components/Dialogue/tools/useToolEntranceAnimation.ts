@@ -39,6 +39,10 @@ function normalizeToolEntranceAnimationKey(key: string) {
   return normalizedKey.length > 0 ? normalizedKey : null;
 }
 
+/**
+ * 空白 key 视为「已播放」：没有稳定身份就无法去重，宁可不动画，
+ * 也不要每次重挂都让整屏匿名卡再闪一遍（与 `useToolCardOpen` 对空 key 的处理一致）。
+ */
 function hasPlayedToolEntranceAnimation(key: string) {
   const normalizedKey = normalizeToolEntranceAnimationKey(key);
   return normalizedKey === null || toolEntranceAnimationKeys.has(normalizedKey);

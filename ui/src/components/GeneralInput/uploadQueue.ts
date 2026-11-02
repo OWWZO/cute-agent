@@ -9,62 +9,53 @@ export type UploadAttachmentState = {
 };
 
 // 上传状态更新均返回新 queue，未知 id 原样返回，避免异步回调误创建幽灵附件。
-export function markUploadSuccess(
+function updateUpload(
   queue: Record<string, UploadAttachmentState>,
   id: string,
-  uploadedFile: CHAT.TFile
-) {
-  const current = queue[id];
-  if (!current) {
+  patch: Partial<UploadAttachmentState>
+): Record<string, UploadAttachmentState> {
+  if (!Object.hasOwn(queue, id)) {
     return queue;
   }
 
   return {
     ...queue,
     [id]: {
-      ...current,
-      status: "success" as UploadStatus,
-      error: undefined,
-      uploadedFile,
+      ...queue[id],
+      ...patch,
     },
   };
+}
+
+export function markUploadSuccess(
+  queue: Record<string, UploadAttachmentState>,
+  id: string,
+  uploadedFile: CHAT.TFile
+): Record<string, UploadAttachmentState> {
+  return updateUpload(queue, id, {
+    status: "success",
+    error: undefined,
+    uploadedFile,
+  });
 }
 
 export function markUploadUploading(
   queue: Record<string, UploadAttachmentState>,
   id: string
-) {
-  const current = queue[id];
-  if (!current) {
-    return queue;
-  }
-
-  return {
-    ...queue,
-    [id]: {
-      ...current,
-      status: "uploading" as UploadStatus,
-      error: undefined,
-    },
-  };
+): Record<string, UploadAttachmentState> {
+  return updateUpload(queue, id, {
+    status: "uploading",
+    error: undefined,
+  });
 }
 
 export function markUploadError(
   queue: Record<string, UploadAttachmentState>,
   id: string,
   error: string
-) {
-  const current = queue[id];
-  if (!current) {
-    return queue;
-  }
-
-  return {
-    ...queue,
-    [id]: {
-      ...current,
-      status: "error" as UploadStatus,
-      error,
-    },
-  };
+): Record<string, UploadAttachmentState> {
+  return updateUpload(queue, id, {
+    status: "error",
+    error,
+  });
 }
