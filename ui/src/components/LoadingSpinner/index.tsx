@@ -16,7 +16,7 @@ const sizeMap = {
 const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   className,
   children,
-  color = "white",
+  color = "var(--color-accent)",
   size = "md",
 }) => {
   return (
@@ -24,7 +24,7 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
       <div className={cn("relative shrink-0", sizeMap[size])}>
         <div
           className="cute-spinner absolute inset-0 rounded-full"
-          style={{ color: color === "white" ? "var(--color-accent)" : color }}
+          style={{ color }}
         />
       </div>
       {children}
