@@ -27,7 +27,12 @@ export function parseAskInput(arg: string): AskQuestion[] {
   try {
     const obj = JSON.parse(arg) as Record<string, unknown>;
     return normalizeAskQuestions(obj.questions);
-  } catch {
+  } catch (error) {
+    // 入参可能还在流式累积、尚未形成合法 JSON。生产环境照旧回退为空问题列表，
+    // 开发环境留一条线索，避免把「解析失败」和「真的没提供问题」混为一谈。
+    if (import.meta.env.DEV) {
+      console.warn("parseAskInput: 入参 JSON 解析失败，按空问题处理", error);
+    }
     return [];
   }
 }

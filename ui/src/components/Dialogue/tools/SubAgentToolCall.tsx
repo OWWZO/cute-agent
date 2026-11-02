@@ -2,8 +2,11 @@ import { memo, useMemo } from "react";
 import { BotIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolveSubagentColorFromName } from "@/lib/subagentColors";
-import { resolveSubAgentDisplay } from "@/utils/chat/subagent";
-import { ToolRow, type ToolRowStackPosition } from "./ToolRow";
+import {
+  resolveSubAgentDisplay,
+  type SubAgentDisplay,
+} from "@/utils/chat/subagent";
+import { ToolRow, type ToolRowStackPosition, type ToolRowStatus } from "./ToolRow";
 import { toolLabel } from "./toolMeta";
 import { resolveTaskToolStatus } from "./toolTaskAdapter";
 
@@ -11,12 +14,19 @@ type SubAgentToolCallProps = {
   tool: CHAT.Task;
   chat: CHAT.ChatItem;
   stackPosition?: ToolRowStackPosition;
-  defaultExpanded?: boolean;
   changeActiveChat: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
-  changePlan?: () => void;
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
-  onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
 };
+
+/** 子代理状态 → ToolRow 状态。唯一映射入口，避免摘要行与状态词各写一份。 */
+function resolveSubAgentRowStatus(
+  sub: SubAgentDisplay,
+  tool: CHAT.Task
+): ToolRowStatus {
+  if (sub.status === "failed") return "error";
+  if (sub.status === "running") return "running";
+  return resolveTaskToolStatus(tool);
+}
 
 /**
  * 子智能体卡（对齐 ZCode `ToolCallBlocks/renderers/agent.tsx`）。
@@ -38,12 +48,7 @@ export const SubAgentToolCall = memo(function SubAgentToolCall({
 }: SubAgentToolCallProps) {
   const sub = useMemo(() => resolveSubAgentDisplay(tool), [tool]);
 
-  const status =
-    sub.status === "failed"
-      ? "error"
-      : sub.status === "running"
-        ? "running"
-        : resolveTaskToolStatus(tool);
+  const status = resolveSubAgentRowStatus(sub, tool);
 
   const agentName = sub.subagentType || "";
   const agentColor = agentName ? resolveSubagentColorFromName(agentName) : null;
@@ -75,11 +80,7 @@ export const SubAgentToolCall = memo(function SubAgentToolCall({
 
   return (
     <ToolRow
-      status={
-        status === "ok" || status === "error" || status === "running"
-          ? status
-          : "ok"
-      }
+      status={status}
       icon={<BotIcon className="size-4" />}
       name={toolLabel("task")}
       kindDetail={

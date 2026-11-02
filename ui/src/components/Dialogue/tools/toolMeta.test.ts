@@ -40,6 +40,12 @@ describe("toolMeta", () => {
     ).toBe("ls -la");
   });
 
+  it("摘要与展开区共用命令字段优先级（input 也能出摘要）", () => {
+    expect(
+      toolSummary("bash", JSON.stringify({ input: "echo hi" }))
+    ).toBe("echo hi");
+  });
+
   it("labels and chips", () => {
     expect(toolLabel("web_search")).toBe("Search");
     expect(

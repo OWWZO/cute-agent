@@ -77,14 +77,14 @@ export function ToolOutputBlock({
         ) : (
           <div className="kimi-tool-section-text">{windowed.text}</div>
         )}
-        {windowed.hiddenCount > 0 ? (
+        {expanded || windowed.hiddenCount > 0 ? (
           <button
             type="button"
             className="kimi-tool-section-more"
             data-testid="tool-output-expand"
-            onClick={() => setExpanded(true)}
+            onClick={() => setExpanded((value) => !value)}
           >
-            展开剩余 {windowed.hiddenCount} 行
+            {expanded ? "收起" : `展开剩余 ${windowed.hiddenCount} 行`}
           </button>
         ) : null}
       </div>

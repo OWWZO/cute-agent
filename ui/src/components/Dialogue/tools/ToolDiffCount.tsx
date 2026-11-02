@@ -1,5 +1,26 @@
 import { FlipMetricValue } from "./FlipMetricValue";
 
+/** 单个 `+A` / `-B` 计数位。两侧结构完全一致，只有符号与配色不同。 */
+function DiffCount({
+  sign,
+  value,
+  className,
+  animateInitial,
+}: {
+  sign: "+" | "-";
+  value: number;
+  className: string;
+  animateInitial: boolean;
+}) {
+  const text = `${sign}${value}`;
+  return (
+    <span aria-label={text} className={className} role="text" title={text}>
+      {sign}
+      <FlipMetricValue value={String(value)} animateInitial={animateInitial} />
+    </span>
+  );
+}
+
 /**
  * 工具卡尾部 `+A −B` 变更计数（对齐 ZCode `renderers.tsx` 的 `renderDiffCount`）。
  *
@@ -23,27 +44,21 @@ export function ToolDiffCount({
   return (
     <span className="kimi-tool-diff">
       {added > 0 ? (
-        <span
-          aria-label={`+${added}`}
+        <DiffCount
+          sign="+"
+          value={added}
           className="kimi-tool-diff-added"
-          role="text"
-          title={`+${added}`}
-        >
-          +
-          <FlipMetricValue value={String(added)} animateInitial={animateInitial} />
-        </span>
+          animateInitial={animateInitial}
+        />
       ) : null}
       {removed > 0 ? (
-        <span
-          aria-label={`-${removed}`}
+        // ZCode `renderDiffCount` 用的是 ASCII 连字符 `-`，不是 U+2212
+        <DiffCount
+          sign="-"
+          value={removed}
           className="kimi-tool-diff-removed"
-          role="text"
-          title={`-${removed}`}
-        >
-          {/* ZCode `renderDiffCount` 用的是 ASCII 连字符 `-`，不是 U+2212 */}
-          -
-          <FlipMetricValue value={String(removed)} animateInitial={animateInitial} />
-        </span>
+          animateInitial={animateInitial}
+        />
       ) : null}
     </span>
   );

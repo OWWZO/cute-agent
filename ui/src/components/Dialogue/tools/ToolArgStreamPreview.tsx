@@ -77,7 +77,8 @@ export function ToolArgStreamPreview({
         className="kimi-tool-stream-preview-body"
         aria-live="polite"
       >
-        {displayed || (streaming ? "" : text)}
+        {/* 结束后以最终入参为准：追赶中的 displayed 可能还停在半截旧文本。 */}
+        {streaming ? displayed : text}
         {streaming ? (
           <span className="kimi-tool-stream-preview-cursor" aria-hidden>
             ▍

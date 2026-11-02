@@ -14,12 +14,37 @@ export type McpToolIdentity = {
   toolName: string;
 };
 
-/** 是否是 MCP 的 FQ 工具名。 */
-export function isMcpToolName(name: string | null | undefined): boolean {
-  if (!name || !name.startsWith(MCP_TOOL_PREFIX)) return false;
+type McpToolSeparatorHit = {
+  body: string;
+  index: number;
+};
+
+/**
+ * 找到 `mcp__{server}__{tool}` 里分隔 server / tool 的那个 `__`。
+ *
+ * 前缀缺失、server 段为空（`idx === 0`）或 tool 段为空时返回 null。
+ * `isMcpToolName` 与 `parseMcpToolName` 共用这一条边界规则，避免两处判定漂移。
+ */
+function findMcpToolSeparator(
+  name: string | null | undefined
+): McpToolSeparatorHit | null {
+  if (!name || !name.startsWith(MCP_TOOL_PREFIX)) return null;
   const body = name.slice(MCP_TOOL_PREFIX.length);
-  const idx = body.indexOf(MCP_TOOL_SEPARATOR);
-  return idx > 0 && idx < body.length - MCP_TOOL_SEPARATOR.length;
+  const index = body.indexOf(MCP_TOOL_SEPARATOR);
+  if (index <= 0 || index >= body.length - MCP_TOOL_SEPARATOR.length) {
+    return null;
+  }
+  return {
+    body,
+    index,
+  };
+}
+
+/** 是否是 MCP 的 FQ 工具名。类型守卫：命中后 `name` 收窄为 `string`。 */
+export function isMcpToolName(
+  name: string | null | undefined
+): name is string {
+  return findMcpToolSeparator(name) !== null;
 }
 
 /**
@@ -31,14 +56,12 @@ export function isMcpToolName(name: string | null | undefined): boolean {
 export function parseMcpToolName(
   name: string | null | undefined
 ): McpToolIdentity | null {
-  if (!isMcpToolName(name)) return null;
-  const qualifiedName = name as string;
-  const body = qualifiedName.slice(MCP_TOOL_PREFIX.length);
-  const idx = body.indexOf(MCP_TOOL_SEPARATOR);
+  const hit = findMcpToolSeparator(name);
+  if (!hit || !name) return null;
   return {
-    qualifiedName,
-    serverKey: body.slice(0, idx),
-    toolName: body.slice(idx + MCP_TOOL_SEPARATOR.length),
+    qualifiedName: name,
+    serverKey: hit.body.slice(0, hit.index),
+    toolName: hit.body.slice(hit.index + MCP_TOOL_SEPARATOR.length),
   };
 }
 

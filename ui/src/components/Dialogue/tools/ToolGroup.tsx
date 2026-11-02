@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePinScrollOnToggle } from "@/hooks/usePinScrollOnToggle";
 
 export function ToolGroup({
   title,
@@ -20,25 +21,7 @@ export function ToolGroup({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const headRef = useRef<HTMLButtonElement | null>(null);
-
-  const pinScroll = useCallback(() => {
-    const el = headRef.current;
-    if (!el) return;
-    const top = el.getBoundingClientRect().top;
-    requestAnimationFrame(() => {
-      const next = el.getBoundingClientRect().top;
-      const delta = next - top;
-      if (Math.abs(delta) > 1) {
-        const scroller = el.closest(
-          "[data-stick-to-bottom], .overflow-y-auto, .overflow-auto"
-        );
-        if (scroller instanceof HTMLElement) {
-          scroller.scrollTop += delta;
-        }
-      }
-    });
-  }, []);
+  const [headRef, pinScroll] = usePinScrollOnToggle<HTMLButtonElement>();
 
   return (
     <div className={cn("kimi-tool-group", open && "is-open")}>

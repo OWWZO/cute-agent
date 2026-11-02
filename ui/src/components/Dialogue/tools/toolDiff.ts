@@ -113,6 +113,17 @@ export function buildEditDiffCode(tool: {
 }
 
 /**
+ * `write` 的正文可能落在 `content` / `new_string` / `text` 三种字段里（历史数据三种都见过）。
+ * `buildWriteDiffCode` 与 `editDiffStats` 共用这一处字段优先级，避免一边能出 patch、
+ * 另一边统计却是 null。
+ */
+function writeContent(d: Record<string, unknown>): string {
+  if (typeof d.content === "string") return d.content;
+  if (typeof d.new_string === "string") return d.new_string;
+  return typeof d.text === "string" ? d.text : "";
+}
+
+/**
  * `write` 没有 `old_string`，构造不出真实 diff。
  *
  * 但内联 diff 预览需要一份「整文件新增」的 patch —— ZCode 对新建文件同样走这条
@@ -134,14 +145,7 @@ export function buildWriteDiffCode(name: string, arg: string): string | null {
     "";
   if (!path) return null;
 
-  const content =
-    typeof d.content === "string"
-      ? d.content
-      : typeof d.new_string === "string"
-        ? d.new_string
-        : typeof d.text === "string"
-          ? d.text
-          : "";
+  const content = writeContent(d);
   if (!content) return null;
 
   const lines = splitLines(content);
@@ -244,21 +248,13 @@ export function extractEditFileSummaries(
       arg: JSON.stringify(entry),
       backendPatch: singleBackendPatch,
     });
-    let added = 0;
-    let removed = 0;
-    if (patch) {
-      for (const line of patch.split("\n")) {
-        if (line.startsWith("+++") || line.startsWith("---")) continue;
-        if (line.startsWith("+")) added += 1;
-        else if (line.startsWith("-")) removed += 1;
-      }
-    }
+    const stats = patch ? patchDiffStats(patch) : null;
     out.push({
       path,
       fileName: path.split(/[\\/]/).filter(Boolean).pop() || path,
       patch: patch || undefined,
-      added,
-      removed,
+      added: stats?.added ?? 0,
+      removed: stats?.removed ?? 0,
     });
   }
   return out;
@@ -313,12 +309,7 @@ export function editDiffStats(
 
   if (key === "write") {
     const d = parseArg(arg);
-    const content =
-      d && typeof d.content === "string"
-        ? d.content
-        : d && typeof d.new_string === "string"
-          ? d.new_string
-          : "";
+    const content = d ? writeContent(d) : "";
     if (content) {
       return { added: splitLines(content).length, removed: 0 };
     }

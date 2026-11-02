@@ -1,9 +1,10 @@
 import { memo } from "react";
 import { SearchIcon } from "lucide-react";
+import { pathBreadcrumb } from "@/lib/codeViewerSource";
 import { ToolRow, type ToolRowStackPosition } from "./ToolRow";
 import { ToolFileChip } from "./ToolFileChip";
 import { ToolArgStreamCard } from "./ToolArgStreamCard";
-import { extractToolFilePath, normalizeToolName, toolLabel, toolSummary } from "./toolMeta";
+import { extractToolFilePath, toolLabel, toolSummary } from "./toolMeta";
 import {
   resolveTaskToolArg,
   resolveTaskToolName,
@@ -39,6 +40,11 @@ export const ReadToolCall = memo(function ReadToolCall({
   const showArgStream = shouldShowToolArgStream(tool);
   const summary = toolSummary(name, arg);
   const filePath = extractToolFilePath(arg);
+  // ZCode `renderFilePath`：文件名之后补一段**父目录**路径。
+  // chip 已经显示 basename（`ToolFileChip` 内部取 `pathBaseName`），这里再渲染全文
+  // 会让 `src/a/bar.ts` 显示成 `bar.ts src/a/bar.ts` —— 文件名重复两遍。
+  // 裸文件名时 `parents` 为空，同样不重复渲染。
+  const parentDir = filePath ? pathBreadcrumb(filePath).parents.join("/") : "";
 
   if (showArgStream) {
     return (
@@ -71,11 +77,9 @@ export const ReadToolCall = memo(function ReadToolCall({
         ) : undefined
       }
       secondary={
-        // ZCode `renderFilePath`：文件名之后补一段父目录路径。
-        // 入参本来就是裸文件名时不重复渲染（否则会看到 `README.md README.md`）。
-        filePath && /[\\/]/.test(filePath) ? (
+        parentDir ? (
           <span className="kimi-tool-row-secondary" title={filePath}>
-            {filePath}
+            {parentDir}
           </span>
         ) : undefined
       }
@@ -86,8 +90,3 @@ export const ReadToolCall = memo(function ReadToolCall({
     />
   );
 });
-
-/** 供 registry 判断是否需要走 read 专用卡（避免 read 名被别名吞掉）。 */
-export function isReadTool(name: string): boolean {
-  return normalizeToolName(name) === "read";
-}

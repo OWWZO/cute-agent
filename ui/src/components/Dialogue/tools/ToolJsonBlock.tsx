@@ -14,7 +14,14 @@ const jsonTheme = {
   error: "color:var(--status-failed-text)",
 };
 
-function parseJsonValue(value: unknown): ToolJsonValue | undefined {
+/**
+ * 把工具入参 / 出参解析成可渲染的 JSON 值。
+ *
+ * 部分后端工具会把 JSON **再序列化一层**当字符串返回（例如 `"{\"a\":1}"`），
+ * 所以字符串解析成功、但结果仍是字符串时再解一层。解不出来（含 `"hello"`
+ * 这种合法但非对象的字符串）统一返回 `undefined`，由调用方退回纯文本渲染。
+ */
+export function parseToolJson(value: unknown): ToolJsonValue | undefined {
   if (value && typeof value === "object") {
     return value as ToolJsonValue;
   }
@@ -28,6 +35,7 @@ function parseJsonValue(value: unknown): ToolJsonValue | undefined {
       return parsed as ToolJsonValue;
     }
     if (typeof parsed === "string" && parsed.trim()) {
+      // 双重编码：第一层解出来还是 JSON 字符串，再解一层。
       const nested = JSON.parse(parsed);
       return nested && typeof nested === "object"
         ? (nested as ToolJsonValue)
@@ -37,10 +45,6 @@ function parseJsonValue(value: unknown): ToolJsonValue | undefined {
     return undefined;
   }
   return undefined;
-}
-
-export function parseToolJson(value: unknown): ToolJsonValue | undefined {
-  return parseJsonValue(value);
 }
 
 /**
