@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -97,10 +97,47 @@ const getFileIcon = (type: string) => {
 const treeRowClass = (active: boolean) =>
   cn(
     "group/file-tree-row relative flex h-7 w-full min-w-0 items-center gap-1.5 rounded-lg border pr-2 py-1 text-left text-ui-base text-foreground outline-none transition-colors",
+    // outline-none 会一并抹掉键盘焦点提示，这里用 inset ring 补回可见焦点。
+    "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-input-border-focused",
     active
       ? "border-input-border-focused hover:bg-surface-hover"
       : "border-transparent hover:bg-surface-hover"
   );
+
+/** 目录行与文件行共用的按钮外壳：图标槽 / 截断名称 / 尾部元信息。 */
+function TreeNodeRow({
+  active = false,
+  depth,
+  title,
+  onClick,
+  leading,
+  name,
+  trailing,
+}: {
+  active?: boolean;
+  depth: number;
+  title: string;
+  onClick: () => void;
+  leading: ReactNode;
+  name: string;
+  trailing: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={treeRowClass(active)}
+      style={{ marginLeft: depth * 12 }}
+      title={title}
+    >
+      <span className="flex size-4 shrink-0 items-center justify-center text-foreground-subtle">
+        {leading}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{name}</span>
+      {trailing}
+    </button>
+  );
+}
 
 const TreeNode = memo(function TreeNode({
   node,
@@ -120,26 +157,25 @@ const TreeNode = memo(function TreeNode({
     const visibleChildren = node.children.slice(0, visibleCount);
     return (
       <div>
-        <button
-          type="button"
-          onClick={() => setExpanded((prev) => !prev)}
-          className={treeRowClass(false)}
-          style={{ marginLeft: depth * 12 }}
+        <TreeNodeRow
+          depth={depth}
           title={`${node.name} · ${formatWorkspaceBytes(node.size)}`}
-        >
-          <span className="flex size-4 shrink-0 items-center justify-center text-foreground-subtle">
-            <Folder className="size-4" />
-          </span>
-          <span className="min-w-0 flex-1 truncate">{node.name}</span>
-          <span className="shrink-0 text-ui-xs tabular-nums text-foreground-subtlest">
-            {formatWorkspaceBytes(node.size)}
-          </span>
-          {expanded ? (
-            <ChevronDown className="size-3 shrink-0 text-foreground-subtlest" />
-          ) : (
-            <ChevronRight className="size-3 shrink-0 text-foreground-subtlest" />
-          )}
-        </button>
+          onClick={() => setExpanded((prev) => !prev)}
+          leading={<Folder className="size-4" />}
+          name={node.name}
+          trailing={
+            <>
+              <span className="shrink-0 text-ui-xs tabular-nums text-foreground-subtlest">
+                {formatWorkspaceBytes(node.size)}
+              </span>
+              {expanded ? (
+                <ChevronDown className="size-3 shrink-0 text-foreground-subtlest" />
+              ) : (
+                <ChevronRight className="size-3 shrink-0 text-foreground-subtlest" />
+              )}
+            </>
+          }
+        />
         {expanded ? (
           <div className="mt-0.5 flex flex-col gap-0.5">
             {visibleChildren.map((child) => (
@@ -164,31 +200,29 @@ const TreeNode = memo(function TreeNode({
   const key = workspaceFileKey(node.file);
   const active = key === selectedFileKey;
   return (
-    <button
-      type="button"
-      onClick={() => onSelectFile?.(node.file)}
-      className={treeRowClass(active)}
-      style={{ marginLeft: depth * 12 }}
+    <TreeNodeRow
+      active={active}
+      depth={depth}
       title={
         node.file.missing
           ? node.file.missingReason || "内容不可读取"
           : `${node.name} · ${formatWorkspaceBytes(node.size)}`
       }
-    >
-      <span className="flex size-4 shrink-0 items-center justify-center">
-        {getFileIcon(node.file.type)}
-      </span>
-      <span className="min-w-0 flex-1 truncate">{node.name}</span>
-      {node.file.missing ? (
-        <span className="max-w-24 shrink-0 truncate text-ui-xs text-destructive">
-          {node.file.missingReason || "不可读取"}
-        </span>
-      ) : (
-        <span className="shrink-0 text-ui-xs tabular-nums text-foreground-subtlest">
-          {formatWorkspaceBytes(node.size)}
-        </span>
-      )}
-    </button>
+      onClick={() => onSelectFile?.(node.file)}
+      leading={getFileIcon(node.file.type)}
+      name={node.name}
+      trailing={
+        node.file.missing ? (
+          <span className="max-w-24 shrink-0 truncate text-ui-xs text-destructive">
+            {node.file.missingReason || "不可读取"}
+          </span>
+        ) : (
+          <span className="shrink-0 text-ui-xs tabular-nums text-foreground-subtlest">
+            {formatWorkspaceBytes(node.size)}
+          </span>
+        )
+      }
+    />
   );
 });
 

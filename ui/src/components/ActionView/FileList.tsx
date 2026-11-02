@@ -400,7 +400,7 @@ const FileList: React.FC<{
 
   return (
     <ActionViewFrame
-      className={isImmersiveDetail ? "flex min-h-0 flex-col overflow-hidden bg-white/50" : "bg-white/50"}
+      contentClassName={isImmersiveDetail ? "flex min-h-0 flex-col overflow-hidden bg-white/50" : "bg-white/50"}
       titleNode={
         <div className="flex min-w-0 items-center gap-2">
           {getFileIcon(fileItem.type)}
