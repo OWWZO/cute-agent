@@ -30,7 +30,7 @@
 .iui-map-error { top: auto; bottom: 28px; }
 .iui-map-overview { position: absolute; bottom: 22px; left: 12px; z-index: 500; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--iui-canvas) 92%, transparent); color: var(--iui-muted); font-size: 10px; line-height: 16px; }
 .iui-map-status { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.iui-map .iui-map-surface .maplibregl-ctrl-attrib { max-width: calc(100% - 50px); padding: 1px 4px; background: color-mix(in srgb, var(--iui-canvas) 90%, transparent); color: var(--iui-muted); font-size: 8px; line-height: 10px; }
+.iui-map .iui-map-surface .maplibregl-ctrl-attrib { max-width: calc(100% - 50px); padding: 1px 4px; background: color-mix(in srgb, var(--iui-canvas) 90%, transparent); color: var(--iui-muted); }
 .iui-map .iui-map-surface .maplibregl-ctrl-attrib a { color: var(--iui-muted); }
 .iui-map .iui-map-surface .maplibregl-ctrl-group { overflow: hidden; border: 0; border-radius: 10px; background: var(--iui-glass); backdrop-filter: blur(12px) saturate(1.4); box-shadow: inset 0 0 0 1px var(--iui-glass-ring), 0 2px 12px rgb(0 0 0 / 8%); opacity: 0; transition: opacity .15s ease; }
 :is(:root[data-openui-theme="dark"], [data-theme="dark"]) .iui-map-surface .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
