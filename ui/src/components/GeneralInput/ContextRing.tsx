@@ -25,6 +25,21 @@ const R = 9;
 const STROKE = 3;
 const CIRC = 2 * Math.PI * R;
 
+/** 上下文占用阈值：≥90% 视为接近上限，≥70% 视为偏高。 */
+const RATIO_DANGER = 0.9;
+const RATIO_WARN = 0.7;
+const STROKE_COLORS = {
+  normal: "#34c759",
+  warn: "#ff9f0a",
+  danger: "#ff3b30",
+} as const;
+
+function strokeColorForRatio(ratio: number): string {
+  if (ratio >= RATIO_DANGER) return STROKE_COLORS.danger;
+  if (ratio >= RATIO_WARN) return STROKE_COLORS.warn;
+  return STROKE_COLORS.normal;
+}
+
 function formatTokens(n: number) {
   if (n >= 1_000_000) {
     const v = n / 1_000_000;
@@ -73,14 +88,7 @@ const ContextRing: CuteType.FC<Props> = ({
     model.promptTokens === null
       ? 0
       : Math.min(1, model.promptTokens / model.max);
-  const tone =
-    ratio >= 0.9 ? "danger" : ratio >= 0.7 ? "warn" : "normal";
-  const stroke =
-    tone === "danger"
-      ? "#ff3b30"
-      : tone === "warn"
-        ? "#ff9f0a"
-        : "#34c759";
+  const stroke = strokeColorForRatio(ratio);
   const dash = CIRC * ratio;
   const pct = Math.round(ratio * 100);
   const hasMeasuredUsage = model.promptTokens !== null;
