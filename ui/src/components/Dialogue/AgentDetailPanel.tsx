@@ -44,7 +44,6 @@ type AgentDetailPanelProps = {
   changeFile?: CHAT.OpenFileHandler;
   sessionArtifactFiles?: CHAT.TFile[];
   changePlan?: () => void;
-  onOpenThinking?: (text: string) => void;
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
   onOpenWorkspaceFiles?: () => void;
@@ -61,7 +60,6 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
   onOpenAgent,
   changeFile,
   sessionArtifactFiles,
-  onOpenThinking,
   onOpenWorkspaceFiles,
 }: AgentDetailPanelProps) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -312,7 +310,6 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
                 changeTask={handleChangeActiveChat}
                 changeFile={handleChangeFile}
                 changePlan={changePlan}
-                onOpenThinking={onOpenThinking}
                 onOpenToolDiff={handleOpenToolDiff}
                 onOpenAgent={handleOpenAgent}
                 onOpenWorkspaceFiles={onOpenWorkspaceFiles}
@@ -334,7 +331,6 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
             changeTask={handleChangeActiveChat}
             changeFile={handleChangeFile}
             changePlan={changePlan}
-            onOpenThinking={onOpenThinking}
             onOpenToolDiff={handleOpenToolDiff}
             onOpenAgent={handleOpenAgent}
             onOpenWorkspaceFiles={onOpenWorkspaceFiles}

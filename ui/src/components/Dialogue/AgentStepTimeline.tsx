@@ -60,7 +60,6 @@ type AgentStepTimelineProps = {
   changeActiveChat: CHAT.OpenTaskHandler;
   changePlan?: () => void;
   changeFile?: CHAT.OpenFileHandler;
-  onOpenThinking?: (text: string) => void;
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
 };
@@ -112,7 +111,7 @@ function textsNearlyEqual(
 }
 
 function resolveSegmentComparableText(segment: ProcessSegment): string {
-  if (segment.type === "final_reply" || segment.type === "assistant_reply") {
+  if (segment.type === "assistant_reply") {
     return segment.text;
   }
   if (segment.type === "thinking") {
@@ -142,10 +141,6 @@ export function isDuplicateOfConclusion(
 ): boolean {
   if (!normalizedConclusion) {
     return false;
-  }
-  // 终答区已有 conclusion 时，时间线不再渲染 final_reply
-  if (segment.type === "final_reply") {
-    return true;
   }
   // task_summary 若已作为底部结论，不再在时间线重复
   if (
@@ -241,7 +236,6 @@ type StepRowContext = {
   changeActiveChat: CHAT.OpenTaskHandler;
   changePlan?: () => void;
   changeFile?: CHAT.OpenFileHandler;
-  onOpenThinking?: (text: string) => void;
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
 };
@@ -529,20 +523,6 @@ const AssistantReplySegment: FC<{ text: string; streaming?: boolean }> = memo(
 
 AssistantReplySegment.displayName = "AssistantReplySegment";
 
-const FinalReplySegment: FC<{ text: string }> = memo(({ text }) => (
-  <div
-    className="timeline-segment-enter mt-3 w-full px-1"
-    data-testid="process-final-reply"
-  >
-    <MarkdownRenderer
-      markDownContent={text}
-      className="chat-markdown conclusion-markdown kimi-md"
-    />
-  </div>
-));
-
-FinalReplySegment.displayName = "FinalReplySegment";
-
 function filterConclusionDuplicateSteps(
   steps: ProcessStepRow[],
   conclusionText: string,
@@ -593,9 +573,6 @@ const ProcessSegmentView: FC<{
   }
   if (segment.type === "user_message") {
     return <UserMessageSegment step={segment.step} />;
-  }
-  if (segment.type === "final_reply") {
-    return <FinalReplySegment text={segment.text} />;
   }
 
   const visibleSteps = filterConclusionDuplicateSteps(
@@ -665,7 +642,6 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
     changeActiveChat,
     changePlan,
     changeFile,
-    onOpenThinking,
     onOpenToolDiff,
     onOpenAgent,
   } = props;
@@ -716,7 +692,6 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
       changeActiveChat,
       changePlan,
       changeFile,
-      onOpenThinking,
       onOpenToolDiff,
       onOpenAgent,
     }),
@@ -725,7 +700,6 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
       changeActiveChat,
       changePlan,
       changeFile,
-      onOpenThinking,
       onOpenToolDiff,
       onOpenAgent,
     ]
@@ -791,9 +765,7 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
                   ? `think-${segment.step.id}`
                   : segment.type === "assistant_reply"
                     ? `reply-${segment.step.id}`
-                    : segment.type === "user_message"
-                      ? `msg-${segment.step.id}`
-                      : `final-${segment.step.id}`;
+                    : `msg-${segment.step.id}`;
             return (
               <ProcessSegmentView
                 key={key}
@@ -828,7 +800,6 @@ export const AgentStepTimeline = memo(
     prev.changeActiveChat === next.changeActiveChat &&
     prev.changePlan === next.changePlan &&
     prev.changeFile === next.changeFile &&
-    prev.onOpenThinking === next.onOpenThinking &&
     prev.onOpenToolDiff === next.onOpenToolDiff &&
     prev.onOpenAgent === next.onOpenAgent &&
     prev.onThoughtPrev === next.onThoughtPrev &&
