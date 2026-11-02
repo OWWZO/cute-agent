@@ -26,6 +26,9 @@ import { getTaskFiles } from "@/utils/taskArtifacts";
 export const SUBAGENT_CHILD_SESSION_ENABLED =
   (import.meta.env?.VITE_SUBAGENT_CHILD_SESSION as string | undefined) === "1";
 
+/** 子会话一次挂载的轮数；更早轮次按需展开，避免长会话把所有 Dialogue 同时挂上。 */
+const CHILD_SESSION_TURN_PAGE_SIZE = 8;
+
 type AgentDetailPanelProps = {
   tool: CHAT.Task;
   chat: CHAT.ChatItem;
@@ -132,7 +135,17 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
       })),
     [childSessionRounds]
   );
-
+  const [visibleTurnCount, setVisibleTurnCount] = useState({
+    sessionId: childSessionId,
+    count: CHILD_SESSION_TURN_PAGE_SIZE,
+  });
+  const visibleCount =
+    visibleTurnCount.sessionId === childSessionId
+      ? visibleTurnCount.count
+      : CHILD_SESSION_TURN_PAGE_SIZE;
+  const visibleChildSessionTurns = childSessionTurns.slice(-visibleCount);
+  const hiddenChildSessionTurnCount =
+    childSessionTurns.length - visibleChildSessionTurns.length;
   const reloadChildSession = childSession.reload;
   const handleSubmitted = useCallback(
     (submitted: { query: string; requestId: string }) => {
@@ -273,26 +286,44 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
           <div className="kimi-detail-panel-empty">加载子会话…</div>
         ) : null}
 
-        {/* 每一轮一个 Dialogue：折叠态只显示提问 + 结论摘要，点开折叠条才补拉该轮过程 */}
-        {childSessionTurns.map((turn) => (
-          <Dialogue
-            key={turn.key || `child-session-${childSessionId}`}
-            chat={turn.chat}
-            deepThink={false}
-            sessionArtifactFiles={sessionArtifactFiles}
-            changeTask={handleChangeActiveChat}
-            changeFile={handleChangeFile}
-            changePlan={changePlan}
-            onOpenThinking={onOpenThinking}
-            onOpenToolDiff={handleOpenToolDiff}
-            onOpenAgent={handleOpenAgent}
-            onOpenWorkspaceFiles={onOpenWorkspaceFiles}
-            onRequestReplay={childSession.loadReplay}
-            replayLoading={childSession.replayLoadingIds.includes(
-              String(turn.chat.requestId || "")
-            )}
-          />
-        ))}
+        {/* 子会话按轮窗口化；流式 live run 常驻尾部，避免子会话长期运行时历史 Dialogue 全挂载。 */}
+        {useRealChildSession && childSessionTurns.length ? (
+          <div className="flex flex-col gap-2">
+            {hiddenChildSessionTurnCount > 0 ? (
+              <button
+                type="button"
+                className="self-center rounded-full px-3 py-1.5 text-ui-xs text-[var(--color-text-subtle)] transition-colors hover:bg-[var(--color-surface-sunken)] hover:text-[var(--color-text)]"
+                onClick={() =>
+                  setVisibleTurnCount({
+                    sessionId: childSessionId,
+                    count: visibleCount + CHILD_SESSION_TURN_PAGE_SIZE,
+                  })
+                }
+              >
+                显示更早的 {hiddenChildSessionTurnCount} 轮
+              </button>
+            ) : null}
+            {visibleChildSessionTurns.map((turn) => (
+              <Dialogue
+                key={turn.key || `child-session-${childSessionId}`}
+                chat={turn.chat}
+                deepThink={false}
+                sessionArtifactFiles={sessionArtifactFiles}
+                changeTask={handleChangeActiveChat}
+                changeFile={handleChangeFile}
+                changePlan={changePlan}
+                onOpenThinking={onOpenThinking}
+                onOpenToolDiff={handleOpenToolDiff}
+                onOpenAgent={handleOpenAgent}
+                onOpenWorkspaceFiles={onOpenWorkspaceFiles}
+                onRequestReplay={childSession.loadReplay}
+                replayLoading={childSession.replayLoadingIds.includes(
+                  String(turn.chat.requestId || "")
+                )}
+              />
+            ))}
+          </div>
+        ) : null}
 
         {!useRealChildSession && hasBody ? (
           <Dialogue
