@@ -74,7 +74,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
   );
   const duration = formatAgentElapsed(sub);
   const phaseLabel = resolveAgentPhaseLabel(member?.phase, sub.status);
-  const phaseTone = resolveAgentPhaseTone(phaseLabel);
+  const phaseTone = resolveAgentPhaseTone(member?.phase, sub.status);
 
   // 子会话真实详情：只有开关开启且父卡确实带 childSessionId 时才订阅。
   // 不具备 childSessionId（旧会话 / 未落库成功）时自动回退合成投影。
