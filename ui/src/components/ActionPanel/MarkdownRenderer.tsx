@@ -14,7 +14,7 @@ import {
 } from '@/utils/markdownArtifacts';
 import {
   buildMarkdownBlockContents,
-  collectLinkDefinitions,
+  LinkDefinitionCache,
   splitMarkdownBlocks,
 } from '@/lib/markdownBlocks';
 
@@ -218,7 +218,14 @@ const MarkdownRenderer: CuteType.FC<{
     () => splitMarkdownBlocks(normalizedContent),
     [normalizedContent]
   );
-  const linkDefs = useMemo(() => collectLinkDefinitions(blocks), [blocks]);
+  const linkDefinitionCacheRef = useRef<LinkDefinitionCache | null>(null);
+  if (linkDefinitionCacheRef.current === null) {
+    linkDefinitionCacheRef.current = new LinkDefinitionCache();
+  }
+  const linkDefs = useMemo(
+    () => linkDefinitionCacheRef.current!.collect(blocks),
+    [blocks]
+  );
   // 只在 blocks / linkDefs 变化时拼一次；否则内联 map 会让每块的 content
   // 每次渲染都是新字符串，MarkdownBlock 的 memo 永远不命中。
   const blockContents = useMemo(

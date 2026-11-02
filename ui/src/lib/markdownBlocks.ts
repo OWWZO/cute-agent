@@ -36,38 +36,79 @@ const FOOTNOTE_DEF_LINE = /^\s{0,3}\[\^[^\]]+\]:/;
  * 若把它提升为文档级定义再追加给正文块，就会凭空生成指向该 URL 的真实 `<a>`：
  * 任何展示 YAML / Markdown 示例配置的回答都会中招（内容完整性 + 链接注入）。
  */
-export function collectLinkDefinitions(blocks: readonly string[]): string {
+function collectBlockLinkDefinitions(block: string): string[] {
   const defs: string[] = [];
-  const seen = new Set<string>();
-
-  for (const block of blocks) {
-    let fence: string | null = null;
-    for (const line of block.split("\n")) {
-      const fenceMatch = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
-      if (fenceMatch) {
-        const marker = fenceMatch[1][0];
-        if (fence === null) {
-          fence = marker;
-        } else if (fence === marker) {
-          fence = null;
-        }
-        continue;
+  let fence: string | null = null;
+  for (const line of block.split("\n")) {
+    const fenceMatch = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0];
+      if (fence === null) {
+        fence = marker;
+      } else if (fence === marker) {
+        fence = null;
       }
-      // 围栏内（含缩进代码块）一律不参与定义收集。
-      if (fence !== null || /^\s{4,}\S/.test(line)) {
-        continue;
-      }
-      if (FOOTNOTE_DEF_LINE.test(line)) {
-        continue;
-      }
-      if (LINK_DEF_LINE.test(line) && !seen.has(line)) {
-        seen.add(line);
-        defs.push(line);
-      }
+      continue;
+    }
+    // 围栏内（含缩进代码块）一律不参与定义收集。
+    if (fence !== null || /^\s{4,}\S/.test(line)) {
+      continue;
+    }
+    if (FOOTNOTE_DEF_LINE.test(line)) {
+      continue;
+    }
+    if (LINK_DEF_LINE.test(line)) {
+      defs.push(line);
     }
   }
+  return defs;
+}
 
-  return defs.join("\n");
+/**
+ * 跨渲染复用每块的定义扫描结果：流式时只有末尾块在增长，前缀块直接命中缓存。
+ */
+export class LinkDefinitionCache {
+  private entries: Array<{ block: string; defs: string[] }> = [];
+  /** 最近一次 collect 实际扫描的块数（测试用，避免为扫全量做隐式回归）。 */
+  lastScannedBlockCount = 0;
+
+  collect(blocks: readonly string[]): string {
+    const nextEntries: Array<{ block: string; defs: string[] }> = [];
+    let scanned = 0;
+    for (let index = 0; index < blocks.length; index += 1) {
+      const block = blocks[index];
+      const previous = this.entries[index];
+      if (previous && previous.block === block) {
+        nextEntries.push(previous);
+        continue;
+      }
+      nextEntries.push({
+        block,
+        defs: collectBlockLinkDefinitions(block),
+      });
+      scanned += 1;
+    }
+    this.entries = nextEntries;
+    this.lastScannedBlockCount = scanned;
+
+    const defs: string[] = [];
+    const seen = new Set<string>();
+    for (const entry of nextEntries) {
+      for (const line of entry.defs) {
+        if (!seen.has(line)) {
+          seen.add(line);
+          defs.push(line);
+        }
+      }
+    }
+    return defs.join("\n");
+  }
+}
+
+const defaultLinkDefinitionCache = new LinkDefinitionCache();
+
+export function collectLinkDefinitions(blocks: readonly string[]): string {
+  return defaultLinkDefinitionCache.collect(blocks);
 }
 
 /**

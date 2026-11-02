@@ -6,6 +6,7 @@ import gfm from "remark-gfm";
 import {
   buildMarkdownBlockContents,
   collectLinkDefinitions,
+  LinkDefinitionCache,
   splitMarkdownBlocks,
   withLinkDefinitions,
 } from "@/lib/markdownBlocks";
@@ -158,6 +159,19 @@ describe("markdownBlocks", () => {
     expect(withLinkDefinitions(`正文\n\n${defs}`, defs)).toBe(
       `正文\n\n${defs}`
     );
+  });
+
+  describe("LinkDefinitionCache", () => {
+    it("流式追加只重扫变化的尾块", () => {
+      const cache = new LinkDefinitionCache();
+      const first = ["正文", "\n[r]: https://x.com", "结尾"];
+      expect(cache.collect(first)).toBe("[r]: https://x.com");
+      expect(cache.lastScannedBlockCount).toBe(3);
+
+      const second = [first[0], first[1], "结尾追加"];
+      expect(cache.collect(second)).toBe("[r]: https://x.com");
+      expect(cache.lastScannedBlockCount).toBe(1);
+    });
   });
 
   describe("buildMarkdownBlockContents", () => {
