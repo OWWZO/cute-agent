@@ -218,9 +218,9 @@ export function planFollowIdleReplay(status?: string): FollowIdleReplayPlan {
 export function resolveFollowEndedStatus(
   chat: CHAT.ChatItem,
   nextStatus?: string
-): string {
+): CHAT.RunStatus {
   if (nextStatus) {
-    return nextStatus;
+    return normalizeRunStatus(nextStatus);
   }
   if (chat.conclusion || chat.metrics?.status === "SUCCESS") {
     return "SUCCESS";
