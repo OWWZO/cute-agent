@@ -21,12 +21,15 @@ import {
 import { cn } from "@/lib/utils";
 import { DeepSearchPreviewItem, ToolItem } from "./Timeline";
 import {
-  deriveAgentProcessModel,
+  buildAgentProcessSignature,
+  buildAgentProcessViewModel,
+  deriveAgentProcessTaskModel,
   type ProcessSegment,
   type ProcessStepGroup,
   type ProcessStepRow,
   resolveAssistantReplyText,
 } from "./agentProcessModel";
+import { useNowTicker } from "@/components/ChatView/subAgentsModel";
 import UserBriefCard from "./UserBriefCard";
 import MarkdownRenderer from "@/components/ActionPanel/MarkdownRenderer";
 import { resolveTaskSummaryText } from "./contentHelpers";
@@ -667,25 +670,43 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
     onOpenAgent,
   } = props;
 
-  const model = useMemo(
+  const nowTick = useNowTicker(Boolean(chat.loading));
+  const processSignature = buildAgentProcessSignature(chat);
+  const taskModel = useMemo(
     () =>
-      deriveAgentProcessModel({
+      deriveAgentProcessTaskModel({
         chat,
         isPlanSolve: isPlanSolveMessage,
+        nowMs: nowTick,
+      }),
+    // 任务事实没变时（纯正文 / 终答增量）复用上一次模型；
+    // chat 只作为派生输入，是否失效由 processSignature 判定。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [processSignature, isPlanSolveMessage, nowTick]
+  );
+  const model = useMemo(
+    () =>
+      buildAgentProcessViewModel(taskModel, {
+        chat: {
+          ...chat,
+          loading: taskModel.loading,
+        },
         thoughtText,
         thoughtStreaming,
         thoughtVersionLabel,
         thoughtVersionIndex,
         thoughtVersionTotal,
+        nowMs: nowTick,
       }),
     [
+      taskModel,
       chat,
-      isPlanSolveMessage,
       thoughtText,
       thoughtStreaming,
       thoughtVersionLabel,
       thoughtVersionIndex,
       thoughtVersionTotal,
+      nowTick,
     ]
   );
 
@@ -795,6 +816,8 @@ export const AgentStepTimeline = memo(
   AgentStepTimelineComponent,
   (prev, next) =>
     prev.chat === next.chat &&
+    buildAgentProcessSignature(prev.chat) ===
+      buildAgentProcessSignature(next.chat) &&
     prev.isPlanSolveMessage === next.isPlanSolveMessage &&
     prev.thoughtText === next.thoughtText &&
     prev.thoughtStreaming === next.thoughtStreaming &&

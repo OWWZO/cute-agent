@@ -6,6 +6,7 @@ import {
 } from "@/utils/chat/subagent";
 import { isTimelineToolActive } from "@/components/ChatView/streamState";
 import { isFileListOnlyTask } from "@/utils/taskArtifacts";
+import { hashContent } from "@/lib/hashContent";
 
 export type ProcessStepKind =
   | "thinking"
@@ -91,6 +92,12 @@ export type AgentProcessModel = {
   totalDurationMs?: number;
   totalDurationLabel?: string;
 };
+
+/** 任务事实派生的稳定部分；思考/意图句由 {@link buildAgentProcessViewModel} 叠加。 */
+export type AgentProcessTaskModel = Omit<
+  AgentProcessModel,
+  "thought" | "intentLine" | "hasProcess"
+> & { hasProcess: boolean };
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -986,31 +993,146 @@ export type DeriveAgentProcessModelInput = {
 };
 
 /**
- * 把现有 chat.tasks / thought 投影为 Cursor 风格过程叙事模型。
- * 不改 SSE / ledger，只做展示层派生。
+ * 任务事实签名：仅当其中字段变化时才需要重建过程模型。
  *
- * 规则：
- * 1. SendUserMessage(user_brief) 永不折叠，并切开前后「执行了 N 步」
- * 2. 终答只走 chat.conclusion；过程文/CoT 不提升为 final_reply
+ * `chat` 引用在流式期间每帧都变（正文、终答、运行状态），但任务树往往没变；
+ * 这里把 `deriveAgentProcessTaskModel` 会读取的字段压成字符串，供上层 `useMemo`
+ * 判断是否可以复用上一次派生结果。纯正文增量不会改变签名。
  */
-export function deriveAgentProcessModel(
-  input: DeriveAgentProcessModelInput
-): AgentProcessModel {
-  const {
-    chat,
-    isPlanSolve,
-    thoughtText = "",
-    thoughtStreaming = false,
-    thoughtVersionLabel,
-    thoughtVersionIndex = 0,
-    thoughtVersionTotal = 0,
-    nowMs = Date.now(),
-  } = input;
+export function buildAgentProcessSignature(chat: CHAT.ChatItem): string {
+  const signatureText = (value: unknown) => {
+    if (typeof value !== "string" || !value) {
+      return "";
+    }
+    return `${value.length}:${hashContent(value)}`;
+  };
+  /**
+   * 文件签名：步骤标题会用 `buildAction` 取主文件（如图片生成），
+   * 文件列表变化时任务模型必须失效。
+   */
+  const signatureFiles = (files: unknown) => {
+    if (!Array.isArray(files) || !files.length) {
+      return "";
+    }
+    return files
+      .map((value) => {
+        const file = (value || {}) as Record<string, unknown>;
+        return [
+          file.displayName,
+          file.fileName,
+          file.name,
+          file.resourceKey,
+          file.previewUrl,
+          file.downloadUrl,
+          file.missing ? 1 : 0,
+        ]
+          .filter(Boolean)
+          .join("@");
+      })
+      .join(",");
+  };
+  const parts: string[] = [
+    chat.loading ? "loading" : "idle",
+    String(chat.startedAt || ""),
+    String(chat.finishedAt || ""),
+    String(chat.runDurationMs ?? ""),
+  ];
+  const walk = (task: CHAT.Task) => {
+    const resultMap = (task.resultMap || {}) as Record<string, unknown>;
+    const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
+    const timing = (task as { timing?: Record<string, unknown> }).timing || {};
+    const searchResult = (resultMap.searchResult || {}) as Record<string, unknown>;
+    parts.push(
+      [
+        task.id || "",
+        task.messageId || "",
+        task.messageType || "",
+        task.messageTime || "",
+        task.isFinal ? 1 : 0,
+        task.finish ? 1 : 0,
+        task.task?.trim() || "",
+        task.digitalEmployee || "",
+        task.toolResult?.toolName || "",
+        String((task.toolResult as { toolCallId?: unknown } | undefined)?.toolCallId || ""),
+        String((task as { toolCallId?: unknown }).toolCallId || ""),
+        signatureText(task.toolThought),
+        signatureText(resultMap.message),
+        signatureText(resultMap.command),
+        signatureText(resultMap.primaryFileName),
+        signatureText(resultMap.input ? JSON.stringify(resultMap.input) : ""),
+        signatureText(
+          resultMap.toolParam ? JSON.stringify(resultMap.toolParam) : ""
+        ),
+        signatureText(nested.input ? JSON.stringify(nested.input) : ""),
+        signatureText(
+          nested.toolParam ? JSON.stringify(nested.toolParam) : ""
+        ),
+        signatureText(task.result),
+        signatureText(task.planThought),
+        task.moreRounds ? 1 : 0,
+        signatureFiles(task.fileList),
+        signatureFiles(resultMap.fileList),
+        signatureFiles(task.artifactRefs),
+        signatureFiles(resultMap.artifactRefs),
+        resultMap.childSessionId || "",
+        resultMap.messageType || "",
+        resultMap.status || "",
+        resultMap.toolName || "",
+        resultMap.toolCallId || "",
+        resultMap.isFinal ? 1 : 0,
+        signatureText(resultMap.answer),
+        signatureText(resultMap.result),
+        signatureText(resultMap.argumentsText),
+        signatureText(resultMap.subAgentLiveText),
+        String(resultMap.subAgentElapsedMs ?? ""),
+        Array.isArray(resultMap.subAgentProgressLines)
+          ? resultMap.subAgentProgressLines.length
+          : "",
+        Array.isArray(searchResult.query) ? searchResult.query.join(",") : "",
+        Array.isArray(searchResult.docs) ? searchResult.docs.length : "",
+        String(timing.startedAt ?? timing.started_at ?? ""),
+        String(timing.finishedAt ?? timing.finished_at ?? ""),
+        String(timing.durationMs ?? timing.duration_ms ?? ""),
+        String(resultMap.startedAt ?? resultMap.started_at ?? ""),
+        String(resultMap.finishedAt ?? resultMap.finished_at ?? ""),
+        String(resultMap.durationMs ?? resultMap.duration_ms ?? ""),
+        String(nested.messageType || ""),
+        String(nested.status || ""),
+        String(nested.toolCallId || ""),
+        String(nested.isFinal ? 1 : 0),
+        String(nested.startedAt ?? nested.started_at ?? ""),
+        String(nested.finishedAt ?? nested.finished_at ?? ""),
+        String(nested.durationMs ?? nested.duration_ms ?? ""),
+        String(
+          (task as { durationMs?: unknown; duration_ms?: unknown }).durationMs ??
+            (task as { duration_ms?: unknown }).duration_ms ??
+            ""
+        ),
+        task.plan ? (task.plan.stepStatus || []).join(",") : "",
+        task.plan ? signatureText(JSON.stringify(task.plan)) : "",
+      ].join(":")
+    );
+    for (const child of task.children || []) {
+      walk(child as CHAT.Task);
+    }
+  };
+  for (const group of chat.tasks || []) {
+    for (const task of group || []) {
+      walk(task);
+    }
+  }
+  return parts.join("|");
+}
+
+/** 只从任务事实派生模型；思考文本与意图句由 {@link buildAgentProcessViewModel} 叠加。 */
+export function deriveAgentProcessTaskModel(input: {
+  chat: CHAT.ChatItem;
+  isPlanSolve: boolean;
+  nowMs?: number;
+}): AgentProcessTaskModel {
+  const { chat, isPlanSolve, nowMs = Date.now() } = input;
 
   const loading = Boolean(chat.loading);
-  const finishedAtMs =
-    parseMessageTimeMs(chat.finishedAt) ??
-    (loading ? undefined : nowMs);
   const startedAtMs = parseMessageTimeMs(chat.startedAt);
 
   // PlanSolve 的 task 容器承载计划步骤，必须保留容器边界；普通 ReAct 历史数据
@@ -1118,6 +1240,56 @@ export function deriveAgentProcessModel(
     | undefined;
 
   const totalStepCount = groups.reduce((sum, group) => sum + group.stepCount, 0);
+  const totalDurationMs = resolveRunDurationMs(chat, startedAtMs, nowMs);
+
+  return {
+    hasProcess: segments.length > 0,
+    loading,
+    segments,
+    groups,
+    finalReply: finalReplySegment
+      ? {
+        text: finalReplySegment.text,
+        step: finalReplySegment.step,
+      }
+      : undefined,
+    totalStepCount,
+    totalDurationMs,
+    totalDurationLabel: formatProcessDuration(totalDurationMs),
+  };
+}
+
+/**
+ * 把思考块与意图句叠到任务模型上。
+ *
+ * 拆成独立步骤，是为了让流式思考文本每帧变化时只重跑这一层，
+ * 不必重新遍历任务树。
+ */
+export function buildAgentProcessViewModel(
+  base: AgentProcessTaskModel,
+  input: {
+    chat: CHAT.ChatItem;
+    thoughtText?: string;
+    thoughtStreaming?: boolean;
+    thoughtVersionLabel?: string;
+    thoughtVersionIndex?: number;
+    thoughtVersionTotal?: number;
+    nowMs?: number;
+  }
+): AgentProcessModel {
+  const {
+    chat,
+    thoughtText = "",
+    thoughtStreaming = false,
+    thoughtVersionLabel,
+    thoughtVersionIndex = 0,
+    thoughtVersionTotal = 0,
+    nowMs = Date.now(),
+  } = input;
+  const loading = Boolean(chat.loading);
+  const startedAtMs = parseMessageTimeMs(chat.startedAt);
+  const finishedAtMs =
+    parseMessageTimeMs(chat.finishedAt) ?? (loading ? undefined : nowMs);
 
   const thought = asText(thoughtText)
     ? {
@@ -1133,7 +1305,7 @@ export function deriveAgentProcessModel(
 
   // 思考块耗时：优先用 startedAt → 首个工具 / finishedAt
   if (thought) {
-    const firstStepStart = segments
+    const firstStepStart = base.segments
       .flatMap((segment) => {
         if (segment.type === "group") {
           return segment.group.steps;
@@ -1160,25 +1332,28 @@ export function deriveAgentProcessModel(
     thought.durationLabel = formatProcessDuration(thought.durationMs);
   }
 
-  const totalDurationMs = resolveRunDurationMs(chat, startedAtMs, nowMs);
-
-  const intentLine = extractIntentLine(thoughtText, chat.tip);
-
   return {
-    hasProcess: Boolean(thought || segments.length),
-    loading,
+    ...base,
+    hasProcess: Boolean(thought || base.segments.length),
     thought,
-    intentLine,
-    segments,
-    groups,
-    finalReply: finalReplySegment
-      ? {
-        text: finalReplySegment.text,
-        step: finalReplySegment.step,
-      }
-      : undefined,
-    totalStepCount,
-    totalDurationMs,
-    totalDurationLabel: formatProcessDuration(totalDurationMs),
+    intentLine: extractIntentLine(thoughtText, chat.tip),
   };
+}
+
+/**
+ * 把现有 chat.tasks / thought 投影为 Cursor 风格过程叙事模型。
+ * 不改 SSE / ledger，只做展示层派生。
+ *
+ * 规则：
+ * 1. SendUserMessage(user_brief) 永不折叠，并切开前后「执行了 N 步」
+ * 2. 终答只走 chat.conclusion；过程文/CoT 不提升为 final_reply
+ */
+export function deriveAgentProcessModel(
+  input: DeriveAgentProcessModelInput
+): AgentProcessModel {
+  const { chat, isPlanSolve, nowMs = Date.now(), ...thought } = input;
+  return buildAgentProcessViewModel(
+    deriveAgentProcessTaskModel({ chat, isPlanSolve, nowMs }),
+    { chat, nowMs, ...thought }
+  );
 }

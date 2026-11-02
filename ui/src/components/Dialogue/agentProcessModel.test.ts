@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildAgentProcessSignature,
   deriveAgentProcessModel,
   formatProcessDuration,
   parseMessageTimeMs,
@@ -1006,6 +1007,72 @@ describe("interactive 步骤会切开前面的工具组", () => {
       groups[1].type === "group" &&
         groups[1].group.steps.map((step) => step.tool.id)
     ).toContain("ask1");
+  });
+});
+
+describe("buildAgentProcessSignature", () => {
+  it("纯正文 / 终答 / tip 更新不改变任务签名", () => {
+    const chat = createChat({
+      tasks: workGroup([
+        tool({
+          id: "t1",
+          messageType: "tool_call",
+          resultMap: { toolName: "Read", isFinal: true },
+          isFinal: true,
+        }),
+      ]),
+    });
+    const before = buildAgentProcessSignature(chat);
+
+    chat.response = "流式正文";
+    chat.tip = "正在整理";
+    chat.conclusion = {
+      messageType: "result",
+      result: "终答",
+    } as CHAT.Task;
+
+    expect(buildAgentProcessSignature(chat)).toBe(before);
+  });
+
+  it("任务新增、思考文本推进与状态变化都会改变签名", () => {
+    const chat = createChat();
+    chat.tasks = workGroup([
+      tool({
+        id: "t1",
+        messageType: "llm_reasoning",
+        toolThought: "先看文件",
+        resultMap: { isFinal: false },
+      }),
+    ]);
+    const before = buildAgentProcessSignature(chat);
+
+    chat.tasks = workGroup([
+      tool({
+        id: "t1",
+        messageType: "llm_reasoning",
+        toolThought: "先看文件，再读目录",
+        resultMap: { isFinal: false },
+      }),
+    ]);
+    const thoughtChanged = buildAgentProcessSignature(chat);
+    expect(thoughtChanged).not.toBe(before);
+    const bodyOnlyChat = {
+      ...chat,
+      response: "正文变化不应影响任务签名",
+      tip: "提示变化",
+    } as CHAT.ChatItem;
+    expect(buildAgentProcessSignature(bodyOnlyChat)).toBe(thoughtChanged);
+
+    chat.tasks = workGroup([
+      tool({
+        id: "t1",
+        messageType: "llm_reasoning",
+        toolThought: "先看文件，再读目录",
+        resultMap: { isFinal: true },
+        isFinal: true,
+      }),
+    ]);
+    expect(buildAgentProcessSignature(chat)).not.toBe(thoughtChanged);
   });
 });
 
