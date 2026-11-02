@@ -11,7 +11,11 @@ import DocumentFallback from "./DocumentFallback";
 import SourceCodeView from "./SourceCodeView";
 import Loading from "./Loading";
 import GenUiModel3D from "@/components/genui/GenUiModel3D";
-import { isBinaryBackedKind, resolveFilePreviewKind } from "@/lib/filePreview/kinds";
+import {
+  isBinaryBackedKind,
+  isTextBackedKind,
+  resolveFilePreviewKind,
+} from "@/lib/filePreview/kinds";
 import { resolveCodeLanguage } from "@/lib/filePreview/language";
 import { cn } from "@/lib/utils";
 
@@ -93,14 +97,15 @@ const FileRenderer: CuteType.FC<FileRendererProps> = React.memo((props) => {
   );
   const resolvedDownload = downloadUrl || fileUrl;
 
+  // markdown / svg / html 由各自的渲染器自己取数，不在这里重复下载。
+  const hasDedicatedTextRenderer =
+    kind === "markdown" || kind === "svg" || kind === "html";
   // 强制源码模式下不按类型分派，但**仍然需要把内容取回来**当纯文本读。
+  // 文本类型从 `isTextBackedKind()` 派生，避免新增类型时漏取内容导致空白预览。
   const shouldFetchText =
     forceSource ||
-    kind === "code" ||
-    kind === "text" ||
     kind === "unknown" ||
-    kind === "diff" ||
-    kind === "csv";
+    (isTextBackedKind(kind) && !hasDedicatedTextRenderer);
 
   const abortRef = useRef<AbortController | null>(null);
   // 卸载时取消未完成的下载；切文件时由 service 自己 abort 上一个。
@@ -145,28 +150,32 @@ const FileRenderer: CuteType.FC<FileRendererProps> = React.memo((props) => {
     }
   );
 
+  const renderLoading = () => (
+    <div className={cn("flex h-full min-h-[200px] items-center justify-center bg-white", className)}>
+      <Loading className={LOADING_CLASS} />
+    </div>
+  );
+
+  const renderError = () => (
+    <div className={cn("bg-white p-6", className)}>
+      <Alert
+        variant="destructive"
+        className={ERROR_CLASS}
+      >
+        <CircleAlert />
+        <AlertTitle>内容不可读取</AlertTitle>
+        <AlertDescription>{resolveUnavailableReason(error as Error)}</AlertDescription>
+      </Alert>
+    </div>
+  );
+
   // ---- 强制源码模式：任何类型都当纯文本读 ----
   if (forceSource) {
     if (loading) {
-      return (
-        <div className={cn("flex h-full min-h-[200px] items-center justify-center bg-white", className)}>
-          <Loading className={LOADING_CLASS} />
-        </div>
-      );
+      return renderLoading();
     }
     if (error) {
-      return (
-        <div className={cn("bg-white p-6", className)}>
-          <Alert
-            variant="destructive"
-            className={ERROR_CLASS}
-          >
-            <CircleAlert />
-            <AlertTitle>内容不可读取</AlertTitle>
-            <AlertDescription>{resolveUnavailableReason(error as Error)}</AlertDescription>
-          </Alert>
-        </div>
-      );
+      return renderError();
     }
     return (
       <SourceCodeView
@@ -275,26 +284,11 @@ const FileRenderer: CuteType.FC<FileRendererProps> = React.memo((props) => {
 
   // ---- 其余（code / text / csv / diff / unknown）：按文本高亮 ----
   if (loading) {
-    return (
-      <div className={cn("flex h-full min-h-[200px] items-center justify-center bg-white", className)}>
-        <Loading className={LOADING_CLASS} />
-      </div>
-    );
+    return renderLoading();
   }
 
   if (error) {
-    return (
-      <div className={cn("bg-white p-6", className)}>
-        <Alert
-          variant="destructive"
-          className={ERROR_CLASS}
-        >
-          <CircleAlert />
-          <AlertTitle>内容不可读取</AlertTitle>
-          <AlertDescription>{resolveUnavailableReason(error as Error)}</AlertDescription>
-        </Alert>
-      </div>
-    );
+    return renderError();
   }
 
   return (

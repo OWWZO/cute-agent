@@ -80,6 +80,7 @@
 
 .markdown-body .octicon {
   display: inline-block;
+  overflow: visible !important;
   fill: currentColor;
   vertical-align: text-bottom;
 }
@@ -178,7 +179,6 @@
 .markdown-body pre,
 .markdown-body samp {
   font-family: monospace;
-  font-size: 1em;
 }
 
 .markdown-body figure {
@@ -407,22 +407,13 @@
 .markdown-body code,
 .markdown-body samp {
   font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
-  font-size: 12px;
 }
 
 .markdown-body pre {
   margin-top: 0;
   margin-bottom: 0;
   font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
-  font-size: 12px;
   word-wrap: normal;
-}
-
-.markdown-body .octicon {
-  display: inline-block;
-  overflow: visible !important;
-  vertical-align: text-bottom;
-  fill: currentColor;
 }
 
 .markdown-body input::-webkit-outer-spin-button,

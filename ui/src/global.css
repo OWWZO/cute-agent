@@ -1209,10 +1209,7 @@ ol {
 /* 终答/对话 Markdown 内嵌图：限制尺寸，避免占满整列 */
 .chat-dialogue .chat-markdown img,
 .conclusion-markdown.markdown-body img,
-.markdown-body.chat-markdown img,
-.chat-dialogue .chat-markdown .markdown-media-image,
-.conclusion-markdown.markdown-body .markdown-media-image,
-.markdown-body.chat-markdown .markdown-media-image {
+.markdown-body.chat-markdown img {
   display: block;
   max-width: min(360px, 100%);
   max-height: 280px;
@@ -1224,6 +1221,27 @@ ol {
   object-fit: contain;
   background: var(--chat-surface, transparent);
   cursor: zoom-in;
+}
+
+/* 图片预览的尺寸约束对所有挂载点生效（Markdown 文件预览等不在 .chat-markdown 下） */
+.markdown-media-image {
+  max-width: min(360px, 100%);
+  max-height: 280px;
+  width: auto;
+  height: auto;
+  border-radius: 0.65rem;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+/* 聊天语境下再补布局与边框；上面的尺寸规则保持全局唯一来源 */
+.chat-dialogue .chat-markdown .markdown-media-image,
+.conclusion-markdown.markdown-body .markdown-media-image,
+.markdown-body.chat-markdown .markdown-media-image {
+  display: block;
+  margin: 0.6em 0;
+  border: 1px solid var(--chat-border);
+  background: var(--chat-surface, transparent);
 }
 
 .chat-dialogue .chat-markdown .markdown-media-image-root,
