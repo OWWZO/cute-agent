@@ -389,19 +389,18 @@ export function subscribeSubAgentSession(
         history: page,
         source: "history"
       });
+      // 账本回放是两种 run 共同的打底：终态 run 只有账本；运行中 run 的已落库轮次
+      // 也只在账本里，实时流只剩「账本还没写完的那一段」（后端投影缓冲按落库边界清理）。
+      // 不拉就会丢掉此前所有轮次，用户看到的就是「只剩最新一轮」。
+      loadReplay(run?.requestId);
       // 终态 run：账本回放才是权威轨迹，实时流只会立刻 follow_idle。
       // 「回看已完成的子 Agent」正是详情面板的主要用法，没必要为它白建一条连接。
       // 例外：刚提交的新 run 还没落库，history 里的「最新」仍是上一轮终态 ——
       // 此时必须开流，后端 {@code AgentRunFollowApplicationService.attachSession}
       // 一收到观察者就会放行 defer 住的 launch。
       if (shouldFetchChildSessionReplay(run) && !pendingRequestId) {
-        loadReplay(run?.requestId);
         return;
       }
-      // 运行中 run 也要拉一次账本回放打底：已经落库的轮次只在账本里，实时流只剩
-      // 「账本还没写完的那一段」（后端投影缓冲按落库边界清理）。不拉就会丢掉此前所有轮次，
-      // 用户看到的就是「只剩最新一轮」。
-      loadReplay(run?.requestId);
       openLiveStream();
     })
     .catch((error: unknown) => {
