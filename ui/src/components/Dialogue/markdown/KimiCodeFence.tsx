@@ -8,7 +8,7 @@ import {
 import { CheckIcon, CopyIcon, WrapText } from "lucide-react";
 import { useCodePreviewWrap } from "@/hooks/useCodePreviewWrap";
 import { cn } from "@/lib/utils";
-import type { BundledLanguage, ThemedToken } from "shiki";
+import type { ThemedToken } from "shiki";
 import { tokenizeCode, tokenStyle } from "@/lib/shikiTokens";
 import { shouldTokenizeCode } from "./codeHighlightPolicy";
 import { copyToClipboard } from "@/utils";
@@ -30,13 +30,6 @@ export function parseDiffLines(code: string): DiffRow[] {
       return { type: "ctx", sign: "", text: line.slice(1) };
     return { type: "ctx", sign: "", text: line };
   });
-}
-
-/** @deprecated 保留给旧测试；fence 已改为 tokens 渲染，不再注入 HTML */
-export function unwrapShikiPre(html: string): string {
-  const trimmed = html.trim();
-  const matched = trimmed.match(/^<pre\b[^>]*>([\s\S]*)<\/pre>$/i);
-  return matched ? matched[1] : trimmed;
 }
 
 function FenceChrome({
@@ -137,7 +130,8 @@ export const KimiCodeFence = memo(function KimiCodeFence({
   streaming = false,
 }: {
   code: string;
-  language: BundledLanguage | string;
+  /** 未知语言由 `tokenizeCode` 回退到纯文本，这里不做类型收窄。 */
+  language?: string;
   /**
    * 流式进行中：**跳过 shiki 高亮**，直接渲染纯文本。
    *
@@ -149,7 +143,7 @@ export const KimiCodeFence = memo(function KimiCodeFence({
   streaming?: boolean;
 }) {
   const [lines, setLines] = useState<ThemedToken[][] | null>(null);
-  const lang = (language || "text") as BundledLanguage;
+  const lang = language || "text";
 
   useEffect(() => {
     let alive = true;

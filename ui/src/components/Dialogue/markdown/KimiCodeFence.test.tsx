@@ -7,7 +7,6 @@ import {
   DiffCodeFence,
   KimiCodeFence,
   parseDiffLines,
-  unwrapShikiPre,
 } from "./KimiCodeFence";
 import { shouldTokenizeCode } from "./codeHighlightPolicy";
 
@@ -45,16 +44,6 @@ describe("DiffCodeFence", () => {
     expect(html).toContain("kimi-diff-line");
     expect(html).toContain("kimi-diff-add");
     expect(html).toContain("kimi-diff-del");
-  });
-});
-
-describe("unwrapShikiPre", () => {
-  it("strips outer shiki pre", () => {
-    const html =
-      '<pre class="shiki github-light"><code><span class="line">x</span></code></pre>';
-    expect(unwrapShikiPre(html)).toBe(
-      '<code><span class="line">x</span></code>'
-    );
   });
 });
 

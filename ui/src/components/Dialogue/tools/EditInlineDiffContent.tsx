@@ -61,12 +61,10 @@ export const EditInlineDiffContent = memo(function EditInlineDiffContent({
     let alive = true;
     setTokens(null);
 
-    if (!shouldTokenizeCode(highlightCode, streaming)) {
-      return () => {
-        alive = false;
-      };
-    }
-    if (highlightCode.length > MAX_HIGHLIGHT_CHARS) {
+    if (
+      !shouldTokenizeCode(highlightCode, streaming) ||
+      highlightCode.length > MAX_HIGHLIGHT_CHARS
+    ) {
       return () => {
         alive = false;
       };
@@ -76,8 +74,12 @@ export const EditInlineDiffContent = memo(function EditInlineDiffContent({
       .then((tokenized) => {
         if (alive) setTokens(tokenized.tokens);
       })
-      .catch(() => {
+      .catch((error) => {
         // 语言不可用 / shiki 加载失败都只是丢掉高亮，纯文本预览仍然完整可读。
+        // dev 下留一条告警，便于区分「预期的语言回退」与真正的实现 bug。
+        if (import.meta.env.DEV) {
+          console.warn("[EditInlineDiffContent] 语法高亮失败，已回退纯文本", error);
+        }
         if (alive) setTokens(null);
       });
 
