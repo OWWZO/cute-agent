@@ -3,6 +3,9 @@ import { buildFilePreviewUrlForBrowser } from "@/utils/fileUrl";
 
 const ARTIFACT_KEY_SPLIT_PATTERN = /[、,\r\n，]+/;
 
+/** 总结协议分隔符：`正文$$$ 产物路径`，正文与产物键由它切分。 */
+const PROTOCOL_DELIMITER = "$$$";
+
 function asText(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -36,7 +39,7 @@ function resolveTaskSummarySourceText(task?: CHAT.Task) {
  */
 export function resolveTaskSummaryText(task?: CHAT.Task) {
   const rawText = resolveTaskSummarySourceText(task);
-  const delimiterIndex = rawText.indexOf("$$$");
+  const delimiterIndex = rawText.indexOf(PROTOCOL_DELIMITER);
   return delimiterIndex >= 0
     ? rawText.slice(0, delimiterIndex).trim()
     : rawText;
@@ -85,12 +88,12 @@ function normalizeArtifactKey(raw: string) {
 }
 
 function parseProtocolArtifactKeys(text: string): string[] {
-  const delimiterIndex = text.indexOf("$$$");
+  const delimiterIndex = text.indexOf(PROTOCOL_DELIMITER);
   if (delimiterIndex < 0) {
     return [];
   }
   return text
-    .slice(delimiterIndex + 3)
+    .slice(delimiterIndex + PROTOCOL_DELIMITER.length)
     .trim()
     .split(ARTIFACT_KEY_SPLIT_PATTERN)
     .map((item) => normalizeArtifactKey(item))
