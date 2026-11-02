@@ -8,7 +8,7 @@ export default class TypeWriterCore {
   queueList: string[] = []; // 存储待消费字符的队列
   maxStepSeconds: number = 50; // 默认最大步进间隔为50毫秒
   maxQueueNum: number = 2000; // 队列中最大字符数
-  timer: NodeJS.Timeout | number | undefined; // 用于控制下一次消费的定时器，兼容浏览器和Node.js环境
+  timer: ReturnType<typeof setTimeout> | undefined; // 用于控制下一次消费的定时器，DOM / Node 构建下都能正确推导
 
   constructor({onConsume, maxStepSeconds}: TypeWriterCoreOptions) {
     this.onConsume = onConsume; // 初始化消费字符的回调
@@ -47,8 +47,7 @@ export default class TypeWriterCore {
   consume() {
     if (this.queueList.length > 0) {
       const str = this.queueList.shift(); // 从队列头部移除一个字符
-      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-      str && this.onConsume(str); // 如果字符存在，则调用消费函数处理该字符
+      if (str) this.onConsume(str); // 如果字符存在，则调用消费函数处理该字符
     }
   }
 
@@ -67,14 +66,22 @@ export default class TypeWriterCore {
     this.next(); // 调用next方法开始消费字符
   }
 
+  // 清除定时器并复位句柄；浏览器定时器 id 可能为 0，不能用真值判断
+  private stop() {
+    if (this.timer !== undefined) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+  }
+
   // 渲染完成后的清理工作
   onRendered() {
-    if (this.timer) clearTimeout(this.timer); // 清除定时器，防止继续消费字符
+    this.stop(); // 清除定时器，防止继续消费字符
   }
 
   // 清空队列并停止当前的消费过程
   onClearQueueList() {
     this.queueList = []; // 清空字符队列
-    if (this.timer) clearTimeout(this.timer); // 清除定时器
+    this.stop(); // 清除定时器
   }
 }
