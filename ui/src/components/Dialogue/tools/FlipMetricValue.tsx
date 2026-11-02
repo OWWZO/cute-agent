@@ -105,7 +105,6 @@ export function FlipMetricValue({
   return (
     <span
       aria-label={value}
-      data-animate-initial={animateInitial ? "true" : undefined}
       className={cn(
         "inline-flex max-w-full items-center overflow-hidden whitespace-nowrap align-middle leading-none",
         className

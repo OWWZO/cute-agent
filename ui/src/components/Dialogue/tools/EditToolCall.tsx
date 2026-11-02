@@ -32,26 +32,12 @@ import {
 } from "./toolStreamPreview";
 import { parseToolJson } from "./ToolJsonBlock";
 
-/**
- * 打开右侧预览的载荷：具体到「哪一个文件」。
- * 多文件 edit 拆成子卡后，每张子卡各带自己的 patch，不能只传 task。
- */
-export type ToolPreviewRequest = {
-  task: CHAT.Task;
-  chat: CHAT.ChatItem;
-  /** 多文件 edit 的文件序号（单文件不传） */
-  fileIndex?: number;
-};
-
 type EditToolCallProps = {
   tool: CHAT.Task;
   chat: CHAT.ChatItem;
   stackPosition?: ToolRowStackPosition;
   defaultExpanded?: boolean;
-  changeActiveChat: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
-  changePlan?: () => void;
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
-  onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
 };
 
 /**
@@ -242,7 +228,7 @@ export const EditToolCall = memo(function EditToolCall({
                 file={file}
                 kindLabel={toolLabel(name)}
                 status={status}
-                persistKey={`${resolveToolKey(tool)}:${index}`}
+                persistKey={editFilePersistKey(tool, fileSummaries, file, index)}
                 streaming={isStreaming}
                 onOpen={
                   onOpenToolDiff
@@ -315,6 +301,19 @@ export const EditToolCall = memo(function EditToolCall({
     </ToolRow>
   );
 });
+
+/** 子卡展开态的身份：优先用文件路径，路径重复时才追加下标兜底。 */
+function editFilePersistKey(
+  tool: CHAT.Task,
+  files: EditFileSummary[],
+  file: EditFileSummary,
+  index: number
+) {
+  const duplicated = files.some(
+    (other, otherIndex) => otherIndex !== index && other.path === file.path
+  );
+  return `${resolveToolKey(tool)}:${duplicated ? `${file.path}:${index}` : file.path}`;
+}
 
 /**
  * 多文件 edit 的主文本（对齐 ZCode `renderJoinedFileChips`）：

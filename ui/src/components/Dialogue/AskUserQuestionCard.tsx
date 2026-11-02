@@ -15,6 +15,7 @@ import {
   type AskQuestion,
 } from "./tools/askUserToolParse";
 import { cn } from "@/lib/utils";
+import { TASK_STATUS } from "./taskStatus";
 
 type AskUserQuestionCardProps = {
   tool: CHAT.Task;
@@ -38,7 +39,9 @@ function resolveAskFields(tool: CHAT.Task) {
     questionId: String(
       nested.questionId || resultMap.questionId || toolAny.questionId || tool.messageId || ""
     ),
-    status: String(nested.status || resultMap.status || toolAny.status || "pending"),
+    status: String(
+      nested.status || resultMap.status || toolAny.status || TASK_STATUS.pending
+    ),
   };
 }
 
@@ -53,7 +56,8 @@ const AskUserQuestionCard: FC<AskUserQuestionCardProps> = memo(({ tool }) => {
     [tool]
   );
   const alreadyAnswered =
-    status === "answered" || Boolean(resultMap.isFinal && status !== "pending");
+    status === TASK_STATUS.answered ||
+    Boolean(resultMap.isFinal && status !== TASK_STATUS.pending);
 
   const [step, setStep] = useState(0);
   const [minimized, setMinimized] = useState(false);

@@ -1,7 +1,7 @@
 /**
  * 工具卡 → 右侧预览的**内容**判定（Stage 3/4 共用）。
  *
- * 与 `EditToolCall` 里的 `ToolPreviewRequest` 区分：那个是「用户点了哪张卡」的载荷
+ * 与 ChatView 传给工具卡的点击载荷区分：那个是「用户点了哪张卡」
  * （task + chat + fileIndex），本模块是「该展示什么内容」的判定结果。
  * 两者配合：点击载荷 → 本模块 → `CodeViewerSource` → 面板 / 侧栏 tab。
  *

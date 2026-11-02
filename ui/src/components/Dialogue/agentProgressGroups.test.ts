@@ -11,9 +11,11 @@ describe("agent phase helpers", () => {
     expect(resolveAgentPhaseLabel("completed", "completed")).toBe("Completed");
   });
 
-  it("maps phase tones", () => {
-    expect(resolveAgentPhaseTone("")).toBe("running");
-    expect(resolveAgentPhaseTone("Failed")).toBe("error");
-    expect(resolveAgentPhaseTone("Completed")).toBe("ok");
+  it("maps phase tones from phase/status rather than display labels", () => {
+    expect(resolveAgentPhaseTone("working", "running")).toBe("running");
+    expect(resolveAgentPhaseTone("queued", "running")).toBe("running");
+    expect(resolveAgentPhaseTone("suspended", "running")).toBe("neutral");
+    expect(resolveAgentPhaseTone(undefined, "failed")).toBe("error");
+    expect(resolveAgentPhaseTone("completed", "completed")).toBe("ok");
   });
 });

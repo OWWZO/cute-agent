@@ -89,7 +89,7 @@ function createRawTokens(code: string): ThemedToken[][] {
  */
 function createTokenCacheKey(
   code: string,
-  language: BundledLanguage,
+  language: string,
   dark: boolean
 ): string {
   return `${dark ? "dark" : "light"}:${language}:${code.length}:${hashContent(code)}`;
@@ -153,7 +153,7 @@ function writeTokenCache(key: string, value: TokenizedCode): void {
  */
 export function tokenizeCode(
   code: string,
-  language: BundledLanguage,
+  language: string,
   dark: boolean
 ): Promise<TokenizedCode> {
   if (!shouldUseSyntaxHighlighting(language)) {
@@ -190,7 +190,9 @@ export function tokenizeCode(
     };
 
     try {
-      return await tokenize(language);
+      // 语言来自 markdown 围栏信息串，编译期无法保证是 BundledLanguage；
+      // 未知值由下方 catch 统一回退到 text。
+      return await tokenize(language as BundledLanguage);
     } catch {
       if (language === TEXT_LANGUAGE) throw new Error("Shiki language unavailable");
       return await tokenize(TEXT_LANGUAGE);

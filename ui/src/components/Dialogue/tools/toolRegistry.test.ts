@@ -289,7 +289,6 @@ describe("toolRegistry", () => {
           },
         }),
         chat: {} as CHAT.ChatItem,
-        changeActiveChat: () => undefined,
         onOpenToolDiff,
       })
     );
@@ -315,7 +314,6 @@ describe("toolRegistry", () => {
           },
         }),
         chat: {} as CHAT.ChatItem,
-        changeActiveChat: () => undefined,
       })
     );
 
@@ -339,7 +337,6 @@ describe("toolRegistry", () => {
         }),
         chat: {} as CHAT.ChatItem,
         defaultExpanded: true,
-        changeActiveChat: () => undefined,
       })
     );
 
@@ -438,9 +435,7 @@ describe("Stage 5 · 卡内展开区", () => {
             toolResult: "line one\nline two\nline three"
           },
         }),
-        chat: {} as CHAT.ChatItem,
         defaultExpanded: true,
-        changeActiveChat: () => undefined,
       })
     );
 
@@ -468,9 +463,7 @@ describe("Stage 5 · 卡内展开区", () => {
             toolResult: "file contents"
           },
         }),
-        chat: {} as CHAT.ChatItem,
         defaultExpanded: true,
-        changeActiveChat: () => undefined,
       })
     );
 
@@ -532,7 +525,6 @@ describe("Cute-agent 真实工具名（workspace_* 前缀）", () => {
       createElement(ReadToolCall, {
         tool: taskOf("workspace_read", { path: "src/app/main.ts" }),
         chat: {} as CHAT.ChatItem,
-        changeActiveChat: () => undefined,
         onOpenToolDiff
       })
     );
@@ -546,7 +538,6 @@ describe("Cute-agent 真实工具名（workspace_* 前缀）", () => {
       createElement(EditToolCall, {
         tool: taskOf("workspace_edit", { path: "src/app/main.ts" }),
         chat: {} as CHAT.ChatItem,
-        changeActiveChat: () => undefined,
         onOpenToolDiff
       })
     );
@@ -585,7 +576,6 @@ describe("write 工具也有可点 chip（回归）", () => {
           content: "one\ntwo"
         }),
         chat: {} as CHAT.ChatItem,
-        changeActiveChat: () => undefined,
         onOpenToolDiff
       })
     );
@@ -605,7 +595,6 @@ describe("write 工具也有可点 chip（回归）", () => {
           content: "x"
         }),
         chat: {} as CHAT.ChatItem,
-        changeActiveChat: () => undefined
       })
     );
     expect(html).toContain("new.ts");
@@ -630,7 +619,6 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
         }),
         chat: {} as CHAT.ChatItem,
         defaultExpanded: true,
-        changeActiveChat: () => undefined
       })
     );
 
@@ -675,7 +663,6 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
         }),
         chat: {} as CHAT.ChatItem,
         defaultExpanded: true,
-        changeActiveChat: () => undefined
       })
     );
 
@@ -703,7 +690,6 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
         }),
         chat: {} as CHAT.ChatItem,
         defaultExpanded: true,
-        changeActiveChat: () => undefined
       })
     );
     expect(failed).toContain("Error");
@@ -736,7 +722,6 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
         }),
         chat: {} as CHAT.ChatItem,
         defaultExpanded: true,
-        changeActiveChat: () => undefined
       })
     );
 
@@ -765,7 +750,6 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
         }),
         chat: {} as CHAT.ChatItem,
         defaultExpanded: true,
-        changeActiveChat: () => undefined
       })
     );
 
@@ -788,7 +772,6 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
           }
         }),
         chat: {} as CHAT.ChatItem,
-        changeActiveChat: () => undefined
       })
     );
 
@@ -813,7 +796,6 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
         }),
         chat: {} as CHAT.ChatItem,
         defaultExpanded: true,
-        changeActiveChat: () => undefined
       })
     );
 

@@ -14,7 +14,8 @@ import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
  * 主线程繁忙时 `setTimeout` 会晚到。如果继续逐条补播旧摘要，
  * 卡顿恢复后用户会看到一串过期状态排队滚过 —— 所以漂移超过 250ms 时直接跳到最新一条。
  */
-const SUMMARY_ROLL_TRANSITION_MS = 300;
+/** 与 `SUMMARY_ROLL_TRANSITION.duration` 同源，避免调参后计时器与动画错位。 */
+const SUMMARY_ROLL_TRANSITION_MS = (SUMMARY_ROLL_TRANSITION.duration ?? 0) * 1000;
 const SUMMARY_ROLL_HOLD_MS = 500;
 const SUMMARY_ROLL_TOTAL_MS = SUMMARY_ROLL_TRANSITION_MS + SUMMARY_ROLL_HOLD_MS;
 const SUMMARY_ROLL_TIMER_DRIFT_SKIP_MS = 250;
@@ -113,8 +114,11 @@ export function QueuedSummaryContent({
       }
 
       // 摘要滚动总共只能有三格：当前显示、下一条、可插队条。
-      // queuedContentRef 只保存后两格；第二条不能被覆盖，新摘要只能替换第三格。
-      queuedContentRef.current = [queue[0]!, snapshot].slice(0, SUMMARY_ROLL_MAX_PENDING);
+      // queuedContentRef 只保存后两格；第二条不能被覆盖，新摘要只能替换队尾。
+      queuedContentRef.current = [
+        ...queue.slice(0, SUMMARY_ROLL_MAX_PENDING - 1),
+        snapshot,
+      ];
     };
     const promote = (snapshot: SummaryContentSnapshot) => {
       displayedContentRef.current = snapshot;

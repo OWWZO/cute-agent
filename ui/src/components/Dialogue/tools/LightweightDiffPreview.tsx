@@ -47,7 +47,7 @@ export function LightweightDiffPreview({
         {rows.map((row, index) => {
           if (row.kind === "omitted") {
             return (
-              <div className="kimi-diff-omitted" key={index}>
+              <div className="kimi-diff-omitted" key={`omitted-${index}`}>
                 已省略 {row.omittedLineCount} 行
               </div>
             );
@@ -55,7 +55,10 @@ export function LightweightDiffPreview({
 
           const { parts } = row;
           return (
-            <div className={cn("kimi-diff-row", `is-${parts.kind}`)} key={index}>
+            <div
+              className={cn("kimi-diff-row", `is-${parts.kind}`)}
+              key={`${index}-${parts.raw}`}
+            >
               {showLineNumbers ? (
                 <span className="kimi-diff-gutter" aria-hidden="true">
                   {index + 1}

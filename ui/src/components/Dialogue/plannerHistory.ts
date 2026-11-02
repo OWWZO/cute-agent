@@ -1,3 +1,8 @@
+import { clonePlanForRender } from "@/utils/chat/renderTasks";
+
+/** 旧协议没有 rounds 时构造的回退轮次 ID；真实 round 不会使用这个值。 */
+const LEGACY_LATEST_ROUND_ID = "latest";
+
 export function buildPlannerRoundsForDisplay(
   chat: CHAT.ChatItem,
   streamingThought?: string
@@ -13,15 +18,7 @@ export function buildPlannerRoundsForDisplay(
     }
     return {
       ...item,
-      plan: item.plan
-        ? {
-          ...item.plan,
-          notes: [...(item.plan.notes || [])],
-          stages: [...(item.plan.stages || [])],
-          steps: [...(item.plan.steps || [])],
-          stepStatus: [...(item.plan.stepStatus || [])],
-        }
-        : item.plan,
+      plan: clonePlanForRender(item.plan),
     };
   });
 
@@ -33,7 +30,7 @@ export function buildPlannerRoundsForDisplay(
       return [];
     }
     return [{
-      plannerRoundId: "latest",
+      plannerRoundId: LEGACY_LATEST_ROUND_ID,
       planThought: fallbackThought,
       plan: fallbackPlan,
     }];

@@ -14,6 +14,11 @@
  * `enableSyntaxHighlighting={!renderStreaming}`：流式时 `code` 每帧都在变，
  * 异步 tokenize 会和消息流更新叠加，既浪费 CPU 又容易产生抖动。
  * 消息落定后 `streaming` 转 false，再一次性高亮。
+ *
+ * 返回 `false` 时调用方**必须把 `code` 当纯文本转义渲染（JSX 文本节点）**，
+ * 绝不能作为 HTML 注入 —— 本函数只是策略判定，不负责转义。
+ * `false` 同时覆盖「流式期间稍后高亮」和「上游已是 Shiki HTML、永不二次注入」
+ * 两种语义；需要区分它们的调用方应自行判断 `streaming`。
  */
 export function shouldTokenizeCode(code: string, streaming: boolean): boolean {
   if (streaming) return false;

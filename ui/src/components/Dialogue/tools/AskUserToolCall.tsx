@@ -23,10 +23,20 @@ type AskUserToolCallProps = {
   defaultExpanded?: boolean;
 };
 
-function resolveQuestions(tool: CHAT.Task) {
+/** ask-user 载荷固定三层查找顺序：resultMap.resultMap → resultMap → task 顶层。 */
+function readToolPayload(tool: CHAT.Task) {
   const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
   const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
   const toolAny = tool as unknown as Record<string, unknown>;
+  return {
+    resultMap,
+    nested,
+    toolAny,
+  };
+}
+
+function resolveQuestions(tool: CHAT.Task) {
+  const { resultMap, nested, toolAny } = readToolPayload(tool);
   const fromMap =
     nested.questions || resultMap.questions || toolAny.questions || undefined;
   const fromMapParsed = normalizeAskQuestions(fromMap);
@@ -35,9 +45,7 @@ function resolveQuestions(tool: CHAT.Task) {
 }
 
 function resolveAnswers(tool: CHAT.Task) {
-  const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
-  const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
-  const toolAny = tool as unknown as Record<string, unknown>;
+  const { resultMap, nested, toolAny } = readToolPayload(tool);
   const fromMap = parseAskAnswersRecord({
     answers: nested.answers || resultMap.answers || toolAny.answers,
     note: nested.note || resultMap.note || toolAny.note,
@@ -51,8 +59,9 @@ export const AskUserToolCall = memo(function AskUserToolCall({
   stackPosition = "single",
   defaultExpanded,
 }: AskUserToolCallProps) {
-  const questions = useMemo(() => resolveQuestions(tool), [tool]);
-  const output = useMemo(() => resolveAnswers(tool), [tool]);
+  // 解析本身很便宜；用 memo 只按 `tool` 引用做 key 反而会在原地更新时留下旧值。
+  const questions = resolveQuestions(tool);
+  const output = resolveAnswers(tool);
   const status = resolveTaskToolStatus(tool);
   const rawLines = resolveTaskToolOutput(tool);
 
