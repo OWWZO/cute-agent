@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
-import type { ComponentProps, HTMLAttributes } from "react";
+import type { ComponentProps, HTMLAttributes, ReactNode } from "react";
 import { useCallback } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 
@@ -35,7 +35,7 @@ export const ConversationContent = ({
 export type ConversationEmptyStateProps = ComponentProps<"div"> & {
   title?: string;
   description?: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
 };
 
 export const ConversationEmptyState = ({
@@ -67,10 +67,14 @@ export const ConversationEmptyState = ({
   </div>
 );
 
-export type ConversationScrollButtonProps = HTMLAttributes<HTMLButtonElement>;
+export type ConversationScrollButtonProps = HTMLAttributes<HTMLButtonElement> & {
+  /** 回到底部按钮文案，可由调用方覆盖以统一语言。 */
+  label?: string;
+};
 
 export const ConversationScrollButton = ({
   className,
+  label = "有新消息",
   ...props
 }: ConversationScrollButtonProps) => {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
@@ -94,7 +98,7 @@ export const ConversationScrollButton = ({
       {...props}
     >
       <ArrowDownIcon className="size-3.5" />
-      有新消息
+      {label}
     </button>
   );
 };
