@@ -51,24 +51,12 @@ interface AnimatedMessageProps {
 
 export const AnimatedMessage = memo(
   ({ children, isNew = false, delay = 0 }: AnimatedMessageProps) => {
-    const { reduce, duration, ease } = useMotionConfig();
+    const { reduce, duration, ease, fade } = useMotionConfig();
 
     return (
       <motion.div
-        initial={
-          isNew
-            ? reduce
-              ? { opacity: 0 }
-              : {
-                opacity: 0,
-                y: 8
-              }
-            : false
-        }
-        animate={{
-          opacity: 1,
-          y: 0
-        }}
+        initial={isNew ? fade.initial : false}
+        animate={fade.animate}
         transition={{
           duration,
           delay: reduce ? 0 : delay,
@@ -212,7 +200,7 @@ export const StaggerContainer: React.FC<StaggerContainerProps> = ({
   className,
   staggerDelay = 0.05,
 }) => {
-  const { reduce } = useMotionConfig();
+  const { reduce, duration, ease } = useMotionConfig();
 
   return (
     <motion.div
@@ -223,7 +211,11 @@ export const StaggerContainer: React.FC<StaggerContainerProps> = ({
         hidden: { opacity: 0 },
         visible: {
           opacity: 1,
-          transition: {staggerChildren: reduce ? 0 : staggerDelay,},
+          transition: {
+            duration,
+            ease,
+            staggerChildren: reduce ? 0 : staggerDelay,
+          },
         },
       }}
     >

@@ -8,6 +8,9 @@ import { ROUTES } from "@/router/routes";
 
 import "@/styles/workspace-admin.css";
 
+const BACK_LABEL = "返回首页";
+const HEADER_KICKER = "Cute / 工作台";
+
 type WorkspaceAdminHeaderProps = {
   title: string;
   description: string;
@@ -38,8 +41,8 @@ export default function WorkspaceAdminHeader({
               target="_blank"
               rel="noreferrer"
               className="workspace-admin-back"
-              aria-label="返回首页"
-              title="返回首页"
+              aria-label={BACK_LABEL}
+              title={BACK_LABEL}
             >
               <ArrowLeft aria-hidden="true" />
             </Link>
@@ -48,7 +51,7 @@ export default function WorkspaceAdminHeader({
             <Icon />
           </span>
           <div className="workspace-admin-heading-copy">
-            <span className="workspace-admin-kicker">Cute / 工作台</span>
+            <span className="workspace-admin-kicker">{HEADER_KICKER}</span>
             <h1 className="workspace-admin-title">{title}</h1>
             <p className="workspace-admin-description">{description}</p>
           </div>

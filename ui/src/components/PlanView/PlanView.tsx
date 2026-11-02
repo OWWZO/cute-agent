@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import { useImperativeHandle, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { ListOrdered } from "lucide-react";
 
@@ -24,8 +24,8 @@ export type PlanViewAction = {
 const PlanView: CuteType.FC<{
   plan?: CHAT.Plan;
   ref?: React.Ref<PlanViewAction>;
-}> = forwardRef((props, ref) => {
-  const { plan } = props;
+}> = (props) => {
+  const { plan, ref } = props;
   const { stages, stepStatus, steps } = plan || {};
 
   const [open, setOpen] = useState(false);
@@ -48,7 +48,7 @@ const PlanView: CuteType.FC<{
     plan && stepStatus && stepStatus.length > 0 && !stepStatus.every((s) => s === "completed")
   );
   // 减弱动态模式只影响动画参数，不改变计划状态和进度计算。
-  const { reduce } = useMotionConfig();
+  const { reduce, fade } = useMotionConfig();
 
   if (!plan) {
     return null;
@@ -123,14 +123,8 @@ const PlanView: CuteType.FC<{
               return (
                 <motion.div
                   key={`${name}-${index}`}
-                  initial={reduce ? { opacity: 0 } : {
-                    opacity: 0,
-                    y: 8
-                  }}
-                  animate={{
-                    opacity: 1,
-                    y: 0
-                  }}
+                  initial={fade.initial}
+                  animate={fade.animate}
                   transition={{
                     delay: reduce ? 0 : Math.min(index * 0.05, 0.2),
                     duration: reduce ? DURATION.reduced : DURATION.message,
@@ -148,16 +142,8 @@ const PlanView: CuteType.FC<{
                     {done ? (
                       <motion.span
                         key={`${name}-${index}-done`}
-                        initial={
-                          reduce ? { opacity: 0 } : {
-                            opacity: 0,
-                            scale: 0.96
-                          }
-                        }
-                        animate={{
-                          opacity: 1,
-                          scale: 1
-                        }}
+                        initial={fade.initial}
+                        animate={fade.animate}
                         transition={reduce ? REDUCED_SPRING : DURATION_QUICK}
                         className="inline-flex"
                       >
@@ -185,7 +171,7 @@ const PlanView: CuteType.FC<{
       </Plan>
     </div>
   );
-});
+};
 
 PlanView.displayName = "PlanView";
 

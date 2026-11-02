@@ -319,11 +319,27 @@ export const MessageBranchPage = ({
 
 // ... existing code ...
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
+export type MessageResponseProps = Omit<
+  ComponentProps<typeof Streamdown>,
+  "children"
+> & {
+  children?: string | number;
   isStreaming?: boolean;
   animateByChars?: boolean;
   showStreamingCursor?: boolean;
   disableAutoScroll?: boolean;
+  /** 显式指定滚动容器；缺省时向上查找最近的可滚动祖先。 */
+  scrollContainer?: HTMLElement | null;
+};
+
+const toSourceText = (children: MessageResponseProps["children"]): string => {
+  if (typeof children === "string") {
+    return children;
+  }
+  if (typeof children === "number") {
+    return String(children);
+  }
+  return "";
 };
 
 const useStreamingText = (text: string, isStreaming: boolean) => {
@@ -401,44 +417,94 @@ const useStreamingText = (text: string, isStreaming: boolean) => {
   return displayedText;
 };
 
-const useNearBottomAutoScroll = (enabled: boolean, trigger: string) => {
+const SCROLL_THRESHOLD = 80;
+const SCROLL_THROTTLE_MS = 80;
+
+/** 滚动容器不写死层级：向上找到第一个可滚动祖先，兼容外层包裹结构变化。 */
+const findScrollableAncestor = (element: HTMLElement): HTMLElement | null => {
+  let node = element.parentElement;
+  while (node) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === "auto" || overflowY === "scroll") {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+};
+
+const useNearBottomAutoScroll = (
+  enabled: boolean,
+  trigger: string,
+  scrollContainer?: HTMLElement | null
+) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastScrollRef = useRef(0);
   const scrollFrameRef = useRef<number | null>(null);
+  const scrollTimerRef = useRef<number | null>(null);
+  const scrollTargetRef = useRef<HTMLElement | null>(null);
+  const wasEnabledRef = useRef(false);
 
   useEffect(() => {
-    if (scrollFrameRef.current !== null) {
-      cancelAnimationFrame(scrollFrameRef.current);
-      scrollFrameRef.current = null;
-    }
-    if (!enabled || !containerRef.current) return;
-
-    const now = Date.now();
-    if (now - lastScrollRef.current < 80) return;
-    lastScrollRef.current = now;
-
-    const container = containerRef.current;
-    scrollFrameRef.current = requestAnimationFrame(() => {
-      scrollFrameRef.current = null;
-      const parent = container.parentElement?.parentElement;
-      if (!parent) return;
-
-      const scrollThreshold = 80;
-      const isNearBottom =
-        parent.scrollHeight - parent.scrollTop - parent.clientHeight < scrollThreshold;
-
-      if (isNearBottom) {
-        parent.scrollTop = parent.scrollHeight;
-      }
-    });
-
-    return () => {
+    const clearPending = () => {
       if (scrollFrameRef.current !== null) {
         cancelAnimationFrame(scrollFrameRef.current);
         scrollFrameRef.current = null;
       }
+      if (scrollTimerRef.current !== null) {
+        window.clearTimeout(scrollTimerRef.current);
+        scrollTimerRef.current = null;
+      }
     };
-  }, [enabled, trigger]);
+
+    clearPending();
+
+    // 流式刚结束时补一次滚动，避免最后一帧内容停在视口下方。
+    const justStoppedStreaming = wasEnabledRef.current && !enabled;
+    wasEnabledRef.current = enabled;
+    if ((!enabled && !justStoppedStreaming) || !containerRef.current) {
+      return clearPending;
+    }
+
+    const target =
+      scrollContainer ??
+      (scrollTargetRef.current ??= findScrollableAncestor(containerRef.current));
+    if (!target) return clearPending;
+
+    const scrollIfNearBottom = () => {
+      const distance =
+        target.scrollHeight - target.scrollTop - target.clientHeight;
+      if (distance < SCROLL_THRESHOLD) {
+        target.scrollTop = target.scrollHeight;
+      }
+    };
+
+    if (!enabled) {
+      scrollIfNearBottom();
+      return clearPending;
+    }
+
+    const scrollInFrame = () => {
+      scrollFrameRef.current = requestAnimationFrame(() => {
+        scrollFrameRef.current = null;
+        lastScrollRef.current = Date.now();
+        scrollIfNearBottom();
+      });
+    };
+
+    const elapsed = Date.now() - lastScrollRef.current;
+    if (elapsed < SCROLL_THROTTLE_MS) {
+      // 节流窗口内改为尾随触发，避免直接丢弃最后一次内容更新。
+      scrollTimerRef.current = window.setTimeout(
+        scrollInFrame,
+        SCROLL_THROTTLE_MS - elapsed
+      );
+    } else {
+      scrollInFrame();
+    }
+
+    return clearPending;
+  }, [enabled, trigger, scrollContainer]);
 
   return containerRef;
 };
@@ -477,15 +543,11 @@ export const MessageResponse = memo(
     animateByChars = true,
     showStreamingCursor = true,
     disableAutoScroll = false,
+    scrollContainer,
     children,
     ...props
   }: MessageResponseProps) => {
-    const sourceText =
-      typeof children === "string"
-        ? children
-        : children == null
-          ? ""
-          : String(children);
+    const sourceText = toSourceText(children);
     // Performance: even when `animateByChars=false` (e.g. reasoning content),
     // still throttle updates during streaming so markdown doesn't re-render on every token.
     const shouldStreamThrottle = isStreaming;
@@ -493,7 +555,8 @@ export const MessageResponse = memo(
     const renderedText = animateByChars ? animatedText : shouldStreamThrottle ? animatedText : sourceText;
     const containerRef = useNearBottomAutoScroll(
       isStreaming && !disableAutoScroll,
-      renderedText
+      renderedText,
+      scrollContainer
     );
 
     return (
@@ -520,6 +583,7 @@ export const MessageResponse = memo(
     prevProps.animateByChars === nextProps.animateByChars &&
     prevProps.showStreamingCursor === nextProps.showStreamingCursor &&
     prevProps.disableAutoScroll === nextProps.disableAutoScroll &&
+    prevProps.scrollContainer === nextProps.scrollContainer &&
     // 终答产物表解析会换 components（img/a），必须参与比较，否则流式中途解析不到文件。
     prevProps.components === nextProps.components
 );
