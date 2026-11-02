@@ -723,7 +723,7 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
               ) : null}
 
               {/* 模型选择不属于「高级工具条」：主会话输入框也要能选，
-                  否则用户只能吃后端默认模型。空列表时组件自身返回 null。 */}
+                  否则用户只能吃后端默认模型。空列表时组件渲染禁用态触发器。 */}
               <ModelPicker
                 models={models}
                 value={selectedModel}
