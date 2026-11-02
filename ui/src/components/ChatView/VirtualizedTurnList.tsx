@@ -122,6 +122,12 @@ export function VirtualizedTurnList<T>({
     const contentDiv = scrollRef.current?.parentElement ?? null;
     const scrollDiv = contentDiv?.parentElement ?? null;
     const resolved = scrollDiv instanceof HTMLDivElement ? scrollDiv : null;
+    if (!resolved && import.meta.env.DEV) {
+      // 结构约定被打破时虚拟化会静默退化为全量渲染，表现为长会话卡顿 —— 必须立刻暴露。
+      console.warn(
+        "VirtualizedTurnList: 未找到祖父滚动容器，已退化为全量渲染；请检查 ai-elements/conversation.tsx 的结构约定。"
+      );
+    }
     scrollElementRef.current = resolved;
     setScrollElement(resolved);
   }, []);

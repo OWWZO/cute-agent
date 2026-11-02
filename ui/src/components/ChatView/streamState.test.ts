@@ -92,14 +92,7 @@ describe("streamState presence & attention", () => {
 
 
   it("plan 单独存在时不自动打开右侧工作区", () => {
-    expect(
-      resolveActionPanelVisibility({
-        plan: {
-          stages: [{ title: "分析需求", status: "completed" }],
-        } as unknown as CHAT.Plan,
-        taskList: [],
-      })
-    ).toBe(false);
+    expect(resolveActionPanelVisibility({ taskList: [] })).toBe(false);
   });
 
   it("html / file 等产物任务会打开工作区", () => {

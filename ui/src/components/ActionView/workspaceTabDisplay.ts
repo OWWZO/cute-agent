@@ -4,7 +4,7 @@ import {
   patchDiffStats,
 } from "@/components/Dialogue/tools/toolDiff";
 import { resolveTaskResultMap } from "@/utils/chat/toolCalls";
-import { sourceTabMeta } from "@/lib/codeViewerSource";
+import { sourceTabMeta, type CodeViewerSource } from "@/lib/codeViewerSource";
 import {
   isAgentDirectoryTab,
   isAgentTab,
@@ -43,7 +43,7 @@ export type WorkspaceTabDisplay = {
 };
 
 /** source tab 的类型词，供搜索时按「补丁 / 文本」找 */
-const SOURCE_TYPE_LABEL: Record<string, string> = {
+const SOURCE_TYPE_LABEL: Record<CodeViewerSource["type"], string> = {
   file: "文件",
   patch: "补丁",
   text: "文本",
@@ -95,7 +95,7 @@ export function resolveWorkspaceTabDisplay(tab: WorkspaceTab): WorkspaceTabDispl
         badge: fileKindBadge(kind),
       },
       hint: meta.subtitle,
-      typeHint: SOURCE_TYPE_LABEL[tab.source.type] || "文件",
+      typeHint: SOURCE_TYPE_LABEL[tab.source.type],
       diffBadge: stats ? formatDiffStats(stats) : "",
     };
   }

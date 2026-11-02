@@ -6,6 +6,7 @@ import type {
   ConversationRunSummary,
 } from "@/services/agentConversation";
 import { GENERIC_TASK_PRODUCT } from "@/utils/constants";
+import { normalizeRunStatus } from "@/utils/runStatus";
 
 import {
   buildConversationTaskData,
@@ -398,11 +399,6 @@ function toTimestamp(value?: string | null, fallback = Date.now()) {
 
 function resolveConversationAgentType(deepThink?: boolean) {
   return deepThink ? 3 : 5;
-}
-
-function normalizeRunStatus(status?: string | null) {
-  const normalized = String(status || "").trim().toUpperCase();
-  return normalized || "RUNNING";
 }
 
 function buildFallbackConclusionEventData(

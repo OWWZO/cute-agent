@@ -55,13 +55,12 @@ export function createFollowController(handlers: {
         handlers.onExhausted();
         return;
       }
+      // 上面的守卫已保证 attemptCount < FOLLOW_ATTEMPT_CAP，这里直接自增即可；
+      // 延迟的指数增长由 FOLLOW_MAX_DELAY_MS 在第 5 次（800 * 2^5）封顶。
       const retryDelay =
         delayMs ??
-        Math.min(
-          FOLLOW_BASE_DELAY_MS * 2 ** Math.min(attemptCount, 6),
-          FOLLOW_MAX_DELAY_MS
-        );
-      attemptCount = Math.min(attemptCount + 1, FOLLOW_ATTEMPT_CAP);
+        Math.min(FOLLOW_BASE_DELAY_MS * 2 ** attemptCount, FOLLOW_MAX_DELAY_MS);
+      attemptCount += 1;
       timer = setTimeout(() => {
         timer = null;
         handlers.reconnect();

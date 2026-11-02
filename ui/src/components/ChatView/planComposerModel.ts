@@ -35,6 +35,16 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+/** 按 `[merged, nested, resultMap, toolAny]` 的顺序取第一个真正的 boolean。 */
+function pickBoolean(...values: unknown[]): boolean | undefined {
+  for (const value of values) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 /** 缺 status 时：已 finish/isFinal 视为 decided，避免续跑后回退审批 UI */
 function resolvePlanApprovalStatus(
   tool: CHAT.Task,
@@ -100,15 +110,18 @@ export function pickPlanApprovalFields(tool: CHAT.Task) {
       toolAny.filePath
     ),
     status: resolvePlanApprovalStatus(tool, merged, nested, resultMap, toolAny),
-    approved:
-      typeof merged.approved === "boolean"
-        ? merged.approved
-        : typeof nested.approved === "boolean"
-          ? nested.approved
-          : typeof resultMap.approved === "boolean"
-            ? resultMap.approved
-            : undefined,
-    feedback: pickFirstText(merged.feedback, nested.feedback, resultMap.feedback),
+    approved: pickBoolean(
+      merged.approved,
+      nested.approved,
+      resultMap.approved,
+      toolAny.approved
+    ),
+    feedback: pickFirstText(
+      merged.feedback,
+      nested.feedback,
+      resultMap.feedback,
+      toolAny.feedback
+    ),
   };
 }
 
@@ -227,12 +240,9 @@ export function buildComposerPlanModel(params: {
     if (fields.planContent.trim() || fields.approvalId) {
       return {
         source: "plan_approval",
-        title:
-          fields.status === "approved"
-            ? "已批准的计划"
-            : fields.status === "rejected"
-              ? "待修订的计划"
-              : "实现计划",
+        // approvalTask 来自 findLatestPendingPlanApproval，status 恒为 pending；
+        // plan_approval 的实际标题由 PlanComposerBar 按本地状态覆盖，这里只给兜底。
+        title: "实现计划",
         planContent: fields.planContent,
         planFilePath: fields.planFilePath || undefined,
         approvalId: fields.approvalId || undefined,

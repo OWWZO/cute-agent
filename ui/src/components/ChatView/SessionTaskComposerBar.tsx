@@ -1,4 +1,4 @@
-import { FC, memo, useMemo, useState } from "react";
+import { FC, memo, useId, useMemo, useState } from "react";
 import {
   CheckCircle2Icon,
   ChevronDownIcon,
@@ -37,12 +37,14 @@ const SessionTaskComposerBar: FC<SessionTaskComposerBarProps> = memo(
     );
     const snapshot = useMemo(() => extractSessionTaskSnapshot(tool), [tool]);
     const [open, setOpen] = useState(false);
+    const listId = useId();
 
     if (!snapshot?.tasks.length) {
       return null;
     }
 
     const { tasks, total, completed, inProgress } = snapshot;
+    const activeTask = tasks.find((task) => task.status === "in_progress");
     const summary = `${completed}/${total} 完成${
       inProgress > 0 ? ` · ${inProgress} 进行中` : ""
     }`;
@@ -52,6 +54,8 @@ const SessionTaskComposerBar: FC<SessionTaskComposerBarProps> = memo(
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-controls={listId}
           className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-[var(--chat-surface-soft)]/60"
         >
           <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[var(--chat-surface-muted)] text-[var(--chat-text-muted)]">
@@ -68,9 +72,7 @@ const SessionTaskComposerBar: FC<SessionTaskComposerBarProps> = memo(
             </div>
             {inProgress > 0 ? (
               <div className="mt-0.5 line-clamp-1 text-ui-xs text-[var(--chat-text-soft)]">
-                {tasks.find((task) => task.status === "in_progress")?.activeForm ||
-                  tasks.find((task) => task.status === "in_progress")?.subject ||
-                  "任务进行中"}
+                {activeTask?.activeForm || activeTask?.subject || "任务进行中"}
               </div>
             ) : (
               <div className="mt-0.5 line-clamp-1 text-ui-xs text-[var(--chat-text-soft)]">
@@ -87,7 +89,10 @@ const SessionTaskComposerBar: FC<SessionTaskComposerBarProps> = memo(
         </button>
 
         {open ? (
-          <ul className="flex flex-col gap-1 border-t border-[var(--chat-border)]/30 px-3 py-2.5">
+          <ul
+            id={listId}
+            className="flex flex-col gap-1 border-t border-[var(--chat-border)]/30 px-3 py-2.5"
+          >
             {tasks.map((task: SessionTask) => (
               <li
                 key={task.id}

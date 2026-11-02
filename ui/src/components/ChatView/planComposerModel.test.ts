@@ -14,6 +14,24 @@ describe("planComposerModel", () => {
     expect(isPlanApprovalApproved("rejected", false)).toBe(false);
   });
 
+  it("honors flat approved / feedback on the task itself", () => {
+    const task = {
+      messageType: "plan_approval",
+      approved: false,
+      feedback: "请补充回滚步骤",
+      resultMap: {
+        approvalId: "a-flat",
+        planContent: "plan",
+        status: "pending",
+      },
+    } as unknown as CHAT.Task;
+
+    expect(pickPlanApprovalFields(task)).toMatchObject({
+      approved: false,
+      feedback: "请补充回滚步骤",
+    });
+  });
+
   it("picks planContent from nested resultMap", () => {
     const task = {
       messageType: "plan_approval",

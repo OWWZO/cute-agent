@@ -46,15 +46,11 @@ function AgentRow({
   now,
   onOpen,
 }: {
-  item: SubAgentRosterItem;
+  item: SubAgentRosterItem & { startedAtMs: number };
   now: number;
   onOpen: (item: SubAgentRosterItem) => void;
 }) {
-  const startedAtMs = item.startedAtMs;
-  const elapsedLabel =
-    startedAtMs != null
-      ? formatSubAgentElapsed(Math.max(0, now - startedAtMs))
-      : "已运行 1 秒";
+  const elapsedLabel = formatSubAgentElapsed(Math.max(0, now - item.startedAtMs));
 
   return (
     <button
@@ -121,17 +117,17 @@ const SubAgentsPanel = memo(function SubAgentsPanel({
   const resolvedItems = useMemo(
     () =>
       runningItems.map((item) => {
-        if (item.startedAtMs != null) {
-          return item;
-        }
-        let fallback = fallbackStartedAtRef.current.get(item.id);
-        if (fallback == null) {
-          fallback = Date.now();
-          fallbackStartedAtRef.current.set(item.id, fallback);
+        let startedAtMs = item.startedAtMs;
+        if (startedAtMs == null) {
+          startedAtMs = fallbackStartedAtRef.current.get(item.id);
+          if (startedAtMs == null) {
+            startedAtMs = Date.now();
+            fallbackStartedAtRef.current.set(item.id, startedAtMs);
+          }
         }
         return {
           ...item,
-          startedAtMs: fallback,
+          startedAtMs,
         };
       }),
     [runningItems]

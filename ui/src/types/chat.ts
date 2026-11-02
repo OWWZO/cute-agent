@@ -1,6 +1,21 @@
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace CHAT {
+    /**
+     * 单轮 run 的生命周期状态，与后端执行账本的终态一一对应。
+     *
+     * `UNKNOWN` 是前端兜底：后端若出现未枚举的新状态，归入这里以保持
+     * 「非运行、非等待、非终态」的既有比较语义，同时避免把任意字符串当成契约。
+     */
+    export type RunStatus =
+      | "RUNNING"
+      | "SUCCESS"
+      | "FAILED"
+      | "STOPPED"
+      | "TIMEOUT"
+      | "WAITING_INPUT"
+      | "UNKNOWN";
+
     export type ChatItem = CuteType.Merge<
       Pick<MESSAGE.Question, "sessionId" | "query" | "requestId">,
       {
@@ -29,7 +44,7 @@ declare global {
         timeline?: TimelineEntry[];
         metrics?: {
           event_count?: number;
-          status?: string;
+          status?: RunStatus;
         };
         /** 上下文占用（SSE context_usage） */
         contextUsage?: ContextUsage;

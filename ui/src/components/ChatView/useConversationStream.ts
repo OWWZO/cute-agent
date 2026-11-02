@@ -23,6 +23,7 @@ import {
 import { resolveParentToolUseId } from "@/utils/chat/subagent";
 import { mergeRunReplayIntoConversation } from "@/utils/conversationHistory";
 import querySSE from "@/utils/querySSE";
+import { normalizeRunStatus } from "@/utils/runStatus";
 import { parseAgentAnswer, type AgentAnswerEnvelope } from "@/utils/sseParsers";
 import {
   conversationHistoryApi,
@@ -365,7 +366,6 @@ function useRafThrottle<TValue>(
   });
 
   return useMemo(() => ({
-    pendingRef,
     cancel,
     flush,
     schedule,
@@ -556,7 +556,7 @@ export function applyGuardError(
 export type RunReplayState = {
   history: CHAT.ConversationHistory;
   chat?: CHAT.ChatItem;
-  status: string;
+  status: CHAT.RunStatus;
 };
 
 /** 将单 run rich replay 统一转换成当前会话快照和目标 chat。 */
@@ -571,7 +571,7 @@ export function resolveRunReplayState(
   return {
     history,
     chat,
-    status: String(chat?.metrics?.status || replay.status || "").toUpperCase(),
+    status: normalizeRunStatus(chat?.metrics?.status || replay.status),
   };
 }
 
@@ -994,10 +994,7 @@ export function useConversationStream(
     setPlan(conversationTaskData.plan);
     setWorkspaceStreamTask(latestTask ? cloneWorkspaceTask(latestTask) : undefined);
     setActiveRunState(resolveLatestRunState(latestChatSnapshot));
-    setShowAction(resolveActionPanelVisibility({
-      plan: conversationTaskData.plan,
-      taskList: conversationTaskData.taskList,
-    }));
+    setShowAction(resolveActionPanelVisibility({ taskList: conversationTaskData.taskList }));
   }, [conversation.chatList, conversation.deepThink, conversation.id, loading]);
 
   useEffect(() => {
@@ -1216,10 +1213,7 @@ export function useConversationStream(
           setTaskList(pendingTaskData.taskList);
           setPlan(pendingTaskData.plan);
           setShowAction(
-            resolveActionPanelVisibility({
-              plan: pendingTaskData.plan,
-              taskList: pendingTaskData.taskList,
-            })
+            resolveActionPanelVisibility({ taskList: pendingTaskData.taskList })
           );
         }
         pendingTaskData = null;
@@ -1262,7 +1256,7 @@ export function useConversationStream(
      * 的 run 重新钉回 RUNNING + loading（实测断线后 UI 永久停在「正在推进任务…」）。
      * 清 pending 之后再提交，保证最终落库的一定是本函数的终态。</p>
      */
-    const markFollowEnded = (nextStatus?: string) => {
+    const markFollowEnded = (nextStatus?: CHAT.RunStatus) => {
       clearFollowReconnectTimer(requestId);
       followReconnectAttemptsRef.current.delete(requestId);
       followReconnectContextsRef.current.delete(requestId);
@@ -1382,10 +1376,7 @@ export function useConversationStream(
             setTaskList(taskData.taskList);
             setPlan(taskData.plan);
             setShowAction(
-              resolveActionPanelVisibility({
-                plan: taskData.plan,
-                taskList: taskData.taskList,
-              })
+              resolveActionPanelVisibility({ taskList: taskData.taskList })
             );
             const latestTask = getLatestRenderableTask(taskData.currentChat);
             setWorkspaceStreamTask(latestTask ? cloneWorkspaceTask(latestTask) : undefined);
@@ -1434,13 +1425,15 @@ export function useConversationStream(
         // 终态照抄账本。RUNNING/未知只有「重连次数用尽」这条兜底路径才会走到：
         // 有结论说明活干完了，收口成 SUCCESS；仍无结论时保留 RUNNING（没有证据表明失败，
         // 不能误标 FAILED），但必须停掉转圈并给出断连提示。
-        const settledStatus = ["SUCCESS", "FAILED", "STOPPED", "TIMEOUT"].includes(
-          hydratedStatus
-        )
-          ? hydratedStatus
-          : hydrated.conclusion || currentChat.conclusion
-            ? "SUCCESS"
-            : "RUNNING";
+        const settledStatus: CHAT.RunStatus =
+          hydratedStatus === "SUCCESS" ||
+          hydratedStatus === "FAILED" ||
+          hydratedStatus === "STOPPED" ||
+          hydratedStatus === "TIMEOUT"
+            ? hydratedStatus
+            : hydrated.conclusion || currentChat.conclusion
+              ? "SUCCESS"
+              : "RUNNING";
         currentChat = {
           ...hydrated,
           loading: false,
@@ -1468,10 +1461,7 @@ export function useConversationStream(
           setTaskList(taskData.taskList);
           setPlan(taskData.plan);
           setShowAction(
-            resolveActionPanelVisibility({
-              plan: taskData.plan,
-              taskList: taskData.taskList,
-            })
+            resolveActionPanelVisibility({ taskList: taskData.taskList })
           );
           const latestTask = getLatestRenderableTask(taskData.currentChat);
           setWorkspaceStreamTask(latestTask ? cloneWorkspaceTask(latestTask) : undefined);
@@ -2141,7 +2131,7 @@ export function useConversationStream(
     const settleResumeReplay = (
       history: CHAT.ConversationHistory,
       nextChat: CHAT.ChatItem,
-      status: string,
+      status: CHAT.RunStatus,
       tip = ""
     ) => {
       if (resumeSettled) {
@@ -2176,10 +2166,7 @@ export function useConversationStream(
         setTaskList(taskData.taskList);
         setPlan(taskData.plan);
         setShowAction(
-          resolveActionPanelVisibility({
-            plan: taskData.plan,
-            taskList: taskData.taskList,
-          })
+          resolveActionPanelVisibility({ taskList: taskData.taskList })
         );
         const latestTask = getLatestRenderableTask(taskData.currentChat);
         setWorkspaceStreamTask(latestTask ? cloneWorkspaceTask(latestTask) : undefined);
@@ -2223,7 +2210,12 @@ export function useConversationStream(
           return;
         }
 
-        if (["SUCCESS", "FAILED", "STOPPED", "TIMEOUT"].includes(status)) {
+        if (
+          status === "SUCCESS" ||
+          status === "FAILED" ||
+          status === "STOPPED" ||
+          status === "TIMEOUT"
+        ) {
           const failureTip =
             replay.errorMsg ||
             (status === "FAILED"
@@ -2792,10 +2784,7 @@ export function useConversationStream(
         if (streamStillActive) {
           setTaskList(pendingTaskData.taskList);
           setPlan(pendingTaskData.plan);
-          setShowAction(resolveActionPanelVisibility({
-            plan: pendingTaskData.plan,
-            taskList: pendingTaskData.taskList,
-          }));
+          setShowAction(resolveActionPanelVisibility({ taskList: pendingTaskData.taskList }));
         }
         pendingTaskData = null;
         lastTaskFlushAt = now;

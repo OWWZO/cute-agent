@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   dispatchPlanApprovalResume,
   planApprovalApi,
+  type PlanApprovalDecideResult,
 } from "@/services/planApproval";
 import MarkdownRenderer from "@/components/ActionPanel/MarkdownRenderer";
 import {
@@ -100,75 +101,90 @@ const PlanComposerBarInner: FC<{
     return null;
   }
 
-  const approve = async () => {
-    if (!model.approvalId || submitting || !canApprove) return;
+  /** 批准 / 拒绝共用的提交生命周期：守卫、pending 状态、失败提示与收尾只写一处。 */
+  const runDecision = async (
+    action: string,
+    execute: () => Promise<PlanApprovalDecideResult>,
+    onAccepted: (res: PlanApprovalDecideResult) => void,
+    failureText: string
+  ) => {
+    if (submitting) return;
     setSubmitting(true);
-    setPendingAction("approvePlan");
+    setPendingAction(action);
     try {
-      const res = await planApprovalApi.approve({
-        approvalId: model.approvalId,
-        editedPlanContent:
-          editedPlan !== model.planContent ? editedPlan : undefined,
-        feedback: feedback.trim() || undefined,
-      });
+      const res = await execute();
       if (res && res.accepted === false) {
-        toast.warning(String(res.message || "批准失败"));
+        toast.warning(String(res.message || failureText));
         return;
       }
-      setLocalStatus("approved");
-      const resumeRequestId = String(res?.resumeRequestId || "");
-      if (resumeRequestId) {
-        dispatchPlanApprovalResume({
-          resumeRequestId,
-          sessionId: String(res?.sessionId || ""),
-          approvalId: model.approvalId,
-          approved: true,
-        });
-        toast.success("计划已批准，正在继续执行");
-      } else {
-        toast.success("计划已批准");
-      }
+      onAccepted(res);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "批准失败");
+      toast.error(error instanceof Error ? error.message : failureText);
     } finally {
       setSubmitting(false);
       setPendingAction(null);
     }
   };
 
+  const approve = async () => {
+    if (!model.approvalId || submitting || !canApprove) return;
+    const approvalId = model.approvalId;
+    await runDecision(
+      "approvePlan",
+      () =>
+        planApprovalApi.approve({
+          approvalId,
+          editedPlanContent:
+            editedPlan !== model.planContent ? editedPlan : undefined,
+          feedback: feedback.trim() || undefined,
+        }),
+      (res) => {
+        setLocalStatus("approved");
+        const resumeRequestId = String(res?.resumeRequestId || "");
+        if (resumeRequestId) {
+          dispatchPlanApprovalResume({
+            resumeRequestId,
+            sessionId: String(res?.sessionId || ""),
+            approvalId,
+            approved: true,
+          });
+          toast.success("计划已批准，正在继续执行");
+        } else {
+          toast.success("计划已批准");
+        }
+      },
+      "批准失败"
+    );
+  };
+
   const reject = async (label: string, fb?: string) => {
     if (!model.approvalId || submitting || status !== "pending") return;
-    setSubmitting(true);
-    setPendingAction(label);
-    try {
-      const res = await planApprovalApi.reject({
-        approvalId: model.approvalId,
-        feedback: (fb ?? feedback).trim() || label,
-      });
-      if (res && res.accepted === false) {
-        toast.warning(String(res.message || "拒绝失败"));
-        return;
-      }
-      setLocalStatus("rejected");
-      setFeedbackOpen(false);
-      const resumeRequestId = String(res?.resumeRequestId || "");
-      if (resumeRequestId) {
-        dispatchPlanApprovalResume({
-          resumeRequestId,
-          sessionId: String(res?.sessionId || ""),
-          approvalId: model.approvalId,
-          approved: false,
-        });
-        toast.success("已拒绝，正在继续修订");
-      } else {
-        toast.success("已拒绝");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "拒绝失败");
-    } finally {
-      setSubmitting(false);
-      setPendingAction(null);
-    }
+    const approvalId = model.approvalId;
+    await runDecision(
+      label,
+      () =>
+        planApprovalApi.reject({
+          approvalId,
+          feedback: (fb ?? feedback).trim() || label,
+        }),
+      (res) => {
+        setLocalStatus("rejected");
+        setFeedbackOpen(false);
+        const resumeRequestId = String(res?.resumeRequestId || "");
+        if (resumeRequestId) {
+          dispatchPlanApprovalResume({
+            resumeRequestId,
+            sessionId: String(res?.sessionId || ""),
+            approvalId,
+            approved: false,
+          });
+          toast.success("已拒绝，正在继续修订");
+        } else {
+          toast.success("已拒绝");
+        }
+      },
+      "拒绝失败"
+    );
   };
 
   if (isApprovalSkin) {

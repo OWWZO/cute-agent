@@ -118,6 +118,9 @@ type ChatViewApi = {
   openFile: (file: CHAT.TFile, chat?: CHAT.ChatItem) => void;
 };
 
+/** 试用次数用尽时的业务联系邮箱：集中在此，避免组件里散落硬编码。 */
+const TOKEN_QUOTA_CONTACT_EMAIL = "liyang.1236@jd.com";
+
 /**
  * 聊天内容的水平内边距。必须放在滚动容器**内层**（ConversationContent），
  * 而不是外层 Conversation —— use-stick-to-bottom 会在两者之间注入无类名的
@@ -542,7 +545,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     onTokenUseUp: () => {
       confirm({
         title: "您的试用次数已用尽",
-        content: "如需额外申请，请联系 liyang.1236@jd.com",
+        content: `如需额外申请，请联系 ${TOKEN_QUOTA_CONTACT_EMAIL}`,
         okText: "我知道了",
         alertOnly: true,
       });
@@ -683,12 +686,24 @@ const ChatView: CuteType.FC<Props> = (props) => {
     setIsRightCollapsed(true);
   });
 
-  const openThinkingPanel = useMemoizedFn((text: string) => {
-    setThinkingDetail(text);
-    setPendingAgentTab(null);
-    setPendingAgentDirectory(false);
+  /**
+   * 清空所有「待打开」意图。
+   *
+   * 同一时刻只允许一个 pending 意图 —— 否则 ActionView 挂载时会一次消费多个，
+   * 连着开出两个 tab（例如打开工具 diff 时又冒出之前排队的任务 tab）。
+   * 每个 open handler 先调这里，再写入自己那一个意图。
+   */
+  const resetPendingOpenIntents = useMemoizedFn(() => {
     setPendingPreviewFile(undefined);
     setPendingSourceTab(null);
+    setPendingAgentTab(null);
+    setPendingAgentDirectory(false);
+    setPendingTaskTab(null);
+  });
+
+  const openThinkingPanel = useMemoizedFn((text: string) => {
+    setThinkingDetail(text);
+    resetPendingOpenIntents();
     openRightWorkspace();
   });
 
@@ -713,7 +728,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       if (!request) return;
 
       setThinkingDetail(null);
-      setPendingPreviewFile(undefined);
+      resetPendingOpenIntents();
       setActiveRunState({
         status: chat?.metrics?.status,
         finishedAt: chat?.finishedAt,
@@ -722,7 +737,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
       // `source` 是 file 且能映射到会话产物时，ActionView 会把它并进同 key 的文件
       // tab；否则作为独立 source tab 打开。
       openRightWorkspace();
-      setPendingPreviewFile(undefined);
       setPendingSourceTab(request);
     }
   );
@@ -741,6 +755,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
         return;
       }
       const display = resolveSubAgentDisplay(task);
+      resetPendingOpenIntents();
       setPendingAgentTab({
         toolCallId,
         title: display.description || display.subagentType || "子智能体",
@@ -750,8 +765,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
         chat,
       });
       setThinkingDetail(null);
-      setPendingPreviewFile(undefined);
-      setPendingSourceTab(null);
       openRightWorkspace();
       setActiveRunState({
         status: chat.metrics?.status,
@@ -763,8 +776,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
   /** 打开子智能体目录 tab（右上角「智能体」面板页脚 / 徽标入口） */
   const openSubAgentDirectory = useMemoizedFn(() => {
     setThinkingDetail(null);
-    setPendingAgentTab(null);
-    setPendingSourceTab(null);
+    resetPendingOpenIntents();
     openRightWorkspace();
     setPendingAgentDirectory(true);
   });
@@ -804,6 +816,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       return;
     }
     setThinkingDetail(null);
+    resetPendingOpenIntents();
     setPendingTaskTab({
       taskKey,
       // 文件类任务的标题取自 primary file（`resolvePreviewTitle` 的 file 分支
@@ -831,6 +844,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     });
     // 先写入父状态：工作区未挂载时 ref 调用会丢；挂载后由 ActionView 消费。
     // 两条路径同时保留是为了覆盖“首次打开工作区”和“工作区已存在”两种时序。
+    resetPendingOpenIntents();
     setPendingPreviewFile(file);
     actionViewRef.current?.setFilePreview(file);
   });
@@ -969,7 +983,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     };
 
     const handleClose = () => {
-      console.log("close");
+      // DataAgent 流正常收口：状态已由 READY / ERROR 事件落定，这里无需额外处理。
     };
     querySSE(
       {
