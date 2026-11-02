@@ -3,6 +3,9 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import { Slot } from "radix-ui";
 
+const DEFAULT_VARIANT = "default";
+const DEFAULT_SIZE = "default";
+
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 motion-reduce:transition-none motion-reduce:active:scale-100",
   {
@@ -34,16 +37,16 @@ const buttonVariants = cva(
       },
     },
     defaultVariants: {
-      variant: "default",
-      size: "default",
+      variant: DEFAULT_VARIANT,
+      size: DEFAULT_SIZE,
     },
   }
 );
 
 function Button({
   className,
-  variant = "default",
-  size = "default",
+  variant,
+  size,
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> &
@@ -51,17 +54,19 @@ function Button({
     asChild?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button";
+  // VariantProps 允许 null，这里统一收敛到 cva 的默认值，保证样式与 data-* 一致
+  const resolvedVariant = variant ?? DEFAULT_VARIANT;
+  const resolvedSize = size ?? DEFAULT_SIZE;
 
   return (
     <Comp
       data-slot="button"
-      data-variant={variant}
-      data-size={size}
+      data-variant={resolvedVariant}
+      data-size={resolvedSize}
       className={cn(buttonVariants({
-        variant,
-        size,
-        className
-      }))}
+        variant: resolvedVariant,
+        size: resolvedSize
+      }), className)}
       {...props}
     />
   );

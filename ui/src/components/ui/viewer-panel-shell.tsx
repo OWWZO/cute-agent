@@ -24,6 +24,8 @@ export function ViewerPanelShell({
 }: ViewerPanelShellProps) {
   return (
     <div
+      role="region"
+      aria-label={label}
       className={cn(
         "relative flex w-full min-h-0 flex-col overflow-hidden rounded-xl bg-[var(--chat-surface)] shadow-[var(--shadow-md)]",
         hideHeader && "rounded-none shadow-none",

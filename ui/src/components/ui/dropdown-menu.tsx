@@ -9,14 +9,6 @@ function DropdownMenu({
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
 }
 
-function DropdownMenuPortal({
-  ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
-  return (
-    <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
-  )
-}
-
 function DropdownMenuTrigger({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
@@ -78,6 +70,24 @@ function DropdownMenuItem({
   )
 }
 
+/** Checkbox / Radio 条目共用的基础样式，改指示器间距或图标尺寸只需动这里 */
+const dropdownMenuCheckableItemClass =
+  "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+
+/** 右侧勾选指示器；slot 用于区分 checkbox / radio 两个条目类型 */
+function DropdownMenuItemIndicator({ slot }: { slot: string }) {
+  return (
+    <span
+      className="pointer-events-none absolute right-2 flex items-center justify-center"
+      data-slot={slot}
+    >
+      <DropdownMenuPrimitive.ItemIndicator>
+        <CheckIcon />
+      </DropdownMenuPrimitive.ItemIndicator>
+    </span>
+  )
+}
+
 function DropdownMenuCheckboxItem({
   className,
   children,
@@ -92,21 +102,13 @@ function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        dropdownMenuCheckableItemClass,
         className
       )}
       checked={checked}
       {...props}
     >
-      <span
-        className="pointer-events-none absolute right-2 flex items-center justify-center"
-        data-slot="dropdown-menu-checkbox-item-indicator"
-      >
-        <DropdownMenuPrimitive.ItemIndicator>
-          <CheckIcon
-          />
-        </DropdownMenuPrimitive.ItemIndicator>
-      </span>
+      <DropdownMenuItemIndicator slot="dropdown-menu-checkbox-item-indicator" />
       {children}
     </DropdownMenuPrimitive.CheckboxItem>
   )
@@ -136,20 +138,12 @@ function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        dropdownMenuCheckableItemClass,
         className
       )}
       {...props}
     >
-      <span
-        className="pointer-events-none absolute right-2 flex items-center justify-center"
-        data-slot="dropdown-menu-radio-item-indicator"
-      >
-        <DropdownMenuPrimitive.ItemIndicator>
-          <CheckIcon
-          />
-        </DropdownMenuPrimitive.ItemIndicator>
-      </span>
+      <DropdownMenuItemIndicator slot="dropdown-menu-radio-item-indicator" />
       {children}
     </DropdownMenuPrimitive.RadioItem>
   )
@@ -249,7 +243,6 @@ function DropdownMenuSubContent({
 
 export {
   DropdownMenu,
-  DropdownMenuPortal,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuGroup,

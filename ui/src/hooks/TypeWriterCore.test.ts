@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import TypeWriterCore from "./TypeWriterCore";
 
 const create = (maxStepSeconds?: number) =>
@@ -32,5 +32,26 @@ describe("TypeWriterCore", () => {
     writer.add("x".repeat(100));
 
     expect(writer.dynamicSpeed()).toBe(20);
+  });
+
+  // 回归：清理后必须把句柄复位为 undefined，否则残留的旧 id 会让状态判断失真。
+  it("清理后复位定时器句柄", () => {
+    vi.useFakeTimers();
+    try {
+      const writer = create();
+      writer.add("abc");
+      writer.start();
+      expect(writer.timer).toBeDefined();
+
+      writer.onRendered();
+      expect(writer.timer).toBeUndefined();
+
+      writer.start();
+      writer.onClearQueueList();
+      expect(writer.timer).toBeUndefined();
+      expect(writer.queueList).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
