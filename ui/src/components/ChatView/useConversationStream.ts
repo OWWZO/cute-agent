@@ -419,6 +419,16 @@ function replaceConversationListItem<TItem>(
   } as CHAT.ConversationHistory;
 }
 
+export function replaceChatAtIndex<T>(
+  list: readonly T[],
+  index: number,
+  item: T
+): T[] {
+  const next = list.slice();
+  next[index] = item;
+  return next;
+}
+
 export function createConversationDraftController<TItem>(
   conversationId: string,
   initialConversation: CHAT.ConversationHistory,
@@ -824,11 +834,10 @@ export function useConversationStream(
         },
       };
     }
+    const nextChatList = replaceChatAtIndex(chatList, index, chat);
     commitConversation(conversationId, {
       ...snapshot,
-      chatList: chatList.map((item, itemIndex) =>
-        itemIndex === index ? chat : item
-      ),
+      chatList: nextChatList,
     });
   });
 

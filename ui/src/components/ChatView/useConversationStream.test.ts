@@ -10,6 +10,7 @@ import {
   planFollowIdleReplay,
   planObservationClose,
   planRootResultLoading,
+  replaceChatAtIndex,
   resolveLatestContextUsage,
   resolveRunReplayState,
 } from "./useConversationStream";
@@ -20,6 +21,19 @@ import {
 import { parseAgentAnswer } from "@/utils/sseParsers";
 
 describe("useConversationStream helpers", () => {
+  it("流式更新只替换命中下标，其他轮次保持原引用", () => {
+    const first = { requestId: "req-1" };
+    const second = { requestId: "req-2" };
+    const original = [first, second];
+    const updated = { requestId: "req-2", response: "新的" };
+    const next = replaceChatAtIndex(original, 1, updated);
+
+    expect(next).not.toBe(original);
+    expect(next[0]).toBe(first);
+    expect(next[1]).toBe(updated);
+    expect(next).toHaveLength(2);
+  });
+
   it("同一 requestId 的 finished 只认领一次刷新", () => {
     const settled = new Set<string>();
 
