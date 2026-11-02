@@ -31,11 +31,39 @@ export function AnimatedOrb({
       };
 
   const blurAmount = Math.max(6, size * 0.15);
-  const circle1Size = size * 0.45;
-  const circle2Size = size * 0.35;
-  const circle3Size = size * 0.5;
-  const circle4Size = size * 0.25;
-  const circle5Size = size * 0.3;
+  // 每个圆球的尺寸、透明度、颜色集中在一处，增删或调整顺序不会漏改某个节点。
+  const circles = [
+    {
+      key: "1",
+      size: size * 0.45,
+      opacity: 0.9,
+      color: colors.circle1,
+    },
+    {
+      key: "2",
+      size: size * 0.35,
+      opacity: 0.85,
+      color: colors.circle2,
+    },
+    {
+      key: "3",
+      size: size * 0.5,
+      opacity: 0.9,
+      color: colors.circle3,
+    },
+    {
+      key: "4",
+      size: size * 0.25,
+      opacity: 0.8,
+      color: colors.circle4,
+    },
+    {
+      key: "5",
+      size: size * 0.3,
+      opacity: 0.85,
+      color: colors.circle5,
+    },
+  ];
 
   return (
     <div
@@ -54,61 +82,22 @@ export function AnimatedOrb({
           className="absolute inset-0 flex items-center justify-center"
           style={{ filter: `blur(${blurAmount}px)` }}
         >
-          <div
-            className="orb-circle-1 absolute rounded-full"
-            style={{
-              width: circle1Size,
-              height: circle1Size,
-              opacity: 0.9,
-              backgroundColor: colors.circle1,
-            }}
-          />
-          <div
-            className="orb-circle-2 absolute rounded-full"
-            style={{
-              width: circle2Size,
-              height: circle2Size,
-              opacity: 0.85,
-              backgroundColor: colors.circle2,
-            }}
-          />
-          <div
-            className="orb-circle-3 absolute rounded-full"
-            style={{
-              width: circle3Size,
-              height: circle3Size,
-              opacity: 0.9,
-              backgroundColor: colors.circle3,
-            }}
-          />
-          <div
-            className="orb-circle-4 absolute rounded-full"
-            style={{
-              width: circle4Size,
-              height: circle4Size,
-              opacity: 0.8,
-              backgroundColor: colors.circle4,
-            }}
-          />
-          <div
-            className="orb-circle-5 absolute rounded-full"
-            style={{
-              width: circle5Size,
-              height: circle5Size,
-              opacity: 0.85,
-              backgroundColor: colors.circle5,
-            }}
-          />
+          {circles.map((circle) => (
+            <div
+              className={`orb-circle-${circle.key} absolute rounded-full`}
+              key={circle.key}
+              style={{
+                width: circle.size,
+                height: circle.size,
+                opacity: circle.opacity,
+                backgroundColor: circle.color,
+              }}
+            />
+          ))}
         </div>
       </div>
 
-      <div
-        className="pointer-events-none absolute inset-0 rounded-full"
-        style={{
-          background:
-            "linear-gradient(to bottom, rgba(255, 255, 255, 0.4) 0%, transparent 100%)",
-        }}
-      />
+      <div className="cute-orb-highlight pointer-events-none absolute inset-0 rounded-full" />
     </div>
   );
 }
