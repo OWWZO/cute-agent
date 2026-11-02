@@ -8,6 +8,15 @@ type Props = {
   disabled?: boolean;
 };
 
+/** relay 的 ws(s) 地址 → 可展示的服务 origin（去掉 path/query）。 */
+function resolveRelayOrigin(relayUrl: string): string {
+  try {
+    return new URL(relayUrl.replace(/^ws/, "http")).origin;
+  } catch {
+    return "";
+  }
+}
+
 export default function BrowserRelayChip({ disabled }: Props) {
   const [status, setStatus] = useState<BrowserRelayStatus>({ connected: false });
   const [pairing, setPairing] = useState<BrowserPairing | null>(null);
@@ -95,9 +104,7 @@ export default function BrowserRelayChip({ disabled }: Props) {
   };
 
   const connected = Boolean(status.connected);
-  const origin = pairing?.relayUrl
-    ? pairing.relayUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/api\/agent\/browser\/relay.*$/, "")
-    : "";
+  const origin = pairing?.relayUrl ? resolveRelayOrigin(pairing.relayUrl) : "";
 
   return (
     <div className="flex min-w-0 items-center gap-1">
