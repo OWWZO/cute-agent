@@ -22,9 +22,8 @@ export interface PanelResolverMessageTypes {
   usePdf?: boolean;
   useDocx?: boolean;
   useLegacyDoc?: boolean;
-  useWord?: boolean;
   useFile?: boolean;
-  useJSON?: boolean | string;
+  useJSON?: boolean;
   isHtml?: boolean;
   searchList?: SearchListItem[];
   usePpt?: boolean;
@@ -246,7 +245,7 @@ export function resolvePanelView(params: ResolvePanelViewParams): PanelView {
     ["internal_search", "web_search", "websearch", "search"].includes(
       resolvedToolName.toLowerCase()
     ) &&
-    (!resolvedToolResultText.trim() || Boolean(useJSON))
+    (!resolvedToolResultText.trim() || useJSON)
   ) {
     return {
       type: "search",

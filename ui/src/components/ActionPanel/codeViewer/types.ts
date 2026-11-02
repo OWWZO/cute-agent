@@ -1,3 +1,4 @@
+import type { SelectedLineRange as DiffsSelectedLineRange } from "@pierre/diffs";
 import type { CSSProperties, HTMLAttributes, ReactNode, Ref } from "react";
 
 /**
@@ -44,11 +45,13 @@ export type CodeViewerStyle = CSSProperties & {
   "--diffs-font-size"?: string;
 };
 
-/** `@pierre/diffs` 的 `SelectedLineRange` 子集（本项目只用行号，不关心 side）。 */
-export interface SelectedLineRange {
-  start: number;
-  end: number;
-}
+/**
+ * `@pierre/diffs` 的 `SelectedLineRange` 子集（本项目只用行号，不关心 side）。
+ *
+ * `start` / `end` 是相对文件的 **1 基**行号；叠加 `firstLineNumber` 换算成
+ * 内部 `CodeCommentRange` 见 `utils.ts` 的 `selectedRangeToCodeCommentRange`。
+ */
+export type SelectedLineRange = Pick<DiffsSelectedLineRange, "start" | "end">;
 
 export interface CodeViewerProps extends HTMLAttributes<HTMLDivElement> {
   code: string;
