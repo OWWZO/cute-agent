@@ -206,6 +206,12 @@ export async function dispatchGenUiAction(
     }
     return { ok: true, type: action.type };
   } catch (error) {
+    // 适配器失败过去被静默吞掉，异步 submitForm/sendMessage 出错时无从排查。
+    console.error(`GenUI action "${action.type}" failed`, {
+      action: action.payload,
+      context: ctx,
+      error,
+    });
     return { ok: false, type: action.type, reason: "error", error };
   }
 }

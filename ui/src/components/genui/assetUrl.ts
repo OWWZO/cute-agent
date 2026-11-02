@@ -1,5 +1,6 @@
 import {
   buildFilePreviewUrlForBrowser,
+  isToolFilePath,
   normalizeFileUrlForBrowser,
 } from "@/utils/fileUrl";
 
@@ -10,17 +11,7 @@ function basenameOf(pathLike: string): string {
 }
 
 function isBrowserReachableUrl(value: string): boolean {
-  return /^(?:https?:)?\/\//i.test(value) || /^(?:blob:|data:)/i.test(value);
-}
-
-function isToolFilePath(value: string): boolean {
-  return (
-    value.startsWith("/tool/") ||
-    value.startsWith("preview/") ||
-    value.startsWith("/preview/") ||
-    value.startsWith("download/") ||
-    value.startsWith("/download/")
-  );
+  return /^(?:https?:)?\/\//i.test(value);
 }
 
 /**
