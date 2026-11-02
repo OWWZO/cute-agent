@@ -24,6 +24,30 @@ type WorkspaceFileTreeProps = {
   depth?: number;
 };
 
+/** 单个目录一次最多渲染的行数；超出部分按「显示更多」分页，避免大目录一次铺满 DOM。 */
+const TREE_PAGE_SIZE = 50;
+
+function TreeMoreButton({
+  remaining,
+  onMore,
+}: {
+  remaining: number;
+  onMore: () => void;
+}) {
+  if (remaining <= 0) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      className="ml-4 flex h-7 items-center rounded-lg border border-transparent px-2 text-ui-xs text-foreground-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
+      onClick={onMore}
+    >
+      显示更多（剩余 {remaining}）
+    </button>
+  );
+}
+
 // ZCode WorkspaceFileTreeRowView.tsx:270 —— 行内图标槽统一 size-4、走三级前景。
 // 类型色改走语义 token（DESIGN.md 禁 Tailwind 调色板色），保留"颜色即类型"的识别性。
 const getFileIcon = (type: string) => {
@@ -90,8 +114,10 @@ const TreeNode = memo(function TreeNode({
   depth: number;
 }) {
   const [expanded, setExpanded] = useState(depth === 0);
+  const [visibleCount, setVisibleCount] = useState(TREE_PAGE_SIZE);
 
   if (node.kind === "dir") {
+    const visibleChildren = node.children.slice(0, visibleCount);
     return (
       <div>
         <button
@@ -116,7 +142,7 @@ const TreeNode = memo(function TreeNode({
         </button>
         {expanded ? (
           <div className="mt-0.5 flex flex-col gap-0.5">
-            {node.children.map((child) => (
+            {visibleChildren.map((child) => (
               <TreeNode
                 key={child.path}
                 node={child}
@@ -125,6 +151,10 @@ const TreeNode = memo(function TreeNode({
                 depth={depth + 1}
               />
             ))}
+            <TreeMoreButton
+              remaining={node.children.length - visibleChildren.length}
+              onMore={() => setVisibleCount((prev) => prev + TREE_PAGE_SIZE)}
+            />
           </div>
         ) : null}
       </div>
@@ -166,6 +196,7 @@ const WorkspaceFileTree = memo(function WorkspaceFileTree(
   props: WorkspaceFileTreeProps
 ) {
   const { nodes, selectedFileKey, onSelectFile, depth = 0 } = props;
+  const [visibleCount, setVisibleCount] = useState(TREE_PAGE_SIZE);
   if (!nodes.length) {
     return (
       <div className="px-2 py-8 text-center text-ui-sm text-foreground-subtle">
@@ -173,9 +204,10 @@ const WorkspaceFileTree = memo(function WorkspaceFileTree(
       </div>
     );
   }
+  const visibleNodes = nodes.slice(0, visibleCount);
   return (
     <div className="flex flex-col gap-0.5">
-      {nodes.map((node) => (
+      {visibleNodes.map((node) => (
         <TreeNode
           key={node.path}
           node={node}
@@ -184,6 +216,10 @@ const WorkspaceFileTree = memo(function WorkspaceFileTree(
           depth={depth}
         />
       ))}
+      <TreeMoreButton
+        remaining={nodes.length - visibleNodes.length}
+        onMore={() => setVisibleCount((prev) => prev + TREE_PAGE_SIZE)}
+      />
     </div>
   );
 });
