@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import type { DataChatRow, DataChatTableColumn } from "./chartConfig";
 
 const ROW_HEIGHT_PX = 28;
 const VISIBLE_OVERSCAN = 10;
@@ -35,16 +36,10 @@ export function resolveVisibleRowRange(
   };
 }
 
-interface TableColumn {
-  title: string;
-  dataIndex: string;
-  key?: string;
-}
-
 interface SimpleTableProps {
   data: {
-    columnList?: TableColumn[];
-    dataList?: Record<string, any>[];
+    columnList?: DataChatTableColumn[];
+    dataList?: DataChatRow[];
   };
 }
 
