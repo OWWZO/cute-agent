@@ -1,12 +1,32 @@
+import type { ReactNode } from "react";
 import { MessageSquareTextIcon, MousePointer2Icon, QuoteIcon } from "lucide-react";
 import type { SerializedPromptContexts } from "@/lib/promptContexts";
 
 const CARD_CLASS =
   "flex max-w-[320px] min-w-0 items-center gap-1.5 rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface-muted)] px-2.5 py-1 text-ui-xs text-[var(--chat-text-soft)]";
 
+const CONTEXT_ICON_CLASS = "size-3.5 shrink-0 text-[var(--chat-text-muted)]";
+
 function truncate(text: string, max = 48): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   return normalized.length > max ? `${normalized.slice(0, max)}…` : normalized;
+}
+
+/** 三类上下文共用同一张卡片：容器、tooltip 与截断文本只在这里维护。 */
+function renderContextCard(options: {
+  key: string;
+  title: string;
+  icon: ReactNode;
+  label?: ReactNode;
+  text?: string;
+}) {
+  return (
+    <div key={options.key} className={CARD_CLASS} title={options.title}>
+      {options.icon}
+      {options.label}
+      {options.text ? <span className="truncate">{options.text}</span> : null}
+    </div>
+  );
 }
 
 /**
@@ -31,20 +51,20 @@ export function UserPromptContexts({ contexts }: { contexts: SerializedPromptCon
           comment.startLine === comment.endLine
             ? `L${comment.startLine}`
             : `L${comment.startLine}-L${comment.endLine}`;
-        return (
-          <div
-            key={comment.id}
-            className={CARD_CLASS}
-            title={comment.comment || comment.sourcePath}
-          >
-            <MessageSquareTextIcon className="size-3.5 shrink-0 text-[var(--chat-text-muted)]" />
-            <span className="shrink-0 font-medium text-[var(--chat-text)]">{comment.sourceTitle}</span>
-            <span className="shrink-0 font-mono">{lineLabel}</span>
-            {comment.comment.trim() ? (
-              <span className="truncate">· {truncate(comment.comment)}</span>
-            ) : null}
-          </div>
-        );
+        return renderContextCard({
+          key: `code-comment-${comment.id}`,
+          title: comment.comment || comment.sourcePath,
+          icon: <MessageSquareTextIcon className={CONTEXT_ICON_CLASS} />,
+          label: (
+            <>
+              <span className="shrink-0 font-medium text-[var(--chat-text)]">
+                {comment.sourceTitle}
+              </span>
+              <span className="shrink-0 font-mono">{lineLabel}</span>
+            </>
+          ),
+          text: comment.comment.trim() ? `· ${truncate(comment.comment)}` : undefined,
+        });
       })}
 
       {contexts.webElements.map((element) => {
@@ -53,34 +73,34 @@ export function UserPromptContexts({ contexts }: { contexts: SerializedPromptCon
           element.text ||
           element.selector ||
           element.tagName.toLowerCase();
-        return (
-          <div
-            key={element.id}
-            className={CARD_CLASS}
-            title={[element.pageTitle || element.pageUrl, element.selector]
-              .filter(Boolean)
-              .join("\n")}
-          >
-            <MousePointer2Icon className="size-3.5 shrink-0 text-[var(--chat-text-muted)]" />
+        return renderContextCard({
+          key: `web-element-${element.id}`,
+          title: [element.pageTitle || element.pageUrl, element.selector]
+            .filter(Boolean)
+            .join("\n"),
+          icon: <MousePointer2Icon className={CONTEXT_ICON_CLASS} />,
+          label: (
             <span className="shrink-0 font-medium text-[var(--chat-text)]">
               {element.tagName.toLowerCase()}
             </span>
-            <span className="truncate">{truncate(title)}</span>
-          </div>
-        );
+          ),
+          text: truncate(title),
+        });
       })}
 
-      {contexts.conversationSelections.map((selection) => (
-        <div key={selection.id} className={CARD_CLASS} title={selection.text}>
-          <QuoteIcon className="size-3.5 shrink-0 text-[var(--chat-text-muted)]" />
-          {selection.path ? (
+      {contexts.conversationSelections.map((selection) =>
+        renderContextCard({
+          key: `selection-${selection.id}`,
+          title: selection.text,
+          icon: <QuoteIcon className={CONTEXT_ICON_CLASS} />,
+          label: selection.path ? (
             <span className="shrink-0 font-medium text-[var(--chat-text)]">
               {selection.path.split(/[\\/]/).pop() || selection.path}
             </span>
-          ) : null}
-          <span className="truncate">{truncate(selection.text)}</span>
-        </div>
-      ))}
+          ) : undefined,
+          text: truncate(selection.text),
+        })
+      )}
     </div>
   );
 }

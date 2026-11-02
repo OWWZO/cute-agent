@@ -21,6 +21,13 @@ type PlanApprovalCardProps = {
 };
 
 /**
+ * 拒绝动作的文案同时承担两个职责：作为 `feedback` 发给后端、作为 `pendingAction`
+ * 标识前端 spinner。抽成常量避免两处字面量漂移。
+ */
+const REJECT_AND_EXIT = "Reject and Exit";
+const REVISE = "Revise";
+
+/**
  * ExitPlanMode 挂起卡片（对标 Kimi ApprovalCard plan_review）。
  * 用户批准/拒绝后 POST /api/agent/plan-approval/*，唤醒后端 Agent 线程。
  */
@@ -90,7 +97,6 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
   }, [approved, status]);
 
   const submitted = alreadyDone || decision !== null;
-  const busy = submitting;
 
   const afterDecide = (
     kind: "approved" | "rejected",
@@ -128,7 +134,7 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
   };
 
   const approve = async () => {
-    if (!approvalId || busy || submitted) return;
+    if (!approvalId || submitting || submitted) return;
     setSubmitting(true);
     setPendingAction("approvePlan");
     try {
@@ -147,7 +153,7 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
   };
 
   const reject = async (label: string, fb?: string) => {
-    if (!approvalId || busy || submitted) return;
+    if (!approvalId || submitting || submitted) return;
     setSubmitting(true);
     setPendingAction(label);
     try {
@@ -167,7 +173,7 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (submitted || busy || minimized || feedbackOpen) return;
+      if (submitted || submitting || minimized || feedbackOpen) return;
       const tag = (document.activeElement?.tagName ?? "").toLowerCase();
       if (tag === "input" || tag === "textarea") return;
       if (e.key === "1") {
@@ -178,13 +184,13 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
         setFeedbackOpen(true);
       } else if (e.key === "3") {
         e.preventDefault();
-        void reject("Reject and Exit");
+        void reject(REJECT_AND_EXIT);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted, busy, minimized, feedbackOpen, approvalId, editedPlan, feedback]);
+  }, [submitted, submitting, minimized, feedbackOpen, approvalId, editedPlan, feedback]);
 
   if (decision === "approved" || isPlanApprovalApproved(status, approved)) {
     return null;
@@ -248,7 +254,7 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
                 <textarea
                   value={editedPlan}
                   onChange={(event) => setEditedPlan(event.target.value)}
-                  disabled={busy}
+                  disabled={submitting}
                   rows={12}
                   placeholder="计划 Markdown 正文（可编辑后执行）"
                 />
@@ -262,11 +268,11 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
                   onChange={(event) => setFeedback(event.target.value)}
                   rows={2}
                   placeholder="说明需要如何修订计划…"
-                  disabled={busy}
+                  disabled={submitting}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      void reject("Revise", feedback);
+                      void reject(REVISE, feedback);
                     } else if (e.key === "Escape") {
                       e.preventDefault();
                       setFeedbackOpen(false);
@@ -285,7 +291,7 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
                 <button
                   type="button"
                   className="kimi-appr-btn is-primary"
-                  disabled={busy || !(editedPlan || planContent).trim()}
+                  disabled={submitting || !(editedPlan || planContent).trim()}
                   onClick={() => void approve()}
                 >
                   {pendingAction === "approvePlan" ? (
@@ -297,7 +303,7 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
                 <button
                   type="button"
                   className="kimi-appr-btn"
-                  disabled={busy}
+                  disabled={submitting}
                   onClick={() => setFeedbackOpen(true)}
                 >
                   修改计划
@@ -306,10 +312,10 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
                 <button
                   type="button"
                   className="kimi-appr-btn is-danger"
-                  disabled={busy}
-                  onClick={() => void reject("Reject and Exit")}
+                  disabled={submitting}
+                  onClick={() => void reject(REJECT_AND_EXIT)}
                 >
-                  {pendingAction === "Reject and Exit" ? (
+                  {pendingAction === REJECT_AND_EXIT ? (
                     <LoaderCircleIcon className="size-3.5 animate-spin" />
                   ) : null}
                   拒绝并退出

@@ -11,6 +11,12 @@ type SessionTaskListProps = {
   chat?: CHAT.ChatItem;
 };
 
+/** 未知 kind 原样展示，避免新增状态被静默误标成「开始」。 */
+const KIND_LABELS: Record<string, string> = {
+  completed: "完成",
+  started: "开始",
+};
+
 /**
  * 时间线内：仅渲染 todo 状态变化（完成 / 开始）。
  * 完整列表见输入框上方 SessionTaskComposerBar。
@@ -49,7 +55,7 @@ const SessionTaskList: FC<SessionTaskListProps> = memo(({ tool, chat }) => {
         >
           <ListIcon className="size-3.5 shrink-0 opacity-70" strokeWidth={1.75} />
           <span className="min-w-0 truncate">
-            {item.kind === "completed" ? "完成" : "开始"}
+            {KIND_LABELS[item.kind] ?? item.kind}
             <span className="text-[var(--chat-text-soft)]">「{item.label}」</span>
           </span>
         </div>

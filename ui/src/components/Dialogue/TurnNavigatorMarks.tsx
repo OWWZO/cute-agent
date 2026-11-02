@@ -9,6 +9,16 @@ import { cn } from "@/lib/utils";
 
 const HOVER_PAGE_SIZE = 60;
 
+/** 运行中优先提示，其余按是否当前项区分层级。 */
+function assistantPreviewTone(isRunning: boolean, isActive: boolean): string {
+  if (isRunning) {
+    return "text-[var(--color-warning)]";
+  }
+  return isActive
+    ? "text-[var(--chat-text-muted)]"
+    : "text-[var(--chat-text-muted)]/80";
+}
+
 export type NavigatorItem = {
   key: string;
   requestId?: string;
@@ -146,11 +156,7 @@ export const TurnNavigatorMarks: FC<{
                 <div
                   className={cn(
                     "mt-1 line-clamp-2 whitespace-pre-line text-ui-xs",
-                    item.isRunning
-                      ? "text-[var(--color-warning)]"
-                      : isActive
-                        ? "text-[var(--chat-text-muted)]"
-                        : "text-[var(--chat-text-muted)]/80"
+                    assistantPreviewTone(item.isRunning, isActive)
                   )}
                 >
                   {item.assistantPreview}

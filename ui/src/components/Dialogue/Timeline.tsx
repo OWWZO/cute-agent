@@ -68,6 +68,16 @@ type ToolItemProps = {
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
 };
 
+/** 桌面控制 / 计划审批的 resultMap 与嵌套 resultMap 同构，取嵌套优先。 */
+function resolveNestedResultMap(tool: CHAT.Task) {
+  const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
+  const nested = (resultMap.resultMap || resultMap) as Record<string, unknown>;
+  return {
+    resultMap,
+    nested,
+  };
+}
+
 const taskRowClass =
   "kimi-task-row mt-1 flex w-full max-w-full cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-2.5 py-1.5 transition-colors duration-150 hover:border-[var(--color-line-strong)] hover:bg-[var(--color-surface-sunken)]";
 
@@ -142,8 +152,7 @@ export const ToolItem: FC<ToolItemProps> = memo(({
       );
     }
     case "desktop_control": {
-      const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
-      const nested = (resultMap.resultMap || resultMap) as Record<string, unknown>;
+      const { nested, resultMap } = resolveNestedResultMap(tool);
       const status = String(nested.status || resultMap.status || "pending");
       return (
         <div className="kimi-ui-card kimi-qcard">
@@ -183,8 +192,7 @@ export const ToolItem: FC<ToolItemProps> = memo(({
       );
     }
     case "plan_approval": {
-      const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
-      const nested = (resultMap.resultMap || resultMap) as Record<string, unknown>;
+      const { nested, resultMap } = resolveNestedResultMap(tool);
       const toolAny = tool as unknown as Record<string, unknown>;
       const approvalStatus = String(
         nested.status || resultMap.status || toolAny.status || "pending"
