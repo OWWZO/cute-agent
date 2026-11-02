@@ -10,6 +10,7 @@ import {
   combineData,
   normalizeEventData,
 } from "@/utils/chat";
+import { normalizeRunStatus } from "@/utils/runStatus";
 import { identityKeys, readTaskIdentity } from "./taskIdentity";
 
 /**
@@ -73,10 +74,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeRunStatus(status?: string | null): string {
-  return String(status || "").trim().toUpperCase() || "RUNNING";
 }
 
 function isRunReplay(
@@ -328,7 +325,7 @@ function applyFallbackConclusion(
 function applyRunStatus(
   chat: CHAT.ChatItem,
   run: ChildSessionRun,
-  liveSettled?: { status: string }
+  liveSettled?: { status: CHAT.RunStatus }
 ) {
   if (liveSettled) {
     // 实时流已收口：以流的终态为准，不要被滞后的账本 RUNNING 拉回 loading。
@@ -440,7 +437,7 @@ export function buildChildSessionChat(
   // 顺序很重要：剥离判据要看全量帧，不能边读边判。
   const ownKeys = collectChildSessionOwnKeys(frameEvents);
 
-  let liveSettled: { status: string } | undefined;
+  let liveSettled: { status: CHAT.RunStatus } | undefined;
   for (const { eventData, frame } of frameEvents) {
     applyChildSessionEvent(chat, detachExternalParentTags(eventData, ownKeys), remember);
     if (frame?.finished === true) {

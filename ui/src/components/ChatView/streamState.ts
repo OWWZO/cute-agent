@@ -299,11 +299,7 @@ export function isStructuredDataOnlyTask(
     return false;
   }
 
-  const toolName = String(
-    resolveTaskToolResult(task)?.toolName ||
-      resolveTaskResultMap(task).toolName ||
-      ""
-  ).toLowerCase();
+  const toolName = resolveTaskToolName(task);
   if (
     toolName === "internal_search" ||
     toolName === "web_search" ||
@@ -362,11 +358,14 @@ export function shouldRefreshWorkspaceTask(eventData?: MESSAGE.EventData) {
   }
 
   const innerType = eventData.resultMap?.messageType || eventData.messageType;
-  if (isFileListOnlyTask({
+  // 事件数据不是完整 CHAT.Task：构造一次伪任务，供下面各判定函数复用。
+  const pseudoTask = {
     messageType: innerType,
     resultMap: eventData.resultMap,
     artifactRefs: eventData.artifactRefs,
-  } as unknown as CHAT.Task)) {
+  } as unknown as CHAT.Task;
+
+  if (isFileListOnlyTask(pseudoTask)) {
     return false;
   }
 
@@ -375,23 +374,13 @@ export function shouldRefreshWorkspaceTask(eventData?: MESSAGE.EventData) {
   }
 
   if (innerType === "tool_call") {
-    return isCanvasPublishPreviewTask({
-      messageType: "tool_call",
-      artifactRefs: eventData.artifactRefs,
-      resultMap: eventData.resultMap,
-    } as unknown as CHAT.Task) && hasWorkspaceArtifacts({
-      messageType: "tool_call",
-      artifactRefs: eventData.artifactRefs,
-      resultMap: eventData.resultMap,
-    } as unknown as CHAT.Task);
+    return (
+      isCanvasPublishPreviewTask(pseudoTask) && hasWorkspaceArtifacts(pseudoTask)
+    );
   }
 
   if (innerType === "tool_result") {
-    return hasWorkspaceArtifacts({
-      messageType: "tool_result",
-      artifactRefs: eventData.artifactRefs,
-      resultMap: eventData.resultMap,
-    } as unknown as CHAT.Task);
+    return hasWorkspaceArtifacts(pseudoTask);
   }
 
   if (innerType && WORKSPACE_ATTENTION_MESSAGE_TYPES.has(innerType)) {
@@ -403,11 +392,7 @@ export function shouldRefreshWorkspaceTask(eventData?: MESSAGE.EventData) {
     return false;
   }
 
-  return isWorkspaceAttentionTask({
-    messageType: innerType,
-    resultMap: eventData.resultMap,
-    artifactRefs: eventData.artifactRefs,
-  } as unknown as CHAT.Task);
+  return isWorkspaceAttentionTask(pseudoTask);
 }
 
 export function getLatestRenderableTask(chat: CHAT.ChatItem): CHAT.Task | undefined {
@@ -432,12 +417,8 @@ export function cloneWorkspaceTask(task: CHAT.Task): CHAT.Task {
   } as CHAT.Task;
 }
 
-export function resolveActionPanelVisibility(params: {
-  plan?: CHAT.Plan;
-  taskList: CHAT.Task[];
-}) {
+export function resolveActionPanelVisibility(params: { taskList: CHAT.Task[] }) {
   // 右侧工作区只在有值得观看的产物时自动展开；plan 单独出现时保持单栏。
-  void params.plan;
   return params.taskList.some((task) => isWorkspaceAttentionTask(task));
 }
 

@@ -66,13 +66,15 @@ describe("ReplayDisclosure", () => {
     expect(html).not.toContain("9 分 59 秒");
   });
 
-  it.each([
+  const statusCopyCases: Array<[CHAT.RunStatus, string]> = [
     ["SUCCESS", "已工作"],
     ["FAILED", "执行失败"],
     ["STOPPED", "已停止"],
     ["TIMEOUT", "已超时"],
     ["WAITING_INPUT", "等待回答"],
-  ])("uses distinct copy for %s", (status, label) => {
+  ];
+
+  it.each(statusCopyCases)("uses distinct copy for %s", (status, label) => {
     const html = renderDisclosure(
       createChat({ metrics: { status } })
     );

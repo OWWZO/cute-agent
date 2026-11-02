@@ -138,17 +138,7 @@ describe("useConversationStream helpers", () => {
   });
 
   it("存在 plan 但没有产物 task 时不自动打开右侧工作区", () => {
-    expect(
-      resolveActionPanelVisibility({
-        plan: {
-          stages: [{
-            title: "分析需求",
-            status: "completed"
-          }],
-        } as unknown as CHAT.Plan,
-        taskList: [],
-      })
-    ).toBe(false);
+    expect(resolveActionPanelVisibility({ taskList: [] })).toBe(false);
   });
 
   it("heartbeat 包在缺少 resultMap 时也应被正常解析", () => {
