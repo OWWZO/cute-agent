@@ -79,7 +79,7 @@
   NSString * const JDIF_ICON_DUIGOU = @"\U0000e6ca"; // 对勾
   NSString * const JDIF_ICON_JIESUO1 = @"\U0000f0b9"; // 解锁
   NSString * const JDIF_ICON_ZHINENGTITIANCHONG = @"\U0000ede1"; // 智能体（填充）
-  NSString * const JDIF_ICON_A2AFUWUXUANZHONG = @"\U0000ed28"; // A2A服务（填充）
+  NSString * const JDIF_ICON_A2AFUWUTIANCHONG = @"\U0000ed28"; // A2A服务（填充）
   NSString * const JDIF_ICON_WEIJIESUO2 = @"\U0000ed19"; // 未解锁
   NSString * const JDIF_ICON_WEIWANCHENG = @"\U0000e263"; // 未完成
   NSString * const JDIF_ICON_BUZANCHENG = @"\U0000ea9a"; // 不赞成
@@ -100,7 +100,7 @@
   NSString * const JDIF_ICON_BIANLIANG = @"\U0000e533"; // 变量
   NSString * const JDIF_ICON_KAPIANTIANCHONG = @"\U0000e4e2"; // 卡片（填充）
   NSString * const JDIF_ICON_ZHEXIAN = @"\U0000ec4a"; // 折线
-  NSString * const JDIF_ICON_ZHONGMINGMING_1 = @"\U0000f055"; // 重命名
+  NSString * const JDIF_ICON_ZHONGMINGMING_ALT = @"\U0000f055"; // 重命名
   NSString * const JDIF_ICON_SHENDUSIKAO = @"\U0000e9b6"; // 深度思考
   NSString * const JDIF_ICON_SHUJUYUAN = @"\U0000f097"; // 数据源
   NSString * const JDIF_ICON_MCPTIANCHONG = @"\U0000f478"; // MCP（填充）
@@ -134,7 +134,7 @@
   NSString * const JDIF_ICON_DAIMA = @"\U0000f09c"; // 代码
   NSString * const JDIF_ICON_YINYONG = @"\U0000f32b"; // 引用
   NSString * const JDIF_ICON_CHAJIANSHANGDIAN = @"\U0000eef8"; // 商店
-  NSString * const JDIF_ICON_GENGDUOICON_11 = @"\U0000efc5"; // 更多-1
+  NSString * const JDIF_ICON_GENGDUOICON_ALT = @"\U0000efc5"; // 更多-1
   NSString * const JDIF_ICON_SHANGCHUAN = @"\U0000e3bc"; // 上传
   NSString * const JDIF_ICON_LIANJIE = @"\U0000e968"; // 链接
   NSString * const JDIF_ICON_XIAOXI = @"\U0000ed71"; // 消息
@@ -164,7 +164,7 @@
   NSString * const JDIF_ICON_QINGQIUKAIFANG = @"\U0000e47b"; // 请求开放
   NSString * const JDIF_ICON_XINJIANDUIHUA = @"\U0000ef17"; // 新建对话
   NSString * const JDIF_ICON_JIA = @"\U0000ee79"; // 加
-  NSString * const JDIF_ICON_JINGTIAOSHUJUTIANCHONG1 = @"\U0000e6f4"; // 精调数据（填充）
+  NSString * const JDIF_ICON_JINGTIAOSHUJUTIANCHONG = @"\U0000e6f4"; // 精调数据（填充）
   NSString * const JDIF_ICON_FANHUI = @"\U0000e3cf"; // 左
   NSString * const JDIF_ICON_ZHENGYAN = @"\U0000e579"; // 睁眼
   NSString * const JDIF_ICON_SHUJUKANBAN = @"\U0000eff3"; // 数据看板
@@ -175,7 +175,7 @@
   NSString * const JDIF_ICON_MOXINGTIYAN = @"\U0000e939"; // 模型体验
   NSString * const JDIF_ICON_ZHISHIKU = @"\U0000e571"; // 知识库
   NSString * const JDIF_ICON_BOTSHANGDIANTIANCHONG = @"\U0000e18b"; // bot商店（填充）
-  NSString * const JDIF_ICON_TUOZHUAIPAIXU1 = @"\U0000ef7f"; // 拖拽排序
+  NSString * const JDIF_ICON_TUOZHUAIPAIXU = @"\U0000ef7f"; // 拖拽排序
   NSString * const JDIF_ICON_ZHENGYAN_1 = @"\U0000e073"; // 闭眼
   NSString * const JDIF_ICON_SHIYAN = @"\U0000f47f"; // 实验
   NSString * const JDIF_ICON_JIAN = @"\U0000f2cc"; // 减
@@ -185,7 +185,7 @@
   NSString * const JDIF_ICON_MOXINGSHANGDIANTIANCHONG = @"\U0000e5ae"; // 模型商店（填充）
   NSString * const JDIF_ICON_PINGGUQIXUANZHONG = @"\U0000e953"; // 评估器(选中)
   NSString * const JDIF_ICON_XIHUAN_TIANCHONG = @"\U0000e1be"; // 喜欢(填充)
-  NSString * const JDIF_ICON_JINGTIAOSHUJU1 = @"\U0000e649"; // 精调数据
+  NSString * const JDIF_ICON_JINGTIAOSHUJU = @"\U0000e649"; // 精调数据
   NSString * const JDIF_ICON_YIWEN = @"\U0000e1b6"; // 疑问
 
   #endif

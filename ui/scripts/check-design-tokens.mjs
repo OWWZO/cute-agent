@@ -184,6 +184,7 @@ const isAllowed = (file, line) =>
 const main = async () => {
   const files = await walk(ROOT);
   const violations = [];
+  let scanned = 0;
 
   for (const file of files) {
     const name = rel(file);
@@ -191,6 +192,7 @@ const main = async () => {
     if (name === "global.css") continue; // token 定义处
     if (isSkipped(name)) continue;
 
+    scanned++;
     const lines = (await readFile(file, "utf8")).split("\n");
     lines.forEach((line, i) => {
       if (isAllowed(name, line)) return;
@@ -200,39 +202,20 @@ const main = async () => {
       if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) {
         return;
       }
-      for (const re of [PALETTE_RE, HEX_RE]) {
-        re.lastIndex = 0;
+      const collect = (re, hint = "") => {
         for (const hit of line.matchAll(re)) {
-          violations.push({ file: name, line: i + 1, text: hit[0], hint: "" });
+          violations.push({ file: name, line: i + 1, text: hit[0], hint });
         }
-      }
-      for (const rule of MOTION_HARDCODED) {
-        rule.re.lastIndex = 0;
-        for (const hit of line.matchAll(rule.re)) {
-          violations.push({
-            file: name,
-            line: i + 1,
-            text: hit[0],
-            hint: rule.hint,
-          });
-        }
-      }
-      for (const rule of TYPO_HARDCODED) {
-        rule.re.lastIndex = 0;
-        for (const hit of line.matchAll(rule.re)) {
-          violations.push({
-            file: name,
-            line: i + 1,
-            text: hit[0],
-            hint: rule.hint,
-          });
-        }
-      }
+      };
+      collect(PALETTE_RE);
+      collect(HEX_RE);
+      for (const rule of MOTION_HARDCODED) collect(rule.re, rule.hint);
+      for (const rule of TYPO_HARDCODED) collect(rule.re, rule.hint);
     });
   }
 
   if (violations.length === 0) {
-    console.log(`✓ design tokens: 0 violations (${files.length} files scanned)`);
+    console.log(`✓ design tokens: 0 violations (${scanned} files scanned)`);
     return;
   }
 

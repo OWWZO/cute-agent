@@ -2,11 +2,13 @@ import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
+import eslintConfigPrettier from 'eslint-config-prettier'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'build', 'coverage', 'node_modules', '*.min.js'],
+    // relayFonts 是 iconfont 平台生成的多文件产物，不参与源码规范检查
+    ignores: ['dist', 'build', 'coverage', 'node_modules', '*.min.js', 'src/assets/relayFonts'],
   },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
@@ -15,8 +17,6 @@ export default tseslint.config(
       ecmaVersion: 2020,
       globals: {
         ...globals.browser,
-        REQUEST_BASE_URL: 'readonly',
-        env: 'readonly',
       },
     },
     plugins: {
@@ -29,24 +29,40 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
-      'semi': ['error', 'always'],
-      '@typescript-eslint/no-explicit-any': 'off',
-      'space-infix-ops': 'error' ,
-      'key-spacing': ['error', { beforeColon: false, afterColon: true }],
-      'no-multiple-empty-lines': ['error', { max: 1 }],
-      'no-trailing-spaces': 'error',
-      'func-call-spacing': ['error', 'never'],
-      'object-curly-newline': ['error', { multiline: true }],
-      'keyword-spacing': ['error', { before: true, after: true }],
-      'space-before-blocks': ['error', 'always'],
-      'space-in-parens': ['error', 'never'],
-      'computed-property-spacing': ['error', 'never'],
-      'key-spacing': ['error', { beforeColon: false, afterColon: true }],
-      'comma-spacing': ['error', { before: false, after: true }],
-      'block-spacing': 'error',
-      'no-whitespace-before-property': 'error',
-      'indent': ['error', 2, { SwitchCase: 1 }],
-      'object-property-newline': ['error', { allowAllPropertiesOnSameLine: false }],
     },
   },
+  {
+    // 构建脚本与配置文件（scripts/*.mjs、*.config.js 等）
+    extends: [js.configs.recommended],
+    files: ['**/*.{js,jsx,mjs,cjs}'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  {
+    // 遗留代码里既有显式 any，逐文件登记而不是关闭全局规则
+    files: [
+      'src/components/ActionPanel/fileContentRender.test.ts',
+      'src/components/ActionPanel/useMsgTypes.ts',
+      'src/components/ActionView/workspaceFiles.test.ts',
+      'src/components/ChatView/layout.test.tsx',
+      'src/components/DataChat/Card.tsx',
+      'src/components/DataChat/SimpleTable.tsx',
+      'src/components/ai-elements/prompt-input/useSpeechRecognition.ts',
+      'src/pages/FeaturedConversationDetail/view.test.tsx',
+      'src/services/index.ts',
+      'src/utils/askUserRestore.test.ts',
+      'src/utils/chat.test.ts',
+      'src/utils/conversationHistory.test.ts',
+      'src/utils/taskArtifacts.ts',
+      'src/utils/utils.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  eslintConfigPrettier,
 )

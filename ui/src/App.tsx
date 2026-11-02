@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { Spinner } from '@/components/ui/spinner';
 import router from './router';
@@ -12,7 +12,7 @@ import { useAuthStore } from '@/stores/auth';
 const BOOT_SKELETON_ID = 'boot-skeleton';
 
 // App 组件：应用的根组件，设置全局配置和路由
-const App: CuteType.FC = React.memo(() => {
+const App: CuteType.FC = () => {
   // 根组件只关心登录状态；token / user 刷新不应让整个路由树重渲染。
   const status = useAuthStore((state) => state.status);
 
@@ -34,6 +34,6 @@ const App: CuteType.FC = React.memo(() => {
   ) : (
     <RouterProvider router={router} />
   );
-});
+};
 
 export default App;

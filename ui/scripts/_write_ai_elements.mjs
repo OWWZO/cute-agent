@@ -1,9 +1,11 @@
 // 把官方 AI Elements 全套写入独立目录，避免影响现有 src/components/ai-elements/
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const SRC = '.shadcn-tmp/aie'
-const OUT = 'src/components/ai-elements-official'
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const SRC = path.join(ROOT, '.shadcn-tmp/aie')
+const OUT = path.join(ROOT, 'src/components/ai-elements-official')
 
 const COMPONENTS = [
   'artifact', 'canvas', 'chain-of-thought', 'checkpoint', 'code-block',
@@ -18,10 +20,12 @@ fs.mkdirSync(OUT, { recursive: true })
 
 let written = 0
 const report = []
+const missing = []
 
 for (const name of COMPONENTS) {
   const jsonPath = path.join(SRC, `${name}.json`)
   if (!fs.existsSync(jsonPath)) {
+    missing.push(name)
     report.push(`缺失 registry 数据: ${name}`)
     continue
   }
@@ -37,3 +41,8 @@ for (const name of COMPONENTS) {
 console.log(`写入目录: ${OUT}`)
 console.log(`文件数: ${written}`)
 console.log(report.join('\n'))
+
+if (missing.length) {
+  console.error(`缺失 ${missing.length} 个组件的 registry 数据: ${missing.join(', ')}`)
+  process.exitCode = 1
+}

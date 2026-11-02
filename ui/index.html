@@ -14,13 +14,13 @@
       - 骨架屏放在 #root **外面**（作为兄弟节点），不依赖 React 是否清空容器。
       - 由 src/App.tsx 的 useLayoutEffect 在 React 首次提交后同步移除（DOM 变更后、
         浏览器绘制前），因此不会闪一下空白。
-      - 颜色对齐 global.css 的亮色令牌（--chat-bg / --muted / --border），
+      - 颜色对齐 global.css 的亮色令牌（--chat-bg / --muted / --muted-foreground / --border），
         项目是 color-scheme: light 的纯 CSS 主题，无运行时深色切换。
     -->
     <style>
       html {
         color-scheme: light;
-        background: #ffffff;
+        background: var(--chat-bg, #ffffff);
       }
       #boot-skeleton {
         position: fixed;
@@ -28,8 +28,8 @@
         z-index: 2147483000;
         display: flex;
         flex-direction: column;
-        background: #ffffff;
-        color: #9a9aa2;
+        background: var(--chat-bg, #ffffff);
+        color: var(--muted-foreground, #9a9aa2);
         font-family:
           -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
           "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
@@ -42,7 +42,7 @@
         gap: 10px;
         height: 56px;
         padding: 0 16px;
-        border-bottom: 1px solid #ececf0;
+        border-bottom: 1px solid var(--border, #ececf0);
       }
       #boot-skeleton .bs-body {
         display: flex;
@@ -56,7 +56,7 @@
         gap: 12px;
         width: 260px;
         padding: 18px 14px;
-        border-right: 1px solid #ececf0;
+        border-right: 1px solid var(--border, #ececf0);
       }
       #boot-skeleton .bs-main {
         display: flex;
@@ -69,7 +69,7 @@
         padding: 24px;
       }
       #boot-skeleton .bs-block {
-        background: #f1f1f3;
+        background: var(--muted, #f1f1f3);
         border-radius: 6px;
         animation: bs-pulse 1.4s ease-in-out infinite;
       }
@@ -93,7 +93,7 @@
         margin: 4px 0 0;
         font-size: 13px;
         line-height: 1.6;
-        color: #9a9aa2;
+        color: var(--muted-foreground, #9a9aa2);
       }
       @keyframes bs-pulse {
         0%,
