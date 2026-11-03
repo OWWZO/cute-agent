@@ -58,6 +58,30 @@ public final class SessionAgentMailboxHub {
         });
     }
 
+    /**
+     * 原子占位：仅当邮箱当前不 active 时置为 active。
+     *
+     * @return false 表示该子 Agent 已被其他运行占用；调用方应拒绝重复启动
+     */
+    public static boolean tryMarkActive(String sessionId, String agentId) {
+        if (StringUtils.isBlank(agentId)) {
+            return false;
+        }
+        boolean[] claimed = {false};
+        BOXES.compute(key(sessionId, agentId), (ignored, mailbox) -> {
+            Mailbox box = mailbox == null ? new Mailbox() : mailbox;
+            if (box.active.get()) {
+                return box;
+            }
+            box.active.set(true);
+            box.closed.set(false);
+            box.touch();
+            claimed[0] = true;
+            return box;
+        });
+        return claimed[0];
+    }
+
     public static boolean isActive(String sessionId, String agentId) {
         if (StringUtils.isBlank(agentId)) {
             return false;

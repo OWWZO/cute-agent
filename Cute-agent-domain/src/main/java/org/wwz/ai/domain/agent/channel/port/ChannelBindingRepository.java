@@ -41,6 +41,24 @@ public interface ChannelBindingRepository {
     /** 插入并回填自增主键。 */
     void insert(ChannelBinding binding);
 
+    /**
+     * 原子地「校验全局上限 + 插入」：达到 {@code limit} 时不写入并返回 false。
+     * <p>{@link #countAll()} 与 {@link #insert(ChannelBinding)} 是典型的 check-then-act，
+     * 并发扫码会让两个请求同时看到「未达上限」。需要执行上限约束的调用方必须走本方法，
+     * 不能自行先 count 再 insert。</p>
+     * <p>默认实现以仓储实例为 monitor，只保证单实例内串行；多实例部署的实现必须用
+     * 数据库锁/条件插入覆盖本方法，否则跨实例仍然超限。</p>
+     */
+    default boolean insertIfBelowLimit(ChannelBinding binding, long limit) {
+        synchronized (this) {
+            if (countAll() >= limit) {
+                return false;
+            }
+            insert(binding);
+            return true;
+        }
+    }
+
     /** 只更新状态相关字段（status / lastError / connectedAt），不碰凭证。 */
     void updateStatus(Long bindingId, String status, String lastError, java.time.LocalDateTime connectedAt);
 

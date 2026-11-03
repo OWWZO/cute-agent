@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.rag.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.rag.model.query.ColumnSchemaRecallQuery;
 import org.wwz.ai.domain.agent.rag.model.config.DataQuerySettings;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ import java.util.Map;
  * <p>Search and embedding are invoked through RAG ports, so transport DTOs and client libraries
  * stay outside Domain.</p>
  */
+@Slf4j
 @Service
 public class SchemaRecallService {
 
@@ -100,6 +102,10 @@ public class SchemaRecallService {
             }
             return dataList;
         } catch (Exception e) {
+            // 检索降级不能静默：必须能和「真的没有命中」区分开。
+            log.warn("schema vector recall failed, degrade to empty collection={} query={}: {}",
+                    request.getCollectionName(), abbreviate(request.getQuery()), e.getMessage(), e);
+            restoreInterruptIfNeeded(e);
             return new ArrayList<>();
         }
     }
@@ -123,8 +129,28 @@ public class SchemaRecallService {
             }
             return dataList;
         } catch (Exception e) {
+            // ES 不可用/查询非法/被中断都要留下可诊断信号，而不是伪装成空命中。
+            log.warn("column value recall failed, degrade to empty: {}", e.getMessage(), e);
+            restoreInterruptIfNeeded(e);
             return new ArrayList<>();
         }
+    }
+
+    /** 中断可能被 HTTP/向量客户端包成 runtime 异常，逐层看 cause 后再决定是否恢复标记。 */
+    private static void restoreInterruptIfNeeded(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private static String abbreviate(String query) {
+        if (query == null) {
+            return null;
+        }
+        return query.length() <= 120 ? query : query.substring(0, 120) + "…";
     }
 
 }

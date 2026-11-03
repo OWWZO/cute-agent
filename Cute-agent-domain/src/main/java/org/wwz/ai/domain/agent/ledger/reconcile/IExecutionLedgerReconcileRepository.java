@@ -36,6 +36,9 @@ public interface IExecutionLedgerReconcileRepository {
 
     /**
      * 写 run 终态。返回受影响行数，0 表示已是终态（并发/重复回调），调用方不应再累加会话计数。
+     * <p><b>幂等契约：</b>实现必须保留 {@code status = RUNNING}（和/或 {@code finished_at IS NULL}）
+     * 守卫，只有真正从运行态迁到终态的那一次更新返回 &gt; 0；无条件 UPDATE 会让重复/并发对账
+     * 把 {@code finishedDelta}/{@code failedDelta} 重复累加到会话计数。</p>
      */
     int updateRunFinish(DialogueRun run);
 
@@ -47,10 +50,24 @@ public interface IExecutionLedgerReconcileRepository {
     /** 未命中返回 {@code null}。 */
     DialogueSession querySessionBySessionId(String sessionId);
 
+    /**
+     * 会话结算并覆盖 {@code latest_summary_text}（调用方已读到可信摘要时使用）。
+     */
     int updateSessionRunFinish(String sessionId,
                                int status,
                                String latestSummaryText,
                                int finishedDelta,
                                int failedDelta,
                                LocalDateTime lastActiveAt);
+
+    /**
+     * 会话结算但<b>不触碰</b> {@code latest_summary_text}。
+     * <p>摘要读取失败（或会话行读不到）时使用：无条件覆盖摘要会把会话既有内容写成 null，
+     * 而计数又不能因此放弃累加。所有实现必须提供只更新状态与计数的版本。</p>
+     */
+    int updateSessionRunFinishKeepingSummary(String sessionId,
+                                             int status,
+                                             int finishedDelta,
+                                             int failedDelta,
+                                             LocalDateTime lastActiveAt);
 }

@@ -139,8 +139,10 @@ public class ChannelAutoConfiguration {
 
     @Bean
     public QqBotQrGateway qqBotQrGateway(QqBotOnboardClient onboardClient,
-                                         ChannelBindingRepository channelBindingRepository) {
-        return new QqBotQrGateway(onboardClient, channelBindingRepository);
+                                         ChannelBindingRepository channelBindingRepository,
+                                         ChannelProperties channelProperties) {
+        return new QqBotQrGateway(onboardClient, channelBindingRepository,
+                channelProperties.getMaxBindings());
     }
 
     @Bean

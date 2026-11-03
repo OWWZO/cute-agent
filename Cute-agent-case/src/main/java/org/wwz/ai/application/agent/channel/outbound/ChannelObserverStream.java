@@ -44,4 +44,9 @@ public class ChannelObserverStream implements AgentSessionStream {
     public boolean isAborted() {
         return false;
     }
+
+    /** IM 观察者没有下游连接可断开；显式声明空操作，避免依赖端口默认实现。 */
+    @Override
+    public void onAbort(Runnable abortHandler) {
+    }
 }

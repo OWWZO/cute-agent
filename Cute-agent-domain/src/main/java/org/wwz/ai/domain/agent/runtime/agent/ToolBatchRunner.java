@@ -97,12 +97,14 @@ final class ToolBatchRunner {
             cancelAll(executionFutures);
         } catch (ExecutionException e) {
             Throwable root = unwrap(e.getCause());
+            // 批次截止时间由上面的 polling 分支负责；这里的 TimeoutException 来自工具/HTTP 自身，
+            // 不能当成批次超时，也不影响「join 失败必须终止同批未完成工具」。
             if (root instanceof TimeoutException) {
-                log.error("{} tool batch timed out after {}s", requestId(), timeoutSeconds);
-                cancelAll(executionFutures);
+                log.error("{} tool execution timed out; cancelling unfinished siblings", requestId(), root);
             } else {
-                log.error("{} tool batch join failed", requestId(), root);
+                log.error("{} tool batch join failed; cancelling unfinished siblings", requestId(), root);
             }
+            cancelAll(executionFutures);
         }
     }
 

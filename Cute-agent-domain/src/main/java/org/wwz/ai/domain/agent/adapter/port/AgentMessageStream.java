@@ -24,9 +24,12 @@ public interface AgentMessageStream {
      * 注册下游异常中断后的回调。
      * 典型场景是浏览器主动断开 SSE，此时调用方可以解绑观察流；是否取消后台 run
      * 由调用方根据业务语义决定，客户端断开本身不等于用户主动停止。
+     * <p><b>实现必须覆盖本方法。</b>故意不提供空默认实现：漏实现会让断开的流永远挂在
+     * {@code ActiveAgentRunRegistry} 上（见 {@code bindStream} 的 detach 回调），
+     * 后续发送落到已关闭的传输层。确实没有中断语义的实现（如 IM 观察者）也必须显式
+     * 声明为空操作，而不是依赖默认值。</p>
      */
-    default void onAbort(Runnable abortHandler) {
-    }
+    void onAbort(Runnable abortHandler);
 
     /**
      * 当前下游输出链路是否已经异常中断。

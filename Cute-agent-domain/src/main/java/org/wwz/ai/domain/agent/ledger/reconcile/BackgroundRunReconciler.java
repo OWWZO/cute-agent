@@ -40,6 +40,9 @@ public class BackgroundRunReconciler {
     /** 单表扫描的分页上限，防止极端数据量下一页拉爆内存；也用于判断「是否还有下一页」。 */
     private static final int MAX_PAGES = 200;
 
+    /** 会话结算的重试次数：run 已终态后不会被重新扫描，瞬时失败必须在这里重试。 */
+    private static final int SESSION_SETTLE_ATTEMPTS = 3;
+
     private final IExecutionLedgerReconcileRepository repository;
     private final TasklistPersistencePort tasklist;
     private final long graceMs;
@@ -95,7 +98,7 @@ public class BackgroundRunReconciler {
                     continue;
                 }
                 try {
-                    int settled = settleRun(run, now);
+                    int settled = settleRun(run, now, report);
                     converged += settled;
                     pageConverged += settled;
                 } catch (Exception e) {
@@ -115,7 +118,7 @@ public class BackgroundRunReconciler {
         return converged;
     }
 
-    private int settleRun(DialogueRun run, LocalDateTime now) {
+    private int settleRun(DialogueRun run, LocalDateTime now, Report report) {
         run.setStatus(ExecutionLedgerConstants.STATUS_STOPPED);
         run.setErrorCode(ERROR_CODE_SERVER_RESTART);
         run.setErrorMsg(REASON_SERVER_RESTART);
@@ -131,25 +134,54 @@ public class BackgroundRunReconciler {
         if (StringUtils.isBlank(run.getSessionId())) {
             return 1;
         }
-        // STOPPED 计入 finished 与 failed（与 AgentExecutionRecorderImpl.isFailedStatus 一致），
-        // latestSummaryText 传回会话现值：该 UPDATE 是无条件覆盖，不能把既有摘要写成 null。
+        // STOPPED 计入 finished 与 failed（与 AgentExecutionRecorderImpl.isFailedStatus 一致）。
+        // 摘要该 UPDATE 是无条件覆盖：只有确实读到会话现值时才走覆盖版本，
+        // 读取失败必须走不碰摘要列的结算，否则一次瞬时读故障就会清空既有摘要。
         String summary = null;
+        boolean summaryRead = false;
         try {
             DialogueSession session = repository.querySessionBySessionId(run.getSessionId());
             if (session != null) {
                 summary = session.getLatestSummaryText();
+                summaryRead = true;
             }
-        } catch (Exception ignored) {
-            // 读不到就维持不覆盖风险的默认值
+        } catch (Exception e) {
+            report.addError("session_summary#" + run.getId(), e);
         }
-        repository.updateSessionRunFinish(
-                run.getSessionId(),
-                ExecutionLedgerConstants.STATUS_STOPPED,
-                summary,
-                1,
-                1,
-                now);
+        settleSession(run, now, summary, summaryRead, report);
         return 1;
+    }
+
+    /**
+     * 会话结算独立收口：run 已经是终态，不再会被下一轮扫描命中，
+     * 因此这里失败必须记录并重试，不能把计数永久丢掉。
+     */
+    private void settleSession(DialogueRun run, LocalDateTime now, String summary, boolean summaryRead, Report report) {
+        for (int attempt = 1; attempt <= SESSION_SETTLE_ATTEMPTS; attempt++) {
+            try {
+                if (summaryRead) {
+                    repository.updateSessionRunFinish(
+                            run.getSessionId(),
+                            ExecutionLedgerConstants.STATUS_STOPPED,
+                            summary,
+                            1,
+                            1,
+                            now);
+                } else {
+                    repository.updateSessionRunFinishKeepingSummary(
+                            run.getSessionId(),
+                            ExecutionLedgerConstants.STATUS_STOPPED,
+                            1,
+                            1,
+                            now);
+                }
+                return;
+            } catch (Exception e) {
+                if (attempt >= SESSION_SETTLE_ATTEMPTS) {
+                    report.addError("session_settle#" + run.getId(), e);
+                }
+            }
+        }
     }
 
     /** Z2：父 run 已终态但仍 running 的工具 → STOPPED；回放投影据此生成终态 {@code tool_result}。 */

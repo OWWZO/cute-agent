@@ -2,6 +2,9 @@ package org.wwz.ai.domain.agent.ledger.impl;
 
 import org.junit.Assert;
 import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunFinishRecord;
@@ -31,11 +34,18 @@ public class AgentExecutionRecorderFinishRunNullTest {
 
     @Test
     public void nullStatusShouldBeRejectedBeforeAnyWrite() {
-        recorder.finishRun(DialogueRunFinishRecord.builder()
-                .runId(1L)
-                .requestId("req-1")
-                .status(null)
-                .build());
+
+        // B4 把「status 非空」上提到 DTO 构造器：构建期直接拒绝，比 finishRun 静默返回更严格。
+        try {
+            DialogueRunFinishRecord.builder()
+                    .runId(1L)
+                    .requestId("req-1")
+                    .status(null)
+                    .build();
+            fail("status=null 必须在构建期被拒绝");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("status"));
+        }
 
         verify(repository, never()).queryRunByRequestId(anyString());
         verify(repository, never()).updateRunFinish(any());

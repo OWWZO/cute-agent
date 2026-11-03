@@ -371,6 +371,11 @@ public class MultiAgentServiceImplTest {
             completedSignal.countDown();
         }
 
+        @Override
+        public void onAbort(Runnable abortHandler) {
+            // 本 fake 不模拟下游断开
+        }
+
         private boolean awaitCompleted() {
             try {
                 return completedSignal.await(3, TimeUnit.SECONDS);

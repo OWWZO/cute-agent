@@ -174,6 +174,38 @@ public class BackgroundRunReconcilerTest {
     }
 
     @Test
+    public void shouldNotOverwriteSummaryWhenSessionReadFails() {
+        DialogueRun run = repository.insertRun("req-summary", "sess-summary", NOW.minusMinutes(30));
+        repository.insertSession("sess-summary", "既有摘要");
+        repository.failSummaryQuery = true;
+
+        BackgroundRunReconciler.Report report = reconciler().reconcile(NOW);
+
+        Assert.assertEquals(1, report.getRunConverged());
+        Assert.assertEquals("读不到摘要时必须走不覆盖摘要的结算", 1, repository.keepSummarySettleCalls);
+        DialogueSession session = repository.sessions.get("sess-summary");
+        Assert.assertEquals("既有摘要", session.getLatestSummaryText());
+        Assert.assertEquals(Integer.valueOf(1), session.getFinishedRunCount());
+        Assert.assertEquals(Integer.valueOf(1), session.getFailedRunCount());
+    }
+
+    @Test
+    public void shouldRetrySessionSettlementAfterTransientFailure() {
+        repository.insertRun("req-retry", "sess-retry", NOW.minusMinutes(30));
+        repository.insertSession("sess-retry", "摘要");
+        repository.failSessionSettleTimes = 1;
+
+        BackgroundRunReconciler.Report report = reconciler().reconcile(NOW);
+
+        Assert.assertEquals(1, report.getRunConverged());
+        Assert.assertFalse("瞬时失败重试后不应留下错误", report.hasErrors());
+        Assert.assertEquals(2, repository.sessionSettleCalls);
+        DialogueSession session = repository.sessions.get("sess-retry");
+        Assert.assertEquals(Integer.valueOf(1), session.getFinishedRunCount());
+        Assert.assertEquals("摘要", session.getLatestSummaryText());
+    }
+
+    @Test
     public void shouldSkipTaskReconcileWhenPersistenceAbsent() {
         BackgroundRunReconciler reconciler = new BackgroundRunReconciler(repository, null, GRACE_MS, BATCH);
         repository.backgroundTasks.add(OrphanBackgroundTaskRow.builder()
@@ -287,6 +319,10 @@ public class BackgroundRunReconcilerTest {
         private final List<OrphanBackgroundTaskRow> backgroundTasks = new ArrayList<>();
         private boolean failRunScan = false;
         private boolean failRunSettle = false;
+        private boolean failSummaryQuery = false;
+        private int failSessionSettleTimes = 0;
+        private int sessionSettleCalls = 0;
+        private int keepSummarySettleCalls = 0;
         private int runScanCalls = 0;
         private int taskScanCalls = 0;
         private int runSettleCalls = 0;
@@ -410,7 +446,21 @@ public class BackgroundRunReconcilerTest {
 
         @Override
         public DialogueSession querySessionBySessionId(String sessionId) {
+            if (failSummaryQuery) {
+                throw new IllegalStateException("simulated summary read failure");
+            }
             return sessionId == null ? null : sessions.get(sessionId);
+        }
+
+        @Override
+        public int updateSessionRunFinishKeepingSummary(String sessionId,
+                                                        int status,
+                                                        int finishedDelta,
+                                                        int failedDelta,
+                                                        LocalDateTime lastActiveAt) {
+            keepSummarySettleCalls++;
+            return applySessionSettlement(sessionId, status, null, finishedDelta, failedDelta,
+                    lastActiveAt, false);
         }
 
         @Override
@@ -420,12 +470,30 @@ public class BackgroundRunReconcilerTest {
                                           int finishedDelta,
                                           int failedDelta,
                                           LocalDateTime lastActiveAt) {
+            return applySessionSettlement(sessionId, status, latestSummaryText, finishedDelta,
+                    failedDelta, lastActiveAt, true);
+        }
+
+        private int applySessionSettlement(String sessionId,
+                                           int status,
+                                           String latestSummaryText,
+                                           int finishedDelta,
+                                           int failedDelta,
+                                           LocalDateTime lastActiveAt,
+                                           boolean overwriteSummary) {
+            sessionSettleCalls++;
+            if (failSessionSettleTimes > 0) {
+                failSessionSettleTimes--;
+                throw new IllegalStateException("simulated session settle failure");
+            }
             DialogueSession session = sessions.get(sessionId);
             if (session == null) {
                 return 0;
             }
             session.setStatus(status);
-            session.setLatestSummaryText(latestSummaryText);
+            if (overwriteSummary) {
+                session.setLatestSummaryText(latestSummaryText);
+            }
             session.setFinishedRunCount(session.getFinishedRunCount() + finishedDelta);
             session.setFailedRunCount(session.getFailedRunCount() + failedDelta);
             session.setLastActiveAt(lastActiveAt);

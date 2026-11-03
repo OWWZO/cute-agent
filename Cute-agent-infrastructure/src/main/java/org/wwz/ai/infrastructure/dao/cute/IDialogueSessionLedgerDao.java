@@ -33,6 +33,15 @@ public interface IDialogueSessionLedgerDao {
                                @Param("failedDelta") int failedDelta,
                                @Param("lastActiveAt") LocalDateTime lastActiveAt);
 
+    /**
+     * 同上，但不写 {@code latest_summary_text}：摘要读取失败时的安全结算路径。
+     */
+    int updateSessionRunFinishKeepingSummary(@Param("sessionId") String sessionId,
+                                             @Param("status") int status,
+                                             @Param("finishedDelta") int finishedDelta,
+                                             @Param("failedDelta") int failedDelta,
+                                             @Param("lastActiveAt") LocalDateTime lastActiveAt);
+
     DialogueSession queryBySessionId(@Param("sessionId") String sessionId);
 
     DialogueSession querySessionOwnership(@Param("sessionId") String sessionId);

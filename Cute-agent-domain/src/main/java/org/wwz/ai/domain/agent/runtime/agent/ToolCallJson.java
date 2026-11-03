@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 工具调用链路共用的 JSON 归一。
@@ -12,6 +14,9 @@ import org.apache.commons.lang3.StringUtils;
  * 因此统一在这里退化为 {@code "{}"}，避免每个调用点各写一套 try/catch。
  */
 final class ToolCallJson {
+
+    private static final Logger log = LoggerFactory.getLogger(ToolCallJson.class);
+    private static final int LOG_PAYLOAD_LIMIT = 512;
 
     /** 小数保留为 BigDecimal，避免高精度坐标/金额在归一过程中丢精度。 */
     static final ObjectMapper MAPPER = new ObjectMapper()
@@ -29,7 +34,10 @@ final class ToolCallJson {
             JsonNode node = MAPPER.readTree(payload);
             // "null" 会解析成 NullNode；数组/标量同样不是工具入参对象，统一退化为 {}。
             return node != null && node.isObject() ? node.toString() : "{}";
-        } catch (Exception ignore) {
+        } catch (Exception e) {
+            // 退化本身必须可观测：否则损坏的模型输出会被当成「模型传了空参数」。
+            log.warn("tool args json normalize failed, degrade to {}: payload={} error={}",
+                    abbreviate(payload), e.getMessage());
             return "{}";
         }
     }
@@ -47,8 +55,15 @@ final class ToolCallJson {
     static String write(Object value) {
         try {
             return MAPPER.writeValueAsString(value);
-        } catch (Exception ignore) {
+        } catch (Exception e) {
+            log.warn("tool args json write failed, degrade to {}: {}", e.getMessage());
             return "{}";
         }
+    }
+
+    private static String abbreviate(String payload) {
+        return payload.length() <= LOG_PAYLOAD_LIMIT
+                ? payload
+                : payload.substring(0, LOG_PAYLOAD_LIMIT) + "...(truncated, total=" + payload.length() + ")";
     }
 }

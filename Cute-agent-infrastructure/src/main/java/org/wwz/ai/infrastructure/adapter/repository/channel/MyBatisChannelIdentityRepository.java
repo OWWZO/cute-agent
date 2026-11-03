@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.adapter.repository.channel;
 
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.wwz.ai.domain.agent.channel.model.ChannelIdentity;
 import org.wwz.ai.domain.agent.channel.port.ChannelIdentityRepository;
 import org.wwz.ai.domain.agent.channel.policy.ChannelUserId;
@@ -51,8 +52,22 @@ public class MyBatisChannelIdentityRepository implements ChannelIdentityReposito
                 .firstSeenAt(now)
                 .lastSeenAt(now)
                 .build();
-        dao.insert(po);
-        return toDomain(po);
+        try {
+            dao.insert(po);
+            return toDomain(po);
+        } catch (DataIntegrityViolationException conflict) {
+            // 跨实例并发首次见同一 platform 用户：唯一索引挡下后回查赢家，不能把异常抛给调用方。
+            AiAgentChannelIdentityPO winner = dao.query(bindingId, platform, platformUserId);
+            if (winner == null) {
+                throw conflict;
+            }
+            dao.touch(winner.getId(), displayName, now);
+            winner.setLastSeenAt(now);
+            if (StringUtils.isNotBlank(displayName)) {
+                winner.setDisplayName(displayName);
+            }
+            return toDomain(winner);
+        }
     }
 
     private ChannelIdentity toDomain(AiAgentChannelIdentityPO po) {

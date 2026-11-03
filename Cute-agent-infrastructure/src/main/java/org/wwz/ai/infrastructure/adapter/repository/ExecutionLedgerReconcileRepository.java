@@ -91,6 +91,16 @@ public class ExecutionLedgerReconcileRepository implements IExecutionLedgerRecon
                 sessionId, status, latestSummaryText, finishedDelta, failedDelta, lastActiveAt);
     }
 
+    @Override
+    public int updateSessionRunFinishKeepingSummary(String sessionId,
+                                                    int status,
+                                                    int finishedDelta,
+                                                    int failedDelta,
+                                                    LocalDateTime lastActiveAt) {
+        return dialogueSessionLedgerDao.updateSessionRunFinishKeepingSummary(
+                sessionId, status, finishedDelta, failedDelta, lastActiveAt);
+    }
+
     private static <T> List<T> nullToEmpty(List<T> rows) {
         return rows == null ? List.of() : rows;
     }

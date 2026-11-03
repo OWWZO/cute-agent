@@ -48,6 +48,21 @@ public class SendMessageMailboxTest {
     }
 
     @Test
+    public void tryMarkActiveClaimsOnlyOnce() {
+        String session = "sess-claim";
+        String agentId = "agent-claim";
+
+        Assert.assertTrue(SessionAgentMailboxHub.tryMarkActive(session, agentId));
+        Assert.assertFalse("第二个并发启动必须被占位挡住",
+                SessionAgentMailboxHub.tryMarkActive(session, agentId));
+        Assert.assertTrue(SessionAgentMailboxHub.isActive(session, agentId));
+
+        SessionAgentMailboxHub.markActive(session, agentId, false);
+        Assert.assertTrue("上一次运行收尾后必须可以重新占位",
+                SessionAgentMailboxHub.tryMarkActive(session, agentId));
+    }
+
+    @Test
     public void inactiveAfterMarkFalse() {
         SessionAgentMailboxHub.markActive("s", "a", true);
         SessionAgentMailboxHub.offer("s", "a", PendingInjectMessage.builder()

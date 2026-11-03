@@ -22,7 +22,15 @@ public interface IChatModelMetadataRepository {
     /** 直接插入，不做 upsert；调用方负责先清理同名旧行。 */
     void saveModelInfo(ChatModelInfo modelInfo);
 
+    /** 删除模型行；未命中时为空操作（幂等，可直接重试）。 */
     void deleteModelInfoByCode(String modelCode);
+
+    /**
+     * 原子删除某模型的模型行 + 字段行。
+     * <p>两次独立删除之间失败会留下仍参与召回的孤儿 schema 行，因此调用方清理单个模型时
+     * 必须走本方法；实现必须在同一个事务内完成两次删除。未命中行时为空操作（幂等）。</p>
+     */
+    void deleteByModelCode(String modelCode);
 
     /**
      * 每个列标识只返回一条；重复行按 id 倒序取最新一条。
@@ -41,5 +49,6 @@ public interface IChatModelMetadataRepository {
     /** 逐个插入，不做 upsert；入参为 null/空时为空操作。 */
     void saveModelSchemas(List<ChatModelSchema> schemaList);
 
+    /** 删除字段行；未命中时为空操作（幂等，可直接重试）。 */
     void deleteModelSchemasByCode(String modelCode);
 }

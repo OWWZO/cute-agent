@@ -19,6 +19,14 @@ import java.util.regex.Pattern;
 @AllArgsConstructor
 public class PlanStreamPayload {
 
+    /**
+     * 「执行顺序 N. 阶段：步骤」拆分。
+     * <p>阶段组必须拒绝冒号且不跨行（否则贪婪匹配会吞到最后一个冒号）；
+     * 步骤组允许换行。整串必须匹配，避免带前缀的文本被静默截取。</p>
+     */
+    private static final Pattern STEP_PATTERN = Pattern.compile(
+            "执行顺序(\\d+)\\.\\s?([^：:\\n]*?)\\s?[：:]([\\s\\S]*)");
+
     private String title;
     private List<String> stages;
     private List<String> steps;
@@ -39,15 +47,14 @@ public class PlanStreamPayload {
                 .stepStatus(new ArrayList<>())
                 .notes(new ArrayList<>())
                 .build();
-        Pattern pattern = Pattern.compile("执行顺序(\\d+)\\.\\s?([\\w\\W]*)\\s?[：:](.*)");
         List<String> sourceSteps = plan.getSteps() == null ? List.of() : plan.getSteps();
         for (int i = 0; i < sourceSteps.size(); i++) {
             addAt(formatted.getStepStatus(), plan.getStepStatus(), i);
             addAt(formatted.getNotes(), plan.getNotes(), i);
 
             String step = sourceSteps.get(i);
-            Matcher matcher = pattern.matcher(step == null ? "" : step);
-            if (matcher.find()) {
+            Matcher matcher = STEP_PATTERN.matcher(step == null ? "" : step.trim());
+            if (matcher.matches()) {
                 formatted.getSteps().add(matcher.group(3).trim());
                 formatted.getStages().add(matcher.group(2).trim());
             } else {

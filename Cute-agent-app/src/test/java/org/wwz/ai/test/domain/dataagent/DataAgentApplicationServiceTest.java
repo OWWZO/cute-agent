@@ -66,5 +66,10 @@ public class DataAgentApplicationServiceTest {
         public void completeWithError(Throwable throwable) {
             throw new AssertionError(throwable);
         }
+
+        @Override
+        public void onAbort(Runnable abortHandler) {
+            // 本 fake 不模拟下游断开
+        }
     }
 }

@@ -78,8 +78,17 @@ public class TaskStopTool implements BaseTool {
                         null,
                         "not_running");
             }
-            RuntimeBackgroundTask stopped = context.requireBackgroundTasks()
-                    .stop(before.getId()).orElse(before);
+            Optional<RuntimeBackgroundTask> stopResult = context.requireBackgroundTasks()
+                    .stop(before.getId());
+            if (stopResult.isEmpty()) {
+                // 任务行已不在注册表：什么都没停，不能回退成停止前的快照谎报成功。
+                return ToolResultPayload.failure(
+                        "TaskStop 失败：agentId=" + agentId + " 的任务已不存在（可能已被并发清理）",
+                        "Task not found: agentId=" + agentId,
+                        null,
+                        "not_found");
+            }
+            RuntimeBackgroundTask stopped = stopResult.get();
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("message", "已停止后台子 Agent " + agentId + "（已发送取消令牌）");
             fields.put("agent_id", agentId);

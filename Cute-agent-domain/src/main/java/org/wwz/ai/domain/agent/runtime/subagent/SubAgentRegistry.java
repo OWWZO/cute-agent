@@ -21,7 +21,11 @@ public class SubAgentRegistry {
     public static final String TYPE_GENERAL_PURPOSE = "general-purpose";
 
     private final Map<String, SubAgentDefinition> builtins = new LinkedHashMap<>();
-    private final Map<String, SubAgentDefinition> configured = new ConcurrentHashMap<>();
+    /**
+     * 可配置层整体快照：读完即发布新引用，读者永远看到完整的一代，
+     * 不会在 clear + putAll 之间观察到空表或部分表。
+     */
+    private volatile Map<String, SubAgentDefinition> configured = Map.of();
 
     public SubAgentRegistry() {
         registerBuiltin(buildGeneralPurpose());
@@ -39,7 +43,12 @@ public class SubAgentRegistry {
      * 若 key 与内置同名，写入 configured 可覆盖内置（除硬保护外，见 replaceConfigured）。
      */
     public void register(SubAgentDefinition definition) {
-        putValidated(configured, definition);
+        // 读-改-写必须串行，否则与 replaceConfigured 并发时会丢失刚注册的类型。
+        synchronized (this) {
+            Map<String, SubAgentDefinition> next = new ConcurrentHashMap<>(configured);
+            putValidated(next, definition);
+            configured = next;
+        }
     }
 
     /**
@@ -62,8 +71,9 @@ public class SubAgentRegistry {
                 next.put(key, normalize(definition));
             }
         }
-        configured.clear();
-        configured.putAll(next);
+        synchronized (this) {
+            configured = next;
+        }
     }
 
     public Optional<SubAgentDefinition> find(String agentType) {
@@ -71,7 +81,8 @@ public class SubAgentRegistry {
             return Optional.empty();
         }
         String key = agentType.trim();
-        SubAgentDefinition configuredDef = configured.get(key);
+        Map<String, SubAgentDefinition> snapshot = configured;
+        SubAgentDefinition configuredDef = snapshot.get(key);
         if (configuredDef != null) {
             return Optional.of(configuredDef);
         }
@@ -94,16 +105,18 @@ public class SubAgentRegistry {
      * 合并列表：内置在前，可配置在后（同 key 已在 replace 时去重）。
      */
     public Collection<SubAgentDefinition> list() {
-        List<SubAgentDefinition> all = new ArrayList<>(builtins.size() + configured.size());
+        Map<String, SubAgentDefinition> snapshot = configured;
+        List<SubAgentDefinition> all = new ArrayList<>(builtins.size() + snapshot.size());
         all.addAll(builtins.values());
-        all.addAll(configured.values());
+        all.addAll(snapshot.values());
         return all;
     }
 
     public List<String> listTypeNames() {
+        Map<String, SubAgentDefinition> snapshot = configured;
         List<String> names = new ArrayList<>();
         names.addAll(builtins.keySet());
-        names.addAll(configured.keySet());
+        names.addAll(snapshot.keySet());
         return names;
     }
 

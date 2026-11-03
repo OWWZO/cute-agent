@@ -706,6 +706,29 @@ public final class ExecutionLedgerFixtureFactory {
             return 1;
         }
 
+        @Override
+        public int updateSessionRunFinishKeepingSummary(String sessionId,
+                                                        int status,
+                                                        int finishedDelta,
+                                                        int failedDelta,
+                                                        LocalDateTime lastActiveAt) {
+            DialogueSession session = store.sessions.values().stream()
+                    .filter(item -> item.getDeleted() == 0
+                            && sessionId != null
+                            && sessionId.equals(item.getSessionId()))
+                    .findFirst()
+                    .orElse(null);
+            if (session == null) {
+                return 0;
+            }
+            session.setStatus(status);
+            session.setFinishedRunCount(defaultCount(session.getFinishedRunCount()) + finishedDelta);
+            session.setFailedRunCount(defaultCount(session.getFailedRunCount()) + failedDelta);
+            session.setLastActiveAt(lastActiveAt);
+            session.setUpdateTime(LocalDateTime.now());
+            return 1;
+        }
+
         private static int defaultCount(Integer value) {
             return value == null ? 0 : value;
         }
