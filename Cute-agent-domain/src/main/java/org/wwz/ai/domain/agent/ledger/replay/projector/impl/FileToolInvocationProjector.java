@@ -5,6 +5,7 @@ import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.ledger.model.replay.ProjectedReplayEvent;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.FileToolOutput;
+import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputNames;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 
 import java.util.LinkedHashMap;
@@ -21,7 +22,7 @@ public class FileToolInvocationProjector extends AbstractToolInvocationProjector
 
     @Override
     public boolean supports(String toolName) {
-        return "file_tool".equals(toolName);
+        return ToolOutputNames.FILE_TOOL.equals(toolName);
     }
 
     @Override

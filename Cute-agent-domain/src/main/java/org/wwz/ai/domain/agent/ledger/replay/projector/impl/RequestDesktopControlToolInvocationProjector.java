@@ -39,11 +39,12 @@ public class RequestDesktopControlToolInvocationProjector extends AbstractToolIn
         Map<String, Object> input = readMap(invocation == null ? null : invocation.getInputJson());
         Map<String, Object> observation = readMap(invocation == null ? null : StringUtils.defaultIfBlank(
                 invocation.getToolResult(), invocation.getLlmObservation()));
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("messageType", "desktop_control");
-
         String controlId = stringValue(observation.get("controlId"));
         DesktopControlRecord persisted = findPersisted(controlId, invocation);
+        Map<String, Object> payload = persisted == null
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(DesktopControlObservationSupport.toReplayPayload(persisted));
+        payload.put("messageType", "desktop_control");
         String resolvedControlId = StringUtils.defaultIfBlank(
                 controlId,
                 persisted == null ? null : persisted.getControlId()
@@ -58,6 +59,8 @@ public class RequestDesktopControlToolInvocationProjector extends AbstractToolIn
         }
         if (StringUtils.isNotBlank(reason)) {
             payload.put("reason", reason);
+        } else {
+            payload.remove("reason");
         }
         payload.put("input", input);
 
@@ -94,8 +97,5 @@ public class RequestDesktopControlToolInvocationProjector extends AbstractToolIn
                 DesktopControlRecord::getToolInvocationId,
                 DesktopControlRecord::getToolCallId
         );
-    }
-    private String stringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
     }
 }

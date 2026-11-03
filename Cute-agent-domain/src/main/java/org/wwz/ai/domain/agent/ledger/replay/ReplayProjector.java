@@ -530,18 +530,18 @@ public class ReplayProjector {
         return base;
     }
 
-    private Object buildLlmResponse(ReplayFactBundle bundle,
-                                    LlmInvocationView invocation,
-                                    String messageType,
-                                    String plannerRoundId) {
+    private Map<String, Object> buildLlmResponse(ReplayFactBundle bundle,
+                                                 LlmInvocationView invocation,
+                                                 String messageType,
+                                                 String plannerRoundId) {
         return buildLlmResponse(bundle, invocation, messageType, plannerRoundId, null);
     }
 
-    private Object buildLlmResponse(ReplayFactBundle bundle,
-                                    LlmInvocationView invocation,
-                                    String messageType,
-                                    String plannerRoundId,
-                                    String parentToolUseId) {
+    private Map<String, Object> buildLlmResponse(ReplayFactBundle bundle,
+                                                 LlmInvocationView invocation,
+                                                 String messageType,
+                                                 String plannerRoundId,
+                                                 String parentToolUseId) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("requestId", bundle == null || bundle.getRun() == null ? null : bundle.getRun().getRequestId());
         response.put("messageId", resolveLlmMessageId(invocation, messageType));

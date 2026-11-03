@@ -46,7 +46,6 @@ public class LtmForkRunResult {
                                            int entriesBefore, long durationMs) {
         return LtmForkRunResult.builder()
                 .status(STATUS_TIMEOUT)
-                .skipReason("timeout")
                 .errorMessage("fork timed out")
                 .forkRequestId(forkRequestId)
                 .forkLabel(forkLabel)

@@ -6,6 +6,7 @@ import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 import org.wwz.ai.domain.agent.ledger.model.replay.ProjectedReplayEvent;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DataAnalysisToolOutput;
+import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputNames;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,7 +22,7 @@ public class DataAnalysisToolInvocationProjector extends AbstractToolInvocationP
 
     @Override
     public boolean supports(String toolName) {
-        return "data_analysis".equals(toolName);
+        return ToolOutputNames.DATA_ANALYSIS.equals(toolName);
     }
 
     @Override
@@ -46,8 +47,8 @@ public class DataAnalysisToolInvocationProjector extends AbstractToolInvocationP
         return List.of(buildTaskEvent(
                 state,
                 invocation,
-                "data_analysis",
-                buildStructuredToolResponse(invocation, "data_analysis", resultMap),
+                ToolOutputNames.DATA_ANALYSIS,
+                buildStructuredToolResponse(invocation, ToolOutputNames.DATA_ANALYSIS, resultMap),
                 buildArtifactRefs(artifacts)
         ));
     }

@@ -30,6 +30,10 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    protected String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
     protected Map<String, Object> readMap(String text) {
         if (StringUtils.isBlank(text)) {
             return new LinkedHashMap<>();

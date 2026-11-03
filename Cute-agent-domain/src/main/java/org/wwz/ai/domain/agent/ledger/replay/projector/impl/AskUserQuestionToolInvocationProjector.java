@@ -105,7 +105,4 @@ public class AskUserQuestionToolInvocationProjector extends AbstractToolInvocati
                 UserQuestionRecord::getToolCallId
         );
     }
-    private String stringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
-    }
 }

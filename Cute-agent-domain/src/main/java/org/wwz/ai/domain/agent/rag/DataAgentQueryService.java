@@ -9,7 +9,6 @@ import org.wwz.ai.domain.agent.rag.model.query.Nl2SqlQuery;
 import org.wwz.ai.domain.agent.rag.model.query.SqlExecutionResult;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryModelDescriptor;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -20,7 +19,7 @@ public interface DataAgentQueryService {
 
     List<Map<String, Object>> recallSchemaColumns(ColumnSchemaRecallQuery query);
 
-    List<Map<String, Object>> recallColumnValues(ColumnValueSearchRequest query) throws IOException;
+    List<Map<String, Object>> recallColumnValues(ColumnValueSearchRequest query);
 
     void chatQuery(DataAgentChatQuery query, AgentMessageStream stream) throws Exception;
 
@@ -28,9 +27,9 @@ public interface DataAgentQueryService {
 
     SqlExecutionResult testQuery(DataAgentChatQuery query);
 
-    Nl2SqlQuery buildNl2SqlQuery(String query) throws Exception;
+    Nl2SqlQuery buildNl2SqlQuery(String query);
 
     List<DataQueryModelDescriptor> queryAllModelsWithSchema();
 
-    SqlExecutionResult previewData(String modelCode) throws Exception;
+    SqlExecutionResult previewData(String modelCode);
 }

@@ -53,10 +53,7 @@ public final class LtmPromptGuidance {
                     + "and high-signal.\n"
                     + PRIORITY + "\n"
                     + TARGET_USER + ". " + TARGET_CURATED + ".\n"
-                    + "Do NOT save task progress, session outcomes, completed-work logs, or temporary TODO "
-                    + "state; use session_search for those. "
-                    + "Specifically: do not record PR numbers, issue numbers, commit SHAs, 'fixed bug X', "
-                    + "'submitted PR Y', 'Phase N done', file counts, or anything stale within 7 days.\n"
+                    + SKIP + "\n"
                     + STYLE + " Procedures and workflows belong in skills/SOP, not memory.";
 
     public static final String SESSION_SEARCH_GUIDANCE =
@@ -151,15 +148,6 @@ public final class LtmPromptGuidance {
                     + SKIP + "\n\n"
                     + FORK_RUNTIME_TOOL_NOTE_MEMORY + "\n"
                     + "If nothing durable is missing from memory, call nothing and finish.";
-
-    /**
-     * @deprecated Hermes 对齐后禁止改写父 system；保留常量以免旧测试/引用断裂。
-     */
-    @Deprecated
-    public static final String FORK_SYSTEM_DIRECTIVE =
-            "# LTM fork directive\n"
-                    + "You may ONLY use the memory tool. Do not call any other tools.\n"
-                    + MEMORY_GUIDANCE;
 
     /** Inline nudge when main agent is about to compact (still has full tools). */
     public static final String FLUSH_INLINE_NUDGE =

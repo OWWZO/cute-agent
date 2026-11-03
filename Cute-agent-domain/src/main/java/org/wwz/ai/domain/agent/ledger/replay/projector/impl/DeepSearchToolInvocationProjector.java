@@ -10,6 +10,7 @@ import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchDoc;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchQueryResult;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchStage;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchToolOutput;
+import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputNames;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -27,7 +28,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
 
     @Override
     public boolean supports(String toolName) {
-        return "deep_search".equals(toolName);
+        return ToolOutputNames.DEEP_SEARCH.equals(toolName);
     }
 
     @Override
@@ -61,8 +62,8 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
             events.add(buildTaskEvent(
                     state,
                     invocation,
-                    "deep_search",
-                    buildStructuredToolResponse(invocation, "deep_search", resultMap),
+                    ToolOutputNames.DEEP_SEARCH,
+                    buildStructuredToolResponse(invocation, ToolOutputNames.DEEP_SEARCH, resultMap),
                     stageArtifactRefs
             ));
         }
@@ -97,20 +98,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
                 continue;
             }
             queries.add(StringUtils.defaultString(item.getQuery()));
-            List<Map<String, Object>> docList = new ArrayList<>();
-            for (DeepSearchDoc doc : item.getDocs()) {
-                if (doc == null) {
-                    continue;
-                }
-                Map<String, Object> docMap = new LinkedHashMap<>();
-                docMap.put("title", StringUtils.defaultString(doc.getTitle()));
-                docMap.put("link", StringUtils.defaultString(doc.getLink()));
-                if (StringUtils.isNotBlank(doc.getSummary())) {
-                    docMap.put("content", doc.getSummary());
-                }
-                docList.add(docMap);
-            }
-            docs.add(docList);
+            docs.add(toDocList(item.getDocs()));
         }
         Map<String, Object> searchResult = new LinkedHashMap<>();
         searchResult.put("query", queries);
@@ -165,20 +153,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
                 if (!queries.contains(StringUtils.defaultString(item.getQuery()))) {
                     queries.add(StringUtils.defaultString(item.getQuery()));
                 }
-                List<Map<String, Object>> docList = new ArrayList<>();
-                for (DeepSearchDoc doc : item.getDocs()) {
-                    if (doc == null) {
-                        continue;
-                    }
-                    Map<String, Object> docMap = new LinkedHashMap<>();
-                    docMap.put("title", StringUtils.defaultString(doc.getTitle()));
-                    docMap.put("link", StringUtils.defaultString(doc.getLink()));
-                    if (StringUtils.isNotBlank(doc.getSummary())) {
-                        docMap.put("content", doc.getSummary());
-                    }
-                    docList.add(docMap);
-                }
-                docs.add(docList);
+                docs.add(toDocList(item.getDocs()));
             }
         }
         Map<String, Object> searchResult = new LinkedHashMap<>();
@@ -186,6 +161,26 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
         searchResult.put("docs", docs);
         resultMap.put("searchResult", searchResult);
         return resultMap;
+    }
+
+    private List<Map<String, Object>> toDocList(List<DeepSearchDoc> docs) {
+        if (docs == null || docs.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<Map<String, Object>> result = new ArrayList<>(docs.size());
+        for (DeepSearchDoc doc : docs) {
+            if (doc == null) {
+                continue;
+            }
+            Map<String, Object> docMap = new LinkedHashMap<>();
+            docMap.put("title", StringUtils.defaultString(doc.getTitle()));
+            docMap.put("link", StringUtils.defaultString(doc.getLink()));
+            if (StringUtils.isNotBlank(doc.getSummary())) {
+                docMap.put("content", doc.getSummary());
+            }
+            result.add(docMap);
+        }
+        return result;
     }
 
     private Map<String, Object> buildReportResult(DeepSearchToolOutput output, DeepSearchStage stage) {
