@@ -8,11 +8,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from cute_tool.tool.docread._compat import get_struct_logger
+from cute_tool.tool.docread._compat import SyncTool, ToolCategory, ToolContext, get_struct_logger
 
 from cute_tool.tool.dataprep._data import build_result, load_records
 from cute_tool.tool.dataprep._data.tool_helpers import INPUT_SCHEMA_FRAGMENT
-from cute_tool.tool.docread._compat import SyncTool, ToolCategory, ToolContext
 
 logger = get_struct_logger(__name__)
 
@@ -195,7 +194,6 @@ class SQLQueryTool(SyncTool):
         except ImportError as e:
             raise RuntimeError("pandas is not installed. Install with: pip install pandas") from e
 
-        import re
         import sqlite3
 
         query = params["query"]

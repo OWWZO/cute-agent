@@ -34,6 +34,7 @@ def proxy_path_name(path: str) -> str:
 @router.post("/desktop_session/close")
 async def proxy_sandbox_tool(request: Request) -> Response:
     name = proxy_path_name(request.url.path)
+    # 装饰器已限制可代理路径；这里保留二级校验，防止路由扩展时意外转发未登记路径。
     if name not in _PROXY_PATHS:
         return Response(status_code=404, content=b'{"message":"unknown sandbox route"}')
 

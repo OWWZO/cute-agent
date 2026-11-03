@@ -104,20 +104,19 @@ class GetDataTool(Tool):
             # 一个自然语言查询可能拆成多个结果集；只有维度一致的结果才会被合并。
             df = self.merge_df(base_datas)
             # dfs = [self.to_df(bd) for bd in base_datas]
-            if base_datas:
-                pretty_sql = sqlparse.format(
-                    base_datas[0]["nl2sqlResult"],
-                    reindent=True,
-                    keyword_case="upper",
-                    strip_comments=True,
-                )
-                self.context.queue.put_nowait(
-                    {
-                        "requestId": self.context.request_id,
-                        "data": f"\n### 2. 取数 SQL\n```sql\n{pretty_sql.strip()}\n```\n",
-                        "isFinal": False,
-                    }
-                )
+            pretty_sql = sqlparse.format(
+                base_datas[0]["nl2sqlResult"],
+                reindent=True,
+                keyword_case="upper",
+                strip_comments=True,
+            )
+            self.context.queue.put_nowait(
+                {
+                    "requestId": self.context.request_id,
+                    "data": f"\n### 2. 取数 SQL\n```sql\n{pretty_sql.strip()}\n```\n",
+                    "isFinal": False,
+                }
+            )
             if len(df) == 0:
                 message = "取数返回空结果，无法完成分析"
                 self._record_data_fetch_failure(message)
@@ -194,19 +193,6 @@ class GetDataTool(Tool):
         guids = [c["guid"] for c in data["columnList"]]
         values = [[row.get(c) for c in guids] for row in data["dataList"]]
         return pd.DataFrame(values, columns=cols)
-
-    @staticmethod
-    def to_json(data: str):
-        if data.startswith("```json"):
-            data = data[len("```json") :]
-        if data.startswith("```"):
-            data = data[len("```") :]
-        if data.startswith("json"):
-            data = data[len("json") :]
-        if data.endswith("```"):
-            data = data[: -len("```")]
-        return json.loads(data)
-
 
 class InsightTool(Tool):
     name = "insight_analysis"

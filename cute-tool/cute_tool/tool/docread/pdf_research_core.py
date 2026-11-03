@@ -135,9 +135,7 @@ def _derive_sections(doc, outline: list[dict[str, Any]], page_count: int) -> lis
             title = None
             if match:
                 numbering, title = match.group(1), match.group(2).strip()
-            elif line.lower() in _SECTION_KEYWORDS or (
-                line.isupper() and 3 <= len(line) <= 40 and line.lower() in _SECTION_KEYWORDS
-            ):
+            elif line.lower() in _SECTION_KEYWORDS:
                 title = line.title() if line.isupper() else line
             elif line.lower().rstrip(":") in _SECTION_KEYWORDS:
                 title = line.rstrip(":")

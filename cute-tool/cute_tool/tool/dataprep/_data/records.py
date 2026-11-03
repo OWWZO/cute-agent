@@ -317,7 +317,6 @@ def emit_records(
         records,
         context,
         op_name=op_name,
-        size_bytes=encoded_size,
         schema=schema,
     )
     preview = records[:preview_rows]
@@ -364,7 +363,6 @@ def _spill_records(
     context: "ToolContext | None",
     *,
     op_name: str,
-    size_bytes: int,
     schema: TabularSchema,
 ) -> ArtifactRef:
     artifact_id = uuid.uuid4().hex[:12]

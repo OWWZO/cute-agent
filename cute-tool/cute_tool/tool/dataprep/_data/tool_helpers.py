@@ -100,11 +100,7 @@ INPUT_SCHEMA_FRAGMENT: dict[str, Any] = {
 }
 
 
-def extend_input_schema(
-    properties: dict[str, Any],
-    *,
-    extra_required: list[str] | None = None,
-) -> dict[str, Any]:
+def extend_input_schema(properties: dict[str, Any]) -> dict[str, Any]:
     """Merge :data:`INPUT_SCHEMA_FRAGMENT` into a tool's ``properties`` dict.
 
     ``properties`` is mutated and returned for convenience. ``data`` is

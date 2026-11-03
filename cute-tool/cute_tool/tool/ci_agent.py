@@ -4,27 +4,19 @@
 负责：代码解析、权限校验、运行时 I/O 守卫、最终答案判定、流式步骤产出。
 """
 import ast
-import json
-import os
 import re
-import time
 from collections.abc import Callable, Generator
 from typing import Any, Optional
 import uuid
 from smolagents import (
     CodeAgent,
-    ChatMessage,
-    MessageRole,
     AgentGenerationError,
-    BASE_BUILTIN_MODULES,
     LogLevel,
     AgentParsingError,
     fix_final_answer_code,
     parse_code_blobs,
     AgentExecutionError,
     ToolCall,
-    truncate_content,
-    YELLOW_HEX,
     ActionOutput,
     Model,
     Tool,
@@ -39,7 +31,6 @@ from rich.text import Text
 from rich.console import Group
 from rich.live import Live
 from rich.markdown import Markdown
-import json_repair
 
 from cute_tool.model.code import CodeOuput
 from cute_tool.tool.code_interpreter_policy import (
@@ -317,8 +308,6 @@ class CIAgent(CodeAgent):
             # 只有聚合后的完整消息才写回 memory，避免把半截 token 当成下一轮上下文。
             memory_step.model_output_message = chat_message
             output_text = chat_message.content
-            memory_step.model_output_message = chat_message
-            output_text = chat_message.content
 
             # This adds <end_code> sequence to the history.
             # This will nudge ulterior LLM calls to finish with <end_code>, thus efficiently stopping generation.
@@ -327,7 +316,6 @@ class CIAgent(CodeAgent):
                 memory_step.model_output_message.content = output_text
 
             memory_step.model_output = output_text
-            # This put call was missing await
 
         except Exception as e:
             raise AgentGenerationError(

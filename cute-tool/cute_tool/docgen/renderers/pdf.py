@@ -229,14 +229,6 @@ def spans_to_markup(
     return "".join(parts)
 
 
-def _markup(
-    text: str, *, mono_font: str, emoji_font: str | None = None
-) -> str:
-    return spans_to_markup(
-        parse_inline(text), mono_font=mono_font, emoji_font=emoji_font
-    )
-
-
 def render_pdf(spec: DocumentSpec, output_path: Path) -> dict[str, Any]:
     """Render a document spec to a PDF file."""
     # PDF 渲染分为“注册字体/主题 -> 构造 flowables -> build/multiBuild -> 可选后处理”四段。

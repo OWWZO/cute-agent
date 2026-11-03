@@ -3,14 +3,9 @@
 
 用 LLM 判断当前步骤是否已完成任务（is_final），避免 Agent 过早/过晚收口。
 """
-from openai import AsyncOpenAI
-
-from smolagents import ChatMessage
-from smolagents import ActionStep
-from typing import Callable, List, Dict, Optional
-from smolagents import MessageRole
+from smolagents import ActionStep, ChatMessage, MessageRole, Model
+from typing import Dict, Optional
 import json_repair
-from loguru import logger as lg
 
 
 class FinalAnswerCheck(object):
@@ -20,7 +15,7 @@ class FinalAnswerCheck(object):
         self,
         input_messages,
         execution_logs,
-        model: Callable[[List[Dict[str, str]]], ChatMessage],
+        model: Model,
         task: str,
         request_id,
         prompt_temps,

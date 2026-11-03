@@ -390,7 +390,10 @@ def get_theme(
     *,
     kind: Literal["document", "deck"] = "document",
 ) -> Theme:
-    """Resolve a theme by name / inline dict, falling back to the kind default."""
+    """Resolve a theme by name / inline dict, falling back to the kind default.
+
+    Built-in themes are shared registry instances; callers must treat them as read-only.
+    """
     # 解析优先级是内置主题/内联覆盖/磁盘主题，所有失败都回退到文档或演示默认主题。
     default_name = "professional" if kind == "document" else "executive_light"
 

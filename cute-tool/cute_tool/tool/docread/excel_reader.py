@@ -104,7 +104,6 @@ class ExcelReaderTool(SyncTool):
         return "Reading Excel file"
 
     async def validate_input(self, params: dict[str, Any], context: ToolContext) -> ValidationResult:
-        from pathlib import Path
         fp = params.get("file_path", "")
         if fp and not Path(fp).exists():
             return ValidationResult(valid=False, message=f"File not found: {fp}")
@@ -188,7 +187,8 @@ class ExcelReaderTool(SyncTool):
         logger.info("Opening Excel file", file_path=str(file_path), size=size)
 
         try:
-            # 只读、data_only 模式降低内存占用并返回公式计算后的值，而不是公式字符串。
+            # 只读、data_only 模式降低内存占用并返回公式缓存值，而不是公式字符串。
+            # 程序生成且未经 Excel 保存的文件可能没有公式缓存，此类单元格会返回 None。
             wb = load_workbook(str(file_path), read_only=True, data_only=True)
         except InvalidFileException as e:
             raise ValueError(

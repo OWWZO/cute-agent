@@ -8,10 +8,9 @@
 from datetime import datetime
 
 from sqlalchemy import String, func
-from sqlalchemy.orm import Mapped, mapped_column
 from typing import Annotated
 
-from sqlalchemy.orm import DeclarativeBase, MappedAsDataclass, declared_attr, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, declared_attr, mapped_column
 from sqlalchemy.ext.asyncio import AsyncAttrs
 
 

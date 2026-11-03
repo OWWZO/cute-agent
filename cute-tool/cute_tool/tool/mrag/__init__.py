@@ -12,4 +12,6 @@
   api/         MRAG 独立管理路由
   eval/        评测
   utils/       OCR、下载、日志等
+  enums/       数据源与任务状态枚举
+  init/        数据库初始化
 """
