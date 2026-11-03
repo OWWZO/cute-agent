@@ -152,15 +152,20 @@ public class BashTool implements BaseTool {
                         response.getString("message"), null);
             }
 
+            Object exitCode = firstNonNull(response.get("exitCode"), response.get("exit_code"));
+            boolean timedOut = Boolean.TRUE.equals(
+                    firstNonNull(response.getBoolean("timedOut"), response.getBoolean("timed_out")));
+            // 非零退出/超时是命令的业务结果（不是通道错误），但绝不能标记成成功执行。
+            boolean ok = !timedOut && exitCode != null && "0".equals(String.valueOf(exitCode).trim());
+
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("tool", TOOL_NAME);
-            data.put("ok", Boolean.TRUE);
-            data.put("exit_code", firstNonNull(response.get("exitCode"), response.get("exit_code")));
+            data.put("ok", ok);
+            data.put("exit_code", exitCode);
             data.put("stdout", StringUtils.defaultString(response.getString("stdout")));
             data.put("stderr", StringUtils.defaultString(response.getString("stderr")));
             data.put("truncated", Boolean.TRUE.equals(response.getBoolean("truncated")));
-            data.put("timed_out", Boolean.TRUE.equals(
-                    firstNonNull(response.getBoolean("timedOut"), response.getBoolean("timed_out"))));
+            data.put("timed_out", timedOut);
             data.put("duration_ms", firstNonNull(response.get("durationMs"), response.get("duration_ms"), 0));
             data.put("cwd", ".");
             Object fileInfo = firstNonNull(response.get("fileInfo"), response.get("file_info"));

@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionTaskItem;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionTaskListPublisher;
@@ -51,10 +52,15 @@ public class TodoWriteTool implements BaseTool {
         item.put("type", "object");
         item.put("properties", itemProps);
         item.put("required", List.of("status"));
+        // content 与 subject 至少一个存在；否则 replaceAll 会跳过该项并静默丢任务。
+        item.put("anyOf", List.of(
+                Map.of("required", List.of("content")),
+                Map.of("required", List.of("subject"))));
 
         Map<String, Object> todos = new LinkedHashMap<>();
         todos.put("type", "array");
         todos.put("items", item);
+        todos.put("minItems", 1);
         todos.put("description", "更新后的完整 todo 列表");
 
         Map<String, Object> properties = new LinkedHashMap<>();
@@ -68,19 +74,36 @@ public class TodoWriteTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext context) {
         try {
             Map<String, Object> params = ToolArgs.map(input);
             Object rawTodos = params.get("todos");
             if (!(rawTodos instanceof List<?> list)) {
-                return ToolResultPayload.failure("TodoWrite 失败：todos 必须为数组", "TodoWrite 失败：todos 必须为数组", null, "bad todos");
+                return failure("todos 必须为数组");
             }
-            List<Map<String, Object>> todoMaps = new ArrayList<>();
-            for (Object item : list) {
-                if (item instanceof Map<?, ?> map) {
-                    todoMaps.add((Map<String, Object>) map);
+            if (list.isEmpty()) {
+                return failure("todos 不能为空");
+            }
+            List<Map<String, Object>> todoMaps = new ArrayList<>(list.size());
+            for (int i = 0; i < list.size(); i++) {
+                Map<String, Object> item = stringKeyedObject(list.get(i));
+                if (item == null) {
+                    return failure("todos[" + i + "] 必须是对象");
                 }
+                if (StringUtils.isBlank(firstNonBlank(item.get("content"), item.get("subject")))) {
+                    return failure("todos[" + i + "] 缺少 content 或 subject");
+                }
+                String status = ToolArgs.str(item.get("status"));
+                if (StringUtils.isBlank(status)) {
+                    return failure("todos[" + i + "] 缺少 status");
+                }
+                if (!SessionTaskListStore.isSupportedStatus(status)) {
+                    return failure("todos[" + i + "] status 非法: " + status
+                            + "，允许: pending | in_progress | completed");
+                }
+                // 先校验再调用 replaceAll：非法条目不能触发破坏性的整表替换。
+                item.put("status", status);
+                todoMaps.add(item);
             }
             SessionTaskListStore store = context.requireSessionTaskList();
             List<SessionTaskItem> oldTodos = store.replaceAll(todoMaps);
@@ -98,5 +121,31 @@ public class TodoWriteTool implements BaseTool {
             String msg = "TodoWrite 失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             return ToolResultPayload.failureFrom(msg, null);
         }
+    }
+
+    private static ToolResultPayload failure(String message) {
+        String text = "TodoWrite 失败：" + message;
+        return ToolResultPayload.failureFrom(text, null);
+    }
+
+    private static Map<String, Object> stringKeyedObject(Object raw) {
+        if (!(raw instanceof Map<?, ?> map)) {
+            return null;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() != null) {
+                result.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+        }
+        return result;
+    }
+
+    private static String firstNonBlank(Object a, Object b) {
+        String first = a == null ? "" : String.valueOf(a).trim();
+        if (StringUtils.isNotBlank(first)) {
+            return first;
+        }
+        return b == null ? "" : String.valueOf(b).trim();
     }
 }

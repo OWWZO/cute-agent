@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
+import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.askuser.UserInputRequiredException;
@@ -114,9 +115,42 @@ public class AskUserQuestionTool implements BaseTool {
         }
 
         Map<String, Object> params = ToolArgs.mapStrict(input);
-        List<Map<String, Object>> questions = normalizeQuestions(params.get("questions"));
-        if (questions.isEmpty()) {
+        Object rawQuestions = params.get("questions");
+        if (!(rawQuestions instanceof List<?> list) || list.isEmpty()) {
             return fail("questions 不能为空（1–4 题）");
+        }
+        if (list.size() > 4) {
+            return fail("questions 最多 4 题");
+        }
+
+        List<Map<String, Object>> questions = new ArrayList<>(list.size());
+        for (int i = 0; i < list.size(); i++) {
+            Map<String, Object> question = stringKeyedObject(list.get(i));
+            if (question == null) {
+                return fail("questions[" + i + "] 必须是对象");
+            }
+            if (StringUtils.isBlank(ToolArgs.str(question.get("question")))
+                    || StringUtils.isBlank(ToolArgs.str(question.get("header")))) {
+                return fail("questions[" + i + "] 缺少 question 或 header");
+            }
+            Object rawOptions = question.get("options");
+            if (!(rawOptions instanceof List<?> options) || options.size() < 2 || options.size() > 4) {
+                return fail("questions[" + i + "] 需要 2–4 个选项");
+            }
+            List<Map<String, Object>> normalizedOptions = new ArrayList<>(options.size());
+            for (int j = 0; j < options.size(); j++) {
+                Map<String, Object> option = stringKeyedObject(options.get(j));
+                if (option == null) {
+                    return fail("questions[" + i + "].options[" + j + "] 必须是对象");
+                }
+                if (StringUtils.isBlank(ToolArgs.str(option.get("label")))
+                        || StringUtils.isBlank(ToolArgs.str(option.get("description")))) {
+                    return fail("questions[" + i + "].options[" + j + "] 缺少 label 或 description");
+                }
+                normalizedOptions.add(option);
+            }
+            question.put("options", normalizedOptions);
+            questions.add(question);
         }
 
         String toolCallId = null;
@@ -127,19 +161,15 @@ public class AskUserQuestionTool implements BaseTool {
         throw new UserInputRequiredException(questions, toolCallId);
     }
 
-    @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> normalizeQuestions(Object raw) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        if (!(raw instanceof List<?> list)) {
-            return result;
+    private static Map<String, Object> stringKeyedObject(Object raw) {
+        if (!(raw instanceof Map<?, ?> map)) {
+            return null;
         }
-        for (Object item : list) {
-            if (item instanceof Map<?, ?> map) {
-                result.add((Map<String, Object>) map);
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() != null) {
+                result.put(String.valueOf(entry.getKey()), entry.getValue());
             }
-        }
-        if (result.size() > 4) {
-            return result.subList(0, 4);
         }
         return result;
     }

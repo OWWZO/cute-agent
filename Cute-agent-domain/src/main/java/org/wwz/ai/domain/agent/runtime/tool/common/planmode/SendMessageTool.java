@@ -149,6 +149,12 @@ public class SendMessageTool implements BaseTool {
                     "message", "目标子 Agent 邮箱已满，指导未投递。"
             ));
         }
+        if (!SessionAgentMailboxHub.isActive(sessionId, target.agentId)) {
+            // 投递与子 Agent 收尾并发：邮箱已关闭时队列会被清空，消息不可能被消费。
+            // 撤回这条消息并回退为后台续跑，避免「返回成功但消息静默丢失」。
+            SessionAgentMailboxHub.withdraw(sessionId, target.agentId, inject);
+            return resumeStopped(agentContext, to, target, message, summary);
+        }
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("ok", true);
         fields.put("to", to);

@@ -297,6 +297,22 @@ public class SessionTaskListStore {
         }
     }
 
+    /**
+     * replaceAll 之前的状态预校验：非法值必须在清空旧列表前被拒绝。
+     * <p>与 {@link #normalizeStatus(String)} 共用同一套别名规则，避免工具侧和存储侧判断漂移。</p>
+     */
+    public static boolean isSupportedStatus(String status) {
+        if (StringUtils.isBlank(status)) {
+            return false;
+        }
+        try {
+            normalizeStatus(status);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     private static String normalizeStatus(String status) {
         String normalized = status.trim().toLowerCase().replace('-', '_');
         return switch (normalized) {

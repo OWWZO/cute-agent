@@ -160,11 +160,16 @@ public final class BrowserCliSupport {
         Object image = payload.get("imageBase64");
         if (image != null) {
             String artifactRef = BrowserViewportPublisher.uploadPng(agentContext, String.valueOf(image));
+            fields.remove("imageBase64");
             if (artifactRef != null) {
                 fields.put("artifactRef", artifactRef);
+                fields.put("message", "Viewport attached as image media; inspect the screenshot, do not fetch artifactRef.");
+            } else {
+                // 上传失败时不能宣称已附加图片：模型需要知道截图缺失，改看 tree/url 或重试。
+                fields.put("image_upload_failed", Boolean.TRUE);
+                fields.put("message", "Viewport screenshot upload failed; no image attachment was created. "
+                        + "Rely on tree/url in this result or retry the browser command.");
             }
-            fields.remove("imageBase64");
-            fields.put("message", "Viewport attached as image media; inspect the screenshot, do not fetch artifactRef.");
         }
     }
 

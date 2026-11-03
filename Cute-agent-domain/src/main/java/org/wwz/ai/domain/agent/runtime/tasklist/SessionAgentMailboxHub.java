@@ -88,6 +88,19 @@ public final class SessionAgentMailboxHub {
         return queued[0];
     }
 
+    /**
+     * 撤回尚未被消费的消息。
+     * <p>仅用于「投递成功后才发现邮箱已关闭」的回退路径：此时消息不会再被消费，
+     * 不回撤会在下一次 markActive(true) 时被重复投递。</p>
+     */
+    public static boolean withdraw(String sessionId, String agentId, PendingInjectMessage message) {
+        if (message == null) {
+            return false;
+        }
+        Mailbox box = BOXES.get(key(sessionId, agentId));
+        return box != null && box.queue.remove(message);
+    }
+
     public static void evict(String sessionId, String agentId) {
         Mailbox mailbox = BOXES.remove(key(sessionId, agentId));
         if (mailbox != null) {
