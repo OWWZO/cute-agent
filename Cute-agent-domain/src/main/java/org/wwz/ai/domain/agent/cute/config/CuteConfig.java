@@ -89,9 +89,13 @@ public class CuteConfig {
      * 结算 tool_result 经活连接推送，父卡秒级刷新（对齐 ZCode delta 推送 UX）；
      * false：root result 即 complete 关流，父卡改由前端冷路径（replay 重拉）刷新。
      */
-    @Value("${autobots.autoagent.stream.defer-background-settle:true}")
-    private boolean deferBackgroundSettle;
+    private boolean deferBackgroundSettle = true;
 
+    /**
+     * {@code @Value} 必须挂在 setter 上：挂在字段上时 Spring 直接反射写字段，本方法不会执行，
+     * 静态策略 {@link StreamSettlePolicy} 永远停在默认值，配置项静默失效。
+     */
+    @Value("${autobots.autoagent.stream.defer-background-settle:true}")
     public void setDeferBackgroundSettle(boolean deferBackgroundSettle) {
         this.deferBackgroundSettle = deferBackgroundSettle;
         StreamSettlePolicy.setDeferBackgroundSettle(deferBackgroundSettle);

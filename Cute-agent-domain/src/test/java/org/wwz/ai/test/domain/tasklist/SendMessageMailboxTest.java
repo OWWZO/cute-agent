@@ -80,6 +80,37 @@ public class SendMessageMailboxTest {
     }
 
     @Test
+    public void offerIsRejectedAfterMailboxClosed() {
+        SessionAgentMailboxHub.markActive("closed", "a", true);
+        SessionAgentMailboxHub.markActive("closed", "a", false);
+
+        int result = SessionAgentMailboxHub.offer("closed", "a", PendingInjectMessage.builder()
+                .text("late guidance")
+                .source(PendingInjectMessage.SOURCE_COORDINATOR)
+                .createdAtMs(System.currentTimeMillis())
+                .build());
+
+        // 关闭后必须拒收，不能在 createIfAbsent 出来的新队列里留下永远没人消费的消息。
+        Assert.assertEquals(SessionAgentMailboxHub.MAILBOX_CLOSED, result);
+        Assert.assertEquals(0, SessionAgentMailboxHub.queue("closed", "a").size());
+    }
+
+    @Test
+    public void markActiveTrueReopensClosedMailbox() {
+        SessionAgentMailboxHub.markActive("reopen", "a", true);
+        SessionAgentMailboxHub.markActive("reopen", "a", false);
+        SessionAgentMailboxHub.markActive("reopen", "a", true);
+
+        int result = SessionAgentMailboxHub.offer("reopen", "a", PendingInjectMessage.builder()
+                .text("resume guidance")
+                .source(PendingInjectMessage.SOURCE_COORDINATOR)
+                .createdAtMs(System.currentTimeMillis())
+                .build());
+
+        Assert.assertEquals(1, result);
+    }
+
+    @Test
     public void toolNameConstant() {
         Assert.assertEquals("SendMessage", TaskToolNames.SEND_MESSAGE);
     }

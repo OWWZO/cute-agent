@@ -2,6 +2,7 @@ package org.wwz.ai.test.domain.tool.browser;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.wwz.ai.domain.agent.adapter.port.cli.CliResult;
 import org.wwz.ai.domain.agent.runtime.tool.browser.BrowserCliSupport;
 import org.wwz.ai.types.agent.config.OpenCliProperties;
 
@@ -91,6 +92,42 @@ public class BrowserCliSupportTest {
         // Windows 上 Path.of 会把 "/tmp/opencli" 规范成 "	mp\opencli"，只断言两端组成
         Assert.assertTrue(dir.contains("opencli"));
         Assert.assertTrue(dir.endsWith("user-1"));
+    }
+
+    @Test
+    public void rejectsUserIdThatEscapesCacheRoot() {
+        OpenCliProperties properties = new OpenCliProperties();
+        properties.setCacheDir("/tmp/opencli");
+
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> BrowserCliSupport.resolveCacheDir(properties, "../../evil"));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> BrowserCliSupport.resolveCacheDir(properties, ".."));
+    }
+
+    @Test
+    public void fallsBackToUnknownForMissingUserId() {
+        OpenCliProperties properties = new OpenCliProperties();
+        properties.setCacheDir("/tmp/opencli");
+
+        Assert.assertTrue(BrowserCliSupport.resolveCacheDir(properties, null).endsWith("unknown"));
+        Assert.assertTrue(BrowserCliSupport.resolveCacheDir(properties, "  ").endsWith("unknown"));
+    }
+
+    @Test
+    public void redactsCdpUrlFromStructuredStderrHints() {
+        String cdpWsUrl = "ws://127.0.0.1:9222/devtools/browser/secret";
+        CliResult result = CliResult.builder()
+                .ok(false)
+                .exitCode(1)
+                .stderr("Hint: reconnect to " + cdpWsUrl + " first\nRetry: curl " + cdpWsUrl)
+                .build();
+
+        Map<String, Object> fields = BrowserCliSupport.toFields(result, cdpWsUrl);
+
+        Assert.assertTrue(String.valueOf(fields.get("error_hint")).contains("[redacted]"));
+        Assert.assertFalse(String.valueOf(fields.get("error_hint")).contains(cdpWsUrl));
+        Assert.assertFalse(String.valueOf(fields.get("retry")).contains(cdpWsUrl));
     }
 
     @Test

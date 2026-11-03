@@ -157,7 +157,8 @@ public class ChatModelSchemaService {
 
     public Set<String> getSyncValueFields(String syncValueFields) {
         if (StringUtils.isBlank(syncValueFields)) {
-            return Collections.emptySet();
+            // 调用方会在返回值上就地改写；getter 统一返回可变集合，避免契约里埋不可变实现的坑。
+            return new HashSet<>();
         }
         return Arrays.stream(syncValueFields.split(",")).collect(Collectors.toSet());
     }

@@ -73,8 +73,10 @@ public class BaseAgentStreamEventHandler {
     protected AgentStreamResult buildIncrResult(AgentExecutionCommand request, AgentStreamAccumulator eventResult, AgentStreamEvent agentResponse) {
         AgentStreamResult streamResult = new AgentStreamResult();
         streamResult.setContentType(ResponseTypeEnum.text.name());
-        streamResult.setStatus(agentResponse.getFinish() ? SUCCESS : RUNNING);
-        streamResult.setComplete(agentResponse.getFinish());
+        // finish 是可空 Boolean：只拆箱一次，无 finish 的帧按"未结束"处理。
+        boolean finished = Boolean.TRUE.equals(agentResponse.getFinish());
+        streamResult.setStatus(finished ? SUCCESS : RUNNING);
+        streamResult.setComplete(finished);
         if ("result".equals(agentResponse.getMessageType())) {
             streamResult.setContentDelta(agentResponse.getResult());
             streamResult.setContent(agentResponse.getResult());

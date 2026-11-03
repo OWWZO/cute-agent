@@ -182,6 +182,38 @@ public class DocToolRemoteProtocolTest {
     }
 
     @Test
+    public void genTreatsFileInfoBearingSuccessFalseAsPartialSuccess() {
+        // 生成侧部分成功：cute-tool 因 lint warnings 标 success=false，但 fileInfo 已产出文件。
+        // hook 必须同时放行早退和通用 success 检查，否则文件永远不会登记为 artifact。
+        http.response = "{\"success\":false,\"message\":\"lint warnings\","
+                + "\"fileInfo\":[{\"fileName\":\"out.pdf\",\"ossUrl\":\"https://oss/x.pdf\"}]}";
+        GenTool tool = new GenTool();
+        tool.bind(context);
+        context.bindCurrentToolArtifactSource(
+                ToolArtifactSource.builder().toolCallId("call-partial-false").toolName("doc_gen").build());
+
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
+
+        Assert.assertFalse("带 fileInfo 的 success=false 必须按部分成功放行", payload.getFailed());
+        Assert.assertFalse(context.getArtifactBindingsByToolCallId("call-partial-false").isEmpty());
+    }
+
+    @Test
+    public void readDoesNotTreatFileInfoBearingSuccessFalseAsSuccess() {
+        // 读侧没有部分成功语义：success=false 即使带 fileInfo 也必须失败。
+        http.response = "{\"success\":false,\"message\":\"parse failed\","
+                + "\"fileInfo\":[{\"fileName\":\"a.pdf\"}]}";
+        ReadTool tool = new ReadTool();
+        tool.bind(context);
+        context.bindCurrentToolArtifactSource(
+                ToolArtifactSource.builder().toolCallId("call-read-partial-false").toolName("doc_read").build());
+
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(ToolArgs.map("{}"), null);
+
+        Assert.assertTrue(payload.getFailed());
+    }
+
+    @Test
     public void genStillFailsWhenMessagePresentWithoutFileInfo() {
         // 与上例互补：没有 fileInfo 的 message 是真正的失败，早退必须仍然生效。
         http.response = "{\"message\":\"document_generate failed: boom\"}";

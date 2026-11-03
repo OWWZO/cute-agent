@@ -18,6 +18,8 @@ public final class SessionAgentMailboxHub {
     private static final ConcurrentHashMap<String, Mailbox> BOXES = new ConcurrentHashMap<>();
     static final int MAX_QUEUE_SIZE = 256;
     static final long IDLE_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(30);
+    /** {@link #offer} 返回值：目标邮箱已被 {@link #markActive} 关闭，消息未投递，调用方应回退。 */
+    public static final int MAILBOX_CLOSED = -2;
 
     private SessionAgentMailboxHub() {
     }
@@ -31,14 +33,19 @@ public final class SessionAgentMailboxHub {
         if (StringUtils.isBlank(agentId)) {
             return;
         }
-        String key = key(sessionId, agentId);
-        Mailbox mailbox = box(sessionId, agentId);
-        mailbox.active.set(active);
-        mailbox.touch();
-        if (!active) {
-            mailbox.queue.clear();
-            BOXES.remove(key, mailbox);
-        }
+        // 与 offer 共用同一把 per-key 锁：“置封 + 清空”必须和投递原子互斥。
+        // 关闭后保留空邮箱作为 tombstone，后续 offer 能识别为已关闭，
+        // 而不是 createIfAbsent 出一个永远没人消费的新队列。
+        BOXES.compute(key(sessionId, agentId), (ignored, mailbox) -> {
+            Mailbox box = mailbox == null ? new Mailbox() : mailbox;
+            box.active.set(active);
+            box.closed.set(!active);
+            box.touch();
+            if (!active) {
+                box.queue.clear();
+            }
+            return box;
+        });
     }
 
     public static boolean isActive(String sessionId, String agentId) {
@@ -51,16 +58,24 @@ public final class SessionAgentMailboxHub {
     }
 
     /**
-     * @return 投递后的队列长度；返回 -1 表示邮箱已满且消息未投递
+     * @return 投递后的队列长度；-1 表示邮箱已满，{@link #MAILBOX_CLOSED} 表示邮箱已关闭（未投递）
      */
     public static int offer(String sessionId, String agentId, PendingInjectMessage message) {
         if (message == null || StringUtils.isBlank(message.getText())) {
             return 0;
         }
         cleanupExpired();
-        Mailbox box = box(sessionId, agentId);
-        box.touch();
-        return box.queue.offer(message) ? box.queue.size() : -1;
+        int[] queued = {MAILBOX_CLOSED};
+        BOXES.compute(key(sessionId, agentId), (ignored, mailbox) -> {
+            Mailbox box = mailbox == null ? new Mailbox() : mailbox;
+            if (box.closed.get()) {
+                return box;
+            }
+            box.touch();
+            queued[0] = box.queue.offer(message) ? box.queue.size() : -1;
+            return box;
+        });
+        return queued[0];
     }
 
     public static void evict(String sessionId, String agentId) {
@@ -98,6 +113,8 @@ public final class SessionAgentMailboxHub {
     private static final class Mailbox {
         private final ConcurrentLinkedQueue<PendingInjectMessage> queue = new BoundedQueue<>(MAX_QUEUE_SIZE);
         private final AtomicBoolean active = new AtomicBoolean(false);
+        /** 已结束的邮箱保留为 tombstone：拒绝后续投递，避免消息落入无人消费的新队列。 */
+        private final AtomicBoolean closed = new AtomicBoolean(false);
         private volatile long lastAccessMs = System.currentTimeMillis();
 
         private void touch() {

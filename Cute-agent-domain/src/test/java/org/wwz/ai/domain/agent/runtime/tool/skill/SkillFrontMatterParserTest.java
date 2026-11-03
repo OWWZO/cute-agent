@@ -160,6 +160,21 @@ public class SkillFrontMatterParserTest {
     }
 
     @Test
+    public void degradedParserDoesNotFlattenNestedKeys() {
+        // 未闭合引号触发 YAML 解析失败；嵌套键/列表不能被压平成顶层字段
+        SkillFrontMatter frontMatter = SkillFrontMatterParser.parse(
+                "---\nname: demo\ndescription: \"a: b\nmetadata:\n  hermes: foo\n"
+                        + "allowed-tools:\n  - Read\n---\n\nbody\n");
+
+        Assert.assertTrue(frontMatter.hasFrontMatter());
+        Assert.assertFalse(frontMatter.warnings().isEmpty());
+        Assert.assertEquals("demo", frontMatter.fields().get("name"));
+        Assert.assertFalse("嵌套映射的子键不得成为顶层字段", frontMatter.fields().containsKey("hermes"));
+        Assert.assertFalse("空值嵌套块不得留下脏键", frontMatter.fields().containsKey("metadata"));
+        Assert.assertFalse("列表字段不得留下脏键", frontMatter.fields().containsKey("allowed-tools"));
+    }
+
+    @Test
     public void shouldFallBackWhenYamlTopLevelIsNotMap() {
         SkillFrontMatter frontMatter = SkillFrontMatterParser.parse("---\n- just\n- a list\n---\n\nbody\n");
 

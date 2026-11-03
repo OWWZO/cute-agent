@@ -134,7 +134,9 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
                     && !json.containsKey("fileInfo")) {
                 return failure(getName() + " 执行失败：" + json.getString("message"));
             }
-            boolean success = !json.containsKey("success") || json.getBooleanValue("success");
+            // 部分成功也必须在这里放行，否则上面的 hook 只是跳过了早退，仍会撞上通用失败分支。
+            boolean success = !json.containsKey("success") || json.getBooleanValue("success")
+                    || (treatsFileInfoAsSuccess() && json.containsKey("fileInfo"));
             if (!success) {
                 return failure(getName() + " 执行失败："
                         + StringUtils.defaultIfBlank(json.getString("message"), responseText));

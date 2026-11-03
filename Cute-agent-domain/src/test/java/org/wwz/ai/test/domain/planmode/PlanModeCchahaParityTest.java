@@ -54,7 +54,11 @@ public class PlanModeCchahaParityTest {
         Assert.assertNull(PlanModeToolPolicy.denyReason(state, "workspace_read", Map.of("path", "src/Main.java")));
         Assert.assertNotNull(PlanModeToolPolicy.denyReason(state, "host_cli", Map.of()));
         Assert.assertNotNull(PlanModeToolPolicy.denyReason(state, "browser", Map.of()));
+        Assert.assertNotNull(PlanModeToolPolicy.denyReason(state, "agent_browser", Map.of()));
         Assert.assertNotNull(PlanModeToolPolicy.denyReason(state, "opencli", Map.of()));
+        // 工具注册表里的本机命令执行入口：关键字兜底匹配不到，必须显式拦。
+        Assert.assertNotNull(PlanModeToolPolicy.denyReason(state, "bash", Map.of()));
+        Assert.assertNotNull(PlanModeToolPolicy.denyReason(state, "code_mode", Map.of()));
         Assert.assertNull(PlanModeToolPolicy.denyReason(state, "Agent", Map.of()));
         Assert.assertNull(PlanModeToolPolicy.denyReason(state, "ExitPlanMode", Map.of()));
     }

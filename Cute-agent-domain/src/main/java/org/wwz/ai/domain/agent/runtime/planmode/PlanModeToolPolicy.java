@@ -45,7 +45,10 @@ public final class PlanModeToolPolicy {
     private static final Set<String> SIDE_EFFECT_TOOLS = Set.of(
             "host_cli",
             "browser",
-            "opencli"
+            "agent_browser",
+            "opencli",
+            "bash",
+            "code_mode"
     );
 
     private static final Set<String> MUTATING = Set.of(
