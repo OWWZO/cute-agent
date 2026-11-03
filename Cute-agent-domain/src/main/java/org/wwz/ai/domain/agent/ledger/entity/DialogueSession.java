@@ -39,6 +39,15 @@ public class DialogueSession {
     private Long bindingId;
 
     /**
+     * IM 出站会话形态（C2C / GROUP / GUILD / DM）。
+     * <p>唤醒轮和主动推送据此恢复出站目标；{@code null} 表示未记录。</p>
+     */
+    private String channelChatType;
+
+    /** IM 出站目标 ID（openid / group_openid / channel_id）；{@code null} 表示未记录。 */
+    private String channelTargetId;
+
+    /**
      * 会话类型 code，见 {@link org.wwz.ai.domain.agent.ledger.model.SessionKind}。
      */
     private String sessionKind;

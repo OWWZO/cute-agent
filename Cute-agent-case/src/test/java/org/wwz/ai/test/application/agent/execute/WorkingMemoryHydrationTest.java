@@ -177,8 +177,9 @@ public class WorkingMemoryHydrationTest {
         }
 
         @Override
-        public void persistTurn(String sessionId, String memoryScope, String requestId, Long runId,
-                                String entryAgent, List<Message> turnMessages) {
+        public boolean persistTurn(String sessionId, String memoryScope, String requestId, Long runId,
+                                   String entryAgent, List<Message> turnMessages) {
+            return true;
         }
 
         @Override

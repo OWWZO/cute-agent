@@ -53,12 +53,12 @@ public class SubAgentResumeHardeningTest {
         }
 
         @Override
-        public void persistTurn(String sessionId,
-                                String memoryScope,
-                                String requestId,
-                                Long runId,
-                                String entryAgent,
-                                List<Message> turnMessages) {
+        public boolean persistTurn(String sessionId,
+                                   String memoryScope,
+                                   String requestId,
+                                   Long runId,
+                                   String entryAgent,
+                                   List<Message> turnMessages) {
             lastFullSnapshot = false;
             store.compute(key(sessionId, memoryScope), (k, old) -> {
                 List<Message> next = old == null ? new ArrayList<>() : new ArrayList<>(old);
@@ -67,6 +67,7 @@ public class SubAgentResumeHardeningTest {
                 }
                 return next;
             });
+            return true;
         }
 
         @Override

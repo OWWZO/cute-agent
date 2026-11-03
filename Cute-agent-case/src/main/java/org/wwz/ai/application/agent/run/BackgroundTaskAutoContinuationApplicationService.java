@@ -1,0 +1,210 @@
+package org.wwz.ai.application.agent.run;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
+import org.wwz.ai.application.agent.dispatch.IAgentDispatchService;
+import org.wwz.ai.application.agent.query.GptQueryApplicationService;
+import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
+import org.wwz.ai.application.agent.stream.AgentSessionStreamFrame;
+import org.wwz.ai.application.agent.stream.AgentStreamProjection;
+import org.wwz.ai.application.agent.stream.SessionEventClock;
+import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
+import org.wwz.ai.domain.agent.cute.config.CuteConfig;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
+import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
+import org.wwz.ai.domain.agent.ledger.model.SessionKind;
+import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
+import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
+import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
+import org.wwz.ai.domain.agent.runtime.handler.AgentStreamEventHandler;
+import org.wwz.ai.types.agent.config.AgentExecutorNames;
+import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
+import org.wwz.ai.types.agent.exception.AgentExecutorBusyException;
+
+import javax.annotation.Resource;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Executor;
+
+/**
+ * 空闲唤醒：为一个已有通知排队的会话开一轮新的 run。
+ * <p>逐句对齐 {@link org.wwz.ai.application.agent.askuser.AskUserResumeApplicationService}，
+ * 但不做交互鉴权、不要求非空 query——唤醒轮的 query 为空，通知在第一步由 BaseAgent drain。</p>
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class BackgroundTaskAutoContinuationApplicationService {
+
+    private final IExecutionLedgerReadRepository executionLedgerReadRepository;
+    private final IAgentDispatchService agentDispatchService;
+    private final ActiveAgentRunRegistry activeAgentRunRegistry;
+    private final AgentSessionEventBus agentSessionEventBus;
+    private final AgentRunLaunchGate agentRunLaunchGate;
+    private final SessionEventClock sessionEventClock;
+    private final SessionProjectionRegistry sessionProjectionRegistry;
+    private final CuteConfig cuteConfig;
+
+    @Resource
+    private Map<AgentType, AgentStreamEventHandler> handlerMap;
+
+    @Resource
+    @Qualifier(AgentExecutorNames.DISPATCH_EXECUTOR)
+    private Executor dispatchExecutor;
+
+    /**
+     * 派发唤醒轮。
+     *
+     * @return true 表示 run 已被受理（或已接管），false 表示当前无法派发
+     */
+    public boolean dispatchWake(String sessionId, String taskId) {
+        if (StringUtils.isBlank(sessionId)) {
+            return false;
+        }
+        DialogueSession session;
+        try {
+            session = executionLedgerReadRepository.querySessionEntity(sessionId);
+        } catch (Exception e) {
+            log.warn("background wake: session query failed sessionId={}", sessionId, e);
+            return false;
+        }
+        if (session == null) {
+            log.warn("background wake: session not found sessionId={}", sessionId);
+            return false;
+        }
+        if (SessionKind.SUBAGENT.code().equals(session.getSessionKind())) {
+            return false;
+        }
+
+        AgentExecutionCommand request = buildWakeRequest(session);
+        try {
+            activeAgentRunRegistry.begin(request.getRequestId(), sessionId, request.getUserId());
+        } catch (AgentConcurrentRunException e) {
+            log.info("background wake skipped, session busy sessionId={} activeRequestId={}",
+                    sessionId, e.getActiveRequestId());
+            return false;
+        }
+
+        AgentStreamProjection projectingStream =
+                new AgentStreamProjection(null, request, handlerMap, agentSessionEventBus, sessionEventClock)
+                        .bindRegistry(sessionProjectionRegistry);
+        // 先发控制帧，前端据此建占位 chat 并重新订阅；再结束旧投影的观察流。
+        publishWakeFrame(sessionId, request.getRequestId(), taskId);
+        completeStaleProjections(sessionId, projectingStream);
+
+        agentRunLaunchGate.defer(request.getRequestId(), sessionId, () -> {
+            try {
+                AgentExecutorSupport.execute(dispatchExecutor, "backgroundTaskWake", request.getRequestId(),
+                        () -> dispatch(request, projectingStream));
+            } catch (AgentExecutorBusyException e) {
+                log.warn("background wake deferred launch busy requestId={}", request.getRequestId(), e);
+                failWake(sessionId, request.getRequestId(), projectingStream, e);
+            }
+        });
+        log.info("background wake dispatched sessionId={} requestId={} taskId={}",
+                sessionId, request.getRequestId(), taskId);
+        return true;
+    }
+
+    private void dispatch(AgentExecutionCommand request, AgentStreamProjection projectingStream) {
+        try {
+            agentDispatchService.dispatch(request, projectingStream);
+            GptQueryApplicationService.completeProjectionUnlessBackgroundRunning(
+                    request, projectingStream, activeAgentRunRegistry);
+        } catch (Exception e) {
+            log.error("{} background wake failed", request.getRequestId(), e);
+            failWake(request.getSessionId(), request.getRequestId(), projectingStream, e);
+        }
+    }
+
+    private void failWake(String sessionId,
+                          String requestId,
+                          AgentStreamProjection projectingStream,
+                          Exception failure) {
+        // 先发失败控制帧，再关流；否则 completeWithError 会先把会话连接收掉。
+        publishWakeFailed(sessionId, requestId, failure);
+        try {
+            projectingStream.completeWithError(failure);
+        } finally {
+            activeAgentRunRegistry.end(requestId);
+        }
+        // 旧投影已经无人接收，一并收口，避免会话级投影永久滞留。
+        completeStaleProjections(sessionId, null);
+    }
+
+    private AgentExecutionCommand buildWakeRequest(DialogueSession session) {
+        boolean deepThink = session.getDeepThink() != null && session.getDeepThink() != 0;
+        String basePrompt = deepThink ? "" : StringUtils.defaultString(cuteConfig.getCuteBasePrompt());
+        return AgentExecutionCommand.builder()
+                .requestId(newRequestId())
+                .sessionId(session.getSessionId())
+                .userId(session.getUserId())
+                .query("")
+                .model(session.getModel())
+                .thinking(session.getThinking())
+                .thinkingEffort(session.getThinkingEffort())
+                .agentType(deepThink ? AgentType.PLAN_SOLVE.getValue() : AgentType.REACT.getValue())
+                .basePrompt(basePrompt)
+                .isStream(true)
+                .triggerSource("background_task")
+                .build();
+    }
+
+    private void publishWakeFrame(String sessionId, String requestId, String taskId) {
+        Map<String, Object> resultMap = new LinkedHashMap<>();
+        resultMap.put("requestId", requestId);
+        resultMap.put("sessionId", sessionId);
+        resultMap.put("triggerSource", "background_task");
+        if (StringUtils.isNotBlank(taskId)) {
+            resultMap.put("taskId", taskId);
+        }
+        agentSessionEventBus.publish(sessionId, AgentSessionStreamFrame.builder()
+                .reqId(requestId)
+                .packageType("run_wake")
+                .status("success")
+                .finished(false)
+                .responseType("text")
+                .resultMap(resultMap)
+                .build());
+    }
+
+    private void publishWakeFailed(String sessionId, String requestId, Exception failure) {
+        Map<String, Object> resultMap = new LinkedHashMap<>();
+        resultMap.put("requestId", requestId);
+        resultMap.put("sessionId", sessionId);
+        agentSessionEventBus.publish(sessionId, AgentSessionStreamFrame.builder()
+                .reqId(requestId)
+                .packageType("run_wake_failed")
+                .status("failed")
+                .finished(true)
+                .errorMsg(failure == null ? "后台续跑启动失败" : failure.getMessage())
+                .resultMap(resultMap)
+                .build());
+    }
+
+    /**
+     * 完成本会话里除 {@code keep} 之外的活投影。
+     * <p>唤醒接管后旧父 run 的投影不应再等待 stream_settle；新投影已注册，
+     * 因此 unregister 不会触发会话级 completeSession，前端连接得以保留。</p>
+     */
+    private void completeStaleProjections(String sessionId, AgentStreamProjection keep) {
+        for (AgentStreamProjection live : sessionProjectionRegistry.listLive(sessionId)) {
+            if (live != keep) {
+                try {
+                    live.complete();
+                } catch (Exception e) {
+                    log.debug("complete stale projection failed sessionId={}", sessionId, e);
+                }
+            }
+        }
+    }
+
+    private static String newRequestId() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+}

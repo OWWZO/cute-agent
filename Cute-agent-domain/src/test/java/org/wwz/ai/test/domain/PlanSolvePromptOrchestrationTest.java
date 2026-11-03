@@ -22,8 +22,8 @@ public class PlanSolvePromptOrchestrationTest {
         Assert.assertTrue(once.contains("不要传 resume_agent_id"));
         Assert.assertTrue(once.contains("禁止用 workspace_list 轮询子 Agent 是否完成"));
         Assert.assertTrue(once.contains("已结束/失败/停止时后台唤醒"));
-        Assert.assertTrue(once.contains("block=true（默认）等到终态"));
-        Assert.assertTrue(once.contains("先 TaskOutput 等完成"));
+        Assert.assertTrue(once.contains("后台结果自动回传"));
+        Assert.assertFalse(once.contains("TaskOutput"));
         Assert.assertEquals(1, once.split(PlanSolvePrompt.ORCHESTRATION_MARKER, -1).length - 1);
     }
 

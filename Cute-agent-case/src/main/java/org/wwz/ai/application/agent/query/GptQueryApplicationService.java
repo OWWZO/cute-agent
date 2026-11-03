@@ -16,6 +16,7 @@ import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
 import org.wwz.ai.application.agent.query.mapper.AgentExecutionCommandMapper;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
@@ -25,6 +26,7 @@ import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
 import org.wwz.ai.domain.agent.runtime.handler.AgentStreamEventHandler;
 import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionNotificationHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.StreamSettlePolicy;
 import org.wwz.ai.types.agent.config.AgentExecutorNames;
 import org.wwz.ai.types.agent.exception.AgentExecutorBusyException;
@@ -88,6 +90,9 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
 
     @Resource
     private IExecutionLedgerReadRepository executionLedgerReadRepository;
+
+    @Resource
+    private BackgroundTaskWakePort backgroundTaskWakePort;
 
     @Override
     public AgentQuerySubmitResult submitAgentQuery(GptQueryCommand params) {
@@ -258,8 +263,22 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
             projectingStream.completeWithError(e);
             endRunUnlessBackground(agentRequest, activeAgentRunRegistry);
         } finally {
+            // 必须在 end 之后复查：收尾窗口内完成的后台通知不能再滞留在队列里。
+            notifyRunSettled(agentRequest);
             log.info("{}, agent.query.web.singleRequest end, requestId: {}",
                     agentRequest.getRequestId(), JSON.toJSONString(agentRequest));
+        }
+    }
+
+    private void notifyRunSettled(AgentExecutionCommand agentRequest) {
+        if (backgroundTaskWakePort == null || agentRequest == null
+                || StringUtils.isBlank(agentRequest.getSessionId())) {
+            return;
+        }
+        try {
+            backgroundTaskWakePort.onRunSettled(agentRequest.getSessionId());
+        } catch (Exception e) {
+            log.warn("{} background run settle check failed", agentRequest.getRequestId(), e);
         }
     }
 
@@ -281,7 +300,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                                                                  AgentStreamProjection projectingStream,
                                                                  ActiveAgentRunRegistry runRegistry) {
         if (shouldDeferProjectionComplete(agentRequest)) {
-            log.info("{} defer projection complete: background tasks still running sessionId={}",
+            log.info("{} defer projection complete: background work still pending sessionId={}",
                     agentRequest == null ? "-" : agentRequest.getRequestId(),
                     agentRequest == null ? null : agentRequest.getSessionId());
             endOccupancy(agentRequest, runRegistry);
@@ -300,6 +319,10 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         // flag=false 时全解耦：root result 即 complete，父卡改由前端冷路径刷新。
         if (agentRequest == null || !StreamSettlePolicy.deferBackgroundSettle()) {
             return false;
+        }
+        // 收尾窗口内完成的通知也需要保持连接：500ms 后 run_wake 要靠它送达前端。
+        if (SessionNotificationHub.hasPending(agentRequest.getSessionId())) {
+            return true;
         }
         return SessionBackgroundTaskHub.hasRunning(
                 SessionBackgroundTaskHub.keyFor(agentRequest.getSessionId(), agentRequest.getRequestId()));

@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.Environment;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.adapter.port.BrowserRelayPort;
 import org.wwz.ai.domain.agent.adapter.port.BrowserBskConnectionPort;
 import org.wwz.ai.domain.agent.adapter.port.AgentBrowserSessionPort;
@@ -156,6 +157,9 @@ public class CuteRuntimeDependencies {
     /** 可选：plan mode 产物存储，Enter/ExitPlanModeTool 解析 .cute/plan.md 路径用。 */
     PlanArtifactStore planArtifactStore;
 
+    /** 可选：后台子 Agent 完成后的三态判活与自动续跑（实现在 case）。 */
+    BackgroundTaskWakePort backgroundTaskWakePort;
+
     public SubAgentRunner getOptionalSubAgentRunner() {
         return subAgentRunner;
     }
@@ -170,6 +174,15 @@ public class CuteRuntimeDependencies {
 
     public PlanArtifactStore getOptionalPlanArtifactStore() {
         return planArtifactStore;
+    }
+
+    public BackgroundTaskWakePort getOptionalBackgroundTaskWakePort() {
+        return backgroundTaskWakePort;
+    }
+
+    /** 自动续跑开关；未装配配置时默认开启。 */
+    public boolean isBackgroundAutoContinuationEnabled() {
+        return cuteConfig == null || cuteConfig.isBackgroundAutoContinuation();
     }
 
     public CuteConfig requireCuteConfig() {

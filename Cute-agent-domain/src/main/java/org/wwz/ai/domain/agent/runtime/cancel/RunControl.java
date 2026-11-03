@@ -1,7 +1,10 @@
 package org.wwz.ai.domain.agent.runtime.cancel;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,6 +41,9 @@ public final class RunControl {
 
     /** 运行中用户/协调注入队列（与 ActiveRun 共享同一实例）。 */
     private volatile ConcurrentLinkedQueue<PendingInjectMessage> pendingInjects;
+
+    /** 本轮已注入的后台任务通知 taskId；run 成功收口后据此 markNotified。 */
+    private final Set<String> consumedBackgroundNotificationTaskIds = ConcurrentHashMap.newKeySet();
 
     public RunControl() {
     }
@@ -188,6 +194,27 @@ public final class RunControl {
             return;
         }
         requirePendingInjects().offer(message);
+    }
+
+    /**
+     * 记录本轮已注入的后台任务通知。
+     */
+    public void addConsumedBackgroundNotifications(Collection<String> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return;
+        }
+        for (String taskId : taskIds) {
+            if (taskId != null && !taskId.isBlank()) {
+                consumedBackgroundNotificationTaskIds.add(taskId.trim());
+            }
+        }
+    }
+
+    /** 取出并清空本轮已消费的通知 taskId（run 成功收口时调用）。 */
+    public Set<String> drainConsumedBackgroundNotifications() {
+        Set<String> drained = Set.copyOf(consumedBackgroundNotificationTaskIds);
+        consumedBackgroundNotificationTaskIds.clear();
+        return drained;
     }
 
     /** 取出并清空待注入消息（步进边界调用）。 */

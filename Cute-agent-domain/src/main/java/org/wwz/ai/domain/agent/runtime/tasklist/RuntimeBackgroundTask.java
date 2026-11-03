@@ -9,6 +9,7 @@ import lombok.ToString;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 后台运行任务。
@@ -70,4 +71,14 @@ public class RuntimeBackgroundTask {
     @ToString.Exclude
     @JSONField(serialize = false)
     private volatile Future<?> future;
+
+    /** 进程内通知权：完成路径入队去重（同一个任务不重复 offer）。 */
+    @Builder.Default
+    @ToString.Exclude
+    @JSONField(serialize = false)
+    private AtomicBoolean notificationClaimed = new AtomicBoolean(false);
+
+    /** 跨重启通知权：true 表示通知已成功随工作记忆持久化，补投时跳过。 */
+    @Builder.Default
+    private Boolean notified = Boolean.FALSE;
 }

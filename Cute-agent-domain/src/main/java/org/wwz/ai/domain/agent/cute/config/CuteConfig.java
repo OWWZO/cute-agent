@@ -57,7 +57,7 @@ public class CuteConfig {
      * 注意：默认值必须包含 get_ui_components —— 主 agent 的 system prompt 里注入了 openui 通道，
      * 提到这个工具；只改 yml 无效（application-*.yml 里该键的层级与这里不一致）。
      */
-    @Value("${autobots.autoagent.plan-solve-main-tool-list:Agent,TaskCreate,TaskGet,TaskUpdate,TaskList,TodoWrite,TaskStop,TaskOutput,SendMessage,EnterPlanMode,ExitPlanMode,AskUserQuestion,ToolSearch,ToolDescribe,ToolCall,ListMcpResources,ReadMcpResource,workspace_read,workspace_list,workspace_glob,workspace_grep,workspace_write,workspace_edit,code_mode,skill_view,skills_search,memory,session_search,image_ocr,canvas_publish,pdf_reader,pdf_structure,word_reader,text_processor,markdown_processor,html_processor,excel_reader,csv_processor,get_ui_components}")
+    @Value("${autobots.autoagent.plan-solve-main-tool-list:Agent,TaskCreate,TaskGet,TaskUpdate,TaskList,TodoWrite,TaskStop,SendMessage,EnterPlanMode,ExitPlanMode,AskUserQuestion,ToolSearch,ToolDescribe,ToolCall,ListMcpResources,ReadMcpResource,workspace_read,workspace_list,workspace_glob,workspace_grep,workspace_write,workspace_edit,code_mode,skill_view,skills_search,memory,session_search,image_ocr,canvas_publish,pdf_reader,pdf_structure,word_reader,text_processor,markdown_processor,html_processor,excel_reader,csv_processor,get_ui_components}")
     private String planSolveMainToolList;
 
     public void setPlanSolveMainToolList(String planSolveMainToolList) {
@@ -100,6 +100,33 @@ public class CuteConfig {
     public void setDeferBackgroundSettle(boolean deferBackgroundSettle) {
         this.deferBackgroundSettle = deferBackgroundSettle;
         StreamSettlePolicy.setDeferBackgroundSettle(deferBackgroundSettle);
+    }
+
+    /**
+     * 后台子 Agent 完成后是否自动回传结果并在主 Agent 空闲时唤醒新一轮。
+     * 关闭后：不产生通知、不注入、不补投、不唤醒；registry / ledger / SSE 行为不变。
+     */
+    @Value("${autobots.agent.background.auto-continuation:true}")
+    private boolean backgroundAutoContinuation;
+
+    /** 空闲唤醒前的合并窗口，用于把相继完成的多条通知合成一轮。 */
+    @Value("${autobots.agent.background.auto-continuation-delay-ms:500}")
+    private long backgroundAutoContinuationDelayMs;
+
+    /** IM 渠道终答直推开关；关闭等于「IM 不推送，仅 Web 可用」。 */
+    @Value("${autobots.agent.channel.terminal-push:true}")
+    private boolean channelTerminalPush;
+
+    public void setBackgroundAutoContinuation(boolean backgroundAutoContinuation) {
+        this.backgroundAutoContinuation = backgroundAutoContinuation;
+    }
+
+    public void setBackgroundAutoContinuationDelayMs(long backgroundAutoContinuationDelayMs) {
+        this.backgroundAutoContinuationDelayMs = backgroundAutoContinuationDelayMs;
+    }
+
+    public void setChannelTerminalPush(boolean channelTerminalPush) {
+        this.channelTerminalPush = channelTerminalPush;
     }
 
     /**

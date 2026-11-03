@@ -13,7 +13,6 @@ import org.wwz.ai.domain.agent.channel.port.ChannelInboundPort;
 import org.wwz.ai.domain.agent.channel.port.ChannelQrGateway;
 import org.wwz.ai.application.agent.query.IGptQueryApplicationService;
 import org.wwz.ai.application.agent.run.AgentRunLaunchGate;
-import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.application.agent.channel.binding.ChannelBindingApplicationService;
 import org.wwz.ai.application.agent.channel.binding.ChannelBindingQrService;
 import org.wwz.ai.domain.agent.channel.port.ChannelConnectionPort;
@@ -21,7 +20,6 @@ import org.wwz.ai.application.agent.channel.binding.ChannelOwnerQueryService;
 import org.wwz.ai.application.agent.channel.inbound.ChannelInboundDispatchService;
 import org.wwz.ai.application.agent.channel.inbound.ChannelSessionBinder;
 import org.wwz.ai.application.agent.channel.outbound.ChannelArtifactResolver;
-import org.wwz.ai.application.agent.channel.outbound.ChannelObserverAttacher;
 import org.wwz.ai.types.agent.config.ChannelProperties;
 import org.wwz.ai.domain.agent.channel.policy.ChannelUrlPolicy;
 import org.wwz.ai.domain.agent.channel.port.ChannelBindingRepository;
@@ -102,14 +100,6 @@ public class ChannelAutoConfiguration {
     }
 
     @Bean
-    public ChannelObserverAttacher channelObserverAttacher(SessionProjectionRegistry sessionProjectionRegistry,
-                                                           IExecutionLedgerReadRepository ledgerReadRepository,
-                                                           ChannelArtifactResolver channelArtifactResolver) {
-        return new ChannelObserverAttacher(
-                sessionProjectionRegistry, ledgerReadRepository, channelArtifactResolver);
-    }
-
-    @Bean
     public ChannelSessionBinder channelSessionBinder(IExecutionLedgerReadRepository ledgerReadRepository,
                                                      IExecutionLedgerWriteRepository ledgerWriteRepository) {
         return new ChannelSessionBinder(ledgerReadRepository, ledgerWriteRepository);
@@ -120,13 +110,11 @@ public class ChannelAutoConfiguration {
             IGptQueryApplicationService gptQueryApplicationService,
             AgentRunLaunchGate agentRunLaunchGate,
             ChannelIdentityRepository channelIdentityRepository,
-            ChannelObserverAttacher channelObserverAttacher,
             ChannelSessionBinder channelSessionBinder) {
         return new ChannelInboundDispatchService(
                 gptQueryApplicationService,
                 agentRunLaunchGate,
                 channelIdentityRepository,
-                channelObserverAttacher,
                 channelSessionBinder);
     }
 

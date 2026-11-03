@@ -14,6 +14,7 @@ import org.wwz.ai.domain.agent.runtime.subagent.SubAgentPrinter;
 import org.wwz.ai.domain.agent.runtime.util.StringUtil;
 import org.wwz.ai.domain.agent.ledger.model.replay.ReplayTiming;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
+import org.wwz.ai.application.agent.channel.outbound.ChannelTerminalPushService;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -31,11 +32,21 @@ public class AgentSessionPrinter implements Printer {
     private final AgentSessionStream stream;
     private final AgentExecutionCommand request;
     private Integer agentType;
+    /** 终答直推 IM；子 Agent 打印机与单测可为 null。 */
+    private final ChannelTerminalPushService terminalPushService;
 
     public AgentSessionPrinter(AgentSessionStream stream, AgentExecutionCommand request, Integer agentType) {
+        this(stream, request, agentType, null);
+    }
+
+    public AgentSessionPrinter(AgentSessionStream stream,
+                               AgentExecutionCommand request,
+                               Integer agentType,
+                               ChannelTerminalPushService terminalPushService) {
         this.stream = stream;
         this.request = request;
         this.agentType = agentType;
+        this.terminalPushService = terminalPushService;
     }
 
     /**
@@ -275,6 +286,10 @@ public class AgentSessionPrinter implements Printer {
             }
 
             stream.sendRuntimeEvent(response);
+            if ("result".equals(messageType) && !nestedSubAgent && terminalPushService != null) {
+                terminalPushService.pushSuccess(
+                        request.getSessionId(), request.getRequestId(), response.getResult());
+            }
         } catch (Exception e) {
             log.error("stream send error", e);
         }

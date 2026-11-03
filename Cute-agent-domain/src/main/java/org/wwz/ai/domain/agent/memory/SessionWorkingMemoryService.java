@@ -29,12 +29,12 @@ public interface SessionWorkingMemoryService {
     /**
      * 持久化本轮 delta 到主 scope。
      */
-    default void persistTurn(String sessionId,
-                             String requestId,
-                             Long runId,
-                             String entryAgent,
-                             List<Message> turnMessages) {
-        persistTurn(sessionId, WorkingMemoryScopes.MAIN, requestId, runId, entryAgent, turnMessages);
+    default boolean persistTurn(String sessionId,
+                                String requestId,
+                                Long runId,
+                                String entryAgent,
+                                List<Message> turnMessages) {
+        return persistTurn(sessionId, WorkingMemoryScopes.MAIN, requestId, runId, entryAgent, turnMessages);
     }
 
     /**
@@ -44,13 +44,15 @@ public interface SessionWorkingMemoryService {
      * 保证 run 重试或部分失败后的补偿调用不会污染下一轮 preload。</p>
      * <p>实现需保证「查重 + 插入」对同一 requestId 的并发调用不产生两条 turn
      * （依赖存储层唯一约束或调用方串行化）。</p>
+     *
+     * @return true 表示本轮消息已经（或无需）落库；false 表示持久化失败，调用方不得据此标记通知已投递
      */
-    void persistTurn(String sessionId,
-                     String memoryScope,
-                     String requestId,
-                     Long runId,
-                     String entryAgent,
-                     List<Message> turnMessages);
+    boolean persistTurn(String sessionId,
+                        String memoryScope,
+                        String requestId,
+                        Long runId,
+                        String entryAgent,
+                        List<Message> turnMessages);
 
     /**
      * 用压缩后的投影整体替换主 scope READY turns。

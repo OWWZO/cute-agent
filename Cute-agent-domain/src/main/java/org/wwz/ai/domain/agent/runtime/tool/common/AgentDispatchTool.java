@@ -48,8 +48,8 @@ public class AgentDispatchTool implements BaseTool {
         SubAgentRegistry subAgentRegistry = resolveSubAgentRegistry(context);
         StringBuilder sb = new StringBuilder();
         sb.append("派发一个新的子 Agent 执行独立任务。")
-                .append("默认阻塞等待完成后返回精简报告；run_in_background=true 时立即返回 task_id 与 agentId。")
-                .append("后台运行中：用 TaskOutput 取结果、TaskStop 取消、SendMessage 中途指导。")
+                .append("默认阻塞等待完成后返回精简报告；run_in_background=true 时立即返回 agentId。")
+                .append("后台运行中：完成结果自动回传；TaskStop 取消、SendMessage 中途指导。")
                 .append("已结束/失败/停止的子 Agent 用 SendMessage(to=agentId, message=…) 后台唤醒，不要用本工具续跑。")
                 .append("新任务：子 Agent 从零上下文开始，请在 prompt 中写全背景与交付要求。")
                 .append("可用 subagent_type：");
@@ -101,7 +101,7 @@ public class AgentDispatchTool implements BaseTool {
         Map<String, Object> runInBackground = new LinkedHashMap<>();
         runInBackground.put("type", "boolean");
         runInBackground.put("description",
-                "设为 true 时后台运行：立即返回 task_id。用 TaskOutput 等待/读取结果，SendMessage 中途指导，TaskStop 取消");
+                "设为 true 时后台运行：立即返回 agentId。完成结果自动回传，SendMessage 中途指导，TaskStop 取消");
 
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("description", description);

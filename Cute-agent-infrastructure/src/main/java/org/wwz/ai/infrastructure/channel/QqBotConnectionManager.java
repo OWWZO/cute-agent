@@ -177,6 +177,11 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
         return client != null && client.isRunning();
     }
 
+    @Override
+    public ChannelAdapter findAdapter(Long bindingId) {
+        return bindingId == null ? null : adapters.get(bindingId);
+    }
+
     private void markActive(Long bindingId) {
         bindingRepository.updateStatus(bindingId, ChannelBinding.STATUS_ACTIVE, null, LocalDateTime.now());
     }

@@ -88,24 +88,27 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
     }
 
     @Override
-    public void persistTurn(String sessionId,
-                            String memoryScope,
-                            String requestId,
-                            Long runId,
-                            String entryAgent,
-                            List<Message> turnMessages) {
-        if (StringUtils.isBlank(sessionId) || StringUtils.isBlank(requestId) || turnMessages == null || turnMessages.isEmpty()) {
-            return;
+    public boolean persistTurn(String sessionId,
+                               String memoryScope,
+                               String requestId,
+                               Long runId,
+                               String entryAgent,
+                               List<Message> turnMessages) {
+        if (StringUtils.isBlank(sessionId) || StringUtils.isBlank(requestId)) {
+            return false;
+        }
+        if (turnMessages == null || turnMessages.isEmpty()) {
+            return true;
         }
         String scope = WorkingMemoryScopes.normalize(memoryScope);
         try {
             WorkingMemoryTurn existing = workingMemoryTurnDao.selectByRequestId(requestId);
             if (existing != null) {
-                return; // idempotent
+                return true; // idempotent
             }
             List<WorkingMemoryMessage> rows = projector.project(turnMessages, sessionId, scope, requestId, runId);
             if (rows.isEmpty()) {
-                return;
+                return true;
             }
             Integer maxSeq = workingMemoryTurnDao.selectMaxTurnSeq(sessionId, scope);
             int nextSeq = (maxSeq == null ? 0 : maxSeq) + 1;
@@ -127,15 +130,17 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
                     .build();
             workingMemoryTurnDao.insertTurn(turn);
             if (turn.getId() == null) {
-                return;
+                return false;
             }
             for (WorkingMemoryMessage row : rows) {
                 row.setTurnId(turn.getId());
                 row.setMemoryScope(scope);
             }
             workingMemoryMessageDao.batchInsertMessages(rows);
+            return true;
         } catch (Exception e) {
             log.warn("persistTurn failed sessionId={} scope={} requestId={}", sessionId, scope, requestId, e);
+            return false;
         }
     }
 

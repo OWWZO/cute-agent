@@ -22,6 +22,8 @@ public class BackgroundTaskPO {
     private Long totalDurationMs;
     private Long startedAtMs;
     private Long endedAtMs;
+    /** 通知是否已随工作记忆持久化；0 表示下轮 run 需要补投。 */
+    private Boolean notified;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
     private Integer deleted;

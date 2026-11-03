@@ -56,6 +56,8 @@ declare global {
         replayLoaded?: boolean;
         /** 后端是否允许从该摘要进入单 run replay。 */
         replayAvailable?: boolean;
+        /** 后台任务唤醒轮：不渲染用户气泡，只展示「后台任务已完成」系统条。 */
+        backgroundWake?: boolean;
       }
     >;
 

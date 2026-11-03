@@ -1,13 +1,15 @@
 package org.wwz.ai.application.agent.channel.inbound;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord;
 
 /**
- * 给 IM 渠道会话打上 {@code binding_id}，供 owner 查看权限使用。
+ * 给 IM 渠道会话打上 {@code binding_id} 与出站目标（chatType / targetId），
+ * 供 owner 查看权限和唤醒轮/主动推送恢复目标使用。
  * <p>为什么在 channel 侧直接写库而不是改 command 链路：{@code AgentExecutionCommand} 是 domain
  * 的运行时命令，加一个纯渠道维度的字段会污染核心链路，而这里只需一次幂等 upsert。</p>
  *
@@ -27,15 +29,24 @@ public class ChannelSessionBinder {
     }
 
     /**
-     * 幂等：已带 bindingId 的会话不再写。任何异常都吞掉——打标记失败不该让用户收不到回复。
+     * 幂等：已带 bindingId 且出站目标完整的会话不再写。任何异常都吞掉——打标记失败不该让用户收不到回复。
+     *
+     * @param chatType 出站会话形态（C2C/GROUP/...），与 targetId 一起供后续主动推送恢复目标
+     * @param targetId 出站目标 ID
      */
-    public void bind(String sessionId, Long bindingId, String userId) {
+    public void bind(String sessionId, Long bindingId, String userId, String chatType, String targetId) {
         if (sessionId == null || sessionId.isBlank() || bindingId == null) {
             return;
         }
         try {
             DialogueSession existing = ledgerReadRepository.querySessionEntity(sessionId);
-            if (existing == null || bindingId.equals(existing.getBindingId())) {
+            if (existing == null) {
+                return;
+            }
+            boolean sameBinding = bindingId.equals(existing.getBindingId());
+            boolean targetComplete = StringUtils.isNotBlank(existing.getChannelChatType())
+                    && StringUtils.isNotBlank(existing.getChannelTargetId());
+            if (sameBinding && (targetComplete || StringUtils.isBlank(chatType) || StringUtils.isBlank(targetId))) {
                 return;
             }
             // 用现有字段整体回写，避免把 upsert 当成「部分更新」用。
@@ -43,6 +54,8 @@ public class ChannelSessionBinder {
                     .sessionId(existing.getSessionId())
                     .userId(existing.getUserId())
                     .bindingId(bindingId)
+                    .channelChatType(StringUtils.defaultIfBlank(chatType, existing.getChannelChatType()))
+                    .channelTargetId(StringUtils.defaultIfBlank(targetId, existing.getChannelTargetId()))
                     .sessionKind(existing.getSessionKind())
                     .parentSessionId(existing.getParentSessionId())
                     .rootSessionId(existing.getRootSessionId())

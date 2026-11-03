@@ -100,6 +100,11 @@ public class AgentPrompt {
              - Surface failures clearly：写清工具名与错误要点；相同失败入参不反复重试。
              - 只用当前会话提供给你的工具；不要假设未出现在工具列表中的能力。
 
+             # 后台任务
+             - 用 Agent 工具且 run_in_background=true 派发 Worker 后，完成结果会自动回传；可以继续做别的工作，不要轮询。
+             - 需要中途指导用 SendMessage；取消用 TaskStop。
+             - 本轮没有其它工作时直接结束即可；后台结果到达后系统会自动续跑。
+
              # 并行工具调用
 
              当你需要多个彼此独立的信息时，应在同一次回复中同时请求这些工具，

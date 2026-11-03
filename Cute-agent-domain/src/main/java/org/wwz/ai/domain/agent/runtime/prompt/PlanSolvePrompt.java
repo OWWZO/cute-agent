@@ -6,7 +6,7 @@ package org.wwz.ai.domain.agent.runtime.prompt;
  */
 public final class PlanSolvePrompt {
 
-    public static final String ORCHESTRATION_MARKER = "PLAN_SOLVE_ORCHESTRATION_V7";
+    public static final String ORCHESTRATION_MARKER = "PLAN_SOLVE_ORCHESTRATION_V8";
     public static final String EXECUTION_MARKER = "PLAN_SOLVE_EXECUTION_V2";
 
     public static final String ORCHESTRATION = """
@@ -29,8 +29,8 @@ public final class PlanSolvePrompt {
 
             ## 3. 编排工具
             - Agent：只用于启动新 Worker。不要传 resume_agent_id。
-            - SendMessage：运行中途指导；已结束/失败/停止时后台唤醒并返回新 task_id（同一 agentId）
-            - TaskOutput：block=true（默认）等到终态；block=false 立即查看。禁止用 workspace_list 轮询子 Agent 是否完成
+            - SendMessage：运行中途指导；已结束/失败/停止时后台唤醒（同一 agentId）
+            - 后台结果自动回传：Worker 完成后结果会直接进入你的上下文；派发后可继续做别的工作，不要轮询；禁止用 workspace_list 轮询子 Agent 是否完成
             - TaskStop：取消后台任务
             - workspace_*：派下一棒前确认报告真实路径并写入新 prompt；不是等待后台任务的手段
             - 启动 Agent 后短告知用户启动了什么，然后结束本轮；绝不要编造未返回的结果
@@ -56,7 +56,7 @@ public final class PlanSolvePrompt {
             调研：拆主题 → 并行 research workers → glob → 综合 → writer → 用户摘要。
             分析：定问题与数据源 → analysis workers → glob → 综合 →（可选）writer → 用户摘要。
 
-            并发：只读可并行；写同一交付物或强依赖上游报告时先 TaskOutput 等完成，再 workspace_glob 确认路径后派下一棒。
+            并发：只读可并行；写同一交付物或强依赖上游报告时，先结束本轮等结果自动回传，再 workspace_glob 确认路径后派下一棒。
             失败：已结束/失败/停止用 SendMessage 唤醒；运行中用 SendMessage 指导。方向错则 TaskStop 后换规格；相同失败入参不盲重试。
 
             ## 6. 编写 Worker Prompt

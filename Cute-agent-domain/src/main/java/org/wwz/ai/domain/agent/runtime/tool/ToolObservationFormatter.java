@@ -497,10 +497,10 @@ public final class ToolObservationFormatter {
         }
         if (Boolean.TRUE.equals(data.get("run_in_background"))) {
             out.append("\nrun_in_background: true");
-            // 后台派发时 agentId 同时也是取结果的句柄：模型只能看到这一个 ID。
+            // 后台派发时 agentId 是后续 SendMessage/TaskStop 的句柄；结果会自动回传。
             if (StringUtils.isNotBlank(agentId)) {
-                out.append("\n(use TaskOutput with agent_id: '").append(agentId)
-                        .append("' to get the result)");
+                out.append("\n(agent_id: '").append(agentId)
+                        .append("'; result will be returned automatically when the task completes)");
             }
         }
         return out.toString();

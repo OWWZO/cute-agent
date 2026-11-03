@@ -78,7 +78,11 @@ public final class LtmTurnSyncSupport {
             // 无身份来源：跳过后台 review，避免把内容写进共享匿名 owner。
             return;
         }
-        List<Message> snapshot = memoryMessages == null ? List.of() : new ArrayList<>(memoryMessages);
+        // 复用上面的 memoryMessages 快照（避免与同步读到不同版本），
+        // 但只把可见消息交给复盘，modelOnly 的内部消息不应进入背景复盘。
+        List<Message> snapshot = memoryMessages == null
+                ? List.of()
+                : visibleMessages(memoryMessages);
         String parentSystem = null;
         ToolCollection parentTools = null;
         try {
@@ -107,7 +111,8 @@ public final class LtmTurnSyncSupport {
     private static List<Map<String, Object>> toMaps(List<Message> messages) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Message message : messages) {
-            if (message == null) {
+            if (message == null || Boolean.TRUE.equals(message.getModelOnly())) {
+                // 后台任务通知只服务模型上下文，不进入长期记忆。
                 continue;
             }
             Map<String, Object> row = new HashMap<>();
@@ -116,5 +121,15 @@ public final class LtmTurnSyncSupport {
             out.add(row);
         }
         return out;
+    }
+
+    private static List<Message> visibleMessages(List<Message> messages) {
+        List<Message> visible = new ArrayList<>(messages.size());
+        for (Message message : messages) {
+            if (message != null && !Boolean.TRUE.equals(message.getModelOnly())) {
+                visible.add(message);
+            }
+        }
+        return visible;
     }
 }

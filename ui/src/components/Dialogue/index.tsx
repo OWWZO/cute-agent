@@ -1,4 +1,5 @@
 import { FC, useState, useCallback, useMemo, memo, useEffect, useRef } from "react";
+import { Sparkles } from "lucide-react";
 import AttachmentList from "@/components/AttachmentList";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { OpenUiMarkdown } from "@/components/openui/OpenUiMarkdown";
@@ -231,6 +232,14 @@ const DialogueComponent: FC<Props> = (props) => {
             preview={true}
             review={(file) => changeFile?.(file, chat)}
           />
+        </div>
+      ) : null}
+
+      {/* 后台任务唤醒轮：没有用户提问，只标注来源 */}
+      {chat.backgroundWake ? (
+        <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
+          <Sparkles className="size-4" aria-hidden="true" />
+          <span>后台任务已完成</span>
         </div>
       ) : null}
 

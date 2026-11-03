@@ -31,6 +31,9 @@ import org.wwz.ai.domain.agent.memory.ltm.CuratedMemoryStore;
 import org.wwz.ai.domain.agent.memory.ltm.LtmManager;
 import org.wwz.ai.domain.agent.memory.ltm.MemoryFlushService;
 import org.wwz.ai.domain.agent.memory.ltm.SessionSearchService;
+import org.wwz.ai.application.agent.run.BackgroundTaskWakeAdapter;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskCompletionEvent;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -144,6 +147,30 @@ public class CuteRuntimeAutoConfiguration {
                 .build();
     }
 
+    /**
+     * 惰性代理：CuteRuntimeDependencies 构造期不能解析 BackgroundTaskWakeAdapter，
+     * 否则会经 dispatch → execute → assembly 反向依赖正在创建的 dependencies，形成循环。
+     */
+    @Bean
+    public BackgroundTaskWakePort backgroundTaskWakePort(
+            ObjectProvider<BackgroundTaskWakeAdapter> adapterProvider) {
+        return new BackgroundTaskWakePort() {
+            @Override
+            public boolean onBackgroundTaskCompleted(BackgroundTaskCompletionEvent event) {
+                BackgroundTaskWakeAdapter adapter = adapterProvider.getIfAvailable();
+                return adapter != null && adapter.onBackgroundTaskCompleted(event);
+            }
+
+            @Override
+            public void onRunSettled(String sessionId) {
+                BackgroundTaskWakeAdapter adapter = adapterProvider.getIfAvailable();
+                if (adapter != null) {
+                    adapter.onRunSettled(sessionId);
+                }
+            }
+        };
+    }
+
     @Bean
     public CuteRuntimeDependencies cuteRuntimeDependencies(CuteConfig cuteConfig,
                                                                  Environment environment,
@@ -181,6 +208,7 @@ public class CuteRuntimeAutoConfiguration {
                                                                    ObjectProvider<SubAgentRegistry> subAgentRegistryProvider,
                                                                    ObjectProvider<ActiveAgentRunRegistry> activeAgentRunRegistryProvider,
                                                                    ObjectProvider<PlanArtifactStore> planArtifactStoreProvider,
+                                                                   @Qualifier("backgroundTaskWakePort") BackgroundTaskWakePort backgroundTaskWakePort,
                                                                    AgentExecutorProperties agentExecutorProperties) {
         // SessionContextCompactionService 是接口，@Lazy 可走 JDK 代理；
         // 反向依赖用 ObjectProvider，避免对 final 的 CuteRuntimeDependencies 做 CGLIB 代理。
@@ -221,6 +249,7 @@ public class CuteRuntimeAutoConfiguration {
                 .subAgentRegistry(subAgentRegistryProvider.getIfAvailable())
                 .activeAgentRunRegistry(activeAgentRunRegistryProvider.getIfAvailable())
                 .planArtifactStore(planArtifactStoreProvider.getIfAvailable())
+                .backgroundTaskWakePort(backgroundTaskWakePort)
                 .ltmFlushMinTurns(ltmPropertiesProvider.getIfAvailable() == null
                         ? 6
                         : ltmPropertiesProvider.getIfAvailable().getFlushMinTurns())

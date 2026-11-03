@@ -3,8 +3,11 @@ package org.wwz.ai.domain.agent.runtime.subagent;
 import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskCompletionEvent;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
+import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.stream.ToolResultStreamPayload;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
@@ -14,7 +17,9 @@ import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionAgentMailboxHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionNotificationHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.StreamSettlePolicy;
+import org.wwz.ai.domain.agent.runtime.tasklist.TaskNotification;
 import org.wwz.ai.domain.agent.runtime.tool.ToolObservationSerializer;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.tool.common.AgentDispatchTool;
@@ -122,6 +127,8 @@ public final class BackgroundSubAgentExecutor {
                 if (taskCancel.isCancelled()
                         || RuntimeBackgroundTask.STATUS_STOPPED.equals(
                         registry.get(taskId).map(RuntimeBackgroundTask::getStatus).orElse(null))) {
+                    // 父 run 取消时任务状态可能仍是 running；统一收敛为 stopped，避免重启后被当失败补投。
+                    registry.stop(taskId);
                     registry.get(taskId).ifPresent(t -> {
                         if (StringUtils.isBlank(t.getOutput()) && StringUtils.isNotBlank(result.getContent())) {
                             t.setOutput(result.getContent());
@@ -135,29 +142,35 @@ public final class BackgroundSubAgentExecutor {
                     });
                     persistLedgerSettlement(parent, parentToolUseId, toolName,
                             registry.get(taskId).orElse(task));
-                    emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, result, false, runRegistry, childSessionId);
+                    // 用户主动停止不产生完成通知，也不唤醒。
+                    emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, result, false,
+                            runRegistry, childSessionId, true);
                     return;
                 }
                 if (result.isCompleted()) {
                     registry.complete(taskId, result);
-                    persistLedgerSettlement(parent, parentToolUseId, toolName,
-                            registry.get(taskId).orElse(task));
-                    emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, result, true, runRegistry, childSessionId);
+                    RuntimeBackgroundTask completedTask = registry.get(taskId).orElse(task);
+                    persistLedgerSettlement(parent, parentToolUseId, toolName, completedTask);
+                    boolean wakeHandled = notifyCompletion(parent, completedTask, parentToolUseId);
+                    emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, result, true,
+                            runRegistry, childSessionId, !wakeHandled);
                 } else {
                     registry.fail(taskId, result);
-                    persistLedgerSettlement(parent, parentToolUseId, toolName,
-                            registry.get(taskId).orElse(task));
-                    emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, result, false, runRegistry, childSessionId);
+                    RuntimeBackgroundTask failedTask = registry.get(taskId).orElse(task);
+                    persistLedgerSettlement(parent, parentToolUseId, toolName, failedTask);
+                    boolean wakeHandled = notifyCompletion(parent, failedTask, parentToolUseId);
+                    emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, result, false,
+                            runRegistry, childSessionId, !wakeHandled);
                 }
             } catch (Exception e) {
                 log.error("{} background subagent failed taskId={}", parent.getRequestId(), taskId, e);
                 if (taskCancel.isCancelled()) {
-                    // 与 try 内的 cancelled 分支保持一致：TaskStop 取消后父侧工具行必须落终态，
-                    // 否则会永远停在 status=running / finished_at=null。
+                    // TaskStop 取消：先登记终态、再结算账本，最后广播（settleAllowed=true 表示不再等唤醒注入）。
+                    registry.stop(taskId);
                     persistLedgerSettlement(parent, parentToolUseId, toolName,
                             registry.get(taskId).orElse(task));
-                    emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, null, false, runRegistry, childSessionId);
-                    return;
+                    emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, null, false,
+                            runRegistry, childSessionId, true);                    return;
                 }
                 String err = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
                 registry.fail(taskId, err);
@@ -169,13 +182,14 @@ public final class BackgroundSubAgentExecutor {
                         .prompt(pmt)
                         .errorMsg(err)
                         .build();
-                persistLedgerSettlement(parent, parentToolUseId, toolName,
-                        registry.get(taskId).orElse(task));
-                emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, failed, false, runRegistry, childSessionId);
+                RuntimeBackgroundTask failedTask = registry.get(taskId).orElse(task);
+                persistLedgerSettlement(parent, parentToolUseId, toolName, failedTask);
+                boolean wakeHandled = notifyCompletion(parent, failedTask, parentToolUseId);
+                emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, failed, false,
+                        runRegistry, childSessionId, !wakeHandled);
             } finally {
                 // 无论正常结束、取消还是异常，都必须释放 agentId 占位，否则该子 Agent 永远无法再次唤醒。
-                registry.releaseAgentRun(preferredAgentId);
-            }
+                registry.releaseAgentRun(preferredAgentId);            }
             });
         } catch (RejectedExecutionException e) {
             // 有界池饱和：必须结算已登记的 RUNNING 任务，否则 TaskOutput 永远等不到终态。
@@ -202,13 +216,11 @@ public final class BackgroundSubAgentExecutor {
         data.put("run_in_background", true);
         if (resume) {
             data.put("resumed", true);
-            data.put("message", "已在后台唤醒子 Agent。用 TaskOutput(agent_id=\"" + preferredAgentId
-                    + "\") 取结果；SendMessage(to=\"" + preferredAgentId
-                    + "\") 中途指导；TaskStop(agent_id) 取消。");
+            data.put("message", "已在后台唤醒子 Agent。任务完成结果会自动回传主 Agent；SendMessage(to=\""
+                    + preferredAgentId + "\") 中途指导；TaskStop(agent_id) 取消。");
         } else {
-            data.put("message", "后台子 Agent 已启动。用 TaskOutput(agent_id=\"" + preferredAgentId
-                    + "\") 取结果；SendMessage(to=\"" + preferredAgentId
-                    + "\") 中途指导；TaskStop(agent_id) 取消。");
+            data.put("message", "后台子 Agent 已启动。任务完成结果会自动回传主 Agent；SendMessage(to=\""
+                    + preferredAgentId + "\") 中途指导；TaskStop(agent_id) 取消。");
         }
         return ToolResultPayload.fromData(data);
     }
@@ -268,8 +280,58 @@ public final class BackgroundSubAgentExecutor {
         if (parent == null || !parent.isTurnClosed() || !StreamSettlePolicy.deferBackgroundSettle()) {
             return false;
         }
-        return !SessionBackgroundTaskHub.hasRunning(
-                SessionBackgroundTaskHub.keyFor(parent.getSessionId(), parent.getRequestId()));
+        // 还有通知排队：500ms 后要发 run_wake，连接不能先关。
+        String sessionKey = SessionBackgroundTaskHub.keyFor(parent.getSessionId(), parent.getRequestId());
+        if (SessionNotificationHub.hasPending(sessionKey)) {
+            return false;
+        }
+        return !SessionBackgroundTaskHub.hasRunning(sessionKey);
+    }
+
+    /**
+     * 后台任务到达终态：入队模型可见通知，并询问应用层是否接管续跑。
+     *
+     * @return true 表示续跑已被接管（调用方不要发 stream_settle）
+     */
+    private static boolean notifyCompletion(AgentContext parent,
+                                            RuntimeBackgroundTask task,
+                                            String parentToolUseId) {
+        if (parent == null || task == null) {
+            return false;
+        }
+        CuteRuntimeDependencies deps = parent.getRuntimeDependencies();
+        if (deps != null && deps.getCuteConfig() != null
+                && !deps.getCuteConfig().isBackgroundAutoContinuation()) {
+            return false;
+        }
+        // stopped / running 不产生通知；completed / failed / lost 才需要回传。
+        if (!RuntimeBackgroundTask.STATUS_COMPLETED.equals(task.getStatus())
+                && !RuntimeBackgroundTask.STATUS_FAILED.equals(task.getStatus())
+                && !RuntimeBackgroundTask.STATUS_LOST.equals(task.getStatus())) {
+            return false;
+        }
+        if (!parent.requireBackgroundTasks().claimNotification(task.getId())) {
+            return false;
+        }
+        String sessionKey = SessionBackgroundTaskHub.keyFor(parent.getSessionId(), parent.getRequestId());
+        SessionNotificationHub.offer(sessionKey, TaskNotification.from(task, parentToolUseId));
+        BackgroundTaskWakePort wakePort = deps == null ? null : deps.getOptionalBackgroundTaskWakePort();
+        if (wakePort == null) {
+            return false;
+        }
+        try {
+            return wakePort.onBackgroundTaskCompleted(new BackgroundTaskCompletionEvent(
+                    parent.getSessionId(),
+                    parent.getRequestId(),
+                    task.getId(),
+                    task.getAgentId(),
+                    task.getChildSessionId(),
+                    task.getStatus(),
+                    task.getDescription()));
+        } catch (Exception e) {
+            log.warn("background wake decision failed taskId={}", task.getId(), e);
+            return false;
+        }
     }
 
     private static void persistLedgerSettlement(AgentContext parent,
@@ -343,7 +405,8 @@ public final class BackgroundSubAgentExecutor {
                                                  SubAgentResult result,
                                                  boolean completed,
                                                  ActiveAgentRunRegistry runRegistry,
-                                                 String childSessionId) {
+                                                 String childSessionId,
+                                                 boolean settleAllowed) {
         if (parent == null) {
             return;
         }
@@ -393,7 +456,7 @@ public final class BackgroundSubAgentExecutor {
                 extra.put("isFinal", true);
                 printer.send(parentToolUseId, "tool_result", toolResult, extra, null, true);
             }
-            if (shouldSettleParentStream(parent)) {
+            if (settleAllowed && shouldSettleParentStream(parent)) {
                 Map<String, Object> settle = new LinkedHashMap<>();
                 settle.put("reason", "background_idle");
                 printer.send("stream_settle", settle);

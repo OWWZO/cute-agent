@@ -15,6 +15,7 @@ import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.askuser.UserQuestionResumeContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
@@ -57,6 +58,9 @@ public class DesktopControlResumeApplicationService {
     @Resource
     @Qualifier(AgentExecutorNames.DISPATCH_EXECUTOR)
     private Executor dispatchExecutor;
+
+    @Resource
+    private BackgroundTaskWakePort backgroundTaskWakePort;
 
     public AgentQuerySubmitResult resume(String resumeRequestId) {
         if (StringUtils.isBlank(resumeRequestId)) {
@@ -152,6 +156,20 @@ public class DesktopControlResumeApplicationService {
             }
             projectingStream.completeWithError(e);
             GptQueryApplicationService.endRunUnlessBackground(agentRequest, activeAgentRunRegistry);
+        } finally {
+            notifyRunSettled(agentRequest);
+        }
+    }
+
+    private void notifyRunSettled(AgentExecutionCommand agentRequest) {
+        if (backgroundTaskWakePort == null || agentRequest == null
+                || StringUtils.isBlank(agentRequest.getSessionId())) {
+            return;
+        }
+        try {
+            backgroundTaskWakePort.onRunSettled(agentRequest.getSessionId());
+        } catch (Exception e) {
+            log.warn("{} desktop-control resume settle check failed", agentRequest.getRequestId(), e);
         }
     }
 
