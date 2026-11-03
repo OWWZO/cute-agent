@@ -22,6 +22,7 @@
 const PAIR_SOURCE = "cute";
 const EXTENSION_SOURCE = "cute-bsk-extension";
 const PAIR_TYPE = "bsk-browser-pair";
+const INSTALLED_FLAG = "__bskPairBridgeInstalled";
 
 export default defineContentScript({
   // 与前端"连接浏览器"按钮所在页面一致：本机开发与任意 https 站点。
@@ -29,6 +30,12 @@ export default defineContentScript({
   runAt: "document_idle",
 
   main(ctx) {
+    // 静态注入与安装后补注入可能落在同一个标签页上；只保留一个监听器，
+    // 否则同一条配对消息会重复发给 background。
+    const scope = window as Window & { [INSTALLED_FLAG]?: boolean };
+    if (scope[INSTALLED_FLAG]) return;
+    scope[INSTALLED_FLAG] = true;
+
     const onMessage = (event: MessageEvent) => {
       if (event.source !== window) return;
       if (event.origin !== window.location.origin) return;
@@ -62,6 +69,7 @@ export default defineContentScript({
 
     ctx.onInvalidated(() => {
       window.removeEventListener("message", onMessage);
+      delete scope[INSTALLED_FLAG];
     });
   },
 });

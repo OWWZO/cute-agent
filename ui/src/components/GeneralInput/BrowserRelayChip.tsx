@@ -54,8 +54,12 @@ export default function BrowserRelayChip({ disabled }: Props) {
     const onMessage = (event: MessageEvent) => {
       if (event.source !== window) return;
       const msg = event.data as { source?: string; type?: string; ok?: boolean; error?: string } | null;
-      if (msg?.source !== "cute-extension") return;
-      if (msg.type !== "browser-pair-result") return;
+      if (!msg) return;
+      const legacyPair =
+        msg.source === "cute-extension" && msg.type === "browser-pair-result";
+      const bskPair =
+        msg.source === "cute-bsk-extension" && msg.type === "bsk-browser-pair-result";
+      if (!legacyPair && !bskPair) return;
       if (msg.ok) {
         void refresh();
         return;
@@ -112,7 +116,7 @@ export default function BrowserRelayChip({ disabled }: Props) {
         type="button"
         disabled={disabled || busy}
         className={cn(
-          "inline-flex h-8 max-w-[140px] items-center gap-1 rounded-md px-2 text-ui-sm text-foreground-subtle hover:bg-black/[0.04] hover:text-foreground",
+          "inline-flex h-8 max-w-[140px] items-center gap-1 rounded-md px-2 text-ui-sm text-foreground hover:bg-black/[0.04]",
           connected && "bg-brand text-white hover:bg-brand hover:text-white"
         )}
         title={
@@ -124,7 +128,7 @@ export default function BrowserRelayChip({ disabled }: Props) {
         }
         onClick={connected ? onDisconnect : onConnect}
       >
-        <Globe className="size-3.5 shrink-0 opacity-80" />
+        <Globe className="size-3.5 shrink-0" />
         <span className="truncate">{connected ? "浏览器已连接" : "连接浏览器"}</span>
       </button>
       {pairing && !connected ? (

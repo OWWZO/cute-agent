@@ -60,6 +60,40 @@ import { type RemoteEndpoint, remoteSocket } from "@/transport/remote-endpoint";
 import type { Transport } from "@/transport/transport";
 import { WSTransport } from "@/transport/ws-transport";
 
+/** 与 bsk-pair.content.ts 的 matches 保持一致。 */
+const PAIR_BRIDGE_TAB_PATTERNS = [
+  "http://localhost:*/*",
+  "http://127.0.0.1:*/*",
+  "https://*/*",
+];
+
+/**
+ * 静态 content script 只在页面加载时注入；扩展安装/重载前就打开的 Cute 页面
+ * 不会自动获得配对桥。安装和浏览器启动时补注入一次，避免用户必须手动刷新。
+ * 页面内的重复注入由 bsk-pair.content.ts 的实例标记挡住。
+ */
+export async function injectPairBridgeIntoOpenTabs(): Promise<void> {
+  if (!chrome.scripting?.executeScript || !chrome.tabs?.query) return;
+  try {
+    const tabs = await chrome.tabs.query({ url: PAIR_BRIDGE_TAB_PATTERNS });
+    await Promise.all(
+      tabs.map(async (tab) => {
+        if (tab.id === undefined) return;
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ["content-scripts/bsk-pair.js"],
+          });
+        } catch {
+          // chrome://、扩展页和 Web Store 等受限页面无法注入。
+        }
+      }),
+    );
+  } catch {
+    // 补注入是尽力而为；正常导航时静态 content script 仍会注入。
+  }
+}
+
 export default defineBackground(() => {
   const controller = new ConnectionController();
   let remoteEndpoint: RemoteEndpoint | null = null;
@@ -420,7 +454,15 @@ export default defineBackground(() => {
   // running; a cold daemon is (re)spawned by the next `bsk` command.
   const reconnectIfNeeded = () => controller.requestConnect();
   if (typeof chrome.runtime?.onStartup?.addListener === "function") {
-    chrome.runtime.onStartup.addListener(reconnectIfNeeded);
+    chrome.runtime.onStartup.addListener(() => {
+      reconnectIfNeeded();
+      void injectPairBridgeIntoOpenTabs();
+    });
+  }
+  if (typeof chrome.runtime?.onInstalled?.addListener === "function") {
+    chrome.runtime.onInstalled.addListener(() => {
+      void injectPairBridgeIntoOpenTabs();
+    });
   }
   if (typeof chrome.idle?.onStateChanged?.addListener === "function") {
     chrome.idle.onStateChanged.addListener((state) => {
