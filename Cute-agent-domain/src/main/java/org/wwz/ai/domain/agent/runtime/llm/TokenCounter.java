@@ -346,8 +346,12 @@ public class TokenCounter {
                 roleCounts.merge(role, 1, Integer::sum);
             }
         }
-        String toolSchemaFingerprint = toolSchemaFingerprint(effective.getTools());
-        String promptShapeFingerprint = fingerprint(effective);
+        // 工具 schema 序列化可能走反射且代价高：一次序列化同时算 schema 指纹与 prompt 指纹，
+        // 不再让 fingerprint(effective) 内部重复 stableToolSchema。
+        String toolSchema = stableToolSchema(effective.getTools());
+        String toolSchemaFingerprint = shortHash(toolSchema);
+        String promptShapeFingerprint = shortHash(
+                effective.protocolName() + "|" + systemContent + "|" + toolSchemaFingerprint);
         return PromptEstimate.builder()
                 .systemChars(systemContent.length())
                 .systemTokens(systemTokens)

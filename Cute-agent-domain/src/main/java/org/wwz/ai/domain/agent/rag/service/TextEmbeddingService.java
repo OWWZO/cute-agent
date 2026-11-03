@@ -16,7 +16,12 @@ import java.util.List;
 @Service
 public class TextEmbeddingService {
 
+    /** 健康检查会被频繁轮询，短缓存避免每次调用都打一次真实 embedding。 */
+    private static final long HEALTH_CACHE_TTL_MS = 30_000L;
+
     private TextEmbeddingPort textEmbeddingPort;
+    private volatile boolean healthResult;
+    private volatile long healthCheckedAtMs;
 
     public TextEmbeddingService() {
     }
@@ -48,8 +53,15 @@ public class TextEmbeddingService {
     }
 
     public boolean healthCheck() {
+        long now = System.currentTimeMillis();
+        if (healthCheckedAtMs > 0 && now - healthCheckedAtMs < HEALTH_CACHE_TTL_MS) {
+            return healthResult;
+        }
         List<Float> vector = getVector("health_check");
-        return vector != null && !vector.isEmpty();
+        boolean healthy = vector != null && !vector.isEmpty();
+        healthResult = healthy;
+        healthCheckedAtMs = System.currentTimeMillis();
+        return healthy;
     }
 
     public void setTextEmbeddingPort(TextEmbeddingPort textEmbeddingPort) {

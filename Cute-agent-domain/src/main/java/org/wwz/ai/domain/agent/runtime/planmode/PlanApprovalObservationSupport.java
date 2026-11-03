@@ -63,10 +63,11 @@ public final class PlanApprovalObservationSupport {
                     && StringUtils.isNotBlank(resumeContext.getPlanMode().getPrePlanMode())) {
                 restored = resumeContext.getPlanMode().getPrePlanMode();
             }
+            // 计划正文只保留在 message（## Approved Plan）里；再放一份 plan 字段会让
+            // observation 体积翻倍，并可能把 96k 截断切在 JSON 中间。
             fields.put("message", PlanModePromptInjector.buildApprovedPlanToolResult(
                     planContent, planFilePath, restored));
             fields.put("restoredMode", restored);
-            fields.put("plan", planContent);
             fields.put("filePath", planFilePath);
         } else {
             String feedback = decision == null ? null : decision.getFeedback();

@@ -22,7 +22,14 @@ public final class SessionBackgroundTaskHub {
     public static RuntimeBackgroundTaskRegistry getOrCreate(String sessionId,
                                                              TasklistPersistencePort persistence) {
         String key = keyFor(sessionId);
-        return BY_SESSION.computeIfAbsent(key, sid -> new RuntimeBackgroundTaskRegistry(sid, persistence));
+        RuntimeBackgroundTaskRegistry existing = BY_SESSION.get(key);
+        if (existing != null) {
+            return existing;
+        }
+        // 构造会 hydrate（DB 读），必须在 bin lock 之外完成；并发创建时只保留先发布者。
+        RuntimeBackgroundTaskRegistry created = new RuntimeBackgroundTaskRegistry(key, persistence);
+        RuntimeBackgroundTaskRegistry raced = BY_SESSION.putIfAbsent(key, created);
+        return raced != null ? raced : created;
     }
 
     /** 当前 session 是否仍有 running 后台任务（用于延迟关闭主 SSE） */

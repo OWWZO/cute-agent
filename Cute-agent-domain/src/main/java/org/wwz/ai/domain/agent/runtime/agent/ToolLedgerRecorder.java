@@ -80,7 +80,6 @@ final class ToolLedgerRecorder {
 
     /** 只建缺失的账本行，不合并已存在的 ID。 */
     Map<String, Long> preRegister(List<ToolCall> commands, Map<String, ToolDispatch> dispatches) {
-        timings.start(commands);
         AgentContext context = agent.getContext();
         if (context == null || !context.hasActiveLedgerRun() || context.getAgentRunState() == null) {
             return Map.of();
@@ -89,6 +88,8 @@ final class ToolLedgerRecorder {
         if (llmInvocationId == null) {
             return Map.of();
         }
+        // 只有确定要写账本时才启动计时；否则 finish 会提前返回，计时条目无人清理。
+        timings.start(commands);
         List<ToolInvocationBatchStartRecord.Item> items = new ArrayList<>(commands.size());
         int dispatchIndex = 1;
         for (ToolCall command : commands) {

@@ -44,7 +44,8 @@ final class LlmRequestAssembler {
                 .model(model)
                 .settings(settings)
                 .messages(toLlmMessages(domainMessages))
-                .tools(tools == null || tools.isEmpty() ? List.of() : List.copyOf(tools))
+                // LlmRequest 构造器已做防御性拷贝，这里再 List.copyOf 会重复复制整份工具定义。
+                .tools(tools == null || tools.isEmpty() ? List.of() : tools)
                 .toolChoice(toolChoice)
                 .temperature(overrideTemperature)
                 .sessionId(context == null ? null : context.getSessionId())

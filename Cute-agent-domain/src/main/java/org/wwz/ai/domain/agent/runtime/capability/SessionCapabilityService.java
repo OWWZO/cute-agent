@@ -30,9 +30,15 @@ public class SessionCapabilityService {
     public static final String KIND_SKILL = "skill";
     public static final String KIND_MCP = "mcp";
 
+    /** MCP 发现结果短缓存：capabilities 会被 UI 频繁读取，避免每次刷新都全量发现。 */
+    private static final long MCP_DISCOVERY_CACHE_TTL_MS = 5_000L;
+
     private final ISessionCapabilityRepository repository;
     private final SkillRegistry skillRegistry;
     private final McpToolExecutor mcpToolExecutor;
+
+    private volatile List<McpToolInfo> cachedDiscoveredTools;
+    private volatile long discoveredAtMs;
 
     public SessionCapabilitiesView capabilities(String sessionId) {
         Map<String, Map<String, Boolean>> overrides = repository.findOverrides(sessionId);
@@ -53,7 +59,7 @@ public class SessionCapabilityService {
         List<CapabilityItem> mcps = new ArrayList<>();
         Set<String> seenMcp = new LinkedHashSet<>();
         try {
-            List<McpToolInfo> tools = mcpToolExecutor.discoverConfiguredTools();
+            List<McpToolInfo> tools = discoverToolsCached();
             for (McpToolInfo t : tools) {
                 if (t == null) {
                     continue;
@@ -72,6 +78,18 @@ public class SessionCapabilityService {
         }
 
         return new SessionCapabilitiesView(false, skills, mcps);
+    }
+
+    private List<McpToolInfo> discoverToolsCached() {
+        long now = System.currentTimeMillis();
+        List<McpToolInfo> cached = cachedDiscoveredTools;
+        if (cached != null && now - discoveredAtMs < MCP_DISCOVERY_CACHE_TTL_MS) {
+            return cached;
+        }
+        List<McpToolInfo> discovered = mcpToolExecutor.discoverConfiguredTools();
+        cachedDiscoveredTools = discovered == null ? List.of() : List.copyOf(discovered);
+        discoveredAtMs = now;
+        return cachedDiscoveredTools;
     }
 
     public void setEnabled(String sessionId, String kind, String refId, boolean enabled) {
