@@ -10,7 +10,6 @@ import org.wwz.ai.domain.agent.channel.port.ChannelInboundPort;
 import org.wwz.ai.domain.agent.channel.model.ChannelInboundEvent;
 import org.wwz.ai.domain.agent.channel.model.ChannelPushResult;
 import org.wwz.ai.domain.agent.channel.model.ChannelTarget;
-import org.wwz.ai.application.agent.channel.outbound.ChannelObserverAttacher;
 import org.wwz.ai.domain.agent.channel.policy.ChannelSessionKey;
 import org.wwz.ai.domain.agent.channel.model.ChannelBinding;
 import org.wwz.ai.domain.agent.channel.model.ChannelIdentity;
@@ -21,9 +20,10 @@ import org.wwz.ai.types.agent.user.UserRequestContext;
 import java.util.UUID;
 
 /**
- * 入站编排：一条 IM 消息 → 一轮 agent 执行 → 出站观察者。
+ * 入站编排：一条 IM 消息 → 一轮 agent 执行。
  * <p>完全复用 {@code submitAgentQuery}，不重写编排：会话创建、授权、run 注册、launch gate、
- * LTM 边界都由现有链路负责。</p>
+ * LTM 边界都由现有链路负责；终答由 {@code AgentSessionPrinter} 在产生点直推，
+ * 不再挂投影观察者。</p>
  */
 @Slf4j
 public class ChannelInboundDispatchService implements ChannelInboundPort {
@@ -31,18 +31,15 @@ public class ChannelInboundDispatchService implements ChannelInboundPort {
     private final IGptQueryApplicationService gptQueryApplicationService;
     private final AgentRunLaunchGate agentRunLaunchGate;
     private final ChannelIdentityRepository identityRepository;
-    private final ChannelObserverAttacher observerAttacher;
     private final ChannelSessionBinder sessionBinder;
 
     public ChannelInboundDispatchService(IGptQueryApplicationService gptQueryApplicationService,
                                          AgentRunLaunchGate agentRunLaunchGate,
                                          ChannelIdentityRepository identityRepository,
-                                         ChannelObserverAttacher observerAttacher,
                                          ChannelSessionBinder sessionBinder) {
         this.gptQueryApplicationService = gptQueryApplicationService;
         this.agentRunLaunchGate = agentRunLaunchGate;
         this.identityRepository = identityRepository;
-        this.observerAttacher = observerAttacher;
         this.sessionBinder = sessionBinder;
     }
 
@@ -70,9 +67,6 @@ public class ChannelInboundDispatchService implements ChannelInboundPort {
                     event.chatType(), event.targetId(), event.platformUserId());
             String requestId = "im-" + UUID.randomUUID();
 
-            ChannelTarget target = new ChannelTarget(
-                    event.platform(), binding.getId(), event.chatType(),
-                    event.targetId(), event.messageId(), event.receivedAt());
             GptQueryCommand command = GptQueryCommand.builder()
                     .query(text)
                     .sessionId(sessionId)
@@ -83,11 +77,15 @@ public class ChannelInboundDispatchService implements ChannelInboundPort {
                     .build();
             gptQueryApplicationService.submitAgentQuery(command);
             // 会话行由 submit 内部的 ensureSessionAccessible 创建，之后才能安全打 binding 标记。
-            sessionBinder.bind(sessionId, binding.getId(), identity.getUserId());
+            sessionBinder.bind(
+                    sessionId,
+                    binding.getId(),
+                    identity.getUserId(),
+                    event.chatType() == null ? null : event.chatType().name(),
+                    event.targetId());
             // 立刻放行：IM 侧没有「浏览器连上来才开始」的概念，不能等 launch gate 的 2 秒兜底。
             agentRunLaunchGate.launchBySession(sessionId);
-
-            observerAttacher.attach(sessionId, requestId, target, adapter);
+            // 终答由 AgentSessionPrinter 直接推送 IM，不再挂出站观察者。
             log.info("channel inbound dispatched bindingId={} sessionId={} requestId={} chatType={}",
                     binding.getId(), sessionId, requestId, event.chatType());
         } catch (AgentConcurrentRunException e) {

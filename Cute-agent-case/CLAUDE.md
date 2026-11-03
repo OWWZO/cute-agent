@@ -59,9 +59,9 @@
 ### Channel（IM 渠道编排）
 | 接口 / 实现 | 职责 |
 |------------|------|
-| `ChannelInboundDispatchService` | 一条 IM 消息 → 复用 `submitAgentQuery` 跑一轮 → 挂出站观察者；实现 domain 的 `ChannelInboundPort` |
-| `ChannelSessionBinder` | `submitAgentQuery` 之后回写 `ai_agent_dialogue_session.binding_id` |
-| `ChannelObserverAttacher` / `ChannelObserverStream` / `ChannelFrameAggregator` | 把投影帧流收成一次 IM 出站（只认终答帧，`AtomicBoolean` 幂等）；投影已关闭时回退查执行账本 |
+| `ChannelInboundDispatchService` | 一条 IM 消息 → 复用 `submitAgentQuery` 跑一轮；终答由 `AgentSessionPrinter` 直推；实现 domain 的 `ChannelInboundPort` |
+| `ChannelSessionBinder` | `submitAgentQuery` 之后回写 `binding_id` 与出站目标（`channel_chat_type` / `channel_target_id`） |
+| `ChannelTerminalPushService` | 终答产生点直推 IM：成功带附件、失败推「任务失败：原因」、停止不推；`(sessionId, requestId)` 幂等 |
 | `ChannelArtifactResolver` | 查 `ai_agent_artifact`（output + visible），拼「📎 附件」 |
 | `ChannelBindingApplicationService` / `ChannelBindingQrService` / `ChannelOwnerQueryService` | 绑定的查询 / 解绑 / 重试 / 上限，扫码状态机，owner 查会话 |
 

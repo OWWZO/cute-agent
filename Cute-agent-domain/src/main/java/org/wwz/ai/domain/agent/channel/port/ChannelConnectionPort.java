@@ -23,4 +23,12 @@ public interface ChannelConnectionPort {
      * {@code if (isConnected(id)) send(...)} 的 check-then-act。</p>
      */
     boolean isConnected(Long bindingId);
+
+    /**
+     * 该绑定当前的出站适配器；连接未建立或平台不支持时返回 null。
+     * <p>终答直推按 session 上的 bindingId 取回适配器，不依赖入站消息上下文。</p>
+     */
+    default ChannelAdapter findAdapter(Long bindingId) {
+        return null;
+    }
 }

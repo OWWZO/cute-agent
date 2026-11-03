@@ -230,10 +230,11 @@ public class ReactTurnCloseSupportTest {
         }
 
         @Override
-        public void persistTurn(String sessionId, String memoryScope, String requestId, Long runId,
-                                String entryAgent, List<Message> turnMessages) {
+        public boolean persistTurn(String sessionId, String memoryScope, String requestId, Long runId,
+                                   String entryAgent, List<Message> turnMessages) {
             persistedScopes.add(new Object[]{sessionId, requestId, runId, entryAgent});
             turnClosedAtPersist.add(observed != null && observed.isTurnClosed());
+            return true;
         }
 
         @Override

@@ -15,6 +15,7 @@ import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.askuser.AskUserQuestionObservationSupport;
 import org.wwz.ai.domain.agent.runtime.askuser.IUserQuestionRepository;
@@ -60,6 +61,9 @@ public class AskUserResumeApplicationService {
     @Resource
     @Qualifier(AgentExecutorNames.DISPATCH_EXECUTOR)
     private Executor dispatchExecutor;
+
+    @Resource
+    private BackgroundTaskWakePort backgroundTaskWakePort;
 
     /**
      * CAS claim 后提交 continuation run。观察流走 GET session stream。
@@ -158,6 +162,21 @@ public class AskUserResumeApplicationService {
             }
             projectingStream.completeWithError(e);
             GptQueryApplicationService.endRunUnlessBackground(agentRequest, activeAgentRunRegistry);
+        } finally {
+            // end 之后复查：HITL 期间完成的后台通知由本轮的下一步 drain 或下一次唤醒处理。
+            notifyRunSettled(agentRequest);
+        }
+    }
+
+    private void notifyRunSettled(AgentExecutionCommand agentRequest) {
+        if (backgroundTaskWakePort == null || agentRequest == null
+                || StringUtils.isBlank(agentRequest.getSessionId())) {
+            return;
+        }
+        try {
+            backgroundTaskWakePort.onRunSettled(agentRequest.getSessionId());
+        } catch (Exception e) {
+            log.warn("{} ask-user resume settle check failed", agentRequest.getRequestId(), e);
         }
     }
 

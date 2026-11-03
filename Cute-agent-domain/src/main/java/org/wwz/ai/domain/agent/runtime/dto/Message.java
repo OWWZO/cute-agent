@@ -52,6 +52,12 @@ public class Message {
     private String originMessageKey;
 
     /**
+     * 仅模型可见：随工作记忆持久化、参与下一轮 hydrate，但不进入用户可见 transcript，
+     * 也不被 LTM / session_search 采集。后台任务完成通知使用。
+     */
+    private Boolean modelOnly;
+
+    /**
      * 消息文本内容
      * 用途：
      * - USER/SYSTEM：存储用户问题/系统指令文本；
@@ -126,6 +132,15 @@ public class Message {
      * @return Message  系统角色消息对象（role=SYSTEM）
      * 示例：Message.systemMessage("你是一名电商市场分析师，严格按照SOP生成报告", null);
      */
+    /** 仅模型可见的 USER 消息（后台任务完成通知）。 */
+    public static Message modelOnlyUserMessage(String content) {
+        return Message.builder()
+                .role(RoleType.USER)
+                .content(content)
+                .modelOnly(true)
+                .build();
+    }
+
     public static Message systemMessage(String content, String base64Image) {
         return systemMessage(content, base64Image, null);
     }

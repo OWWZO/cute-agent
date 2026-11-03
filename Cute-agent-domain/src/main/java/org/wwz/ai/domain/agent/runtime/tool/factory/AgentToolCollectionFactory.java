@@ -25,7 +25,6 @@ import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskCreateTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskGetTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskListTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.SendMessageTool;
-import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskOutputTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskStopTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskUpdateTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TodoWriteTool;
@@ -538,9 +537,6 @@ public class AgentToolCollectionFactory {
 
         TaskStopTool taskStopTool = new TaskStopTool();
         toolCollection.addTool(taskStopTool);
-
-        TaskOutputTool taskOutputTool = new TaskOutputTool();
-        toolCollection.addTool(taskOutputTool);
 
         SendMessageTool sendMessageTool = new SendMessageTool();
         toolCollection.addTool(sendMessageTool);

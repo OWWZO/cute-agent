@@ -35,7 +35,7 @@ public class SendMessageTool implements BaseTool {
         return "向后台子 Agent 发送消息。"
                 + " to 填 agentId。"
                 + " 目标仍在运行或邮箱仍活跃时注入指导，不新开任务。"
-                + " 目标已 completed/failed/stopped 时后台唤醒（同一 agentId），再用 TaskOutput(agent_id) 取结果。";
+                + " 目标已 completed/failed/stopped 时后台唤醒（同一 agentId），完成结果会自动回传。";
     }
 
     @Override

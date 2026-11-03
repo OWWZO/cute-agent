@@ -15,6 +15,7 @@ import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadStateStore;
 
 import jakarta.annotation.Resource;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * React / PlanSolve 共用收口：发 result、结束 ledger、投影 working memory / LTM / workspace read-state。
@@ -89,13 +90,23 @@ public class ReactTurnCloseSupport {
             return;
         }
         Long runId = agentContext.getAgentRunState() == null ? null : agentContext.getAgentRunState().getRunId();
-        sessionWorkingMemoryService.persistTurn(
+        boolean persisted = sessionWorkingMemoryService.persistTurn(
                 agentContext.getSessionId(),
                 agentContext.getRequestId(),
                 runId,
                 entryAgent,
                 executor.exportWorkingMemoryDelta()
         );
+        if (!persisted) {
+            log.warn("working memory persist failed, background notifications stay unnotified requestId={}",
+                    agentContext.getRequestId());
+            return;
+        }
+        // 通知只有随工作记忆落库后才算「已投递」；失败时保持 0，下一轮补投。
+        Set<String> consumedTaskIds = agentContext.control().drainConsumedBackgroundNotifications();
+        if (!consumedTaskIds.isEmpty()) {
+            agentContext.requireBackgroundTasks().markNotified(consumedTaskIds);
+        }
     }
 
     private void persistWorkspaceReadState(AgentContext agentContext) {

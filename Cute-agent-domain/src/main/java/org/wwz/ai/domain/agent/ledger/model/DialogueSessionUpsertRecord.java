@@ -25,6 +25,12 @@ public class DialogueSessionUpsertRecord {
      */
     private Long bindingId;
 
+    /** IM 出站会话形态；null = 未记录，upsert 时保留库里已有值。 */
+    private String channelChatType;
+
+    /** IM 出站目标 ID；null = 未记录，upsert 时保留库里已有值。 */
+    private String channelTargetId;
+
     /**
      * 会话类型（落库为 code），调用方应传
      * {@link org.wwz.ai.domain.agent.ledger.model.SessionKind#code()}。

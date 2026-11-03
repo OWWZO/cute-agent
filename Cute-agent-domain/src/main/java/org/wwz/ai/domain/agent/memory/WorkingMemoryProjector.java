@@ -55,7 +55,7 @@ public class WorkingMemoryProjector {
                             : JSON.toJSONString(message.getToolCalls()))
                     .base64Image(message.getBase64Image())
                     .messageKind(resolveMessageKind(message))
-                    .visibility("ALL")
+                    .visibility(Boolean.TRUE.equals(message.getModelOnly()) ? "MODEL_ONLY" : "ALL")
                     .tokenEstimate(0)
                     .deleted(0)
                     .build());
@@ -97,11 +97,21 @@ public class WorkingMemoryProjector {
             } else {
                 messages.add(Message.userMessage(row.getContent(), row.getBase64Image(), originMessageKey));
             }
+            // 投影时写进 visibility 的「只给模型看」必须还原回来：
+            // 否则重新投影会按普通消息处理，把后台任务通知渲染给用户。
+            if ("MODEL_ONLY".equalsIgnoreCase(row.getVisibility())) {
+                messages.get(messages.size() - 1).setModelOnly(Boolean.TRUE);
+            }
         }
         return messages;
     }
 
     private String resolveMessageKind(Message message) {
+        // 后台任务通知等「只给模型看、不展示给用户」的消息单独归类，
+        // 回放时才能靠 messageKind 还原 modelOnly，而不是当成普通用户提问。
+        if (Boolean.TRUE.equals(message.getModelOnly())) {
+            return "background_notification";
+        }
         if (message.getRole() == RoleType.USER) {
             return "query";
         }

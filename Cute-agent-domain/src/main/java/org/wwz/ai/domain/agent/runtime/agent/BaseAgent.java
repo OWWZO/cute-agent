@@ -31,12 +31,19 @@ import org.wwz.ai.domain.agent.runtime.tool.ToolObservationSerializer;
 import org.wwz.ai.domain.agent.runtime.tool.common.MemoryTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.SessionSearchTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.skill.SkillViewTool;
+import org.wwz.ai.domain.agent.runtime.tasklist.BackgroundTaskNotificationFormatter;
+import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
+import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionNotificationHub;
+import org.wwz.ai.domain.agent.runtime.tasklist.TaskNotification;
 import org.wwz.ai.domain.agent.runtime.tool.deferred.DeferredToolCall;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillPromptIndexBuilder;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadStateStore;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -107,6 +114,9 @@ public abstract class BaseAgent {
     private String digitalEmployeePrompt;
 
     private final transient ToolExecutionPipeline toolPipeline = new ToolExecutionPipeline(this);
+
+    /** 本 run 是否已做过一次「notified=0 终态任务」补投扫描。 */
+    private transient boolean backgroundNotificationBackfillDone = false;
 
     /**
      * 子类定义单步执行逻辑。
@@ -263,6 +273,8 @@ public abstract class BaseAgent {
                 if (context != null) {
                     // 步进边界 drain 控制面 inject（用户中途指导），再进入 think
                     drainPendingInjectsIntoMemory();
+                    // 后台子 Agent 完成通知：同一轮 steer，或唤醒轮第一步补投
+                    drainBackgroundTaskNotificationsIntoMemory();
                     // 每步进入前都刷新一次当前位置，供 LLM / tool 账本读取。
                     context.markExecutionPosition(getName(), currentStep);
                     // Plan Mode：sparse/full 提醒 + mid-run Enter 时补 system 指引
@@ -317,6 +329,72 @@ public abstract class BaseAgent {
             log.info("{} {} drained inject source={} chars={}",
                     context.getRequestId(), getName(), source, inject.getText().length());
         }
+    }
+
+    /**
+     * 步进边界：把后台任务完成通知写入 Memory（仅模型可见）。
+     * <p>首次 drain 时同时补投 {@code notified=0} 的终态任务，覆盖进程重启/崩溃窗口；
+     * 已由队列投递的任务按 taskId 去重。成功收口后才由收口点统一 markNotified。</p>
+     */
+    protected void drainBackgroundTaskNotificationsIntoMemory() {
+        if (context == null || memory == null) {
+            return;
+        }
+        if (context.getRuntimeDependencies() != null
+                && context.getRuntimeDependencies().getCuteConfig() != null
+                && !context.getRuntimeDependencies().getCuteConfig().isBackgroundAutoContinuation()) {
+            return;
+        }
+        String sessionKey = SessionBackgroundTaskHub.keyFor(
+                context.getSessionId(), context.getRequestId());
+        List<TaskNotification> batch = new ArrayList<>(SessionNotificationHub.drain(sessionKey));
+        Set<String> batchTaskIds = new LinkedHashSet<>();
+        for (TaskNotification notification : batch) {
+            if (notification != null && StringUtils.isNotBlank(notification.taskId())) {
+                batchTaskIds.add(notification.taskId());
+            }
+        }
+        if (!context.isSubAgent() && !backgroundNotificationBackfillDone) {
+            // run 级只扫一次：之后新完成的任务都会走完成路径入队。
+            // 子 Agent 与父会话共享 registry，但补投只归主会话：否则父会话未投递的通知
+            // 会被塞进子 Agent 的上下文。
+            backgroundNotificationBackfillDone = true;
+            RuntimeBackgroundTaskRegistry registry = context.requireBackgroundTasks();
+            for (RuntimeBackgroundTask task : registry.listAll()) {
+                if (task == null || StringUtils.isBlank(task.getId())) {
+                    continue;
+                }
+                if (RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())
+                        || RuntimeBackgroundTask.STATUS_STOPPED.equals(task.getStatus())
+                        || Boolean.TRUE.equals(task.getNotified())
+                        || batchTaskIds.contains(task.getId())) {
+                    continue;
+                }
+                // 补投不看内存 claim：上一轮可能已 drain 但没成功落库，本轮必须重新注入。
+                // 同一轮内由 batchTaskIds 去重；会话单 run 仲裁保证不会并发补投。
+                TaskNotification notification = TaskNotification.from(task, null);
+                if (notification != null) {
+                    batch.add(notification);
+                    batchTaskIds.add(task.getId());
+                }
+            }
+        }
+        if (batch.isEmpty()) {
+            return;
+        }
+        String formatted = BackgroundTaskNotificationFormatter.formatBatch(batch);
+        if (StringUtils.isBlank(formatted)) {
+            return;
+        }
+        String wrapped = "<system-reminder>\n"
+                + "以下内容是后台任务完成通知（不是用户输入，也不代表用户提出了新问题）。"
+                + "请结合这些结果继续当前任务；如果已经给用户最终答复，请在新的回复中简要汇报相关结果。\n"
+                + "</system-reminder>\n\n"
+                + formatted;
+        memory.addMessage(Message.modelOnlyUserMessage(wrapped));
+        context.control().addConsumedBackgroundNotifications(batchTaskIds);
+        log.info("{} {} drained background notifications count={} taskIds={}",
+                context.getRequestId(), getName(), batch.size(), batchTaskIds);
     }
 
     /**

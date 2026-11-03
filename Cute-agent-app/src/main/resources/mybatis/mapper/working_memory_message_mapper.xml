@@ -96,6 +96,11 @@
         </if>
     </sql>
 
+    <!-- 后台任务通知仅模型可见，session_search 一律不返回。 -->
+    <sql id="visibleFilter">
+        AND m.visibility &lt;&gt; 'MODEL_ONLY'
+    </sql>
+
     <!-- Search every non-deleted projection, including INVALID turns. INVALID means
          no longer used for the next prompt, not that the historical message vanished. -->
     <select id="searchFullTextBySession" resultMap="WorkingMemorySearchMessageMap">
@@ -108,6 +113,7 @@
           AND m.deleted = 0
           AND t.deleted = 0
           <include refid="roleFilter"/>
+          <include refid="visibleFilter"/>
           AND MATCH(m.content) AGAINST (#{query} IN NATURAL LANGUAGE MODE)
         ORDER BY search_score DESC, t.turn_seq DESC, m.seq_no DESC, m.id DESC
         LIMIT #{limit}
@@ -127,6 +133,7 @@
           AND m.deleted = 0
           AND t.deleted = 0
           <include refid="roleFilter"/>
+          <include refid="visibleFilter"/>
           AND MATCH(m.content) AGAINST (#{query} IN NATURAL LANGUAGE MODE)
         ORDER BY search_score DESC, t.create_time DESC, t.turn_seq DESC, m.seq_no DESC, m.id DESC
         LIMIT #{limit}
@@ -141,6 +148,7 @@
           AND m.deleted = 0
           AND t.deleted = 0
           <include refid="roleFilter"/>
+          <include refid="visibleFilter"/>
           AND (LOWER(CONVERT(COALESCE(m.content, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
                    LIKE LOWER(CONVERT(CONCAT('%', #{query}, '%') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
                OR LOWER(CONVERT(COALESCE(m.tool_calls_json, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
@@ -161,6 +169,7 @@
           AND m.deleted = 0
           AND t.deleted = 0
           <include refid="roleFilter"/>
+          <include refid="visibleFilter"/>
           AND (LOWER(CONVERT(COALESCE(m.content, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
                    LIKE LOWER(CONVERT(CONCAT('%', #{query}, '%') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
                OR LOWER(CONVERT(COALESCE(m.tool_calls_json, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
@@ -178,6 +187,7 @@
           AND m.id = #{messageId}
           AND m.deleted = 0
           AND t.deleted = 0
+          <include refid="visibleFilter"/>
         LIMIT 1
     </select>
 
@@ -189,6 +199,7 @@
             AND anchor.session_id = #{sessionId}
             AND anchor.memory_scope = 'main'
             AND anchor.deleted = 0
+            AND anchor.visibility &lt;&gt; 'MODEL_ONLY'
         INNER JOIN ai_agent_working_memory_turn anchor_turn ON anchor.turn_id = anchor_turn.id
             AND anchor_turn.deleted = 0
         WHERE m.session_id = #{sessionId}
@@ -196,6 +207,7 @@
           AND m.deleted = 0
           AND t.deleted = 0
           <include refid="roleFilter"/>
+          <include refid="visibleFilter"/>
           AND NOT (
               LTRIM(COALESCE(m.content, '')) LIKE '[CONTEXT COMPACTION%'
               OR LTRIM(COALESCE(m.content, '')) LIKE '[CONTEXT SUMMARY]:%'
@@ -217,6 +229,7 @@
             AND anchor.session_id = #{sessionId}
             AND anchor.memory_scope = 'main'
             AND anchor.deleted = 0
+            AND anchor.visibility &lt;&gt; 'MODEL_ONLY'
         INNER JOIN ai_agent_working_memory_turn anchor_turn ON anchor.turn_id = anchor_turn.id
             AND anchor_turn.deleted = 0
         WHERE m.session_id = #{sessionId}
@@ -224,6 +237,7 @@
           AND m.deleted = 0
           AND t.deleted = 0
           <include refid="roleFilter"/>
+          <include refid="visibleFilter"/>
           AND NOT (
               LTRIM(COALESCE(m.content, '')) LIKE '[CONTEXT COMPACTION%'
               OR LTRIM(COALESCE(m.content, '')) LIKE '[CONTEXT SUMMARY]:%'
@@ -248,6 +262,7 @@
           AND m.memory_scope = 'main'
           AND m.deleted = 0
           AND t.deleted = 0
+          <include refid="visibleFilter"/>
         ORDER BY t.turn_seq ASC, m.seq_no ASC, m.id ASC
     </select>
 

@@ -197,6 +197,7 @@ public class MyBatisTasklistPersistence implements TasklistPersistencePort {
                 .totalDurationMs(row.getTotalDurationMs())
                 .startedAtMs(row.getStartedAtMs() == null ? 0L : row.getStartedAtMs())
                 .endedAtMs(row.getEndedAtMs())
+                .notified(Boolean.TRUE.equals(row.getNotified()))
                 .build();
     }
 
@@ -217,6 +218,7 @@ public class MyBatisTasklistPersistence implements TasklistPersistencePort {
         po.setTotalDurationMs(task.getTotalDurationMs());
         po.setStartedAtMs(task.getStartedAtMs());
         po.setEndedAtMs(task.getEndedAtMs());
+        po.setNotified(Boolean.TRUE.equals(task.getNotified()));
         return po;
     }
 

@@ -264,7 +264,15 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
     }
 
     private List<Message> applyLtmPreCompactHooks(String sessionId, String requestId, List<Message> current) {
-        List<Message> working = current;
+        // 后台任务通知只服务模型上下文：不参与 LTM flush / insight 采集。
+        List<Message> working = new ArrayList<>(current == null ? 0 : current.size());
+        if (current != null) {
+            for (Message message : current) {
+                if (message != null && !Boolean.TRUE.equals(message.getModelOnly())) {
+                    working.add(message);
+                }
+            }
+        }
         try {
             CuteRuntimeDependencies deps = runtimeDependencies();
             if (deps == null) {

@@ -505,7 +505,7 @@ public class AgentToolCollectionFactoryTest {
     }
 
     @Test
-    public void deployedPlanSolveMainToolListIncludesTaskOutputAndSendMessage() throws Exception {
+    public void deployedPlanSolveMainToolListExcludesTaskOutputAndIncludesSendMessage() throws Exception {
         for (String profile : List.of("application-dev.yml", "application-prod.yml")) {
             String yaml = new String(new ClassPathResource(profile).getInputStream().readAllBytes(),
                     StandardCharsets.UTF_8);
@@ -513,7 +513,7 @@ public class AgentToolCollectionFactoryTest {
             Assert.assertTrue(profile + " missing plan-solve-main-tool-list", idx >= 0);
             int end = yaml.indexOf('\n', idx);
             String line = end < 0 ? yaml.substring(idx) : yaml.substring(idx, end);
-            Assert.assertTrue(profile + " missing TaskOutput", line.contains("TaskOutput"));
+            Assert.assertFalse(profile + " should not expose TaskOutput", line.contains("TaskOutput"));
             Assert.assertTrue(profile + " missing SendMessage", line.contains("SendMessage"));
             // code_mode 是主 Agent 的编排工具：白名单漏了它，开关打开也调用不到
             Assert.assertTrue(profile + " missing code_mode", line.contains("code_mode"));

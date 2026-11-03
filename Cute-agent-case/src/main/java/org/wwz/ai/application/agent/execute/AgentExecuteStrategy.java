@@ -3,7 +3,9 @@ package org.wwz.ai.application.agent.execute;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.wwz.ai.application.agent.channel.outbound.ChannelTerminalPushService;
 import org.wwz.ai.application.agent.stream.AgentSessionPrinter;
 import org.wwz.ai.application.agent.stream.AgentSessionStream;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
@@ -68,6 +70,9 @@ public class AgentExecuteStrategy implements IExecuteStrategy {
     @Resource
     private IPlanApprovalRepository planApprovalRepository;
 
+    @Resource
+    private ChannelTerminalPushService channelTerminalPushService;
+
     @Override
     public void execute(AgentExecutionCommand request, AgentSessionStream stream) throws Exception {
         Link link = resolveLink(request);
@@ -112,7 +117,8 @@ public class AgentExecuteStrategy implements IExecuteStrategy {
      */
     private String applyHandler(Link link, AgentExecutionCommand request, AgentSessionStream stream,
                                 AtomicReference<Supplier<AgentContext>> contextRef) throws Exception {
-        AgentSessionPrinter printer = new AgentSessionPrinter(stream, request, request.getAgentType());
+        AgentSessionPrinter printer = new AgentSessionPrinter(
+                stream, request, request.getAgentType(), channelTerminalPushService);
         if (link.planSolveFactory() != null) {
             DefaultPlanSolveAgentExecuteStrategyFactory.DynamicContext dynamicContext =
                     DefaultPlanSolveAgentExecuteStrategyFactory.DynamicContext.builder()
@@ -169,6 +175,12 @@ public class AgentExecuteStrategy implements IExecuteStrategy {
                     null,
                     link.failureCode(),
                     failure.getMessage());
+            // 用户主动停止已在上面 return；这里只推真正的执行失败。
+            if (channelTerminalPushService != null) {
+                String reason = StringUtils.defaultIfBlank(failure.getMessage(), link.failureCode());
+                channelTerminalPushService.pushFailure(
+                        agentContext.getSessionId(), agentContext.getRequestId(), reason);
+            }
         }
     }
 

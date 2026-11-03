@@ -6,14 +6,18 @@ import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentResult;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
+import java.util.stream.Collectors;
 
 /**
  * 后台运行任务注册表。
@@ -140,6 +144,66 @@ public class RuntimeBackgroundTaskRegistry {
                 persist(task);
             }
         });
+    }
+
+    /**
+     * 认领一次通知投递权。
+     * <p>只有终态任务可认领；内存 CAS 保证同一个任务只入队一次。补投判断不看本标记，
+     * 只看 {@code notified}（可能跨进程丢失）。</p>
+     */
+    public boolean claimNotification(String taskId) {
+        Optional<RuntimeBackgroundTask> found = get(taskId);
+        if (found.isEmpty()) {
+            return false;
+        }
+        RuntimeBackgroundTask task = found.get();
+        if (!isNotifiable(task)) {
+            return false;
+        }
+        AtomicBoolean claimed = task.getNotificationClaimed();
+        if (claimed == null) {
+            synchronized (task) {
+                claimed = task.getNotificationClaimed();
+                if (claimed == null) {
+                    claimed = new AtomicBoolean(false);
+                    task.setNotificationClaimed(claimed);
+                }
+            }
+        }
+        return claimed.compareAndSet(false, true);
+    }
+
+    /**
+     * 通知已随工作记忆成功持久化：写 {@code notified=1}。
+     * <p>只允许在 run 成功收口后调用；失败/取消不落标记，下一轮补投。</p>
+     */
+    public void markNotified(Collection<String> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return;
+        }
+        Set<String> ids = taskIds.stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .collect(Collectors.toSet());
+        for (String taskId : ids) {
+            get(taskId).ifPresent(task -> {
+                if (Boolean.TRUE.equals(task.getNotified())) {
+                    return;
+                }
+                task.setNotified(Boolean.TRUE);
+                persist(task);
+            });
+        }
+    }
+
+    private static boolean isNotifiable(RuntimeBackgroundTask task) {
+        if (task == null) {
+            return false;
+        }
+        String status = task.getStatus();
+        return RuntimeBackgroundTask.STATUS_COMPLETED.equals(status)
+                || RuntimeBackgroundTask.STATUS_FAILED.equals(status)
+                || RuntimeBackgroundTask.STATUS_LOST.equals(status);
     }
 
     public Optional<RuntimeBackgroundTask> get(String taskId) {

@@ -19,6 +19,7 @@
         <result column="total_duration_ms" property="totalDurationMs"/>
         <result column="started_at_ms" property="startedAtMs"/>
         <result column="ended_at_ms" property="endedAtMs"/>
+        <result column="notified" property="notified"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
         <result column="deleted" property="deleted"/>
@@ -55,12 +56,12 @@
         INSERT INTO ai_agent_background_task (
             session_id, task_id, type, status, description, command,
             agent_id, agent_type, prompt, output, error_msg,
-            total_tool_use_count, total_duration_ms, started_at_ms, ended_at_ms,
+            total_tool_use_count, total_duration_ms, started_at_ms, ended_at_ms, notified,
             create_time, update_time, deleted
         ) VALUES (
             #{sessionId}, #{taskId}, #{type}, #{status}, #{description}, #{command},
             #{agentId}, #{agentType}, #{prompt}, #{output}, #{errorMsg},
-            #{totalToolUseCount}, #{totalDurationMs}, #{startedAtMs}, #{endedAtMs},
+            #{totalToolUseCount}, #{totalDurationMs}, #{startedAtMs}, #{endedAtMs}, IFNULL(#{notified}, 0),
             NOW(), NOW(), 0
         )
         ON DUPLICATE KEY UPDATE
@@ -77,6 +78,7 @@
             total_duration_ms = VALUES(total_duration_ms),
             started_at_ms = VALUES(started_at_ms),
             ended_at_ms = VALUES(ended_at_ms),
+            notified = VALUES(notified),
             deleted = 0,
             update_time = NOW()
     </insert>

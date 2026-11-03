@@ -15,6 +15,7 @@ import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
@@ -60,6 +61,9 @@ public class PlanApprovalResumeApplicationService {
     @Resource
     @Qualifier(AgentExecutorNames.DISPATCH_EXECUTOR)
     private Executor dispatchExecutor;
+
+    @Resource
+    private BackgroundTaskWakePort backgroundTaskWakePort;
 
     public AgentQuerySubmitResult resume(String resumeRequestId) {
         if (StringUtils.isBlank(resumeRequestId)) {
@@ -155,6 +159,20 @@ public class PlanApprovalResumeApplicationService {
             }
             projectingStream.completeWithError(e);
             GptQueryApplicationService.endRunUnlessBackground(agentRequest, activeAgentRunRegistry);
+        } finally {
+            notifyRunSettled(agentRequest);
+        }
+    }
+
+    private void notifyRunSettled(AgentExecutionCommand agentRequest) {
+        if (backgroundTaskWakePort == null || agentRequest == null
+                || StringUtils.isBlank(agentRequest.getSessionId())) {
+            return;
+        }
+        try {
+            backgroundTaskWakePort.onRunSettled(agentRequest.getSessionId());
+        } catch (Exception e) {
+            log.warn("{} plan-approval resume settle check failed", agentRequest.getRequestId(), e);
         }
     }
 

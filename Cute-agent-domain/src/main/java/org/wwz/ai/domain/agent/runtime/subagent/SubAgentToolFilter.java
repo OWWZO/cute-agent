@@ -64,7 +64,6 @@ public final class SubAgentToolFilter {
             disallowed.add(AgentDispatchTool.NAME);
         }
         disallowed.add(TaskToolNames.TASK_STOP);
-        disallowed.add(TaskToolNames.TASK_OUTPUT);
         disallowed.add(TaskToolNames.SEND_MESSAGE);
         disallowed.add(TaskToolNames.ENTER_PLAN_MODE);
         disallowed.add(TaskToolNames.EXIT_PLAN_MODE);
