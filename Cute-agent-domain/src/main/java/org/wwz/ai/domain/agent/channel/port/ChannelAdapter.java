@@ -15,11 +15,26 @@ public interface ChannelAdapter {
 
     /**
      * 推纯文本。实现方负责按平台上限切块与格式转换。
-     * <p>实现 MUST NOT 抛异常：所有失败以 {@link ChannelPushResult#success()} 为 false 返回，
-     * 否则异常会冒泡到 projection 观察者循环。</p>
+     * <p><b>契约可执行化：</b>本默认方法保证「MUST NOT 抛异常」这一不变量——实现方只需覆写
+     * {@link #doPushText}，任何从它逃逸的 {@link Throwable} 都会在模板方法内被转换为
+     * {@link ChannelPushResult#fail(String, boolean)}，不可能再冒泡到 projection 观察者循环。
+     * 调用方因此可以安全地直接调用 {@code pushText}，无须再自行 try/catch。</p>
      * <p><b>分块与重试语义：</b>返回的 {@link ChannelPushResult} 描述整次调用的聚合结果，
      * 不区分单个分块。调用方对 {@code retryable=true} 的重试必须重发完整 {@code text}；
      * 实现需保证重发不会因已投递的分块产生不可接受的重复，做不到时须返回 {@code retryable=false}。</p>
      */
-    ChannelPushResult pushText(ChannelTarget target, String text);
+    default ChannelPushResult pushText(ChannelTarget target, String text) {
+        try {
+            return doPushText(target, text);
+        } catch (Throwable t) {
+            return ChannelPushResult.fail("pushText escaped: " + t, false);
+        }
+    }
+
+    /**
+     * 平台推送实现。允许抛异常；失败由 {@link #pushText} 统一转为
+     * {@link ChannelPushResult#fail(String, boolean)}（不可重试），实现自身也可以按
+     * 平台语义返回更精确的 {@code retryable} 判定。
+     */
+    ChannelPushResult doPushText(ChannelTarget target, String text);
 }

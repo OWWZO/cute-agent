@@ -134,8 +134,8 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
     }
 
     @Override
-    public void updateToolInvocationFinish(ToolInvocation invocation) {
-        toolInvocationLedgerDao.updateToolInvocationFinish(invocation);
+    public int updateToolInvocationFinish(ToolInvocation invocation) {
+        return toolInvocationLedgerDao.updateToolInvocationFinish(invocation);
     }
 
     @Override

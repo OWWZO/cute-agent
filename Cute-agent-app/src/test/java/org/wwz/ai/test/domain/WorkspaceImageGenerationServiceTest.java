@@ -107,10 +107,10 @@ public class WorkspaceImageGenerationServiceTest {
         Assert.assertEquals(2, persistedResult.get().getFiles().size());
 
         Assert.assertEquals("req-100", result.getRequestId());
-        Assert.assertEquals(2, result.getFileInfo().size());
+        Assert.assertEquals(2, result.getFiles().size());
         Assert.assertTrue(result.getUsedFallback());
-        Assert.assertEquals("https://file.example.com/result-1.png", result.getFileInfo().get(0).getPreviewUrl());
-        Assert.assertEquals("https://file.example.com/download/result-2.png", result.getFileInfo().get(1).getDownloadUrl());
+        Assert.assertEquals("https://file.example.com/result-1.png", result.getFiles().get(0).getPreviewUrl());
+        Assert.assertEquals("https://file.example.com/download/result-2.png", result.getFiles().get(1).getDownloadUrl());
     }
 
     @Test

@@ -16,7 +16,8 @@ import java.util.List;
 @AllArgsConstructor
 public class WorkspaceImageGenerationResult {
     private String data;
-    private List<WorkspaceImageFile> fileInfo;
+    /** 生成的图片文件列表。与 {@code ImageGenerationExecutionResult#files} 同名对齐。 */
+    private List<WorkspaceImageFile> files;
     private String requestId;
     private String mode;
     private Boolean usedFallback;

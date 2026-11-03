@@ -45,7 +45,7 @@ public final class WorkspaceImageMapper {
         }
         return WorkspaceImageGenerationView.builder()
                 .data(result.getData())
-                .fileInfo(toFileViews(result.getFileInfo()))
+                .fileInfo(toFileViews(result.getFiles()))
                 .requestId(result.getRequestId())
                 .mode(result.getMode())
                 .usedFallback(result.getUsedFallback())

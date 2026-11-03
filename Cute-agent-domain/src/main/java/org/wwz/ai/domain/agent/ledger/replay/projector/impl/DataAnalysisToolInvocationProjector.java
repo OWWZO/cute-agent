@@ -34,8 +34,7 @@ public class DataAnalysisToolInvocationProjector extends AbstractToolInvocationP
                 : null;
         String data = output == null ? "" : StringUtils.defaultString(output.getContent());
         if (StringUtils.isBlank(data) && invocation != null) {
-            data = StringUtils.defaultString(
-                    StringUtils.defaultIfBlank(invocation.getToolResult(), invocation.getLlmObservation()));
+            data = StringUtils.defaultString(invocation.resolveResultText());
         }
 
         Map<String, Object> resultMap = new LinkedHashMap<>();

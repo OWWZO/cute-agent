@@ -10,6 +10,7 @@ import org.wwz.ai.domain.agent.runtime.enums.AgentType;
 import org.wwz.ai.domain.agent.runtime.enums.ResponseTypeEnum;
 import org.wwz.ai.domain.agent.runtime.handler.AgentStreamEventHandler;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -152,7 +153,7 @@ public class AgentStreamProjection implements AgentSessionStream {
     }
 
     @Override
-    public void send(Object payload) throws Exception {
+    public void send(Object payload) throws IOException {
         if (payload instanceof AgentStreamEvent event) {
             sendRuntimeEvent(event);
             return;
@@ -164,7 +165,7 @@ public class AgentStreamProjection implements AgentSessionStream {
     }
 
     @Override
-    public void sendRuntimeEvent(AgentStreamEvent agentResponse) throws Exception {
+    public void sendRuntimeEvent(AgentStreamEvent agentResponse) throws IOException {
         if (closed.get()) {
             return;
         }

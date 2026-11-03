@@ -5,6 +5,8 @@ import org.wwz.ai.application.agent.dataquery.result.DataAgentStreamResult;
 import org.wwz.ai.application.agent.stream.AgentSessionStream;
 import org.wwz.ai.trigger.http.dataagent.vo.DataAgentChatMessageResponseVO;
 
+import java.io.IOException;
+
 /** Maps Case stream results to the stable DataAgent SSE payload shape. */
 @RequiredArgsConstructor
 public class DataAgentSseResponseStream implements AgentSessionStream {
@@ -12,7 +14,7 @@ public class DataAgentSseResponseStream implements AgentSessionStream {
     private final DataAgentResponseMapper responseMapper;
 
     @Override
-    public void send(Object payload) throws Exception {
+    public void send(Object payload) throws IOException {
         if (!(payload instanceof DataAgentStreamResult event)) {
             throw new IllegalArgumentException("Unexpected Case DataAgent stream result type");
         }

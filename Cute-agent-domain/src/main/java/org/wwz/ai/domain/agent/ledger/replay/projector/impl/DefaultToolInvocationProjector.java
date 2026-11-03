@@ -52,9 +52,8 @@ public class DefaultToolInvocationProjector extends AbstractToolInvocationProjec
         boolean failed = invocation.getStatus() != null
                 && invocation.getStatus() != ExecutionLedgerConstants.STATUS_SUCCESS;
         if (failed) {
-            return StringUtils.defaultIfBlank(invocation.getErrorMsg(),
-                    StringUtils.defaultIfBlank(invocation.getToolResult(), invocation.getLlmObservation()));
+            return StringUtils.defaultIfBlank(invocation.getErrorMsg(), invocation.resolveResultText());
         }
-        return StringUtils.defaultIfBlank(invocation.getToolResult(), invocation.getLlmObservation());
+        return invocation.resolveResultText();
     }
 }

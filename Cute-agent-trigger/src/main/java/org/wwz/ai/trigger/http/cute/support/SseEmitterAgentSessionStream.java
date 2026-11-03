@@ -5,6 +5,7 @@ import org.wwz.ai.application.agent.stream.AgentSessionStream;
 import org.wwz.ai.application.agent.stream.AgentSessionStreamFrame;
 import org.wwz.ai.trigger.http.agent.mapper.AgentStreamResponseMapper;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,7 +34,7 @@ public class SseEmitterAgentSessionStream implements AgentSessionStream {
     }
 
     @Override
-    public void send(Object payload) throws Exception {
+    public void send(Object payload) throws IOException {
         synchronized (sendLock) {
             if (closed.get()) {
                 return;
@@ -47,7 +48,7 @@ public class SseEmitterAgentSessionStream implements AgentSessionStream {
                     markAborted();
                     return;
                 }
-                throw ex;
+                throw ex instanceof IOException io ? io : new IOException("sse send failed", ex);
             }
         }
     }

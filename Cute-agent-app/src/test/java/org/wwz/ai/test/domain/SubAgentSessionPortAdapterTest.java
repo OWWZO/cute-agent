@@ -7,6 +7,7 @@ import org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.SessionKind;
+import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionIdentity;
 import org.wwz.ai.infrastructure.adapter.port.SubAgentSessionPortAdapter;
 
 import java.time.LocalDateTime;
@@ -23,7 +24,9 @@ public class SubAgentSessionPortAdapterTest {
                 ExecutionLedgerFixtureFactory.newLedgerTestContext();
         SubAgentSessionPortAdapter adapter = new SubAgentSessionPortAdapter(ctx.writeRepository);
 
-        adapter.ensureChildSession("sub_agent-1", "parent-1", "user-1", "探索前端", "code-executor");
+        adapter.ensureChildSession(SubAgentSessionIdentity.builder()
+                .childSessionId("sub_agent-1").parentSessionId("parent-1")
+                .userId("user-1").title("探索前端").subAgentType("code-executor").build());
 
         DialogueSession row = ctx.readRepository.querySessionEntity("sub_agent-1");
         Assert.assertNotNull(row);
@@ -40,7 +43,9 @@ public class SubAgentSessionPortAdapterTest {
                 ExecutionLedgerFixtureFactory.newLedgerTestContext();
         SubAgentSessionPortAdapter adapter = new SubAgentSessionPortAdapter(ctx.writeRepository);
 
-        adapter.ensureChildSession("sub_agent-2", "parent-1", "user-1", "首次", "general-purpose");
+        adapter.ensureChildSession(SubAgentSessionIdentity.builder()
+                .childSessionId("sub_agent-2").parentSessionId("parent-1")
+                .userId("user-1").title("首次").subAgentType("general-purpose").build());
         // 模拟子 run 启动：run_count 原子 +1
         LocalDateTime now = LocalDateTime.now();
         ctx.writeRepository.upsertSessionOnRunStart(DialogueSessionUpsertRecord.builder()
@@ -55,7 +60,9 @@ public class SubAgentSessionPortAdapterTest {
                 ctx.readRepository.querySessionEntity("sub_agent-2").getRunCount());
 
         // 续跑再次确保身份：必须 no-op，不得重置计数或改写身份列
-        adapter.ensureChildSession("sub_agent-2", "parent-1", "user-1", "改名尝试", "deep-search");
+        adapter.ensureChildSession(SubAgentSessionIdentity.builder()
+                .childSessionId("sub_agent-2").parentSessionId("parent-1")
+                .userId("user-1").title("改名尝试").subAgentType("deep-search").build());
 
         DialogueSession row = ctx.readRepository.querySessionEntity("sub_agent-2");
         Assert.assertEquals(Integer.valueOf(1), row.getRunCount());
@@ -83,7 +90,9 @@ public class SubAgentSessionPortAdapterTest {
                 .startedAt(now)
                 .lastActiveAt(now)
                 .build());
-        adapter.ensureChildSession("sub_agent-3", "session-user-1", "user-1", "子任务", null);
+        adapter.ensureChildSession(SubAgentSessionIdentity.builder()
+                .childSessionId("sub_agent-3").parentSessionId("session-user-1")
+                .userId("user-1").title("子任务").subAgentType(null).build());
 
         List<DialogueSessionView> listed = ctx.readRepository.queryRecentSessions("user-1", 10);
 

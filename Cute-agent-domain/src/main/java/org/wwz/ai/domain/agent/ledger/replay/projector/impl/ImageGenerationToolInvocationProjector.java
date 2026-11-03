@@ -50,8 +50,7 @@ public class ImageGenerationToolInvocationProjector extends AbstractToolInvocati
 
         String summary = output == null ? "" : StringUtils.defaultString(output.getSummary());
         if (StringUtils.isBlank(summary) && invocation != null) {
-            summary = StringUtils.defaultString(
-                    StringUtils.defaultIfBlank(invocation.getToolResult(), invocation.getLlmObservation()));
+            summary = StringUtils.defaultString(invocation.resolveResultText());
         }
         Map<String, Object> toolResult = new LinkedHashMap<>();
         toolResult.put("toolName", invocation == null ? null : invocation.getToolName());

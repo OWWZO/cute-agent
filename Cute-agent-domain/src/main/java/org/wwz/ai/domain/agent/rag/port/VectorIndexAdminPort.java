@@ -7,26 +7,27 @@ import java.util.List;
 
 /**
  * 向量集合与点数据管理端口。
+ * <p>存储端失败以 {@link VectorPortException}（unchecked）抛出，调用方可按需捕获做重试/降级。</p>
  */
 public interface VectorIndexAdminPort {
 
-    boolean collectionExists(String collectionName) throws Exception;
+    boolean collectionExists(String collectionName);
 
     /**
      * 创建集合；集合已存在时幂等返回（不报错、不清空既有数据）。
      * <p>本端口不提供 check-then-create 的原子性；并发初始化的调用方必须自行串行化。</p>
      */
-    void createCollection(String collectionName, int dimension) throws Exception;
+    void createCollection(String collectionName, int dimension);
 
-    void recreateCollection(String collectionName, int dimension) throws Exception;
+    void recreateCollection(String collectionName, int dimension);
 
-    void upsert(String collectionName, List<VectorPoint> points) throws Exception;
+    void upsert(String collectionName, List<VectorPoint> points);
 
-    void deleteByIds(String collectionName, List<String> ids) throws Exception;
+    void deleteByIds(String collectionName, List<String> ids);
 
     /**
      * 按过滤条件删除。实现应在返回前完成删除请求提交，不得在本地异步排队；
      * 删除是否立即可被后续查询观察到仍取决于存储端一致性。
      */
-    void deleteByFilter(String collectionName, VectorFilter filter) throws Exception;
+    void deleteByFilter(String collectionName, VectorFilter filter);
 }
