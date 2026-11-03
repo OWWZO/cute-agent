@@ -2,6 +2,8 @@ package org.wwz.ai.domain.agent.runtime.tool.cli;
 
 import lombok.Builder;
 import lombok.Value;
+import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.runtime.artifact.WorkspaceRelativePath;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -11,9 +13,10 @@ import java.util.Map;
  * <p>
  * 只描述 workspace 内的相对路径和文件服务生成的地址，绝不包含服务器绝对路径，
  * 也不包含 relay / CDP / Cookie 等连接信息。
+ * <p>安全保证由构造期校验兜住：{@code relativePath} 必须是可证明落在工作区内的相对路径，
+ * 越界值直接拒绝（{@link IllegalArgumentException}），不允许先构造再在消费端补救。
  */
 @Value
-@Builder
 public class MaterializedCliArtifact {
 
     /** workspace 内相对路径，已通过根目录校验和 {@code ..} 拒绝。 */
@@ -33,6 +36,24 @@ public class MaterializedCliArtifact {
 
     /** 文件服务下载地址，登记成功时必然存在。 */
     String downloadUrl;
+
+    @Builder
+    public MaterializedCliArtifact(String relativePath,
+                                   String fileName,
+                                   Long fileSize,
+                                   String mimeType,
+                                   String previewUrl,
+                                   String downloadUrl) {
+        if (StringUtils.isBlank(relativePath) || !WorkspaceRelativePath.isSafe(relativePath)) {
+            throw new IllegalArgumentException("relativePath must stay inside workspace");
+        }
+        this.relativePath = WorkspaceRelativePath.sanitize(relativePath);
+        this.fileName = fileName;
+        this.fileSize = fileSize;
+        this.mimeType = mimeType;
+        this.previewUrl = previewUrl;
+        this.downloadUrl = downloadUrl;
+    }
 
     public Map<String, Object> toMap() {
         Map<String, Object> map = new LinkedHashMap<>();

@@ -57,7 +57,11 @@ public class DesktopControlYieldService {
         String userId = request == null ? null : request.getUserId();
         LtmOwner owner = agentContext.getLtmOwner();
         if (owner == null) {
-            owner = LtmOwnerResolver.resolve(userId, null);
+            owner = LtmOwnerResolver.resolve(userId, null, agentContext.getSessionId());
+        }
+        if (owner == null) {
+            // 无身份来源时拒绝落库：ownerKey 是后续归属判定的依据，不能退化成共享匿名键。
+            throw new IllegalStateException("缺少用户身份，无法创建桌面控制请求");
         }
 
         DesktopControlRecord record = DesktopControlRecord.builder()

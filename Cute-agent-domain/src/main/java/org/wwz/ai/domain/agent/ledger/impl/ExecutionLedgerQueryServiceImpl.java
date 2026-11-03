@@ -3,10 +3,14 @@ package org.wwz.ai.domain.agent.ledger.impl;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.wwz.ai.domain.agent.channel.port.ChannelBindingOwnershipPort;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.entity.ArtifactRecord;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
+import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.entity.LlmInvocation;
 import org.wwz.ai.domain.agent.ledger.entity.ToolInvocation;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
@@ -40,6 +44,13 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     private final IExecutionLedgerReadRepository executionLedgerReadRepository;
     private final ToolOutputReader toolOutputReader;
 
+    /**
+     * 渠道 owner 判定端口：会话归属可能是绑定的 owner 而不是会话行上的 userId。
+     * 渠道模块未启用时没有实现，按 deniesAll 处理。
+     */
+    @Autowired
+    private ObjectProvider<ChannelBindingOwnershipPort> channelBindingOwnershipPortProvider;
+
     @Override
     public ExecutionRunDetail queryRunDetail(String requestId) {
         if (StringUtils.isBlank(requestId)) {
@@ -49,6 +60,22 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
         if (run == null) {
             return null;
         }
+        return buildRunDetail(run);
+    }
+
+    @Override
+    public ExecutionRunDetail queryRunDetail(String userId, String requestId) {
+        if (requireReadableRun(userId, requestId) == null) {
+            return null;
+        }
+        DialogueRun run = executionLedgerReadRepository.queryRunByRequestId(requestId);
+        if (run == null) {
+            return null;
+        }
+        return buildRunDetail(run);
+    }
+
+    private ExecutionRunDetail buildRunDetail(DialogueRun run) {
         List<LlmInvocation> llmInvocations = executionLedgerReadRepository.queryLlmInvocationsByRunId(run.getId());
         List<ToolInvocation> toolInvocations = executionLedgerReadRepository.queryToolInvocationsByRunId(run.getId());
         List<ArtifactRecord> artifacts = executionLedgerReadRepository.queryArtifactsByRunIdWithSubagentFold(run.getId());
@@ -79,11 +106,24 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     }
 
     @Override
+    public List<ArtifactView> querySessionArtifacts(String userId, String sessionId) {
+        if (!canReadSession(userId, sessionId)) {
+            return List.of();
+        }
+        return querySessionArtifacts(sessionId);
+    }
+
+    @Override
     public DialogueRunView queryRunSummary(String requestId) {
         if (StringUtils.isBlank(requestId)) {
             return null;
         }
         return toRunView(executionLedgerReadRepository.queryRunSummaryByRequestId(requestId));
+    }
+
+    @Override
+    public DialogueRunView queryRunSummary(String userId, String requestId) {
+        return toRunView(requireReadableRun(userId, requestId));
     }
 
     @Override
@@ -151,13 +191,17 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     }
 
     @Override
-    public List<ToolInvocationView> queryRecentToolInvocations(String toolName, int limit) {
-        if (StringUtils.isBlank(toolName)) {
+    public List<ToolInvocationView> queryRecentToolInvocations(String userId, String toolName, int limit) {
+        if (StringUtils.isBlank(userId) || StringUtils.isBlank(toolName)) {
             return List.of();
         }
+        int pageSize = limit <= 0
+                ? MAX_RECENT_TOOL_INVOCATION_PAGE_SIZE
+                : Math.min(limit, MAX_RECENT_TOOL_INVOCATION_PAGE_SIZE);
         List<ToolInvocationView> views = executionLedgerReadRepository.queryRecentToolInvocations(
+                userId,
                 toolName,
-                normalizeLimit(limit)
+                pageSize
         );
         enrichStructuredOutputs(views, null);
         return views;
@@ -173,6 +217,14 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     }
 
     @Override
+    public List<DialogueRunView> queryRecentSessionRuns(String userId, String sessionId, int limit) {
+        if (!canReadSession(userId, sessionId)) {
+            return List.of();
+        }
+        return queryRecentSessionRuns(sessionId, limit);
+    }
+
+    @Override
     public List<DialogueRunView> querySessionRuns(String sessionId, int offset, int limit) {
         if (StringUtils.isBlank(sessionId)) {
             return List.of();
@@ -185,6 +237,11 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     public List<DialogueRunView> querySessionRuns(String sessionId, RunCursor after, int limit) {
         if (StringUtils.isBlank(sessionId)) {
             return List.of();
+        }
+        // cursor 未签名，sessionId 由调用方控制；必须绑定到当前会话，避免把别的会话
+        // 的 (createTime, id) keyset 应用进来造成跳页/重复页。
+        if (after != null && !after.matchesSession(sessionId)) {
+            throw new IllegalArgumentException("cursor 不属于当前 session");
         }
         int normalizedLimit = Math.max(1, Math.min(limit, MAX_SESSION_RUN_PAGE_SIZE + 1));
         return executionLedgerReadRepository.queryRunsBySessionId(sessionId, after, normalizedLimit);
@@ -204,6 +261,14 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
             return null;
         }
         return executionLedgerReadRepository.querySessionHistorySummary(sessionId);
+    }
+
+    @Override
+    public DialogueSessionView querySessionHistorySummary(String userId, String sessionId) {
+        if (!canReadSession(userId, sessionId)) {
+            return null;
+        }
+        return querySessionHistorySummary(sessionId);
     }
 
     @Override
@@ -227,6 +292,14 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
         return restoreSessionTitles(
                 executionLedgerReadRepository.queryRecentSessions(userId, normalizeLimit(limit))
         );
+    }
+
+    @Override
+    public List<DialogueSessionView> querySessionTree(String userId, String sessionId, int limit) {
+        if (!canReadSession(userId, sessionId)) {
+            return List.of();
+        }
+        return querySessionTree(sessionId, limit);
     }
 
     @Override
@@ -276,6 +349,44 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
                 .nextCursor(nextCursor)
                 .hasMore(hasMore)
                 .build();
+    }
+
+    /**
+     * 会话归属校验：会话本人，或该会话绑定的 IM 渠道 owner（与 case 层授权口径一致）。
+     * <p>归属未建立（userId 为空）的会话在这里一律拒绝，不做「首个访问者自动绑定」，
+     * 那是写路径授权服务的职责。</p>
+     */
+    private boolean canReadSession(String userId, String sessionId) {
+        if (StringUtils.isAnyBlank(userId, sessionId)) {
+            return false;
+        }
+        DialogueSession session = executionLedgerReadRepository.querySessionOwnership(sessionId);
+        if (session == null || StringUtils.isBlank(session.getUserId())) {
+            return false;
+        }
+        if (StringUtils.equals(session.getUserId(), userId)) {
+            return true;
+        }
+        if (session.getBindingId() == null) {
+            return false;
+        }
+        ChannelBindingOwnershipPort port = channelBindingOwnershipPortProvider == null
+                ? ChannelBindingOwnershipPort.deniesAll()
+                : channelBindingOwnershipPortProvider.getIfAvailable(ChannelBindingOwnershipPort::deniesAll);
+        return port.isOwner(session.getBindingId(), userId);
+    }
+
+    /**
+     * 先由 requestId 定位 run 所属 session，再走同一套归属校验。
+     *
+     * @return 可读时返回轻量 run 摘要；不存在或非 owner 返回 {@code null}
+     */
+    private DialogueRun requireReadableRun(String userId, String requestId) {
+        if (StringUtils.isAnyBlank(userId, requestId)) {
+            return null;
+        }
+        DialogueRun run = executionLedgerReadRepository.queryRunSummaryByRequestId(requestId);
+        return run != null && canReadSession(userId, run.getSessionId()) ? run : null;
     }
 
     /**

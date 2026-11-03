@@ -76,12 +76,16 @@ public class RequestDesktopControlTool implements BaseTool {
         try {
             CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
             String sessionId = StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId());
+            String ownerKey = resolveOwnerKey(context);
+            if (ownerKey == null) {
+                return fail("缺少用户身份，无法请求桌面控制");
+            }
             DesktopSessionRemote.OpenResult opened = DesktopSessionRemote.open(
                     context.getRuntimeDependencies().requireRemoteHttpPort(),
                     config,
                     context.getRequestId(),
                     sessionId,
-                    resolveOwnerKey(context),
+                    ownerKey,
                     DesktopSessionRemote.DEFAULT_TTL_SECONDS);
             throw new DesktopControlRequiredException(reason, opened.getUrl(), opened.getHoldUntil(), toolCallId);
         } catch (DesktopControlRequiredException yield) {
@@ -94,9 +98,9 @@ public class RequestDesktopControlTool implements BaseTool {
     private String resolveOwnerKey(AgentContext context) {
         LtmOwner owner = context.getLtmOwner();
         if (owner == null) {
-            owner = LtmOwnerResolver.resolve(context.getUserId(), null);
+            owner = LtmOwnerResolver.resolve(context.getUserId(), null, context.getSessionId());
         }
-        return owner.asOwnerKey();
+        return owner == null ? null : owner.asOwnerKey();
     }
 
 

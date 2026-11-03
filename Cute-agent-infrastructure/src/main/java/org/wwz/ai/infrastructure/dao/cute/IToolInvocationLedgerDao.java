@@ -23,7 +23,11 @@ public interface IToolInvocationLedgerDao {
 
     List<ToolInvocation> queryByLlmInvocationIds(@Param("llmInvocationIds") List<Long> llmInvocationIds);
 
-    List<ToolInvocationView> queryRecentByToolName(@Param("toolName") String toolName,
+    /**
+     * 按用户 + 工具名读取最近调用；{@code user_id} 条件下推到 SQL，禁止返回全量用户数据。
+     */
+    List<ToolInvocationView> queryRecentByToolName(@Param("userId") String userId,
+                                                   @Param("toolName") String toolName,
                                                    @Param("limit") int limit);
 
     /**

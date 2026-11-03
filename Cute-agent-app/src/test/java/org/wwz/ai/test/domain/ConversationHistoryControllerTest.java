@@ -26,6 +26,7 @@ import org.wwz.ai.trigger.http.agent.vo.ConversationSessionRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionPageRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionStatusRespVO;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
+import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.types.agent.user.UserRequestContext;
 import org.wwz.ai.types.enums.ResponseCode;
 
@@ -234,15 +235,12 @@ public class ConversationHistoryControllerTest {
                 "private run", LocalDateTime.of(2026, 5, 2, 10, 0, 0),
                 ExecutionLedgerConstants.STATUS_SUCCESS, "summary:req-owned-001", "private.md");
 
-        ConversationSessionAuthorizationService ownership =
-                Mockito.mock(ConversationSessionAuthorizationService.class);
-        Mockito.doThrow(new RuntimeException("denied"))
-                .when(ownership)
-                .ensureExistingSessionAccessible("user-test", "session-owned-001");
+        // 归属失败现在内聚在读契约里：非 owner 查 run 摘要返回 null。
+        ExecutionLedgerQueryService deniedQueryService = Mockito.spy(ctx.queryService);
+        Mockito.doReturn(null).when(deniedQueryService).queryRunSummary("user-test", "req-owned-001");
         AgentConversationHistoryController controller = new AgentConversationHistoryController();
-        ReflectionTestUtils.setField(controller, "executionLedgerQueryService", ctx.queryService);
+        ReflectionTestUtils.setField(controller, "executionLedgerQueryService", deniedQueryService);
         ReflectionTestUtils.setField(controller, "conversationHistoryReplayService", ctx.replayService);
-        ReflectionTestUtils.setField(controller, "conversationSessionAuthorizationService", ownership);
 
         int llmQueriesBefore = ctx.store.queryLlmByRunIdCount;
         int toolQueriesBefore = ctx.store.queryToolByRunIdCount;

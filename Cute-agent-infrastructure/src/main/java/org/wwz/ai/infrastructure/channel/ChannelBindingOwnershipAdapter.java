@@ -21,11 +21,25 @@ public class ChannelBindingOwnershipAdapter implements ChannelBindingOwnershipPo
 
     @Override
     public boolean isOwner(Long bindingId, String userId) {
+        // 安全判定端口：任何不完整/异常输入都 fail-closed。
         if (bindingId == null || StringUtils.isBlank(userId)) {
             return false;
         }
         Optional<ChannelBinding> binding = bindingRepository.findById(bindingId);
-        return binding.map(value -> StringUtils.equals(value.getOwnerUserId(), userId))
+        return binding.map(value -> isActiveOwner(value, userId))
                 .orElse(false);
+    }
+
+    /**
+     * owner 匹配还不够：已解绑（DISABLED）/已删除的 binding 仍保留原 ownerUserId，
+     * 只看 owner 会让被撤销的 bot 继续授权。只有 ACTIVE 且未软删除才放行。
+     */
+    private boolean isActiveOwner(ChannelBinding binding, String userId) {
+        if (binding == null
+                || !binding.isActive()
+                || Integer.valueOf(1).equals(binding.getDeleted())) {
+            return false;
+        }
+        return StringUtils.equals(binding.getOwnerUserId(), userId);
     }
 }

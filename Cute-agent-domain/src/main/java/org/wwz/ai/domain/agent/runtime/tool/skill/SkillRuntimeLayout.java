@@ -21,6 +21,8 @@ public class SkillRuntimeLayout {
     public static final String PLACEHOLDER_PYTHON = "${PYTHON}";
 
     private static final Pattern UNSAFE_SEGMENT = Pattern.compile("[^A-Za-z0-9._-]+");
+    /** 清洗后的最终不变量：单段、仅安全字符、不是 . / .. */
+    private static final Pattern SAFE_SEGMENT = Pattern.compile("[A-Za-z0-9._-]+");
     private static final int MAX_SEGMENT_LEN = 80;
     private static final String FALLBACK_SEGMENT = "skill";
 
@@ -63,6 +65,22 @@ public class SkillRuntimeLayout {
             cleaned = cleaned.substring(0, MAX_SEGMENT_LEN);
         }
         cleaned = cleaned.replaceAll("^[.-]+|[.-]+$", "");
-        return cleaned.isBlank() ? FALLBACK_SEGMENT : cleaned;
+        // 显式收口：清洗规则本身已把分隔符替换掉，但这里再断言一次最终不变量，
+        // 避免未来放宽 UNSAFE_SEGMENT（例如支持 Unicode）时静默带回 . / .. 或多段路径。
+        if (!isSafeSegment(cleaned)) {
+            log.warn("技能名清洗后仍不安全，目录回退到 {}: {}", FALLBACK_SEGMENT, name);
+            return FALLBACK_SEGMENT;
+        }
+        return cleaned;
+    }
+
+    static boolean isSafeSegment(String segment) {
+        return segment != null
+                && !segment.isBlank()
+                && !".".equals(segment)
+                && !"..".equals(segment)
+                && segment.indexOf('/') < 0
+                && segment.indexOf('\\') < 0
+                && SAFE_SEGMENT.matcher(segment).matches();
     }
 }

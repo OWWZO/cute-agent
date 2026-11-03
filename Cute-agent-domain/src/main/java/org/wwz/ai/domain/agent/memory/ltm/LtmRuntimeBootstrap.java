@@ -32,7 +32,12 @@ public final class LtmRuntimeBootstrap {
         if (ltmManager == null) {
             return;
         }
-        LtmOwner owner = LtmOwnerResolver.resolve(request.getUserId(), request.getErp());
+        LtmOwner owner = LtmOwnerResolver.resolve(request.getUserId(), request.getErp(), request.getSessionId());
+        if (owner == null) {
+            // 身份缺失时 fail-closed：不初始化 LTM，也不注入 prefetch 围栏。
+            agentContext.setLtmMemoryContext(null);
+            return;
+        }
         agentContext.setLtmOwner(owner);
         Map<String, Object> ctx = new HashMap<>();
         ctx.put("requestId", request.getRequestId());

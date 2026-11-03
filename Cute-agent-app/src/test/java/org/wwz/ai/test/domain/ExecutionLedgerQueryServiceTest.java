@@ -8,10 +8,12 @@ import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryDetail;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunStartRecord;
+import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationStartRecord;
+import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationBatchStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
@@ -42,11 +44,14 @@ public class ExecutionLedgerQueryServiceTest {
         Assert.assertEquals("report-1.md", detail.getArtifacts().get(0).getFileName());
         Assert.assertEquals("req-query-001", detail.getArtifacts().get(0).getRequestId());
 
-        List<ToolInvocationView> recentTools = ctx.queryService.queryRecentToolInvocations("file_tool", 100);
+        List<ToolInvocationView> recentTools = ctx.queryService.queryRecentToolInvocations(
+                "user-query-001", "file_tool", 100);
         Assert.assertEquals(2, recentTools.size());
         Assert.assertEquals("req-query-002", recentTools.get(0).getRequestId());
         Assert.assertEquals(Integer.valueOf(1), recentTools.get(0).getArtifactCount());
         Assert.assertNull(recentTools.get(0).getStructuredOutput());
+        // 越权路径：其他用户按同一工具名查询必须查不到任何记录。
+        Assert.assertTrue(ctx.queryService.queryRecentToolInvocations("user-other", "file_tool", 100).isEmpty());
 
         var recentRuns = ctx.queryService.queryRecentSessionRuns("session-query-001", 10);
         Assert.assertEquals(2, recentRuns.size());
@@ -597,6 +602,49 @@ public class ExecutionLedgerQueryServiceTest {
             this.parentToolInvocationId = parentToolInvocationId;
             this.childToolInvocationId = childToolInvocationId;
         }
+    }
+
+    /**
+     * 越权回归：同一份 requestId/sessionId，非 owner 通过带 userId 的读契约必须拿不到数据。
+     */
+    @Test
+    public void scopedReadsRejectForeignUser() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx = ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        seedRun(ctx, "req-sec-001", "session-sec-001", "user-a", "file_tool", 1, "a.md");
+
+        Assert.assertNotNull(ctx.queryService.queryRunDetail("user-a", "req-sec-001"));
+        Assert.assertNull("外部用户不得读取他人 run 详情",
+                ctx.queryService.queryRunDetail("user-b", "req-sec-001"));
+        Assert.assertNotNull(ctx.queryService.queryRunSummary("user-a", "req-sec-001"));
+        Assert.assertNull("外部用户不得读取他人 run 摘要",
+                ctx.queryService.queryRunSummary("user-b", "req-sec-001"));
+        Assert.assertEquals(1, ctx.queryService.querySessionArtifacts("user-a", "session-sec-001").size());
+        Assert.assertTrue("外部用户不得读取他人会话产物",
+                ctx.queryService.querySessionArtifacts("user-b", "session-sec-001").isEmpty());
+        Assert.assertNotNull(ctx.queryService.querySessionHistorySummary("user-a", "session-sec-001"));
+        Assert.assertNull("外部用户不得读取他人会话摘要",
+                ctx.queryService.querySessionHistorySummary("user-b", "session-sec-001"));
+        Assert.assertFalse(ctx.queryService.querySessionTree("user-a", "session-sec-001", 10).isEmpty());
+        Assert.assertTrue("外部用户不得读取他人会话树",
+                ctx.queryService.querySessionTree("user-b", "session-sec-001", 10).isEmpty());
+        Assert.assertEquals(1, ctx.queryService.queryRecentSessionRuns("user-a", "session-sec-001", 10).size());
+        Assert.assertTrue("外部用户不得读取他人最近 run",
+                ctx.queryService.queryRecentSessionRuns("user-b", "session-sec-001", 10).isEmpty());
+    }
+
+    /**
+     * keyset cursor 未签名：换一个会话使用同一 cursor 必须被拒绝，不能静默跳页。
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void cursorBoundToSessionIsEnforced() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx = ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        seedRun(ctx, "req-cursor-001", "session-cursor-a", "user-a", "file_tool", 1, "a.md");
+        seedRun(ctx, "req-cursor-002", "session-cursor-b", "user-a", "file_tool", 1, "b.md");
+
+        DialogueRunView first = ctx.queryService.querySessionRuns("session-cursor-a", 0, 10).get(0);
+        RunCursor cursor = RunCursor.from(first);
+
+        ctx.queryService.querySessionRuns("session-cursor-b", cursor, 10);
     }
 
     private void seedRun(ExecutionLedgerFixtureFactory.LedgerTestContext ctx,

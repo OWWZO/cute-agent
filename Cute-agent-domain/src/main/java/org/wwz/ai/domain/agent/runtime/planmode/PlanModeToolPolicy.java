@@ -117,11 +117,28 @@ public final class PlanModeToolPolicy {
         return null;
     }
 
+    /**
+     * 只放行工作区根下精确的 {@code .cute/plan.md}。
+     * <p>不接受 {@code foo.cute/plan.md}、{@code sub/.cute/plan.md}、绝对路径或含 {@code ..}
+     * 的写法——旧实现用 {@code endsWith} 判断，等于允许在任意子目录写同名文件。</p>
+     */
     private static boolean isPlanRelativePath(String path) {
         String normalized = path.replace('\\', '/').trim();
-        return normalized.equals(PlanArtifactStore.RELATIVE_PLAN_PATH)
-                || normalized.endsWith("/" + PlanArtifactStore.RELATIVE_PLAN_PATH)
-                || normalized.endsWith(".cute/plan.md");
+        while (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
+        if (normalized.startsWith("/") || normalized.startsWith("~")) {
+            return false;
+        }
+        if (normalized.indexOf(':') >= 0) {
+            return false;
+        }
+        for (String segment : normalized.split("/")) {
+            if ("..".equals(segment)) {
+                return false;
+            }
+        }
+        return PlanArtifactStore.RELATIVE_PLAN_PATH.equals(normalized);
     }
 
     @SuppressWarnings("unchecked")

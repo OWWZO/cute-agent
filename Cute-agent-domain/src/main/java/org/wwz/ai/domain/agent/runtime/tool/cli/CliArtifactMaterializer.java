@@ -203,14 +203,20 @@ public final class CliArtifactMaterializer {
         Long fileSize = result.getResponse().getFileSize() == null
                 ? size
                 : result.getResponse().getFileSize().longValue();
-        return MaterializedCliArtifact.builder()
-                .relativePath(relativePath)
-                .fileName(file.getFileName() == null ? relativePath : file.getFileName().toString())
-                .fileSize(fileSize)
-                .mimeType(probeMime(file))
-                .previewUrl(result.getResponse().getDomainUrl())
-                .downloadUrl(result.getResponse().getOssUrl())
-                .build();
+        try {
+            return MaterializedCliArtifact.builder()
+                    .relativePath(relativePath)
+                    .fileName(file.getFileName() == null ? relativePath : file.getFileName().toString())
+                    .fileSize(fileSize)
+                    .mimeType(probeMime(file))
+                    .previewUrl(result.getResponse().getDomainUrl())
+                    .downloadUrl(result.getResponse().getOssUrl())
+                    .build();
+        } catch (IllegalArgumentException e) {
+            // 构造期校验失败：该候选不是合法工作区产物，按登记失败处理，不阻断其它文件。
+            log.warn("cli artifact rejected: {}", e.getMessage());
+            return null;
+        }
     }
 
     private static void emitFileEvent(AgentContext agentContext,

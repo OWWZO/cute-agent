@@ -93,7 +93,7 @@ public class ChannelBindingQrService {
             return;
         }
         try {
-            PollOutcome outcome = gateway.poll(taskId);
+            PollOutcome outcome = gateway.poll(task.ownerUserId, taskId);
             if (outcome.status() == Status.COMPLETED) {
                 finish(task, Status.COMPLETED, outcome.bindingId(), null);
                 log.info("channel qr completed taskId={} bindingId={}", taskId, outcome.bindingId());

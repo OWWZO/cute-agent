@@ -217,12 +217,13 @@ public class MemoryFlushServiceImpl implements MemoryFlushService {
             if (ledger != null && StringUtils.isNotBlank(sessionId)) {
                 DialogueSession session = ledger.querySessionEntity(sessionId);
                 if (session != null && StringUtils.isNotBlank(session.getUserId())) {
-                    return LtmOwnerResolver.resolve(session.getUserId(), null);
+                    return LtmOwnerResolver.resolve(session.getUserId(), null, sessionId);
                 }
             }
         } catch (Exception e) {
             log.debug("resolveOwner failed sessionId={}: {}", sessionId, e.toString());
         }
-        return LtmOwnerResolver.resolve(null, null);
+        // 兜底收敛到会话级；sessionId 也为空时返回 null，由调用方按 null-owner 跳过。
+        return LtmOwnerResolver.resolve(null, null, sessionId);
     }
 }

@@ -72,7 +72,11 @@ public final class LtmTurnSyncSupport {
         }
         LtmOwner owner = agentContext.getLtmOwner();
         if (owner == null) {
-            owner = LtmOwnerResolver.resolve(null, null);
+            owner = LtmOwnerResolver.resolve(null, null, agentContext.getSessionId());
+        }
+        if (owner == null) {
+            // 无身份来源：跳过后台 review，避免把内容写进共享匿名 owner。
+            return;
         }
         List<Message> snapshot = memoryMessages == null ? List.of() : new ArrayList<>(memoryMessages);
         String parentSystem = null;

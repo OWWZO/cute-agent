@@ -203,6 +203,32 @@ public class SubAgentControlIsolationTest {
     }
 
     @Test
+    public void parallelForkMustInheritSecurityGuardsFromParent() {
+        AgentContext parent = AgentContext.builder()
+                .requestId("req-guard")
+                .sessionId("sess-guard")
+                .query("父任务")
+                .toolCollection(new ToolCollection())
+                .toolDispatchWhitelist(java.util.Set.of("workspace_read"))
+                .disabledSkillNames(java.util.Set.of("danger-skill"))
+                .disabledMcpIds(java.util.Set.of("mcp-1"))
+                .skipMemory(Boolean.TRUE)
+                .ltmSideEffectsDisabled(Boolean.TRUE)
+                .memoryScope("sub:agent-1")
+                .build();
+
+        AgentContext fork = parent.forkForParallelTask("并发子任务");
+
+        Assert.assertEquals("工具白名单必须继承", parent.getToolDispatchWhitelist(), fork.getToolDispatchWhitelist());
+        Assert.assertEquals("禁用 skill 必须继承", parent.getDisabledSkillNames(), fork.getDisabledSkillNames());
+        Assert.assertEquals("禁用 MCP 必须继承", parent.getDisabledMcpIds(), fork.getDisabledMcpIds());
+        Assert.assertEquals("skipMemory 必须继承", parent.getSkipMemory(), fork.getSkipMemory());
+        Assert.assertEquals("LTM 副作用开关必须继承",
+                parent.getLtmSideEffectsDisabled(), fork.getLtmSideEffectsDisabled());
+        Assert.assertEquals("记忆作用域必须继承", parent.getMemoryScope(), fork.getMemoryScope());
+    }
+
+    @Test
     public void parallelForkMustStillReceiveUserStop() {
         AgentContext parent = newParent("sess-iso-15");
         // 用户 stop 令牌在 run 开始时由 ActiveAgentRunRegistry 注入父，早于 fork
