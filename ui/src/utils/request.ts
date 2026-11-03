@@ -69,6 +69,17 @@ function responseMessage(data: unknown, fallback: string) {
   return fallback;
 }
 
+function requestErrorLogContext(error: unknown) {
+  if (!axios.isAxiosError(error)) {
+    return { errorType: error instanceof Error ? error.name : typeof error };
+  }
+  return {
+    method: error.config?.method?.toUpperCase(),
+    url: error.config?.url?.split(/[?#]/, 1)[0],
+    status: error.response?.status,
+  };
+}
+
 function retryAfterRefresh(
   config?: AuthRetryConfig,
   reason = '登录状态已失效'
@@ -139,7 +150,7 @@ request.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error('请求错误:', error);
+    console.error('请求错误:', requestErrorLogContext(error));
     return Promise.reject(error);
   }
 );
@@ -171,7 +182,7 @@ request.interceptors.response.use(
     return response;
   },
   (error: AxiosError) => {
-    console.error('响应错误:', error);
+    console.error('响应错误:', requestErrorLogContext(error));
 
     if (error.response) {
       const { status, data: resData } = error.response;

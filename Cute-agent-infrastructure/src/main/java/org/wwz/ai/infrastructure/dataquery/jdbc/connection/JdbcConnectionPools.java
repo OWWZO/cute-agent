@@ -125,7 +125,8 @@ public class JdbcConnectionPools {
         try {
             return jdbcConnectionPoolFactory.createPooledDatasource(config);
         } catch (Exception e) {
-            log.error("创建数据源失败, config: {}", config, e);
+            log.error("创建数据源失败, poolId: {}, dialect: {}",
+                    config.getKey(), config.getJdbcDialect(), e);
             throw new RuntimeException("创建数据源失败", e);
         }
     }

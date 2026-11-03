@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.dao.cute.po;
 
 import lombok.Data;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -14,13 +15,16 @@ public class PlanApprovalPO {
     private String sourceRequestId;
     private Long toolInvocationId;
     private String toolCallId;
+    @ToString.Exclude
     private String planContent;
     private String planFilePath;
+    @ToString.Exclude
     private String decisionJson;
     /** 审批状态，取值来自 PlanApprovalStatuses。 */
     private String status;
     private LocalDateTime expiresAt;
     private String resumeRequestId;
+    @ToString.Exclude
     private String resumeContextJson;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

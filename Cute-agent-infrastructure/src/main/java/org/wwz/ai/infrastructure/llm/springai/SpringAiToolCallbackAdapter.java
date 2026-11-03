@@ -60,7 +60,8 @@ public class SpringAiToolCallbackAdapter implements ToolCallback {
                     ? stringResult
                     : OBJECT_MAPPER.writeValueAsString(result);
         } catch (Exception e) {
-            log.error("Spring AI ToolCallback 调用失败: tool={}, input={}", definition.getName(), toolInput, e);
+            log.error("Spring AI ToolCallback 调用失败: tool={}, inputLength={}",
+                    definition.getName(), toolInput == null ? 0 : toolInput.length(), e);
             throw new RuntimeException("Tool callback execute failed: " + definition.getName(), e);
         }
     }

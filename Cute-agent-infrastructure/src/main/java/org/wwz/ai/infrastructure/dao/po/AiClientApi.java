@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -35,6 +36,7 @@ public class AiClientApi {
     /**
      * API密钥
      */
+    @ToString.Exclude
     private String apiKey;
 
     /**

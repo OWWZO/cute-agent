@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -18,6 +19,7 @@ public class AiClientToolMcpPO implements Serializable {
     private String mcpId;
     private String mcpName;
     private String transportType;
+    @ToString.Exclude
     private String transportConfig;
     private Integer requestTimeout;
     private Integer status;

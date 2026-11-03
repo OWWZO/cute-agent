@@ -27,6 +27,10 @@ export type ImageGenerationToolResponse = {
   rawResponse?: unknown;
 };
 
+/**
+ * 仅保存纯生成参数。该对象会写入 localStorage，禁止加入 apiKey、baseUrl
+ * 等凭据字段，也不要把整个对象直接写入日志。
+ */
 export type GenerationConfig = {
   model: string;
   mode: RequestMode;

@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.dataquery.vector;
 
 import lombok.Data;
+import lombok.ToString;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +24,7 @@ public class QdrantProperties {
     private String host;
 
     private Integer port;
+    @ToString.Exclude
     private String apiKey;
     private String embeddingUrl;
     private Boolean preferGrpc;
