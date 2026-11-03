@@ -22,6 +22,7 @@ public final class PlanApprovalStatuses {
     }
 
     public static boolean isOpen(String status) {
-        return PENDING.equals(status) || RESUME_PENDING.equals(status) || RESUMING.equals(status);
+        // List.of(...).contains(null) 会抛 NPE，先做 null 判断。
+        return status != null && OPEN.contains(status);
     }
 }

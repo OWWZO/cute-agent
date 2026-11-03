@@ -44,8 +44,6 @@ import java.util.concurrent.atomic.LongAdder;
 @RequiredArgsConstructor
 public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
 
-    private static final String DEFAULT_SESSION_TITLE = "新对话";
-
     private final IExecutionLedgerWriteRepository executionLedgerWriteRepository;
     private final ToolOutputWriter toolOutputWriter;
 
@@ -464,7 +462,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
     private String resolveSessionTitle(String queryText) {
         String normalized = StringUtils.trimToEmpty(queryText);
         if (normalized.isEmpty()) {
-            return DEFAULT_SESSION_TITLE;
+            return ExecutionLedgerConstants.DEFAULT_SESSION_TITLE;
         }
         return normalized.length() <= 30 ? normalized : normalized.substring(0, 30);
     }
@@ -511,7 +509,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
     }
 
     private boolean isMeaningfulSessionTitle(String title) {
-        return StringUtils.isNotBlank(title) && !DEFAULT_SESSION_TITLE.equals(title.trim());
+        return StringUtils.isNotBlank(title) && !ExecutionLedgerConstants.DEFAULT_SESSION_TITLE.equals(title.trim());
     }
 
     private record SessionHeadValues(String title, String latestQueryText) {

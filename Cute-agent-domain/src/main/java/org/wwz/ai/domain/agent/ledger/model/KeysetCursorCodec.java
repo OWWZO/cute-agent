@@ -6,6 +6,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.DateTimeException;
 import java.util.Base64;
 
 /**
@@ -64,7 +65,8 @@ public final class KeysetCursorCodec {
         } catch (IllegalArgumentException exception) {
             // 版本头/尾随数据校验抛出的已是归一化异常，避免二次包装。
             throw exception;
-        } catch (IOException | RuntimeException exception) {
+        } catch (IOException | DateTimeException exception) {
+            // 仅归一化「输入非法」类异常；NPE/ClassCastException 等编程缺陷继续向上抛出。
             throw invalidCursor(invalidMessage);
         }
     }

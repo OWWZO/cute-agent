@@ -74,7 +74,6 @@ public class DeepSearchStage {
         stage.setChapterContent(chapterContent);
         stage.setChapterOrder(chapterOrder);
         stage.setChapterSummary(chapterSummary);
-        stage.setAnswer(chapterSummary);
         stage.setQueries(queries == null ? new ArrayList<>() : new ArrayList<>(queries));
         stage.setResults(results == null ? new ArrayList<>() : new ArrayList<>(results));
         return stage;

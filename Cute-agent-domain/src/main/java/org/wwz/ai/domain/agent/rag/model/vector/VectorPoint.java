@@ -1,11 +1,16 @@
 package org.wwz.ai.domain.agent.rag.model.vector;
 
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+
 import java.util.List;
 import java.util.Map;
 
 /**
  * 待写入向量索引的领域点模型。
  */
+@EqualsAndHashCode
+@ToString
 public final class VectorPoint {
 
     private final String id;

@@ -9,7 +9,10 @@ import java.util.Set;
 /**
  * SQL 字面量类型判断工具。
  */
-public class SqlLiteralUtil {
+public final class SqlLiteralUtil {
+
+    private SqlLiteralUtil() {
+    }
 
     private static final Set<SqlTypeName> numericType =
             ImmutableSet.<SqlTypeName>builder()

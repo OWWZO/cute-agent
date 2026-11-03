@@ -77,6 +77,8 @@ public class ReplayProjector {
     /**
      * 实时与历史共用同一套 frame 组装逻辑。
      * 实时链路只需要提供已经收口好的 ProjectedReplayEvent，即可得到前端可直接消费的 eventData。
+     * <p>返回 frame 的顶层 resultMap 固定带 {@code agentType=history}，该标记只服务历史回放；
+     * 实时调用方只应消费 {@code eventData}，不得把顶层 resultMap 透传给 SSE。</p>
      */
     public AgentStreamResult projectFrame(String requestId,
                                          ProjectedReplayEvent event,
@@ -316,12 +318,6 @@ public class ReplayProjector {
                                                      String plannerRoundId,
                                                      String parentToolUseId) {
         syncPlannerRoundState(state, messageType, plannerRoundId);
-        List<Map<String, Object>> artifactRefs = null;
-        if ("result".equals(messageType)) {
-            SummaryReplayResultResolver.ResolvedSummary resolvedSummary =
-                    SummaryReplayResultResolver.resolve(invocation.getResponseText(), bundle == null ? null : bundle.getArtifacts());
-            artifactRefs = resolvedSummary.getArtifactRefs().isEmpty() ? null : resolvedSummary.getArtifactRefs();
-        }
         return ProjectedReplayEvent.builder()
                 .taskId(state.getTaskId())
                 .taskOrder(state.getTaskOrder().getAndIncrement())
@@ -329,7 +325,6 @@ public class ReplayProjector {
                 .messageType(resolveOuterMessageType(messageType))
                 .messageOrder(state.getAndIncrOrder(state.getTaskId() + ":" + messageType))
                 .resultMap(buildLlmResponse(bundle, invocation, messageType, plannerRoundId, parentToolUseId))
-                .artifactRefs(artifactRefs)
                 .timing(resolveReplayTiming(
                         invocation.getStartedAt(),
                         invocation.getFinishedAt(),
@@ -438,7 +433,7 @@ public class ReplayProjector {
         // 某些失败、旧数据或仅有 tool 事实的 run 没有显式 result 事件，使用 run 终态摘要补齐前端结论区。
         Map<String, Object> resultMap = new LinkedHashMap<>();
         SummaryReplayResultResolver.ResolvedSummary resolvedSummary =
-                SummaryReplayResultResolver.resolve(run.getFinalSummaryText(), bundle.getArtifacts());
+                SummaryReplayResultResolver.resolve(run.getFinalSummaryText());
         resultMap.put("requestId", run.getRequestId());
         resultMap.put("messageId", run.getRequestId() + ":summary");
         resultMap.put("messageTime", resolveRunMessageTime(run));
@@ -447,12 +442,9 @@ public class ReplayProjector {
         resultMap.put("finish", run.getStatus() != null && run.getStatus() != ExecutionLedgerConstants.STATUS_RUNNING);
         resultMap.put("result", resolvedSummary.getSummaryText());
         resultMap.put("taskSummary", resolvedSummary.getSummaryText());
-            if (!resolvedSummary.getFileList().isEmpty()) {
-                resultMap.put("fileList", resolvedSummary.getFileList());
-            }
-            if (!resolvedSummary.getArtifactKeys().isEmpty()) {
-                resultMap.put("artifactKeys", resolvedSummary.getArtifactKeys());
-            }
+        if (!resolvedSummary.getArtifactKeys().isEmpty()) {
+            resultMap.put("artifactKeys", resolvedSummary.getArtifactKeys());
+        }
 
         String taskId = state.getTaskId();
         events.add(ProjectedReplayEvent.builder()
@@ -462,7 +454,6 @@ public class ReplayProjector {
                 .messageType("task")
                 .messageOrder(state.getAndIncrOrder(taskId + ":result"))
                 .resultMap(resultMap)
-                .artifactRefs(resolvedSummary.getArtifactRefs().isEmpty() ? null : resolvedSummary.getArtifactRefs())
                 .build());
     }
 
@@ -471,7 +462,8 @@ public class ReplayProjector {
             return false;
         }
         for (ProjectedReplayEvent event : events) {
-            if (!(event.getResultMap() instanceof Map<?, ?> resultMap)) {
+            Map<String, Object> resultMap = event.getResultMap();
+            if (resultMap == null) {
                 continue;
             }
             Object messageType = resultMap.get("messageType");
@@ -532,18 +524,18 @@ public class ReplayProjector {
         return base;
     }
 
-    private Object buildLlmResponse(ReplayFactBundle bundle,
-                                    LlmInvocationView invocation,
-                                    String messageType,
-                                    String plannerRoundId) {
+    private Map<String, Object> buildLlmResponse(ReplayFactBundle bundle,
+                                                 LlmInvocationView invocation,
+                                                 String messageType,
+                                                 String plannerRoundId) {
         return buildLlmResponse(bundle, invocation, messageType, plannerRoundId, null);
     }
 
-    private Object buildLlmResponse(ReplayFactBundle bundle,
-                                    LlmInvocationView invocation,
-                                    String messageType,
-                                    String plannerRoundId,
-                                    String parentToolUseId) {
+    private Map<String, Object> buildLlmResponse(ReplayFactBundle bundle,
+                                                 LlmInvocationView invocation,
+                                                 String messageType,
+                                                 String plannerRoundId,
+                                                 String parentToolUseId) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("requestId", bundle == null || bundle.getRun() == null ? null : bundle.getRun().getRequestId());
         response.put("messageId", resolveLlmMessageId(invocation, messageType));
@@ -572,12 +564,9 @@ public class ReplayProjector {
             response.put("resultMap", new LinkedHashMap<>());
         } else if ("result".equals(messageType)) {
             SummaryReplayResultResolver.ResolvedSummary resolvedSummary =
-                    SummaryReplayResultResolver.resolve(invocation.getResponseText(), bundle == null ? null : bundle.getArtifacts());
+                    SummaryReplayResultResolver.resolve(invocation.getResponseText());
             response.put("result", resolvedSummary.getSummaryText());
             response.put("taskSummary", resolvedSummary.getSummaryText());
-            if (!resolvedSummary.getFileList().isEmpty()) {
-                response.put("fileList", resolvedSummary.getFileList());
-            }
             if (!resolvedSummary.getArtifactKeys().isEmpty()) {
                 response.put("artifactKeys", resolvedSummary.getArtifactKeys());
             }

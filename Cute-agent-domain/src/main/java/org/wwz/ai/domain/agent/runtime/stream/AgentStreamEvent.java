@@ -36,13 +36,4 @@ public class AgentStreamEvent {
     private String result;
     private Boolean finish;
     private Map<String, String> ext;
-
-    /**
-     * Builder alias for callers that describe the envelope payload as event data.
-     */
-    public static class AgentStreamEventBuilder {
-        public AgentStreamEventBuilder eventData(Map<String, Object> eventData) {
-            return resultMap(eventData);
-        }
-    }
 }

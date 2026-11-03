@@ -41,18 +41,22 @@ public enum LlmRetryBudget {
 
     /** null 视为 BOUNDED：调用方不显式传预算时行为与旧实现一致。 */
     public static boolean isUnbounded(LlmRetryBudget budget) {
-        return budget == UNBOUNDED;
+        return resolved(budget).isUnbounded();
     }
 
     public static boolean allows(LlmRetryBudget budget, int retryBudgetAttempt, int maxAttempts) {
-        return budget == UNBOUNDED || retryBudgetAttempt < maxAttempts;
+        return resolved(budget).allows(retryBudgetAttempt, maxAttempts);
     }
 
     public static boolean loopContinues(LlmRetryBudget budget, int attempt, int loopMaxAttempts) {
-        return budget == UNBOUNDED || attempt <= loopMaxAttempts;
+        return resolved(budget).loopContinues(attempt, loopMaxAttempts);
     }
 
     public static int statusMaxAttempts(LlmRetryBudget budget, int maxAttempts) {
-        return budget == UNBOUNDED ? UNBOUNDED_MAX_ATTEMPTS_SENTINEL : maxAttempts;
+        return resolved(budget).statusMaxAttempts(maxAttempts);
+    }
+
+    private static LlmRetryBudget resolved(LlmRetryBudget budget) {
+        return budget == null ? BOUNDED : budget;
     }
 }

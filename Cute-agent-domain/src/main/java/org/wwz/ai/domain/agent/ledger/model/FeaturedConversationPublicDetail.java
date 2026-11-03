@@ -39,7 +39,11 @@ public class FeaturedConversationPublicDetail {
 
     private String contentUnavailableReason;
 
-    /** 新的默认轻量 history 载荷；旧字段保留给非历史兼容调用方。 */
+    /**
+     * 新的默认轻量 history 载荷；旧字段保留给非历史兼容调用方。
+     * <p>与 {@link #historyDetail} 互斥：默认路径只填 {@code historyPage}，
+     * 只有显式请求完整历史时才填 {@code historyDetail}。</p>
+     */
     private ConversationHistoryPage historyPage;
 
     private ConversationHistoryDetail historyDetail;

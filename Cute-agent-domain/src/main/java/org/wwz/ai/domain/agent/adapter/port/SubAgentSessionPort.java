@@ -13,6 +13,8 @@ package org.wwz.ai.domain.agent.adapter.port;
  *   <li><b>幂等</b>：确定性 childSessionId 可能被续跑重复传入，实现须保证不会新建第二行；</li>
  *   <li><b>身份列不可覆盖</b>：已存在的会话行不得被本次调用改写 {@code session_kind}/{@code parent_session_id}。</li>
  * </ul>
+ * <p>该端口在运行时依赖中是可选的：缺失时 {@code SubAgentRunner} 记录告警并继续启动子 Agent，
+ * 即走不落库身份行的降级路径。</p>
  */
 public interface SubAgentSessionPort {
 

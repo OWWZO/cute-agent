@@ -1,11 +1,9 @@
 package org.wwz.ai.domain.agent.runtime.command;
 
-import com.alibaba.fastjson.JSONObject;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
 
 import java.util.List;
 
@@ -29,7 +27,6 @@ public class AgentExecutionCommand {
     private String basePrompt;
     private List<org.wwz.ai.domain.agent.runtime.dto.Message> workingMemoryMessages;
     private Boolean isStream;
-    private List<Message> messages;
     private List<AgentExecutionFile> sessionFiles;
     private String model;
     private Boolean thinking;
@@ -39,24 +36,4 @@ public class AgentExecutionCommand {
     private String resumeApprovalId;
     private String resumeContextJson;
     private Boolean forcePlanMode;
-
-    /**
-     * 预装载到 Agent memory 的结构化消息。
-     */
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class Message {
-        private String role;
-        private String content;
-        private String messageType;
-        private List<ToolCall> toolCalls;
-        private String toolCallId;
-        private List<JSONObject> artifactRefs;
-        private Boolean referenceOnly;
-        private String commandCode;
-        private List<AgentExecutionFile> uploadFile;
-        private List<AgentExecutionFile> files;
-    }
 }

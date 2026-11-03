@@ -3,7 +3,6 @@ package org.wwz.ai.domain.agent.rag.model.sql;
 import lombok.Data;
 
 import java.util.List;
-import java.util.Map;
 
 @Data
 /**
@@ -44,7 +43,7 @@ public class SqlModel {
      */
     private List<WhereCondition> havingConditionList;
 
-    Map<String, ModelColumn> modelColumnMap;
+    private String selectType;
 
-
+    private String hint;
 }

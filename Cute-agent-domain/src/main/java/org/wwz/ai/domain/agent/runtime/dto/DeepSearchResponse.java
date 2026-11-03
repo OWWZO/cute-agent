@@ -15,14 +15,13 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DeepSearchrResponse {
+public class DeepSearchResponse {
 
     /** {@link #messageType} 的允许取值，与回放阶段常量共用同一来源。 */
     public static final String MESSAGE_TYPE_EXTEND = DeepSearchStage.STAGE_EXTEND;
     public static final String MESSAGE_TYPE_SEARCH = DeepSearchStage.STAGE_SEARCH;
     public static final String MESSAGE_TYPE_CHAPTER_SUMMARY = DeepSearchStage.STAGE_CHAPTER_SUMMARY;
     public static final String MESSAGE_TYPE_REPORT = DeepSearchStage.STAGE_REPORT;
-
     private String requestId;
     private String query;
     private String answer;
@@ -45,6 +44,7 @@ public class DeepSearchrResponse {
     @AllArgsConstructor
     public static class SearchResult {
         private List<String> query;
+        /** 与 {@link #query} 按位置对应（同一查询的文档列表）。 */
         private List<List<SearchDoc>> docs;
         private List<SearchChapter> chapters;
     }

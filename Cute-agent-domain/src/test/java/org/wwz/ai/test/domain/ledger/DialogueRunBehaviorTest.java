@@ -61,7 +61,6 @@ public class DialogueRunBehaviorTest {
         Assert.assertEquals(NOW.plusSeconds(5), run.getFinishedAt());
         Assert.assertEquals(Long.valueOf(5000L), run.getDurationMs());
         Assert.assertTrue(run.isTerminal());
-        Assert.assertTrue(run.isFinished());
     }
 
     @Test

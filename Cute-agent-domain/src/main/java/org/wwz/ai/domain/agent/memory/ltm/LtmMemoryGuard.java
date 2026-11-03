@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.memory.ltm;
 
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.runtime.tool.common.MemoryTool;
 
 import java.util.Set;
 
@@ -11,7 +12,7 @@ public final class LtmMemoryGuard {
 
     /** 写记忆相关工具名（子代理工具池默认剥离） */
     public static final Set<String> MEMORY_WRITE_TOOLS = Set.of(
-            "memory",
+            MemoryTool.TOOL_NAME,
             "fact_store",
             "viking_memory"
     );

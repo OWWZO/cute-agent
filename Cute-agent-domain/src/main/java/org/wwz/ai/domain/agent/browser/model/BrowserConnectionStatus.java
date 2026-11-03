@@ -23,10 +23,6 @@ public final class BrowserConnectionStatus {
         return connected;
     }
 
-    public boolean getConnected() {
-        return connected;
-    }
-
     public String getTabUrl() {
         return tabUrl;
     }

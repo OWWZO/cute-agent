@@ -2,7 +2,7 @@ package org.wwz.ai.test.domain;
 
 import org.junit.Assert;
 import org.junit.Test;
-import org.wwz.ai.domain.agent.runtime.dto.DeepSearchrResponse;
+import org.wwz.ai.domain.agent.runtime.dto.DeepSearchResponse;
 import org.wwz.ai.domain.agent.runtime.tool.common.DeepSearchStructuredResultBuilder;
 
 import java.lang.reflect.Method;
@@ -25,9 +25,9 @@ public class DeepSearchBuilderCompatibilityTest {
                 getClass().getClassLoader()
         );
         Class<?> builderClass = isolatedLoader.loadClass(DeepSearchStructuredResultBuilder.class.getName());
-        Class<?> responseClass = isolatedLoader.loadClass(DeepSearchrResponse.class.getName());
-        Class<?> searchResultClass = isolatedLoader.loadClass(DeepSearchrResponse.SearchResult.class.getName());
-        Class<?> searchDocClass = isolatedLoader.loadClass(DeepSearchrResponse.SearchDoc.class.getName());
+        Class<?> responseClass = isolatedLoader.loadClass(DeepSearchResponse.class.getName());
+        Class<?> searchResultClass = isolatedLoader.loadClass(DeepSearchResponse.SearchResult.class.getName());
+        Class<?> searchDocClass = isolatedLoader.loadClass(DeepSearchResponse.SearchDoc.class.getName());
 
         Object builder = builderClass.getConstructor(String.class).newInstance("新能源车出口趋势");
         Method recordEvent = builderClass.getMethod("recordEvent", responseClass);
@@ -102,7 +102,7 @@ public class DeepSearchBuilderCompatibilityTest {
 
         private static final List<String> CHILD_FIRST_PREFIXES = List.of(
                 "org.wwz.ai.domain.agent.runtime.tool.common.DeepSearchStructuredResultBuilder",
-                "org.wwz.ai.domain.agent.runtime.dto.DeepSearchrResponse",
+                "org.wwz.ai.domain.agent.runtime.dto.DeepSearchResponse",
                 "org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearch"
         );
 

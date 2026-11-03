@@ -1,11 +1,17 @@
 package org.wwz.ai.domain.agent.rag.model.vector;
 
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+
 import java.util.List;
 import java.util.Map;
 
 /**
  * Domain-level vector recall input. It contains no transport DTO fields.
+ * <p>集合只做浅拷贝：结构不可变，但其中的可变值对象仍与调用方共享。</p>
  */
+@EqualsAndHashCode
+@ToString
 public final class VectorRecallRequest {
 
     private final String query;

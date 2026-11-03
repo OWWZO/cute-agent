@@ -31,6 +31,11 @@ public final class MemoryContextFence {
         return cleaned.trim();
     }
 
+    /**
+     * 把未围栏的原始记忆片段包装成围栏块。
+     * <p>入参必须是未围栏内容：{@link #sanitize} 会剥离已有的
+     * {@code <memory-context>...</memory-context>}，传入已围栏文本会得到空结果。</p>
+     */
     public static String buildBlock(String rawContext) {
         if (rawContext == null || rawContext.isBlank()) {
             return "";

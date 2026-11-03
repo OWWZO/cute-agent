@@ -240,12 +240,17 @@ public class CuteConfig {
 
         rawSettings.forEach((modelName, settings) -> {
             if (settings == null) {
+                log.warn("忽略 llm.settings 中配置为空的模型: {}", modelName);
                 return;
             }
 
             String normalizedModelName = StringUtils.hasText(modelName) ? modelName.trim() : "";
             if (!StringUtils.hasText(normalizedModelName)) {
+                log.warn("忽略 llm.settings 中 key 为空的模型配置");
                 return;
+            }
+            if (normalizedSettings.containsKey(normalizedModelName)) {
+                log.warn("llm.settings 存在仅空白差异的重复 key，后者覆盖前者: {}", modelName);
             }
 
             normalizedSettings.put(normalizedModelName, LLMSettings.builder()

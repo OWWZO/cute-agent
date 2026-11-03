@@ -12,9 +12,6 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 默认 fallback projector。
- */
-/**
  * 未注册专用 projector 的工具回放兜底实现，保证未知工具仍能生成基础事件。
  */
 public class DefaultToolInvocationProjector extends AbstractToolInvocationProjector {

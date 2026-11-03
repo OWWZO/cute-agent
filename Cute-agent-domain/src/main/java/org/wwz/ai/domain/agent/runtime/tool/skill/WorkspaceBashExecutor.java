@@ -196,11 +196,9 @@ public class WorkspaceBashExecutor {
                 return raw;
             }
             truncated = true;
+            // 构造器已把 maxChars 抬到 4_096 下限，head/tail 必为正值。
             int head = maxChars / 2;
             int tail = maxChars - head - 32;
-            if (tail < 0) {
-                return raw.substring(0, maxChars);
-            }
             return raw.substring(0, head) + "\n…[输出被截断]…\n" + raw.substring(raw.length() - tail);
         }
 

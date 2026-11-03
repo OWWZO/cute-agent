@@ -13,6 +13,7 @@ import java.util.Map;
  * 供应商无关的非流式 completion 响应。
  * <p>
  * 不可变契约：所有字段 final，集合与 map 做防御性复制；需要变体时用 {@code toBuilder()}。
+ * <p>{@code toolCalls}/{@code metadata} 未设置时 getter 返回 {@code null}，调用方须判空。
  */
 @Getter
 @Builder(toBuilder = true)

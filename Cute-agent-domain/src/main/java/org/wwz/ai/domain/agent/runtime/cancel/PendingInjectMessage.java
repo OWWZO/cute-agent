@@ -1,17 +1,14 @@
 package org.wwz.ai.domain.agent.runtime.cancel;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.Value;
 
 /**
  * 运行中注入的用户/协调消息（控制面 inbox，非新开 run）。
+ * <p>入队后即对外发布，必须保持不可变。</p>
  */
-@Data
+@Value
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class PendingInjectMessage {
 
     public static final String SOURCE_USER = "user";

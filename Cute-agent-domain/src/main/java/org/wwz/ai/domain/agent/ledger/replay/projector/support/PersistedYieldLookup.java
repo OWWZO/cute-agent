@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.ledger.replay.projector.support;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 
@@ -14,6 +15,7 @@ import java.util.function.Function;
  * toolCallId 兜底匹配。共用的安全语义是"历史回放不能因附属状态读失败而中断"，
  * 因此仓储异常一律吞掉返回 null。
  */
+@Slf4j
 public final class PersistedYieldLookup {
 
     private PersistedYieldLookup() {
@@ -33,16 +35,21 @@ public final class PersistedYieldLookup {
                              Function<String, List<T>> openBySession,
                              Function<T, Long> toolInvocationIdOf,
                              Function<T, String> toolCallIdOf) {
-        try {
-            if (StringUtils.isNotBlank(businessId)) {
+        if (StringUtils.isNotBlank(businessId)) {
+            try {
                 T byBusinessId = byId.apply(businessId);
                 if (byBusinessId != null) {
                     return byBusinessId;
                 }
+            } catch (RuntimeException e) {
+                // 历史回放不能因问询/桌面控制附属状态读取失败而中断。
+                log.warn("yield lookup by business id failed, businessId={}", businessId, e);
             }
-            if (invocation == null || StringUtils.isBlank(invocation.getSessionId())) {
-                return null;
-            }
+        }
+        if (invocation == null || StringUtils.isBlank(invocation.getSessionId())) {
+            return null;
+        }
+        try {
             for (T record : openBySession.apply(invocation.getSessionId())) {
                 if (record == null) {
                     continue;
@@ -57,8 +64,9 @@ public final class PersistedYieldLookup {
                 }
             }
             return null;
-        } catch (RuntimeException ignored) {
-            // 历史回放不能因问询/桌面控制附属状态读取失败而中断。
+        } catch (RuntimeException e) {
+            log.warn("yield lookup by session failed, sessionId={}, toolCallId={}",
+                    invocation.getSessionId(), invocation.getToolCallId(), e);
             return null;
         }
     }

@@ -7,6 +7,8 @@ import org.wwz.ai.domain.agent.channel.model.ChannelBinding;
 
 /**
  * 绑定的持久化端口。实现在 infrastructure 的 channel/dao 之上，case 只依赖这个接口。
+ * <p>{@code (platform, appId, deleted)} 与 {@code (ownerUserId, platform, deleted)} 在 DB 上有唯一索引，
+ * 因此 {@link #findByOwner}/{@link #findByAppId} 最多返回一行。</p>
  */
 public interface ChannelBindingRepository {
 

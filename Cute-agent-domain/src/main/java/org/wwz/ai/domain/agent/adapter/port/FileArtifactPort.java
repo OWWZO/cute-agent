@@ -32,6 +32,9 @@ public interface FileArtifactPort {
      * 物化本地文件的统一入口：共享卷部署走 {@link #register} 零拷贝，
      * 非共享部署由适配器改为 {@link #uploadLocalFile}。工具层只需调用本方法，
      * 不感知部署拓扑。
+     * <p>分支由适配器配置决定，不会在 {@code register} 失败后自动回退：
+     * 本地文件缺失或共享卷假设不成立时按底层调用失败抛出 {@link IOException}。
+     * {@link #register} / {@link #uploadLocalFile} 是低层原语，直接调用即绕过本方法的拓扑处理。</p>
      */
     FileResponse materializeLocalFile(String serviceBaseUrl, FileRequest request) throws IOException;
 

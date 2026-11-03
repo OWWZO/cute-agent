@@ -39,24 +39,4 @@ public record BrowserRelayInboundMessage(String userId,
                                                             BrowserCommandResult result) {
         return new BrowserRelayInboundMessage(userId, connectionId, Kind.COMMAND_RESULT, result, null);
     }
-
-    public String getUserId() {
-        return userId;
-    }
-
-    public String getConnectionId() {
-        return connectionId;
-    }
-
-    public Kind getKind() {
-        return kind;
-    }
-
-    public BrowserCommandResult getCommandResult() {
-        return commandResult;
-    }
-
-    public BrowserTabMetadata getTabMetadata() {
-        return tabMetadata;
-    }
 }

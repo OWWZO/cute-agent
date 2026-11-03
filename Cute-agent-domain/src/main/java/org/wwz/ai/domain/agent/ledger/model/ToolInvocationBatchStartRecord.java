@@ -27,6 +27,7 @@ public class ToolInvocationBatchStartRecord {
 
     private Integer stepNo;
 
+    /** 非空；同一批内每个 item 的 {@code toolCallId} 必须唯一。 */
     private List<Item> items;
 
     /**
@@ -49,6 +50,7 @@ public class ToolInvocationBatchStartRecord {
 
         private String subAgentDescription;
 
+        /** 展示排序键，由生产者按批从 1 开始分配；不同批之间可能重复，不得假定全局唯一。 */
         private Integer dispatchIndex;
 
         private String toolName;

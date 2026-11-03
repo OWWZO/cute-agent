@@ -24,9 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class AgentStreamAccumulator {
 
     @Builder.Default
-    private AtomicInteger messageCount = new AtomicInteger(0);
-
-    @Builder.Default
     private Map<String, Integer> orderMapping = new HashMap<>();
 
     private Boolean initPlan;
@@ -43,9 +40,6 @@ public class AgentStreamAccumulator {
     @Builder.Default
     private Map<String, Object> resultMap = new HashMap<>();
 
-    @Builder.Default
-    private List<Object> resultList = new ArrayList<>();
-
     public static final String PLANNER_ROUND_ID_KEY = "plannerRoundId";
 
     public synchronized Integer getAndIncrOrder(String key) {
@@ -58,7 +52,12 @@ public class AgentStreamAccumulator {
         return order + 1;
     }
 
-    public synchronized Boolean isInitPlan() {
+    /**
+     * 标记计划已初始化。
+     *
+     * @return 首次调用返回 true，之后返回 false
+     */
+    public synchronized boolean markPlanInitialized() {
         if (Objects.isNull(initPlan) || Boolean.FALSE.equals(initPlan)) {
             initPlan = true;
             return true;

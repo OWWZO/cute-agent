@@ -8,6 +8,8 @@ import java.util.Objects;
  */
 public record BrowserAction(String value) {
 
+    public static final String LEASE_RELEASE = "lease-release";
+
     public BrowserAction {
         value = Objects.requireNonNull(value, "action").trim().toLowerCase(Locale.ROOT);
         if (value.isEmpty()) {
@@ -19,11 +21,7 @@ public record BrowserAction(String value) {
         return new BrowserAction(value);
     }
 
-    public String getValue() {
-        return value;
-    }
-
     public boolean isLeaseRelease() {
-        return "lease-release".equals(value);
+        return LEASE_RELEASE.equals(value);
     }
 }

@@ -61,13 +61,16 @@ public interface SessionContextCompactionService {
         return applyIfNeededMidRun(sessionId, memoryScope, requestId, messages, flushParity, null, null);
     }
 
-    default List<Message> applyIfNeededMidRun(String sessionId,
-                                              String memoryScope,
-                                              String requestId,
-                                              List<Message> messages,
-                                              LtmFlushParity flushParity,
-                                              PromptShape promptShape,
-                                              ContextTokenTracker.Snapshot tokenSnapshot) {
-        return applyIfNeeded(sessionId, memoryScope, requestId, messages);
-    }
+    /**
+     * mid-run 压缩的唯一实现点：短重载都委托到这里。
+     * <p>实现必须覆写本方法；{@code flushParity}/{@code promptShape}/{@code tokenSnapshot}
+     * 是 Hermes prompt-cache 对齐所需的 mid-run 上下文，不得静默丢弃。</p>
+     */
+    List<Message> applyIfNeededMidRun(String sessionId,
+                                      String memoryScope,
+                                      String requestId,
+                                      List<Message> messages,
+                                      LtmFlushParity flushParity,
+                                      PromptShape promptShape,
+                                      ContextTokenTracker.Snapshot tokenSnapshot);
 }

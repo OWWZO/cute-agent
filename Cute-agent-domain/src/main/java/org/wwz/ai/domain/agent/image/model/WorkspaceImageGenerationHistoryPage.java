@@ -9,6 +9,7 @@ import java.util.List;
 
 /**
  * 生图历史分页结果。
+ * <p>{@code total} 表示匹配条件的总行数（不是 {@code list.size()}），用于客户端计算页数。</p>
  */
 @Data
 @Builder

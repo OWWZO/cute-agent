@@ -12,7 +12,7 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.FileArtifactUploader;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.dto.DeepSearchRequest;
-import org.wwz.ai.domain.agent.runtime.dto.DeepSearchrResponse;
+import org.wwz.ai.domain.agent.runtime.dto.DeepSearchResponse;
 import org.wwz.ai.domain.agent.runtime.dto.FileRequest;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
@@ -205,7 +205,7 @@ public class DeepSearchTool implements BaseTool {
                             return;
                         }
                         int eventNumber = eventIndex.incrementAndGet();
-                        DeepSearchrResponse searchResponse = JSONObject.parseObject(data, DeepSearchrResponse.class);
+                        DeepSearchResponse searchResponse = JSONObject.parseObject(data, DeepSearchResponse.class);
                         searchResponse.setToolCallId(toolCallId);
                         if (eventNumber == 1 || eventNumber % 100 == 0) {
                             log.info("{} deep_search recv event={} type={} final={} answerLength={}",
@@ -239,7 +239,7 @@ public class DeepSearchTool implements BaseTool {
                                 && searchResponse.getSearchResult().getQuery() != null
                                 && searchResponse.getSearchResult().getDocs() != null) {
                             List<String> eventQueries = searchResponse.getSearchResult().getQuery();
-                            List<List<DeepSearchrResponse.SearchDoc>> eventDocs = searchResponse.getSearchResult().getDocs();
+                            List<List<DeepSearchResponse.SearchDoc>> eventDocs = searchResponse.getSearchResult().getDocs();
                             // query/docs 可能因章节补搜不同步，按较短一侧对齐，避免 IndexOutOfBoundsException。
                             int alignedSize = Math.min(eventQueries.size(), eventDocs.size());
                             for (int idx = 0; idx < alignedSize; idx++) {
@@ -247,11 +247,11 @@ public class DeepSearchTool implements BaseTool {
                             }
                         }
 
-                        if (DeepSearchrResponse.MESSAGE_TYPE_EXTEND.equals(searchResponse.getMessageType())) {
+                        if (DeepSearchResponse.MESSAGE_TYPE_EXTEND.equals(searchResponse.getMessageType())) {
                             messageIdRef.set(StringUtil.getUUID());
                             searchResponse.setSearchFinish(false);
                             ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
-                        } else if (DeepSearchrResponse.MESSAGE_TYPE_SEARCH.equals(searchResponse.getMessageType())) {
+                        } else if (DeepSearchResponse.MESSAGE_TYPE_SEARCH.equals(searchResponse.getMessageType())) {
                             searchResponse.setSearchFinish(true);
                             ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
                             FileRequest fileRequest = FileRequest.builder()
@@ -261,13 +261,13 @@ public class DeepSearchTool implements BaseTool {
                                     .content(JSON.toJSONString(contentMap))
                                     .build();
                              fileArtifactUploader.upload(fileRequest, true, artifactSource);
-                        } else if (DeepSearchrResponse.MESSAGE_TYPE_CHAPTER_SUMMARY.equals(searchResponse.getMessageType())) {
+                        } else if (DeepSearchResponse.MESSAGE_TYPE_CHAPTER_SUMMARY.equals(searchResponse.getMessageType())) {
                             if (messageIdRef.get().isEmpty()) {
                                 messageIdRef.set(StringUtil.getUUID());
                             }
                             searchResponse.setSearchFinish(true);
                             ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
-                        } else if (DeepSearchrResponse.MESSAGE_TYPE_REPORT.equals(searchResponse.getMessageType())) {
+                        } else if (DeepSearchResponse.MESSAGE_TYPE_REPORT.equals(searchResponse.getMessageType())) {
                             int currentReportIndex = reportIndex.get();
                             if (currentReportIndex == 1 && messageIdRef.get().isEmpty()) {
                                 messageIdRef.set(StringUtil.getUUID());

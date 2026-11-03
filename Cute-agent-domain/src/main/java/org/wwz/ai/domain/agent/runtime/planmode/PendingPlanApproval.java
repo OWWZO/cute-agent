@@ -25,8 +25,8 @@ public class PendingPlanApproval {
     public static final String STATUS_TIMEOUT = "timeout";
     public static final String STATUS_CANCELLED = "cancelled";
 
-    public static final String DECISION_APPROVED = "approved";
-    public static final String DECISION_REJECTED = "rejected";
+    public static final String DECISION_APPROVED = STATUS_APPROVED;
+    public static final String DECISION_REJECTED = STATUS_REJECTED;
 
     private String approvalId;
     private String sessionId;

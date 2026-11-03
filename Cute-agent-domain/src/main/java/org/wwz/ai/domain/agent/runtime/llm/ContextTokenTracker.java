@@ -41,10 +41,8 @@ public final class ContextTokenTracker {
         if (!isUsableUsage(usage)) {
             return;
         }
-        int prompt = Math.max(0, usage.getPromptTokens());
-        int completion = usage.getCompletionTokens() == null ? 0 : Math.max(0, usage.getCompletionTokens());
         // promptTokens 已含 cached，禁止再加 cachedPromptTokens
-        this.lastProviderContextTokens = prompt + completion;
+        this.lastProviderContextTokens = normalizedPromptTokens(usage) + normalizedCompletionTokens(usage);
         this.anchorMessageCount = Math.max(0, anchorAfterAssistant);
         this.promptShapeFingerprint = fingerprint;
         this.usageAvailable = lastProviderContextTokens > 0;
@@ -116,9 +114,15 @@ public final class ContextTokenTracker {
         if (usage == null || usage.getPromptTokens() == null) {
             return false;
         }
-        int prompt = Math.max(0, usage.getPromptTokens());
-        int completion = usage.getCompletionTokens() == null ? 0 : Math.max(0, usage.getCompletionTokens());
-        return prompt + completion > 0;
+        return normalizedPromptTokens(usage) + normalizedCompletionTokens(usage) > 0;
+    }
+
+    private static int normalizedPromptTokens(LlmUsageSnapshot usage) {
+        return Math.max(0, usage.getPromptTokens());
+    }
+
+    private static int normalizedCompletionTokens(LlmUsageSnapshot usage) {
+        return usage.getCompletionTokens() == null ? 0 : Math.max(0, usage.getCompletionTokens());
     }
 
     @Value

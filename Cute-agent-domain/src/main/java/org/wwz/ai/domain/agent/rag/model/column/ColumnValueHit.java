@@ -1,10 +1,15 @@
 package org.wwz.ai.domain.agent.rag.model.column;
 
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+
 import java.util.Map;
 
 /**
  * 单条列值召回结果。
  */
+@EqualsAndHashCode
+@ToString
 public final class ColumnValueHit {
 
     private final Map<String, Object> fields;

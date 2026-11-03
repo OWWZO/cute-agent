@@ -32,6 +32,10 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    protected String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
     protected Map<String, Object> readMap(String text) {
         if (StringUtils.isBlank(text)) {
             return new LinkedHashMap<>();
@@ -148,7 +152,7 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
     protected ProjectedReplayEvent buildTaskEvent(AgentStreamAccumulator state,
                                                   ToolInvocationView invocation,
                                                   String logicalMessageType,
-                                                  Object responsePayload,
+                                                  Map<String, Object> responsePayload,
                                                   List<Map<String, Object>> artifactRefs) {
         String taskId = state.getTaskId();
         String orderKey = taskId + ":" + logicalMessageType;

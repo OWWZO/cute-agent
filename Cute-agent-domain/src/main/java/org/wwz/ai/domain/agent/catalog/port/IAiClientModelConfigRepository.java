@@ -7,6 +7,9 @@ import java.util.Optional;
 
 /**
  * 模型配置持久化端口。
+ * <p>写方法返回 {@code false} 表示未影响任何行（目标行不存在或已删除）；持久化/基础设施错误必须抛出，
+ * 不得吞掉后返回 {@code false}。{@code modelId} 不是唯一键，{@code updateByModelId}/{@code deleteByModelId}
+ * 可能影响多行，调用方需自行确认影响范围。</p>
  */
 public interface IAiClientModelConfigRepository {
 

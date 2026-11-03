@@ -24,7 +24,7 @@ public class ProjectedReplayEvent implements Serializable {
     private String messageId;
     private String messageType;
     private Integer messageOrder;
-    private Object resultMap;
+    private Map<String, Object> resultMap;
     private List<Map<String, Object>> artifactRefs;
     private ReplayTiming timing;
 }

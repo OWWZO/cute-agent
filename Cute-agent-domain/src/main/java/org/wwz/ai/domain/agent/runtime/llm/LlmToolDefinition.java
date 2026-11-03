@@ -1,7 +1,9 @@
 package org.wwz.ai.domain.agent.runtime.llm;
 
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
 
 /**
  * 供应商无关的工具定义。
@@ -10,6 +12,8 @@ import lombok.Getter;
  * 不可变契约：字段 final，需要替换 invoker 时使用 {@link #withInvoker(LlmToolInvoker)}。
  */
 @Getter
+@EqualsAndHashCode(exclude = "invoker")
+@ToString(exclude = "invoker")
 @Builder(toBuilder = true)
 public class LlmToolDefinition {
 

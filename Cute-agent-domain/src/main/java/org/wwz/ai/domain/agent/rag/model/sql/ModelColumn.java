@@ -56,8 +56,4 @@ public class ModelColumn {
       * 计算列json配置
       */
      private String calculateExpression;
-     /**
-      * 查询指定的函数
-      */
-     private String colFunction;
 }

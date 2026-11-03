@@ -18,8 +18,10 @@ public interface IExecutionLedgerWriteRepository {
 
     void insertRun(DialogueRun run);
 
+    /** 未命中返回 {@code null}。 */
     DialogueSession querySessionBySessionId(String sessionId);
 
+    /** 未命中返回 {@code null}。 */
     DialogueRun queryRunByRequestId(String requestId);
 
     List<LlmInvocation> queryLlmInvocationsByRunId(Long runId);
@@ -53,6 +55,8 @@ public interface IExecutionLedgerWriteRepository {
 
     /**
      * run 结束：按终态原子累加 finished/failed 计数。
+     *
+     * @return 受影响行数：0 表示会话行不存在或已删除（计数未更新），1 表示已更新
      */
     int updateSessionRunFinish(String sessionId,
                                int status,

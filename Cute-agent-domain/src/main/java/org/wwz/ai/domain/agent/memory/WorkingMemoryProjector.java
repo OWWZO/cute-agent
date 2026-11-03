@@ -109,7 +109,6 @@ public class WorkingMemoryProjector {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private List<ToolCall> parseToolCalls(String json) {
         if (StringUtils.isBlank(json)) {
             return Collections.emptyList();

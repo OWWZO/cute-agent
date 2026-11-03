@@ -42,6 +42,9 @@ public final class ExecutionLedgerConstants {
     public static final String REQUEST_SOURCE_AGENT = "agent";
     public static final String REQUEST_SOURCE_WORKSPACE = "workspace";
 
+    /** 会话无有效标题时的占位标题，读写两侧共用。 */
+    public static final String DEFAULT_SESSION_TITLE = "新对话";
+
     public static final String TOOL_PROVIDER_LOCAL = "local";
     public static final String TOOL_PROVIDER_MCP = "mcp";
 

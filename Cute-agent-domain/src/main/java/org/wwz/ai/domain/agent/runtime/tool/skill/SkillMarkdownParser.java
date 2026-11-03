@@ -24,35 +24,48 @@ import java.util.Set;
 public class SkillMarkdownParser {
 
     public SkillDefinition parse(Path skillDirectory) {
-        Path normalizedSkillDirectory = skillDirectory.toAbsolutePath().normalize();
-        Path skillMarkdownPath = normalizedSkillDirectory.resolve("SKILL.md");
-        if (!Files.isRegularFile(skillMarkdownPath)) {
-            throw new SkillLoadException("missing SKILL.md under " + normalizedSkillDirectory);
-        }
+        // 统一按 UTF-8 读取；front matter 只解析元数据，正文原样保留供 skill_view 返回。
+        LoadedSkill loadedSkill = loadSkillMarkdown(skillDirectory);
+        Path skillMarkdownPath = loadedSkill.skillMarkdownPath();
+        ParsedMarkdown parsedMarkdown = loadedSkill.parsedMarkdown();
+        String name = readRequiredField(parsedMarkdown.frontMatter(), "name", skillMarkdownPath);
+        String description = readRequiredField(parsedMarkdown.frontMatter(), "description", skillMarkdownPath);
 
-        try {
-            // 统一按 UTF-8 读取；front matter 只解析元数据，正文原样保留供 skill_view 返回。
-            String markdown = Files.readString(skillMarkdownPath, StandardCharsets.UTF_8);
-            ParsedMarkdown parsedMarkdown = parseMarkdown(markdown, skillMarkdownPath);
-            String name = readRequiredField(parsedMarkdown.frontMatter(), "name", skillMarkdownPath);
-            String description = readRequiredField(parsedMarkdown.frontMatter(), "description", skillMarkdownPath);
-
-            return SkillDefinition.builder()
-                    .name(name)
-                    .description(description)
-                    .basePath(normalizedSkillDirectory)
-                    .content(parsedMarkdown.content())
-                    .frontMatter(parsedMarkdown.frontMatter())
-                    .build();
-        } catch (IOException e) {
-            throw new SkillLoadException("failed to read " + skillMarkdownPath, e);
-        }
+        return SkillDefinition.builder()
+                .name(name)
+                .description(description)
+                .basePath(loadedSkill.skillDirectory())
+                .content(parsedMarkdown.content())
+                .frontMatter(parsedMarkdown.frontMatter())
+                .build();
     }
 
     /**
      * 只解析 frontmatter 与目录定位，丢弃正文，供 catalog 扫描使用。
      */
     public SkillDescriptor parseMetadata(Path skillDirectory, String source, String relativePath) {
+        LoadedSkill loadedSkill = loadSkillMarkdown(skillDirectory);
+        Path skillMarkdownPath = loadedSkill.skillMarkdownPath();
+        Map<String, Object> frontMatter = loadedSkill.parsedMarkdown().frontMatter();
+        String name = readRequiredField(frontMatter, "name", skillMarkdownPath);
+        String description = readRequiredField(frontMatter, "description", skillMarkdownPath);
+        String category = resolveCategory(
+                readOptionalField(frontMatter, "category"),
+                inferCategory(relativePath));
+        return SkillDescriptor.builder()
+                .ref(SkillRef.of(source, name, relativePath))
+                .name(name)
+                .description(description)
+                .category(category)
+                .tags(readTags(frontMatter))
+                .source(source == null || source.isBlank() ? SkillRef.SOURCE_BUILTIN : source.trim())
+                .version(readOptionalField(frontMatter, "version"))
+                .basePath(loadedSkill.skillDirectory())
+                .frontMatter(frontMatter)
+                .build();
+    }
+
+    private LoadedSkill loadSkillMarkdown(Path skillDirectory) {
         Path normalizedSkillDirectory = skillDirectory.toAbsolutePath().normalize();
         Path skillMarkdownPath = normalizedSkillDirectory.resolve("SKILL.md");
         if (!Files.isRegularFile(skillMarkdownPath)) {
@@ -60,25 +73,7 @@ public class SkillMarkdownParser {
         }
         try {
             String markdown = Files.readString(skillMarkdownPath, StandardCharsets.UTF_8);
-            ParsedMarkdown parsedMarkdown = parseMarkdown(markdown, skillMarkdownPath);
-            Map<String, Object> frontMatter = parsedMarkdown.frontMatter();
-            String name = readRequiredField(frontMatter, "name", skillMarkdownPath);
-            String description = readRequiredField(frontMatter, "description", skillMarkdownPath);
-            String category = firstNonBlank(
-                    readOptionalField(frontMatter, "category"),
-                    inferCategory(relativePath),
-                    SkillDescriptor.CATEGORY_GENERAL);
-            return SkillDescriptor.builder()
-                    .ref(SkillRef.of(source, name, relativePath))
-                    .name(name)
-                    .description(description)
-                    .category(category)
-                    .tags(readTags(frontMatter))
-                    .source(source == null || source.isBlank() ? SkillRef.SOURCE_BUILTIN : source.trim())
-                    .version(readOptionalField(frontMatter, "version"))
-                    .basePath(normalizedSkillDirectory)
-                    .frontMatter(frontMatter)
-                    .build();
+            return new LoadedSkill(normalizedSkillDirectory, skillMarkdownPath, parseMarkdown(markdown, skillMarkdownPath));
         } catch (IOException e) {
             throw new SkillLoadException("failed to read " + skillMarkdownPath, e);
         }
@@ -168,16 +163,16 @@ public class SkillMarkdownParser {
         return parent.isBlank() ? SkillDescriptor.CATEGORY_GENERAL : parent;
     }
 
-    private String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
+    private String resolveCategory(String... candidates) {
+        for (String candidate : candidates) {
+            if (candidate != null && !candidate.isBlank()) {
+                return candidate;
             }
         }
-        return null;
+        return SkillDescriptor.CATEGORY_GENERAL;
+    }
+
+    private record LoadedSkill(Path skillDirectory, Path skillMarkdownPath, ParsedMarkdown parsedMarkdown) {
     }
 
     private record ParsedMarkdown(Map<String, Object> frontMatter, String content) {

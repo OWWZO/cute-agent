@@ -7,7 +7,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.agent.BaseAgent;
-import org.wwz.ai.domain.agent.runtime.dto.DeepSearchrResponse;
+import org.wwz.ai.domain.agent.runtime.dto.DeepSearchResponse;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.tool.common.DeepSearchStructuredResultBuilder;
@@ -28,15 +28,15 @@ public class DeepSearchLlmObservationTest {
     @Test
     public void shouldSeparateStructuredOutputAndCompactObservation() {
         DeepSearchStructuredResultBuilder builder = new DeepSearchStructuredResultBuilder("新能源车出口趋势");
-        builder.recordEvent(DeepSearchrResponse.builder()
+        builder.recordEvent(DeepSearchResponse.builder()
                 .messageType("extend")
-                .searchResult(DeepSearchrResponse.SearchResult.builder()
+                .searchResult(DeepSearchResponse.SearchResult.builder()
                         .query(List.of("中国新能源车出口数据", "欧洲市场需求变化"))
                         .build())
                 .build());
-        builder.recordEvent(DeepSearchrResponse.builder()
+        builder.recordEvent(DeepSearchResponse.builder()
                 .messageType("search")
-                .searchResult(DeepSearchrResponse.SearchResult.builder()
+                .searchResult(DeepSearchResponse.SearchResult.builder()
                         .query(List.of("中国新能源车出口数据", "欧洲市场需求变化"))
                         .docs(List.of(
                                 List.of(doc("海关总署：出口量创新高", "https://example.com/customs", repeat("出口量持续增长，", 30))),
@@ -44,13 +44,13 @@ public class DeepSearchLlmObservationTest {
                         ))
                         .build())
                 .build());
-        builder.recordEvent(DeepSearchrResponse.builder()
+        builder.recordEvent(DeepSearchResponse.builder()
                 .messageType("chapter_summary")
                 .chapterId("C1")
                 .chapterTitle("中国新能源车出口数据")
                 .chapterOrder(1)
                 .chapterSummary("出口量持续增长。")
-                .searchResult(DeepSearchrResponse.SearchResult.builder()
+                .searchResult(DeepSearchResponse.SearchResult.builder()
                         .query(List.of("中国新能源车出口数据"))
                         .docs(List.of(List.of(doc("海关总署：出口量创新高", "https://example.com/customs", "出口量持续增长"))))
                         .build())
@@ -87,15 +87,15 @@ public class DeepSearchLlmObservationTest {
     public void shouldKeepFullAnswerAndTruncateSourceDocsInObservation() {
         DeepSearchStructuredResultBuilder builder = new DeepSearchStructuredResultBuilder("AI 芯片供应链");
         String fullAnswer = repeat("总结", 150);
-        builder.recordEvent(DeepSearchrResponse.builder()
+        builder.recordEvent(DeepSearchResponse.builder()
                 .messageType("extend")
-                .searchResult(DeepSearchrResponse.SearchResult.builder()
+                .searchResult(DeepSearchResponse.SearchResult.builder()
                         .query(List.of("AI 芯片供应链"))
                         .build())
                 .build());
-        builder.recordEvent(DeepSearchrResponse.builder()
+        builder.recordEvent(DeepSearchResponse.builder()
                 .messageType("search")
-                .searchResult(DeepSearchrResponse.SearchResult.builder()
+                .searchResult(DeepSearchResponse.SearchResult.builder()
                         .query(List.of("AI 芯片供应链"))
                         .docs(List.of(List.of(
                                 doc("文档1", "https://example.com/1", repeat("内容1", 120)),
@@ -161,8 +161,8 @@ public class DeepSearchLlmObservationTest {
         }
     }
 
-    private DeepSearchrResponse.SearchDoc doc(String title, String link, String content) {
-        return DeepSearchrResponse.SearchDoc.builder()
+    private DeepSearchResponse.SearchDoc doc(String title, String link, String content) {
+        return DeepSearchResponse.SearchDoc.builder()
                 .title(title)
                 .link(link)
                 .content(content)

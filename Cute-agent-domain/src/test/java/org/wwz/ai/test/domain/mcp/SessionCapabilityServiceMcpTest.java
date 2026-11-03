@@ -56,6 +56,11 @@ public class SessionCapabilityServiceMcpTest {
         }
 
         @Override
+        public String version() {
+            return "0";
+        }
+
+        @Override
         public boolean isEnabled() {
             return false;
         }

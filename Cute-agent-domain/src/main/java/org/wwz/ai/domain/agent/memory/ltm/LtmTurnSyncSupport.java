@@ -43,14 +43,17 @@ public final class LtmTurnSyncSupport {
         }
         String assistant = "";
         List<Map<String, Object>> messages = List.of();
+        List<Message> memoryMessages = null;
         if (executor != null && executor.getMemory() != null) {
-            List<Message> all = executor.getMemory().getMessages();
-            if (all != null && !all.isEmpty()) {
-                Message last = all.get(all.size() - 1);
+            List<Message> liveMessages = executor.getMemory().getMessages();
+            if (liveMessages != null && !liveMessages.isEmpty()) {
+                // 只取一次快照，避免同步与复盘读到不同版本的消息列表。
+                memoryMessages = new ArrayList<>(liveMessages);
+                Message last = memoryMessages.get(memoryMessages.size() - 1);
                 if (last != null && last.getRole() == RoleType.ASSISTANT && last.getContent() != null) {
                     assistant = last.getContent();
                 }
-                messages = toMaps(all);
+                messages = toMaps(memoryMessages);
             }
         }
 
@@ -71,10 +74,7 @@ public final class LtmTurnSyncSupport {
         if (owner == null) {
             owner = LtmOwnerResolver.resolve(null, null);
         }
-        List<Message> snapshot = List.of();
-        if (executor != null && executor.getMemory() != null && executor.getMemory().getMessages() != null) {
-            snapshot = new ArrayList<>(executor.getMemory().getMessages());
-        }
+        List<Message> snapshot = memoryMessages == null ? List.of() : new ArrayList<>(memoryMessages);
         String parentSystem = null;
         ToolCollection parentTools = null;
         try {

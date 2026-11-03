@@ -129,8 +129,9 @@ public final class PlanModePromptInjector {
         }
 
         int attachments = state.getPlanAttachmentCount();
-        // system 已带完整契约时，提醒一律用 sparse：同一时刻再塞一份全文等于双份，
-        // 而且这条消息会被持久化、之后每轮重发。只有 system 没注入成功才用全文兜底。
+        // system 已带完整契约时默认用 sparse；但每满 FULL_EVERY_N_ATTACHMENTS 条仍周期性补一次全文，
+        // 因为这条消息会被持久化并在后续轮次重发，需要防止模型在长会话里淡忘完整约束。
+        // 只有 system 没注入成功时才每轮都用全文兜底。
         boolean useFull = shouldAttachFull(agent.getSystemPrompt(), attachments);
         String body = useFull
                 ? "<system-reminder>\n" + PLAN_MODE_INSTRUCTIONS.trim() + "\n</system-reminder>"

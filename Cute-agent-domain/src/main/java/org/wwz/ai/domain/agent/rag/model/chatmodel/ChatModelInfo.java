@@ -13,7 +13,9 @@ public class ChatModelInfo implements Serializable {
     private static final long serialVersionUID = 8763697882256572393L;
     private Long id;
     private String code;
+    /** 元数据类型，仅支持 {@code table} 或 {@code sql}。 */
     private String type;
+    /** {@code type=table} 时为表名；{@code type=sql} 时为原始 SQL 语句。 */
     private String content;
     private String name;
     private String usePrompt;

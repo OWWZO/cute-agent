@@ -14,6 +14,7 @@ import org.wwz.ai.domain.agent.ledger.model.ConversationSessionCursor;
 import org.wwz.ai.domain.agent.ledger.model.ConversationSessionPage;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
+import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationView;
 import org.wwz.ai.domain.agent.ledger.model.RunCursor;
@@ -330,7 +331,7 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     }
 
     private boolean isMeaningfulSessionTitle(String title) {
-        return StringUtils.isNotBlank(title) && !"新对话".equals(title.trim());
+        return StringUtils.isNotBlank(title) && !ExecutionLedgerConstants.DEFAULT_SESSION_TITLE.equals(title.trim());
     }
 
     private String abbreviateSessionTitle(String queryText) {

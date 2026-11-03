@@ -17,6 +17,9 @@ import java.util.Map;
 @Slf4j
 public class ReadMcpResourceTool implements BaseTool {
 
+    /** 单次读取返回给模型的最大字符数，超出部分截断并标记。 */
+    private static final int MAX_CONTENT_CHARS = 40_000;
+
     @Override
     public String getName() {
         return McpToolNames.READ_MCP_RESOURCE;
@@ -65,10 +68,15 @@ public class ReadMcpResourceTool implements BaseTool {
                         "ReadMcpResource 失败：server 与 uri 必填", null, "invalid args");
             }
             String content = executor.readResource(server, uri);
+            boolean truncated = content != null && content.length() > MAX_CONTENT_CHARS;
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("server", server);
             fields.put("uri", uri);
-            fields.put("content", content);
+            fields.put("content", truncated ? content.substring(0, MAX_CONTENT_CHARS) : content);
+            if (truncated) {
+                fields.put("truncated", Boolean.TRUE);
+                fields.put("originalChars", content.length());
+            }
             return ToolResultPayload.okData(McpToolNames.READ_MCP_RESOURCE, fields);
         } catch (Exception e) {
             log.warn("ReadMcpResource failed", e);

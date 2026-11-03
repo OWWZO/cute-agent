@@ -75,9 +75,6 @@ public class SkillsSearchTool implements BaseTool {
                 return ToolResultPayload.failureFrom("skills_search 参数格式错误，必须传入对象类型参数。", null);
             }
             String text = readString(rawInput, "query");
-            if (text == null || text.isBlank()) {
-                text = readString(rawInput, "text");
-            }
             SkillQuery query = SkillQuery.builder()
                     .text(text)
                     .category(readString(rawInput, "category"))

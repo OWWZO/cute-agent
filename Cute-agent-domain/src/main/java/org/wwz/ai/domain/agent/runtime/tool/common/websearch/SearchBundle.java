@@ -9,4 +9,8 @@ import java.util.List;
  * @param summary provider 给出的摘要；为 null 表示该 provider 不提供
  */
 public record SearchBundle(List<SearchHit> hits, String summary) {
+
+    public SearchBundle {
+        hits = hits == null ? List.of() : List.copyOf(hits);
+    }
 }

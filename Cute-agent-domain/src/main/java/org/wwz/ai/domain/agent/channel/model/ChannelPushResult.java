@@ -15,6 +15,21 @@ public record ChannelPushResult(
         boolean retryable
 ) {
 
+    public ChannelPushResult {
+        if (success) {
+            if (error != null) {
+                throw new IllegalArgumentException("successful push must not carry error");
+            }
+        } else {
+            if (messageId != null) {
+                throw new IllegalArgumentException("failed push must not carry messageId");
+            }
+            if (error == null || error.isBlank()) {
+                throw new IllegalArgumentException("failed push must carry error");
+            }
+        }
+    }
+
     public static ChannelPushResult ok(String messageId) {
         return new ChannelPushResult(true, messageId, null, false);
     }

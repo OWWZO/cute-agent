@@ -47,8 +47,8 @@ public enum SessionKind {
      * 是否出现在侧栏会话列表。只有用户会话进列表。
      * <p>
      * 子会话暂时不进列表：前端会话树 UI 尚未落地，提前放开只会让子会话以扁平条目
-     * 混进侧栏，缺少父会话上下文。与 SQL 里的 {@code listableSessionKindPredicate} 保持一致，
-     * 两处必须同改。
+     * 混进侧栏，缺少父会话上下文。与 SQL（{@code dialogue_session_ledger_mapper.xml} 中的
+     * {@code AND session_kind = 'conversation'}）保持一致，两处必须同改。
      */
     public boolean isListable() {
         return this == CONVERSATION;

@@ -56,8 +56,8 @@ public class SessionTaskItem {
         map.put("description", description);
         map.put("activeForm", activeForm);
         map.put("owner", owner);
-        map.put("blocks", blocks == null ? List.of() : new ArrayList<>(blocks));
-        map.put("blockedBy", blockedBy == null ? List.of() : new ArrayList<>(blockedBy));
+        map.put("blocks", blocks == null ? new ArrayList<>() : new ArrayList<>(blocks));
+        map.put("blockedBy", blockedBy == null ? new ArrayList<>() : new ArrayList<>(blockedBy));
         map.put("metadata", metadata == null ? Map.of() : new LinkedHashMap<>(metadata));
         return map;
     }

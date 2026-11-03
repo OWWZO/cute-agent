@@ -7,6 +7,9 @@ import java.util.Optional;
 
 /**
  * MCP 配置持久化端口。
+ * <p>写方法返回 {@code false} 表示未影响任何行（目标行不存在或已删除）；持久化/基础设施错误必须抛出，
+ * 不得吞掉后返回 {@code false}。{@code mcpId} 是唯一业务键（DB 唯一索引）。
+ * {@code findByStatus}/{@code findByTransportType} 按等值匹配，传入 {@code null} 时不会命中任何行。</p>
  */
 public interface IAiClientToolMcpConfigRepository {
 
