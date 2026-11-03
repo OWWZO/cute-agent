@@ -19,6 +19,11 @@ public interface SkillRegistry {
         refresh();
     }
 
+    /**
+     * 当前目录快照的版本标识，仅在 {@link #refresh()} 改变目录内容后变化，供缓存与调试使用。
+     */
+    String version();
+
     boolean isEnabled();
 
     Collection<SkillDefinition> listSkills();
