@@ -24,5 +24,9 @@ public class DesktopControlRecord {
     private Double holdUntil;
     private String status;
     private String resumeRequestId;
+    /**
+     * 由 {@code UserQuestionResumeContext#toJson} 序列化的续跑上下文。
+     * 读取方必须容忍解析失败与结构漂移。
+     */
     private String resumeContextJson;
 }

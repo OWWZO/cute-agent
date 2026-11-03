@@ -44,7 +44,7 @@ public class ToolArtifactRegistry {
     /** 按工具调用ID查找绑定 */
     public synchronized List<ToolArtifactBinding> findBindingsByToolCallId(String toolCallId) {
         if (StringUtils.isBlank(toolCallId)) {
-            return List.of();  // 空ID直接返回空列表
+            return new ArrayList<>();  // 空ID直接返回空列表，保持与正常路径一致的可变性
         }
         return bindings.stream()
             .filter(binding -> binding.getSource() != null)           // 过滤无来源的

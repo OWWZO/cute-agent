@@ -24,6 +24,8 @@ public final class TaskSummaryArtifactProtocol {
 
     /**
      * 终答原文保留 {@code $$$}；只解析点名 keys，不对 visibleBindings。
+     *
+     * @param visibleBindings 仅为签名兼容保留，当前不参与解析/过滤
      */
     public static TaskSummaryResult parse(String llmResponse, List<ToolArtifactBinding> visibleBindings) {
         return parse(llmResponse);
@@ -57,7 +59,11 @@ public final class TaskSummaryArtifactProtocol {
         return toEventPayload(result, List.of());
     }
 
-    /** 终答 payload 只带原文和点名 keys，不附 fileList。 */
+    /**
+     * 终答 payload 只带原文和点名 keys，不附 fileList。
+     *
+     * @param visibleBindings 仅为签名兼容保留，当前不参与过滤
+     */
     public static Map<String, Object> toEventPayload(
             TaskSummaryResult result,
             List<ToolArtifactBinding> visibleBindings

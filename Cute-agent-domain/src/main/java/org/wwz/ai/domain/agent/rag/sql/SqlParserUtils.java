@@ -194,14 +194,12 @@ public class SqlParserUtils {
                 case EQUALS:
                 case NOT_EQUALS:
                 case RLIKE:
-                    if (call.getOperator() instanceof SqlLikeOperator && ((SqlLikeOperator) call.getOperator()).isNegated()) {
-                        whereCondition.setNegaed(true);
-                    }
+                    // fall through: 取反判断与操作数处理统一交给 LIKE / IN 段
                 case LIKE:
                     if (call.getOperator() instanceof SqlLikeOperator && ((SqlLikeOperator) call.getOperator()).isNegated()) {
                         whereCondition.setNegaed(true);
                     }
-
+                    // fall through: 与 IN / BETWEEN 共用操作数处理
                 case IN:
                 case NOT_IN:
                 case IS_NULL:
