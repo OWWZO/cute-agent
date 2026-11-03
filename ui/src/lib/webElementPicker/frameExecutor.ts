@@ -86,11 +86,11 @@ export async function executeScriptInIframe(
     scriptEl = targetDoc.createElement("script");
     scriptEl.textContent = [
       "(function(){",
-      `var t=${JSON.stringify(token)};`,
+      `const t=${JSON.stringify(token)};`,
       `Promise.resolve().then(function(){return (${script});}).then(function(r){`,
-      'var f=window[t];if(typeof f==="function")f(r);',
+      'const f=window[t];if(typeof f==="function")f(r);',
       "},function(e){",
-      'var f=window[t+"_reject"];if(typeof f==="function")f(String((e&&e.message)||e));',
+      'const f=window[t+"_reject"];if(typeof f==="function")f(String((e&&e.message)||e));',
       "});})();",
     ].join("");
     targetDoc.documentElement.appendChild(scriptEl);

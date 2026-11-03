@@ -132,7 +132,7 @@ request.interceptors.request.use(
         }
       }
       // 上传解析 zip 可能超过默认 10s
-      if (config.timeout == null || config.timeout < 60000) {
+      if (config.timeout === null || config.timeout === undefined || config.timeout < 60000) {
         config.timeout = 60000;
       }
     }

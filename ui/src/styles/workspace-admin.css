@@ -194,6 +194,7 @@
 .workspace-admin-list-item {
   display: block;
   width: 100%;
+  cursor: pointer;
   margin: 0 0 2px;
   border: 1px solid transparent;
   border-radius: var(--kimi-radius-sm);
@@ -205,6 +206,10 @@
     background-color var(--duration-base) var(--ease-out),
     border-color var(--duration-base) var(--ease-out),
     color var(--duration-base) var(--ease-out);
+}
+
+.workspace-admin-list-item:disabled {
+  cursor: not-allowed;
 }
 
 .workspace-admin-model-item {
@@ -417,6 +422,7 @@
 .workspace-admin-tab {
   display: inline-flex;
   min-height: 30px;
+  cursor: pointer;
   align-items: center;
   gap: 6px;
   border: 1px solid transparent;
@@ -430,6 +436,10 @@
     border-color var(--duration-base) var(--ease-out),
     color var(--duration-base) var(--ease-out),
     box-shadow var(--duration-base) var(--ease-out);
+}
+
+.workspace-admin-tab:disabled {
+  cursor: not-allowed;
 }
 
 .workspace-admin-tab:hover {

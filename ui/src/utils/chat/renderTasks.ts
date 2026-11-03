@@ -354,6 +354,15 @@ function readChapterEntries(
   );
 }
 
+function resolveCardStage(
+  hasSummary: boolean,
+  docsCount: number
+): "chapter_summary" | "search" | "extend" {
+  if (hasSummary) return "chapter_summary";
+  if (docsCount > 0) return "search";
+  return "extend";
+}
+
 function collectDeepSearchChapters(
   inner?: MESSAGE.ResultMap
 ): DeepSearchChapterEntry[] {
@@ -562,11 +571,7 @@ function processDeepSearchTask(
       }
 
       const hasSummary = Boolean(chapter.summary);
-      const cardStage = hasSummary
-        ? "chapter_summary"
-        : docs.length
-          ? "search"
-          : "extend";
+      const cardStage = resolveCardStage(hasSummary, docs.length);
       renderTask.resultMap = {
         ...renderTask.resultMap,
         messageType: cardStage,
@@ -621,11 +626,7 @@ function processDeepSearchTask(
     }
 
     const hasSummary = Boolean(chapter?.summary);
-    const cardStage = hasSummary
-      ? "chapter_summary"
-      : docs.length
-        ? "search"
-        : "extend";
+    const cardStage = resolveCardStage(hasSummary, docs.length);
     renderTask.resultMap = {
       ...renderTask.resultMap,
       messageType: cardStage,
