@@ -10,6 +10,8 @@ import java.util.List;
 
 /**
  * 生图历史批次视图。
+ * <p>{@code batchCount}/{@code sourceImageCount}/{@code maskImageCount}/{@code usedFallback}
+ * 在上游输出缺省时可能为 {@code null}，消费方必须做空值处理，不得直接拆箱。</p>
  */
 @Data
 @Builder

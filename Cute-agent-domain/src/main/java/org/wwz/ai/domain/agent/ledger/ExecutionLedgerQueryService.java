@@ -31,6 +31,8 @@ public interface ExecutionLedgerQueryService {
 
     /**
      * 批量加载已经定位好的 run 明细，避免历史回放按 run 重复查询账本事实。
+     * <p>返回列表与入参 {@code runs} 顺序、数量一一对应；{@code null} 元素返回空明细。
+     * 入参为 {@code null} 或空时返回空列表。</p>
      */
     List<ExecutionRunDetail> queryRunDetails(List<DialogueRunView> runs);
 

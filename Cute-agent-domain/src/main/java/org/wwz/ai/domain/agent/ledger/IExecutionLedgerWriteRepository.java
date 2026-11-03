@@ -18,8 +18,10 @@ public interface IExecutionLedgerWriteRepository {
 
     void insertRun(DialogueRun run);
 
+    /** 未命中返回 {@code null}。 */
     DialogueSession querySessionBySessionId(String sessionId);
 
+    /** 未命中返回 {@code null}。 */
     DialogueRun queryRunByRequestId(String requestId);
 
     List<LlmInvocation> queryLlmInvocationsByRunId(Long runId);
