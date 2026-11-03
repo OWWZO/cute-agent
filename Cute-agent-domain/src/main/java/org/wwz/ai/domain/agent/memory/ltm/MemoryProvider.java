@@ -6,6 +6,13 @@ import java.util.Map;
 
 /**
  * 可插拔长期记忆后端。
+ * <p><b>线程安全：</b>同一 Provider 实例会被并发调用——{@code prefetch} 在 {@code ltm-prefetch}
+ * 线程执行，{@code queuePrefetch}/{@code syncTurn}/{@code onSessionEnd}/{@code onSessionSwitch}
+ * 在 {@code ltm-bg} 单线程执行，{@code initialize}/{@code systemPromptBlock}/{@code handleToolCall}
+ * 等在调用方线程执行；不同类别之间可能重叠。实现必须自行保证线程安全，不得依赖 ThreadLocal
+ * 或无保护的实例可变状态跨钩子传递数据。</p>
+ * <p><b>返回值：</b>{@code String} 用 {@code ""}、{@code List} 用空列表表示「无结果」，
+ * 实现不应返回 {@code null}。</p>
  */
 public interface MemoryProvider {
 
