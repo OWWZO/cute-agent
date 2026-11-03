@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.List;
 
@@ -18,11 +19,16 @@ import java.util.List;
 public class WorkspaceImageGenerationCommand {
 
     private String requestId;
+    @ToString.Exclude
     private String prompt;
     private String mode;
+    @ToString.Exclude
     private List<String> fileNames;
+    @ToString.Exclude
     private List<String> maskFileNames;
+    @ToString.Exclude
     private String fileName;
+    @ToString.Exclude
     private String fileDescription;
     private String size;
     private Integer n;

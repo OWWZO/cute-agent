@@ -1,6 +1,5 @@
 package org.wwz.ai.application.agent.query;
 
-import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -99,7 +98,11 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         AgentExecutionCommand agentRequest = agentExecutionCommandMapper.toExecutionCommand(
                 params, UserRequestContext.currentUserId());
         validateRequestedModel(agentRequest);
-        log.info("{} start handle Agent request: {}", params.getRequestId(), JSON.toJSONString(agentRequest));
+        log.info("{} start handle Agent request: sessionId={}, agentType={}, model={}",
+                agentRequest.getRequestId(),
+                agentRequest.getSessionId(),
+                agentRequest.getAgentType(),
+                agentRequest.getModel());
 
         String userId = resolveUserId(agentRequest);
         agentRequest.setUserId(userId);
@@ -265,8 +268,11 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         } finally {
             // 必须在 end 之后复查：收尾窗口内完成的后台通知不能再滞留在队列里。
             notifyRunSettled(agentRequest);
-            log.info("{}, agent.query.web.singleRequest end, requestId: {}",
-                    agentRequest.getRequestId(), JSON.toJSONString(agentRequest));
+            log.info("{}, agent.query.web.singleRequest end, sessionId={}, agentType={}, model={}",
+                    agentRequest.getRequestId(),
+                    agentRequest.getSessionId(),
+                    agentRequest.getAgentType(),
+                    agentRequest.getModel());
         }
     }
 
