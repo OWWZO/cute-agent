@@ -24,10 +24,13 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -36,16 +39,27 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public final class BackgroundSubAgentExecutor {
 
-    private static final ExecutorService BACKGROUND_EXECUTOR = Executors.newCachedThreadPool(new ThreadFactory() {
-        private final AtomicInteger seq = new AtomicInteger();
+    /** 后台子 Agent 执行线程上限与排队上限：SubAgentRunner 内部还有并发 permit，这里只做资源兜底。 */
+    private static final int BACKGROUND_THREADS = 16;
+    private static final int BACKGROUND_QUEUE_SIZE = 256;
 
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, "bg-subagent-" + seq.incrementAndGet());
-            t.setDaemon(true);
-            return t;
-        }
-    });
+    private static final ExecutorService BACKGROUND_EXECUTOR = new ThreadPoolExecutor(
+            BACKGROUND_THREADS,
+            BACKGROUND_THREADS,
+            60L,
+            TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(BACKGROUND_QUEUE_SIZE),
+            new ThreadFactory() {
+                private final AtomicInteger seq = new AtomicInteger();
+
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r, "bg-subagent-" + seq.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                }
+            },
+            new ThreadPoolExecutor.AbortPolicy());
 
     private BackgroundSubAgentExecutor() {
     }
@@ -86,7 +100,9 @@ public final class BackgroundSubAgentExecutor {
         final String toolName = StringUtils.defaultIfBlank(parentToolName, AgentDispatchTool.NAME);
         SessionAgentMailboxHub.queue(sessionKey, preferredAgentId);
 
-        Future<?> future = BACKGROUND_EXECUTOR.submit(() -> {
+        Future<?> future;
+        try {
+            future = BACKGROUND_EXECUTOR.submit(() -> {
             try {
                 SubAgentResult result = subAgentRunner.run(
                         parent, desc, pmt, type, resumeId, taskCancel, preferredAgentId, parentToolUseId);
@@ -141,7 +157,16 @@ public final class BackgroundSubAgentExecutor {
                         registry.get(taskId).orElse(task));
                 emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, failed, false, runRegistry, childSessionId);
             }
-        });
+            });
+        } catch (RejectedExecutionException e) {
+            // 有界池饱和：必须结算已登记的 RUNNING 任务，否则 TaskOutput 永远等不到终态。
+            log.warn("{} background subagent rejected, taskId={}, agentId={}",
+                    parent.getRequestId(), taskId, preferredAgentId);
+            registry.fail(taskId, "background executor rejected");
+            SessionAgentMailboxHub.evict(sessionKey, preferredAgentId);
+            return ToolResultPayload.fromData(rejectedData(toolName, preferredAgentId, childSessionId,
+                    description, subagentType));
+        }
         registry.bindFuture(taskId, future);
 
         Map<String, Object> data = new LinkedHashMap<>();
@@ -359,6 +384,24 @@ public final class BackgroundSubAgentExecutor {
         } catch (Exception e) {
             log.debug("background settlement emit skipped: {}", e.getMessage());
         }
+    }
+
+    private static Map<String, Object> rejectedData(String toolName,
+                                                    String agentId,
+                                                    String childSessionId,
+                                                    String description,
+                                                    String subagentType) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("tool", toolName);
+        data.put("ok", false);
+        data.put("status", RuntimeBackgroundTask.STATUS_FAILED);
+        data.put("agentId", agentId);
+        data.put("childSessionId", childSessionId);
+        data.put("task_type", RuntimeBackgroundTask.TYPE_LOCAL_AGENT);
+        data.put("description", description);
+        data.put("agentType", StringUtils.defaultIfBlank(subagentType, SubAgentRegistry.TYPE_GENERAL_PURPOSE));
+        data.put("errorMsg", "background executor rejected: queue full");
+        return data;
     }
 
     private static String trimToString(Object value) {

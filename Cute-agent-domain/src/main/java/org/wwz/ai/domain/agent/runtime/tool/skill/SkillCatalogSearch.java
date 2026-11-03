@@ -90,17 +90,19 @@ final class SkillCatalogSearch {
         if (tokens.isEmpty()) {
             return 0;
         }
+        // 先把标签统一小写并拼成一段文本：避免每个 token 都对全部 tag 重复 toLowerCase。
+        StringBuilder tagText = new StringBuilder();
+        for (String tag : tags) {
+            if (tag != null) {
+                tagText.append(tag.toLowerCase(Locale.ROOT)).append(' ');
+            }
+        }
+        String normalizedTags = tagText.toString();
         int matched = 0;
         for (String token : tokens) {
             boolean inName = nameLower.contains(token);
             boolean inDesc = descLower.contains(token);
-            boolean inTag = false;
-            for (String tag : tags) {
-                if (tag != null && tag.toLowerCase(Locale.ROOT).contains(token)) {
-                    inTag = true;
-                    break;
-                }
-            }
+            boolean inTag = !normalizedTags.isEmpty() && normalizedTags.contains(token);
             if (inName || inDesc || inTag) {
                 matched++;
             }

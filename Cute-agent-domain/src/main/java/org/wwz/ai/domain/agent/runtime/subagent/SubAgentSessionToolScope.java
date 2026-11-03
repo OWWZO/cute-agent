@@ -8,6 +8,9 @@ import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * 按<b>会话身份</b>解析子 Agent 定义，供「用户直聊子会话」（模式 2）裁剪工具池。
  * <p>
@@ -20,8 +23,16 @@ import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 @RequiredArgsConstructor
 public class SubAgentSessionToolScope {
 
+    /** 会话身份在工具装配期间很少变化，短缓存避免 retry / 子轮次重复读 session 行。 */
+    private static final long CACHE_TTL_MS = 60_000L;
+    private static final int CACHE_MAX_ENTRIES = 1024;
+
     private final SubAgentRegistry subAgentRegistry;
     private final IExecutionLedgerReadRepository executionLedgerReadRepository;
+    private final Map<String, CachedDefinition> cache = new ConcurrentHashMap<>();
+
+    private record CachedDefinition(SubAgentDefinition definition, long expiresAtMs) {
+    }
 
     /**
      * 解析该会话应使用的子 Agent 定义。
@@ -33,6 +44,24 @@ public class SubAgentSessionToolScope {
         if (StringUtils.isBlank(sessionId)) {
             return null;
         }
+        long now = System.currentTimeMillis();
+        CachedDefinition cached = cache.get(sessionId);
+        if (cached != null && cached.expiresAtMs() > now) {
+            return cached.definition();
+        }
+        SubAgentDefinition definition = resolveUncached(sessionId);
+        if (cache.size() >= CACHE_MAX_ENTRIES) {
+            // 简单上限：过期项先清，仍满则整体清空，保证缓存不会无界增长。
+            cache.entrySet().removeIf(entry -> entry.getValue().expiresAtMs() <= now);
+            if (cache.size() >= CACHE_MAX_ENTRIES) {
+                cache.clear();
+            }
+        }
+        cache.put(sessionId, new CachedDefinition(definition, now + CACHE_TTL_MS));
+        return definition;
+    }
+
+    private SubAgentDefinition resolveUncached(String sessionId) {
         DialogueSession session = executionLedgerReadRepository.querySessionEntity(sessionId);
         if (session == null || !SessionKind.SUBAGENT.code().equals(session.getSessionKind())) {
             return null;

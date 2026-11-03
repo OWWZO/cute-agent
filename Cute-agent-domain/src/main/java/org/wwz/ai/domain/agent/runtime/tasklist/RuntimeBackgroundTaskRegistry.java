@@ -194,24 +194,56 @@ public class RuntimeBackgroundTaskRegistry {
         }
     }
 
-    public synchronized Optional<RuntimeBackgroundTask> complete(String taskId, SubAgentResult result) {
-        RuntimeBackgroundTask task = tasks.get(StringUtils.trimToEmpty(taskId));
-        if (task == null) {
-            return Optional.empty();
+    public Optional<RuntimeBackgroundTask> complete(String taskId, SubAgentResult result) {
+        RuntimeBackgroundTask task;
+        synchronized (this) {
+            task = tasks.get(StringUtils.trimToEmpty(taskId));
+            if (task == null) {
+                return Optional.empty();
+            }
+            if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
+                return Optional.of(task);
+            }
+            task.setStatus(RuntimeBackgroundTask.STATUS_COMPLETED);
+            task.setEndedAtMs(System.currentTimeMillis());
+            if (result != null) {
+                task.setAgentId(result.getAgentId());
+                task.setAgentType(result.getAgentType());
+                task.setOutput(result.getContent());
+                task.setTotalToolUseCount(result.getTotalToolUseCount());
+                task.setTotalDurationMs(result.getTotalDurationMs());
+                if (StringUtils.isNotBlank(result.getErrorMsg())) {
+                    task.setErrorMsg(result.getErrorMsg());
+                }
+            }
         }
-        if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
-            return Optional.of(task);
-        }
-        task.setStatus(RuntimeBackgroundTask.STATUS_COMPLETED);
-        task.setEndedAtMs(System.currentTimeMillis());
-        if (result != null) {
-            task.setAgentId(result.getAgentId());
-            task.setAgentType(result.getAgentType());
-            task.setOutput(result.getContent());
-            task.setTotalToolUseCount(result.getTotalToolUseCount());
-            task.setTotalDurationMs(result.getTotalDurationMs());
-            if (StringUtils.isNotBlank(result.getErrorMsg())) {
-                task.setErrorMsg(result.getErrorMsg());
+        // 状态变更在窄临界区内完成；DB 与通知放到锁外，避免慢库阻塞同会话其它状态迁移。
+        persist(task);
+        notifyTask(task);
+        return Optional.of(task);
+    }
+
+    public Optional<RuntimeBackgroundTask> fail(String taskId, SubAgentResult result) {
+        RuntimeBackgroundTask task;
+        synchronized (this) {
+            task = tasks.get(StringUtils.trimToEmpty(taskId));
+            if (task == null) {
+                return Optional.empty();
+            }
+            if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
+                return Optional.of(task);
+            }
+            task.setStatus(RuntimeBackgroundTask.STATUS_FAILED);
+            task.setEndedAtMs(System.currentTimeMillis());
+            if (result != null) {
+                task.setAgentId(result.getAgentId());
+                task.setAgentType(result.getAgentType());
+                task.setOutput(result.getContent());
+                task.setErrorMsg(StringUtils.defaultIfBlank(result.getErrorMsg(), "failed"));
+                task.setTotalToolUseCount(result.getTotalToolUseCount());
+                task.setTotalDurationMs(result.getTotalDurationMs());
+            } else {
+                task.setErrorMsg("failed");
             }
         }
         persist(task);
@@ -219,57 +251,39 @@ public class RuntimeBackgroundTaskRegistry {
         return Optional.of(task);
     }
 
-    public synchronized Optional<RuntimeBackgroundTask> fail(String taskId, SubAgentResult result) {
-        RuntimeBackgroundTask task = tasks.get(StringUtils.trimToEmpty(taskId));
-        if (task == null) {
-            return Optional.empty();
-        }
-        if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
-            return Optional.of(task);
-        }
-        task.setStatus(RuntimeBackgroundTask.STATUS_FAILED);
-        task.setEndedAtMs(System.currentTimeMillis());
-        if (result != null) {
-            task.setAgentId(result.getAgentId());
-            task.setAgentType(result.getAgentType());
-            task.setOutput(result.getContent());
-            task.setErrorMsg(StringUtils.defaultIfBlank(result.getErrorMsg(), "failed"));
-            task.setTotalToolUseCount(result.getTotalToolUseCount());
-            task.setTotalDurationMs(result.getTotalDurationMs());
-        } else {
-            task.setErrorMsg("failed");
+    public Optional<RuntimeBackgroundTask> fail(String taskId, String errorMsg) {
+        RuntimeBackgroundTask task;
+        synchronized (this) {
+            task = tasks.get(StringUtils.trimToEmpty(taskId));
+            if (task == null) {
+                return Optional.empty();
+            }
+            if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
+                return Optional.of(task);
+            }
+            task.setStatus(RuntimeBackgroundTask.STATUS_FAILED);
+            task.setEndedAtMs(System.currentTimeMillis());
+            task.setErrorMsg(StringUtils.defaultIfBlank(errorMsg, "failed"));
         }
         persist(task);
         notifyTask(task);
         return Optional.of(task);
     }
 
-    public synchronized Optional<RuntimeBackgroundTask> fail(String taskId, String errorMsg) {
-        RuntimeBackgroundTask task = tasks.get(StringUtils.trimToEmpty(taskId));
-        if (task == null) {
-            return Optional.empty();
+    public Optional<RuntimeBackgroundTask> stop(String taskId) {
+        RuntimeBackgroundTask task;
+        synchronized (this) {
+            task = tasks.get(StringUtils.trimToEmpty(taskId));
+            if (task == null) {
+                return Optional.empty();
+            }
+            if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
+                return Optional.of(task);
+            }
+            task.setStatus(RuntimeBackgroundTask.STATUS_STOPPED);
+            task.setEndedAtMs(System.currentTimeMillis());
         }
-        if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
-            return Optional.of(task);
-        }
-        task.setStatus(RuntimeBackgroundTask.STATUS_FAILED);
-        task.setEndedAtMs(System.currentTimeMillis());
-        task.setErrorMsg(StringUtils.defaultIfBlank(errorMsg, "failed"));
-        persist(task);
-        notifyTask(task);
-        return Optional.of(task);
-    }
-
-    public synchronized Optional<RuntimeBackgroundTask> stop(String taskId) {
-        RuntimeBackgroundTask task = tasks.get(StringUtils.trimToEmpty(taskId));
-        if (task == null) {
-            return Optional.empty();
-        }
-        if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
-            return Optional.of(task);
-        }
-        task.setStatus(RuntimeBackgroundTask.STATUS_STOPPED);
-        task.setEndedAtMs(System.currentTimeMillis());
+        // 取消钩子/中断 Future 可能是阻塞动作，放到锁外执行。
         if (task.getCancellation() != null) {
             task.getCancellation().cancel("task_stop");
         }
@@ -295,6 +309,9 @@ public class RuntimeBackgroundTaskRegistry {
         if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
             return Optional.of(task);
         }
+        // 无本地 Future 时每轮都要回源 DB；退避到 5s，避免每个等待任务 4 次/秒的持续查询。
+        // 同进程任务有 notifyAll，仍会被立即唤醒，不受退避影响。
+        long waitMs = 250L;
         while (RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
             if (isAborted(abort)) {
                 break;
@@ -326,12 +343,13 @@ public class RuntimeBackgroundTaskRegistry {
                     break;
                 }
                 try {
-                    task.wait(250L);
+                    task.wait(waitMs);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
                 }
             }
+            waitMs = Math.min(waitMs * 2, 5_000L);
         }
         return Optional.of(task);
     }

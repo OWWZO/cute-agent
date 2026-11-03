@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 发现 skill 下注册脚本，支持 scripts/ 自动扫描与 scripts.yaml 增强配置。
@@ -48,9 +49,26 @@ public class SkillScriptDiscoverer {
     private static final int MAX_YAML_ALIASES = 50;
 
     private final SkillPathGuard skillPathGuard;
+    /** 按 skill 根目录缓存发现结果，目录/scripts.yaml 的 mtime 变化时失效。 */
+    private final Map<Path, CacheEntry> discoveryCache = new ConcurrentHashMap<>();
+
+    private record CacheEntry(long scriptsDirModifiedMs,
+                              long scriptsYamlModifiedMs,
+                              Map<String, SkillScriptDefinition> scripts) {
+    }
 
     public Map<String, SkillScriptDefinition> discover(Path skillDirectory) {
         Path normalizedSkillDirectory = skillDirectory.toAbsolutePath().normalize();
+        long scriptsDirModifiedMs = lastModifiedMs(normalizedSkillDirectory.resolve("scripts"));
+        long scriptsYamlModifiedMs = lastModifiedMs(normalizedSkillDirectory.resolve("scripts.yaml"));
+        CacheEntry cached = discoveryCache.get(normalizedSkillDirectory);
+        if (cached != null
+                && cached.scriptsDirModifiedMs() == scriptsDirModifiedMs
+                && cached.scriptsYamlModifiedMs() == scriptsYamlModifiedMs) {
+            // 返回可变副本，保持调用方拿到的 map 与原实现一致。
+            return new LinkedHashMap<>(cached.scripts());
+        }
+
         // 自动扫描结果先建立基础集合，再由 scripts.yaml 按名称覆盖或增强，兼容简单 skill 与显式配置。
         Map<String, SkillScriptDefinition> discoveredScripts = discoverFromScriptsDirectory(normalizedSkillDirectory);
         Map<String, SkillScriptDefinition> configuredScripts = discoverFromScriptsYaml(normalizedSkillDirectory);
@@ -61,7 +79,20 @@ public class SkillScriptDiscoverer {
             }
             discoveredScripts.put(name, script);
         });
+        // 用不可变快照缓存，保留发现顺序；返回给调用方的仍是独立副本。
+        discoveryCache.put(normalizedSkillDirectory,
+                new CacheEntry(scriptsDirModifiedMs, scriptsYamlModifiedMs,
+                        Collections.unmodifiableMap(new LinkedHashMap<>(discoveredScripts))));
         return discoveredScripts;
+    }
+
+    private static long lastModifiedMs(Path path) {
+        try {
+            return Files.getLastModifiedTime(path).toMillis();
+        } catch (IOException e) {
+            // 路径不存在或不可读：用 -1 作为稳定哨兵，missing→created 时 mtime 变化使缓存失效。
+            return -1L;
+        }
     }
 
     private Map<String, SkillScriptDefinition> discoverFromScriptsDirectory(Path skillDirectory) {

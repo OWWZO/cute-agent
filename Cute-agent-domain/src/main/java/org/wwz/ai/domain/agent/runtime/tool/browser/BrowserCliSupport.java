@@ -215,9 +215,13 @@ public final class BrowserCliSupport {
             }
         }
         if (raw instanceof String text && StringUtils.isNumeric(text.trim())) {
-            long value = Long.parseLong(text.trim());
-            if (value > 0) {
-                return Math.min(value, max);
+            try {
+                long value = Long.parseLong(text.trim());
+                if (value > 0) {
+                    return Math.min(value, max);
+                }
+            } catch (NumberFormatException ignored) {
+                // isNumeric 只校验字符集，超长数字串会超出 long 范围；按未配置处理并回落默认值。
             }
         }
         return Math.min(fallback, max);

@@ -17,7 +17,11 @@ public final class SessionTaskListPublisher {
         if (agentContext == null || agentContext.getPrinter() == null) {
             return;
         }
-        SessionTaskListStore store = agentContext.requireSessionTaskList();
+        // 发布是只读路径：列表尚未建立时不要为了发空快照去构造 store / hydrate DB。
+        SessionTaskListStore store = agentContext.peekSessionTaskList();
+        if (store == null) {
+            return;
+        }
         Map<String, Object> snapshot = store.toClientSnapshot();
         agentContext.getPrinter().send(TaskToolNames.SESSION_TASKS_EVENT, snapshot);
     }
