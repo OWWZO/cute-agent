@@ -24,10 +24,6 @@ public class FromTable {
      */
     private String tableAlias;
     /**
-     * comment
-     */
-    private String tableComment;
-    /**
      * 关联类型
      *
      * @see org.apache.calcite.sql.JoinType
@@ -43,7 +39,6 @@ public class FromTable {
      * 关联条件内容
      */
     private String condition;
-    private List<WhereCondition> joinConditions;
     /**
      * 关联表
      */

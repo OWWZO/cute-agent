@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.memory.ltm;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -18,6 +19,7 @@ import java.util.Map;
  * <p>子 Agent（skipMemory=true）完全跳过 LTM 生命周期；其工作记忆仍由
  * {@code SubAgentRunner} 单独投影到 {@code sub:<agentId>}。
  */
+@Slf4j
 public final class LtmTurnSyncSupport {
 
     private LtmTurnSyncSupport() {
@@ -79,8 +81,9 @@ public final class LtmTurnSyncSupport {
                 parentSystem = executor.getSystemPrompt();
                 parentTools = executor.getAvailableTools();
             }
-        } catch (Exception ignored) {
-            // ignore
+        } catch (Exception e) {
+            log.warn("读取父回合 system prompt/tools 失败，review 将使用降级快照: requestId={}",
+                    agentContext.getRequestId(), e);
         }
         if (parentTools == null) {
             parentTools = agentContext.getToolCollection();

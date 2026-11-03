@@ -5,6 +5,8 @@ import java.util.Map;
 
 /**
  * Domain-level vector write input. Legacy request mapping stays outside Domain.
+ * <p>集合本身做了防御性复制，但 payload 值仍按引用保存；嵌套的可变对象不在此处深拷贝，
+ * 调用方在写入后不得再修改 payload 内部的 List/Map/数组。</p>
  */
 public final class VectorWriteRequest {
 

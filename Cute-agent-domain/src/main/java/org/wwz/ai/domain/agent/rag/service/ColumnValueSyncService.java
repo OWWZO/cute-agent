@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.rag.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelInfo;
@@ -12,6 +13,7 @@ import java.util.List;
 /**
  * Domain-facing column-value index facade kept for startup and metadata compatibility callers.
  */
+@Slf4j
 @Service
 public class ColumnValueSyncService {
 
@@ -45,10 +47,17 @@ public class ColumnValueSyncService {
     }
 
     public void syncColumnValueBatch(ChatModelInfo modelInfo, List<ChatModelSchema> schemas) {
-        if (schemas == null || schemas.isEmpty() || columnValueSyncPort == null) {
+        if (schemas == null || schemas.isEmpty()) {
+            return;
+        }
+        if (columnValueSyncPort == null) {
+            log.warn("column-value 同步端口缺失，跳过同步: modelCode={}",
+                    modelInfo == null ? null : modelInfo.getModelCode());
             return;
         }
         if (columnValueIndexAdminPort == null || !columnValueIndexAdminPort.isAvailable()) {
+            log.warn("column-value 索引不可用，跳过同步: modelCode={}",
+                    modelInfo == null ? null : modelInfo.getModelCode());
             return;
         }
         columnValueSyncPort.syncColumnValues(modelInfo, List.copyOf(schemas));

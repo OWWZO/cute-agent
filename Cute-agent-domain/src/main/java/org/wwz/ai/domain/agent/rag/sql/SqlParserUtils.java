@@ -394,7 +394,6 @@ public class SqlParserUtils {
         List<DataOrderBy> list = new ArrayList<>();
         for (SqlNode node : nodeList) {
             DataOrderBy orderBy = new DataOrderBy();
-            orderBy.setColumnKind(node.getKind().name());
             if (SqlKind.DESCENDING.equals(node.getKind())) {
                 SqlBasicCall nodeCall = (SqlBasicCall) node;
                 SqlOperator operator = nodeCall.getOperator();
@@ -419,37 +418,6 @@ public class SqlParserUtils {
     }
 
 
-    private static void resetOrderByColumnKind(List<DataOrderBy> orderByList, List<ModelColumn> columnList) {
-        if (CollectionUtils.isEmpty(columnList) || CollectionUtils.isEmpty(orderByList)) {
-            return;
-        }
-        //处理order by中使用字段是否为原始字段还是复合字段
-        for (DataOrderBy orderBy : orderByList) {
-            Optional<ModelColumn> columnFind = columnList.stream().filter(f ->
-                            StringUtils.contains(
-                                    StringUtils.lowerCase(f.getColumnName()), StringUtils.lowerCase(orderBy.getColumnName()))
-                    )
-                    .findAny();
-
-            Optional<ModelColumn> aliasFind = columnList.stream().filter(f ->
-                            StringUtils.equalsIgnoreCase(
-                                    StringUtils.lowerCase(f.getColumnAlias()), StringUtils.lowerCase(orderBy.getColumnName()))
-                    )
-                    .findAny();
-
-
-            if (!columnFind.isPresent() && !aliasFind.isPresent()) {
-                continue;
-            }
-            //order by 内容和字段一致 则取字段类型
-            columnFind.ifPresent(p -> orderBy.setColumnKind(p.getColumnKind()));
-            //如果时别名，则默认identifier
-            aliasFind.ifPresent(p -> orderBy.setColumnKind(SqlKind.IDENTIFIER.name()));
-
-        }
-    }
-
-
     private static String cleanSql(String sql, String dialect) {
         String semicolon = ";";
         if (StringUtils.endsWith(sql, semicolon)) {
@@ -463,7 +431,6 @@ public class SqlParserUtils {
         Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
         Matcher matcher = pattern.matcher(sql);
         if (matcher.find()) {
-            sqlModel.setHint(matcher.group(2));
             return matcher.replaceAll("$1" + SqlModel.HINT_TAG + "$3");
         }
         return sql;
@@ -484,7 +451,6 @@ public class SqlParserUtils {
         sqlModel.setDialect(dialect);
         SqlNode sqlNode = SqlParser.create(sql, parserConfigWithoutQuoted(dialect)).parseQuery();
         SqlSelect selectNode = null;
-        sqlModel.setSelectType(sqlNode.getKind().name());
         if (SqlKind.SELECT.equals(sqlNode.getKind())) {
             selectNode = (SqlSelect) sqlNode;
             if (selectNode.getFetch() != null) {
@@ -517,8 +483,6 @@ public class SqlParserUtils {
         List<ModelColumn> modelColumns = parseSelectColumn(selectNode, dialect);
 
         // 解析结果按列、来源、过滤、分组和排序分段填充，SqlModel 是查询转换层的稳定中间表示。
-        resetOrderByColumnKind(sqlModel.getOrderByList(), modelColumns);
-
         sqlModel.setColumnList(modelColumns);
         FromTable fromTable = parseQueryFromTable(sqlNode);
         if (fromTable != null) {

@@ -15,7 +15,7 @@ public class Nl2SqlQuery {
     private String currentDateInfo = "当前时间信息：%s,%s";
     private String traceId;
     private String recallType = "only_recall";
-    private Boolean stream = true;
+    private boolean stream = true;
     private String userInfo = "";
     private String dbType;
     private boolean useVector;

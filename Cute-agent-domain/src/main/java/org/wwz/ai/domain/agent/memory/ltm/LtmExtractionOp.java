@@ -17,6 +17,8 @@ public class LtmExtractionOp {
     private String action;
     /** user | curated */
     private String target;
+    /** add/replace 必填；remove 可为空。 */
     private String content;
+    /** 仅 replace/remove 有意义，add 时忽略；replace 时应能唯一定位旧内容。 */
     private String oldText;
 }
