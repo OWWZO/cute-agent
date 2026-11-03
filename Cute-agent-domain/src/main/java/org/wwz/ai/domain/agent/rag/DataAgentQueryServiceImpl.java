@@ -88,30 +88,37 @@ public class DataAgentQueryServiceImpl implements DataAgentQueryService {
 
     @Override
     public void chatQuery(DataAgentChatQuery request, AgentMessageStream stream) throws Exception {
-        Nl2SqlQuery nl2SqlQuery = prepareNl2SqlQuery(request.content(), null);
-        stream.send(DataQueryStreamEvent.text(DataQueryEventType.DEBUG, nl2SqlQuery.getRequestId()));
-        AgentExecutorSupport.execute(toolExecutor, "dataAgentChatQuery", () -> {
-            try {
-                List<DataQueryResult> result = nl2SqlQueryService.runNL2SQLSse(nl2SqlQuery, stream);
-                stream.send(DataQueryStreamEvent.chartData(result));
-            } catch (Exception e) {
-                log.error("{},{} 智能问数异常：{}", nl2SqlQuery.getTraceId(), nl2SqlQuery.getRequestId(), e.getMessage(), e);
+        try {
+            Nl2SqlQuery nl2SqlQuery = prepareNl2SqlQuery(request.content(), null);
+            stream.send(DataQueryStreamEvent.text(DataQueryEventType.DEBUG, nl2SqlQuery.getRequestId()));
+            AgentExecutorSupport.execute(toolExecutor, "dataAgentChatQuery", () -> {
                 try {
-                    stream.send(DataQueryStreamEvent.text(DataQueryEventType.ERROR, e.getMessage()));
-                } catch (Exception sendException) {
-                    log.warn("{},{} sse 发送异常：{}", nl2SqlQuery.getTraceId(), nl2SqlQuery.getRequestId(),
-                            sendException.getMessage(), sendException);
+                    List<DataQueryResult> result = nl2SqlQueryService.runNL2SQLSse(nl2SqlQuery, stream);
+                    stream.send(DataQueryStreamEvent.chartData(result));
+                } catch (Exception e) {
+                    log.error("{},{} 智能问数异常：{}", nl2SqlQuery.getTraceId(), nl2SqlQuery.getRequestId(), e.getMessage(), e);
+                    try {
+                        stream.send(DataQueryStreamEvent.text(DataQueryEventType.ERROR, e.getMessage()));
+                    } catch (Exception sendException) {
+                        log.warn("{},{} sse 发送异常：{}", nl2SqlQuery.getTraceId(), nl2SqlQuery.getRequestId(),
+                                sendException.getMessage(), sendException);
+                    }
+                } finally {
+                    try {
+                        stream.send(DataQueryStreamEvent.text(DataQueryEventType.READY, ""));
+                    } catch (Exception sendException) {
+                        log.warn("{},{} sse 发送异常：{}", nl2SqlQuery.getTraceId(), nl2SqlQuery.getRequestId(),
+                                sendException.getMessage(), sendException);
+                    }
+                    stream.complete();
                 }
-            } finally {
-                try {
-                    stream.send(DataQueryStreamEvent.text(DataQueryEventType.READY, ""));
-                } catch (Exception sendException) {
-                    log.warn("{},{} sse 发送异常：{}", nl2SqlQuery.getTraceId(), nl2SqlQuery.getRequestId(),
-                            sendException.getMessage(), sendException);
-                }
-                stream.complete();
-            }
-        });
+            });
+        } catch (Exception e) {
+            // 启动阶段失败（客户端已断开、执行器拒绝任务等）也必须给出终态帧，
+            // 否则 SSE 连接会一直挂着直到客户端超时。
+            log.error("智能问数请求启动失败，终止流：{}", e.getMessage(), e);
+            stream.completeWithError(e);
+        }
     }
 
     @Override

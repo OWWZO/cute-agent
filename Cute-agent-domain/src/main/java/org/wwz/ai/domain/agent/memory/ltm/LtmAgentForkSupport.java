@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -134,6 +135,9 @@ public final class LtmAgentForkSupport {
         Map<String, CuratedMemoryEntry> beforeMap = snapshotActiveEntries(forkStore, forkOwner);
         int before = beforeMap.size();
         long startedAt = System.currentTimeMillis();
+        // 超时不仅中断线程，还要置协作取消：底层模型/SSE 不响应中断时，
+        // Agent 在下一步检查会看到取消标记，停止继续向共享记忆库写入。
+        RunCancellation forkCancellation = new RunCancellation();
         Callable<LtmForkRunResult> task = () -> {
             AgentExecutionCommand fake = new AgentExecutionCommand();
             fake.setRequestId(forkRequestId);
@@ -159,6 +163,7 @@ public final class LtmAgentForkSupport {
 
             ToolCollection tools = copyParentToolsForFork(forkParity.getParentTools(), child);
             child.setToolCollection(tools);
+            child.control().bindCancellation(forkCancellation);
 
             ReactImplAgent agent = new ReactImplAgent(child);
             agent.setName("ltm-" + label);
@@ -192,6 +197,19 @@ public final class LtmAgentForkSupport {
             return LtmForkRunResult.failed(forkRequestId, label, before,
                     System.currentTimeMillis() - startedAt, "fork executor rejected");
         }
+        return awaitFork(future, forkCancellation, forkRequestId, label, before, startedAt, timeoutSeconds);
+    }
+
+    /**
+     * 等待 fork 结果；超时时同时中断线程并置协作取消，避免超时结果返回后任务继续写共享记忆库。
+     */
+    static LtmForkRunResult awaitFork(Future<LtmForkRunResult> future,
+                                      RunCancellation cancellation,
+                                      String forkRequestId,
+                                      String label,
+                                      int before,
+                                      long startedAt,
+                                      long timeoutSeconds) {
         try {
             LtmForkRunResult result = future.get(Math.max(5L, timeoutSeconds), TimeUnit.SECONDS);
             if (result == null) {
@@ -204,6 +222,7 @@ public final class LtmAgentForkSupport {
             return result;
         } catch (TimeoutException e) {
             future.cancel(true);
+            cancellation.cancel("ltm fork timeout");
             return LtmForkRunResult.timeout(forkRequestId, label, before,
                     System.currentTimeMillis() - startedAt);
         } catch (Exception e) {

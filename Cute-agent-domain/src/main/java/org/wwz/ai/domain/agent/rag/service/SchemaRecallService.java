@@ -47,12 +47,21 @@ public class SchemaRecallService {
             return new ArrayList<>();
         }
         int limit = request.limit() == null ? 100 : request.limit();
+        // 空列表不能作为过滤值：REST 通道会生成 match any=[] 导致召回恒为空，
+        // gRPC 通道又会直接忽略该条件，两个通道行为不一致。没有指定模型时就不加过滤。
+        List<String> modelCodes = request.modelCodes().stream()
+                .filter(code -> code != null && !code.isBlank())
+                .distinct()
+                .toList();
+        Map<String, Object> filters = modelCodes.isEmpty()
+                ? Map.of()
+                : Map.of("modelCode", modelCodes);
         VectorRecallRequest recallRequest = new VectorRecallRequest(
                 request.query(),
                 DataQuerySettings.SCHEMA_COLLECTION_NAME,
                 limit,
                 request.scoreThreshold(),
-                Map.of("modelCode", request.modelCodes()),
+                filters,
                 List.of(),
                 request.timeoutMillis());
         return vectorRecall(recallRequest);

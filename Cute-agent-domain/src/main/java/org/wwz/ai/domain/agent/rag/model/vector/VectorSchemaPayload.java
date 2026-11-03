@@ -13,6 +13,7 @@ public class VectorSchemaPayload {
     private String dataType;
     private String synonyms;
     private String vectorUuid;
-    private String defaultRecall;
-    private String analyzeSuggest;
+    // 源模型 ChatModelSchema 用 int：必须保持包装类型才能被 BeanUtils.copyProperties 赋值并参与 JSON 序列化。
+    private Integer defaultRecall;
+    private Integer analyzeSuggest;
 }

@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -57,6 +58,12 @@ public class Nl2SqlQueryService {
      * 防止被提示词注入诱导的全表扫描把结果集读爆内存。
      */
     private static final int MAX_RESULT_ROWS = 500;
+
+    /**
+     * SSE 等待上限：远端可能保持连接却不关闭（或 onLine 异常后不再回调 onClosed/onFailure），
+     * 无界 await 会让执行器线程永久挂起。
+     */
+    private static final long SSE_AWAIT_TIMEOUT_SECONDS = 120L;
 
     private final DataQuerySettings settings;
     private final DataQueryExecutionPort dataQueryExecutionPort;
@@ -84,12 +91,19 @@ public class Nl2SqlQueryService {
                 .headers(Map.of("Accept", "text/event-stream", "Content-Type", "application/json"))
                 .body(JSONObject.toJSONString(request))
                 .build(), listener);
-        listener.getCountDownLatch().await();
+        if (!awaitStream(listener, SSE_AWAIT_TIMEOUT_SECONDS)) {
+            throw new RuntimeException("nl2sql sse stream timeout after " + SSE_AWAIT_TIMEOUT_SECONDS + "s");
+        }
         log.info("{} sse event count:{}", request.getRequestId(), listener.getEventCount());
         if (!listener.isSuccess()) {
             throw new RuntimeException("sse listener failed " + listener.getErrorMessage());
         }
         return nl2sqlQueryData(request, listener.getNl2SQLResult());
+    }
+
+    /** 有界等待 SSE 终态；返回 false 表示超时。 */
+    static boolean awaitStream(Nl2SqlSseListener listener, long timeoutSeconds) throws InterruptedException {
+        return listener.getCountDownLatch().await(Math.max(0L, timeoutSeconds), TimeUnit.SECONDS);
     }
 
     public String replaceFirstMatchedOrThrow(String input, List<String> codeList) {
@@ -128,6 +142,18 @@ public class Nl2SqlQueryService {
         return queryData(request, result);
     }
 
+    /**
+     * 把 FROM 的模型编码改写成真实表名/子查询。
+     * <p>只做精确标识符替换：编码和替换串都按字面量处理，模型编码不会再被当作正则或组引用。</p>
+     */
+    static String rewriteModelCode(String sql, String modelCode, String tableName) {
+        if (StringUtils.isBlank(sql) || StringUtils.isBlank(modelCode)) {
+            return sql;
+        }
+        Pattern pattern = Pattern.compile("(?<![\\w.])`?" + Pattern.quote(modelCode) + "`?(?![\\w.])");
+        return pattern.matcher(sql).replaceAll(Matcher.quoteReplacement(tableName));
+    }
+
     public String getTableName(DataQueryModelDescriptor model) {
         if ("table".equalsIgnoreCase(model.getType())) {
             return model.getContent();
@@ -156,11 +182,10 @@ public class Nl2SqlQueryService {
             List<DataQueryColumn> columns = parseColumns(sqlModel, columnsById);
             List<DataQueryFilter> filters = parseFilters(sqlModel, columnsById);
 
-            String realSql = generatedQuery.getNl2sql();
             String tableName = getTableName(model);
-            for (String code : modelsByCode.keySet()) {
-                realSql = realSql.replaceAll(code + "|`" + code + "`", tableName);
-            }
+            // 只重写本查询 FROM 的模型：遍历全部模型会把 join 中的其它表也改成同一张表，
+            // 且模型编码里的正则元字符/替换串里的 $ 会抛异常或篡改 SQL。
+            String realSql = rewriteModelCode(generatedQuery.getNl2sql(), modelCode, tableName);
 
             // 真正执行的是替换表名后的 realSql，必须对最终 SQL 再做一次只读校验，
             // 否则配置的模型内容/替换结果可以把校验过的 SELECT 改写成非查询语句。
@@ -400,6 +425,11 @@ public class Nl2SqlQueryService {
                 }
             } catch (Exception e) {
                 log.error("{},{} nl2sql消息解析错误:{}", traceId, requestId, e.getMessage(), e);
+                // onLine 抛错时下游不保证再回调 onClosed/onFailure；先自行释放等待方，
+                // 否则 runNL2SQLSse 只能等满超时上限。
+                success = false;
+                errorMessage = "nl2sql listener failed " + traceId + "," + requestId + ": " + e.getMessage();
+                countDownLatch.countDown();
                 throw new RuntimeException(e);
             }
         }

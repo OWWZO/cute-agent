@@ -88,15 +88,25 @@ public final class LtmForkParity {
     public static Set<String> resolveCuratorWhitelist(ToolCollection parentTools) {
         Set<String> out = new LinkedHashSet<>();
         out.add("memory");
-        if (parentTools == null || parentTools.getToolMap() == null || parentTools.getToolMap().isEmpty()) {
+        if (parentTools == null) {
             return Set.copyOf(out);
         }
-        for (String name : parentTools.getToolMap().keySet()) {
+        // 与 hasParentTools() 保持一致：MCP 工具同样算父会话实际暴露的工具，
+        // 否则 fork 的 dispatch 白名单会漏掉走 MCP 的策展工具。
+        addCandidateNames(out, parentTools.getToolMap() == null ? null : parentTools.getToolMap().keySet());
+        addCandidateNames(out, parentTools.getMcpToolMap() == null ? null : parentTools.getMcpToolMap().keySet());
+        return Set.copyOf(out);
+    }
+
+    private static void addCandidateNames(Set<String> out, Set<String> names) {
+        if (names == null) {
+            return;
+        }
+        for (String name : names) {
             if (name != null && CURATOR_CANDIDATE_TOOLS.contains(name)) {
                 out.add(name);
             }
         }
-        return Set.copyOf(out);
     }
 
     public String getFrozenSystemPrompt() {
