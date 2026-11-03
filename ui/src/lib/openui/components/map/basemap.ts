@@ -18,13 +18,16 @@ const DARK = {
   building: "#28292b", street: "#36393e", road: "#4b5058", ferry: "#2b5566", label: "#b4b9bf", minor: "#8d939a", halo: "#1c1d1f",
 };
 
+const OPENFREEMAP_BASE_URL = "https://tiles.openfreemap.org";
+const ESRI_RASTER_BASE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services";
+
 /** Restrained, destination-independent cartography using public OpenMapTiles geometry. */
 export function vectorStyle(dark: boolean): StyleSpecification {
   const c = dark ? DARK : LIGHT;
   return {
     version: 8,
-    glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
-    sources: { places: { type: "vector", url: "https://tiles.openfreemap.org/planet", attribution: '<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org">OpenMapTiles</a> · Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } },
+    glyphs: `${OPENFREEMAP_BASE_URL}/fonts/{fontstack}/{range}.pbf`,
+    sources: { places: { type: "vector", url: `${OPENFREEMAP_BASE_URL}/planet`, attribution: '<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org">OpenMapTiles</a> · Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } },
     layers: [
       { id: "background", type: "background", paint: { "background-color": c.background } },
       { id: "landcover", type: "fill", source: "places", "source-layer": "landcover", filter: ["in", "class", "wood", "grass"], paint: { "fill-color": c.green, "fill-opacity": 0.8 } },
@@ -47,7 +50,7 @@ export function rasterStyle(dark: boolean): StyleSpecification {
   const service = dark ? "Canvas/World_Dark_Gray_Base" : "World_Street_Map";
   return {
     version: 8,
-    sources: { streets: { type: "raster", tiles: [`https://server.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19, attribution: "Tiles © Esri · OpenStreetMap contributors" } },
+    sources: { streets: { type: "raster", tiles: [`${ESRI_RASTER_BASE_URL}/${service}/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19, attribution: "Tiles © Esri · OpenStreetMap contributors" } },
     layers: [{ id: "streets", type: "raster", source: "streets" }],
   };
 }

@@ -12,6 +12,7 @@ export const Table = defineComponent({
   name: "Table",
   props: z.object({
     columns: z.array(z.string()),
+    // Cells are opaque OpenUI values; the renderer narrows components and primitives.
     rows: z.array(z.array(z.any())),
   }),
   description: "Each row lists its cells in column order; a cell may be a component. Number columns align right.",

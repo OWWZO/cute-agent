@@ -23,7 +23,11 @@ export function webUrl(value: unknown): string | null {
 }
 
 // Shared prop schemas
-/** Children slot: any component, or a list of them (from @Each). Printed as `Node[]`. */
+/**
+ * Children slot: any component, or a list of them (from @Each). Printed as `Node[]`.
+ * `any` is deliberate here: the runtime payload is an opaque OpenUI node handle
+ * that is narrowed by the renderer, not by this schema.
+ */
 const node = z.any();
 tagSchemaId(node, "Node");
 export const children = z.array(node);
@@ -73,6 +77,8 @@ export const bg = (value: unknown) => (typeof value === "string" ? (BACKGROUND[v
  * Text color for a model-chosen CSS color background (hex or rgb). Raw colors
  * do not follow the theme, so text on them is set dark or light to stay legible.
  */
+const DARK_TEXT_LUMINANCE_THRESHOLD = 0.36;
+
 function contrastOn(background: unknown): string | undefined {
   if (typeof background !== "string" || background in BACKGROUND) return undefined;
   let rgb: number[] | null = null;
@@ -89,7 +95,10 @@ function contrastOn(background: unknown): string | undefined {
     const v = c / 255;
     return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
   });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.36 ? "#0d0d0d" : "#ffffff";
+  // Deliberately biased above the WCAG midpoint so mid-tone brand colors stay readable.
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > DARK_TEXT_LUMINANCE_THRESHOLD
+    ? "#0d0d0d"
+    : "#ffffff";
 }
 
 /** Style for content on a raw-color background: text tokens switch to the readable color. */

@@ -174,7 +174,7 @@ export const Input = defineComponent({
     const numeric = props.type === "number";
     // A number field shows what is typed ("1." or "-") until it parses.
     const [draft, setDraft] = useState<string | null>(null);
-    const shown = draft ?? (numeric ? (typeof field.value === "number" ? String(field.value) : String(field.value ?? "")) : String(field.value ?? ""));
+    const shown = draft ?? String(field.value ?? "");
     return (
       <Field label={props.label}>
         <input

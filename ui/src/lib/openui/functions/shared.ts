@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 
+// List items are intentionally opaque: OpenUI functions accept arbitrary runtime values.
 export const list = () => z.array(z.any());
 export const numbers = () => z.array(z.number());
 export const date = () => z.union([z.string(), z.number()]);

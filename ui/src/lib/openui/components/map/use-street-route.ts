@@ -4,6 +4,9 @@ import { coordinate, type LatLng } from "./map-utils";
 
 const cache = new Map<string, LatLng[]>();
 const inFlight = new Map<string, Promise<LatLng[]>>();
+const DEBOUNCE_MS = 700;
+const FETCH_TIMEOUT_MS = 10_000;
+const MAX_CACHE_ENTRIES = 64;
 
 /**
  * Street geometry for a "lng,lat;lng,lat" key from /api/street-route, fetched in
@@ -21,7 +24,7 @@ export function useStreetRoute(routingKey: string, enabled: boolean): LatLng[] |
         const controller = new AbortController();
         let timeout: ReturnType<typeof setTimeout> | undefined;
         request = new Promise<LatLng[]>((resolve, reject) => {
-          timeout = setTimeout(() => controller.abort(), 10000);
+          timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
           void fetch(
             withBase(`/api/street-route?coords=${encodeURIComponent(routingKey)}`),
             { signal: controller.signal }
@@ -51,7 +54,7 @@ export function useStreetRoute(routingKey: string, enabled: boolean): LatLng[] |
       }
       void request.then((points) => {
         if (!cache.has(routingKey)) {
-          if (cache.size >= 64) {
+          if (cache.size >= MAX_CACHE_ENTRIES) {
             cache.delete(cache.keys().next().value!);
           }
           cache.set(routingKey, points);
@@ -70,7 +73,7 @@ export function useStreetRoute(routingKey: string, enabled: boolean): LatLng[] |
           });
         }
       });
-    }, 700);
+    }, DEBOUNCE_MS);
     return () => {
       active = false;
       clearTimeout(debounce);

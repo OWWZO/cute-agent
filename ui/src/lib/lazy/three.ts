@@ -9,29 +9,21 @@ export type RoomEnvironmentModule = typeof import(
   "three/examples/jsm/environments/RoomEnvironment.js"
 );
 
-let threePromise: Promise<ThreeModule> | undefined;
-let orbitControlsPromise: Promise<OrbitControlsModule> | undefined;
-let gltfLoaderPromise: Promise<GltfLoaderModule> | undefined;
-let roomEnvironmentPromise: Promise<RoomEnvironmentModule> | undefined;
-
-export function loadThree(): Promise<ThreeModule> {
-  return (threePromise ??= import("three"));
+function memoizedImport<T>(load: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | undefined;
+  return () => (pending ??= load());
 }
 
-export function loadOrbitControls(): Promise<OrbitControlsModule> {
-  return (orbitControlsPromise ??= import(
-    "three/examples/jsm/controls/OrbitControls.js"
-  ));
-}
+export const loadThree = memoizedImport<ThreeModule>(() => import("three"));
 
-export function loadGltfLoader(): Promise<GltfLoaderModule> {
-  return (gltfLoaderPromise ??= import(
-    "three/examples/jsm/loaders/GLTFLoader.js"
-  ));
-}
+export const loadOrbitControls = memoizedImport<OrbitControlsModule>(() =>
+  import("three/examples/jsm/controls/OrbitControls.js")
+);
 
-export function loadRoomEnvironment(): Promise<RoomEnvironmentModule> {
-  return (roomEnvironmentPromise ??= import(
-    "three/examples/jsm/environments/RoomEnvironment.js"
-  ));
-}
+export const loadGltfLoader = memoizedImport<GltfLoaderModule>(() =>
+  import("three/examples/jsm/loaders/GLTFLoader.js")
+);
+
+export const loadRoomEnvironment = memoizedImport<RoomEnvironmentModule>(() =>
+  import("three/examples/jsm/environments/RoomEnvironment.js")
+);
