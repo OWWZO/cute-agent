@@ -31,6 +31,11 @@ public interface VectorIndexAdminPort {
      */
     void createCollection(String collectionName, int dimension);
 
+    /**
+     * 重建集合：删除既有集合（含全部向量）后按给定维度重新创建。
+     * <p>会丢弃全部点数据；集合不存在时直接创建。删除与创建之间集合短暂缺失，不是原子操作，
+     * 期间查询/写入可能失败。存储端失败以 {@link VectorPortException} 抛出。</p>
+     */
     void recreateCollection(String collectionName, int dimension);
 
     /** 批量写入；{@code points} 为 {@code null} 或空时抛 {@link IllegalArgumentException}。 */

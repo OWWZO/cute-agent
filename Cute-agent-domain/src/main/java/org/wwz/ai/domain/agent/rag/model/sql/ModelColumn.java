@@ -5,10 +5,10 @@ import org.wwz.ai.domain.agent.rag.model.schema.StandardColumnType;
 
 import java.util.List;
 
-@Data
 /**
  * 问数模型字段描述，连接自然语言列语义与物理列信息。
  */
+@Data
 public class ModelColumn {
 
     private String columnKey;

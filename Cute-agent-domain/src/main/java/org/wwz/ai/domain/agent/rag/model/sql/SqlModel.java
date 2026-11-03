@@ -4,10 +4,10 @@ import lombok.Data;
 
 import java.util.List;
 
-@Data
 /**
  * SQL 查询抽象模型，承载选择列、来源表、过滤、分组和排序结构。
  */
+@Data
 public class SqlModel {
 
     public static final String HINT_TAG = "HINT";

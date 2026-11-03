@@ -7,8 +7,9 @@ import java.util.List;
 
 /**
  * 附件段落拼装。
- * <p>有可达链接时贴链接（QQ 自动识别为可点击）；链接不可达时明说「当前环境文件链接不可用」，
- * 而不是让用户点一个 127.0.0.1 地址。</p>
+ * <p>有链接时贴链接（QQ 自动识别为可点击）；链接不可用时明说「当前环境文件链接不可用」，
+ * 避免把本地开发 / 私网地址当成可点击链接发出去。是否可达由 {@link ChannelAttachmentRef}
+ * 的生产方判定，本类只按 {@link ChannelAttachmentRef#hasUrl()}（非 null 且非空白）决定是否输出链接。</p>
  */
 public final class ChannelAttachmentFormatter {
 
