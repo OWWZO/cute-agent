@@ -16,9 +16,9 @@ public final class ChannelFrameFilter {
 
     /**
      * 只认「终答 + 已结束 + 正文非空」。
-     * <p>中间帧（{@code agent_stream} / {@code tool} / {@code plan} / {@code heartbeat} /
-     * {@code stream_settle} / {@code follow_*}）一律丢弃：要么与终答重复，要么是 Web UI 专属展示，
-     * 要么根本不含正文。</p>
+     * <p>中间帧（{@code agent_stream} / {@code tool_result} / {@code tool_thought} / {@code plan} /
+     * {@code heartbeat} / {@code stream_settle} / {@code follow_*}）一律丢弃：要么与终答重复，
+     * 要么是 Web UI 专属展示，要么根本不含正文。</p>
      */
     public static boolean shouldDeliver(String packageType, boolean finished, String responseAll) {
         return PACKAGE_RESULT.equals(packageType)

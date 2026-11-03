@@ -13,7 +13,8 @@ import java.util.Objects;
  * @param platformUserId 发送者在该平台的身份（C2C 为 user_openid，GROUP 为 member_openid）
  * @param text           正文，已剥离平台特有的 @ 前缀
  * @param messageId      平台消息 ID，被动回复时回传
- * @param receivedAt     接收时刻
+ * @param receivedAt     接收时刻；由适配器在收到平台消息时用本机时钟（{@code Instant.now()}）赋值，
+ *                       仅用于被动回复窗口计算，不承担跨连接排序或去重职责（去重按 {@code messageId}）
  */
 public record ChannelInboundEvent(
         String platform,

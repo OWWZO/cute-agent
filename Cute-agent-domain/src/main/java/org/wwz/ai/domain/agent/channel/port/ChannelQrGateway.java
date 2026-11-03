@@ -32,7 +32,14 @@ public interface ChannelQrGateway {
         }
     }
 
-    /** 创建 QQ 绑定任务并记住 owner，返回 task_id。 */
+    /**
+     * 创建 QQ 绑定任务并记住 owner，返回 task_id。
+     * <p>失败语义：平台调用失败时抛运行时异常（当前实现为 {@link IllegalStateException}），
+     * 不会返回 null。</p>
+     *
+     * @param ownerUserId 任务发起者，必须非 null；后续 {@link #poll} 必须传入同一值
+     * @return 平台任务 id，非 null
+     */
     String createTask(String ownerUserId);
 
     /**
@@ -47,9 +54,20 @@ public interface ChannelQrGateway {
      *       按 QQ 身份 upsert/去重，不能为同一身份插入多条绑定。</li>
      *   <li>{@code PollOutcome} 的 {@code bindingId} 只在 COMPLETED 时非空。</li>
      * </ul>
+     *
+     * @param ownerUserId 任务发起者，必须与 {@link #createTask} 时一致；null/blank 时 fail-closed，返回 EXPIRED
+     * @param taskId      任务 id；null/blank、未知或已失效时 fail-closed，返回 EXPIRED
+     * @return 非 null 的轮询结果
      */
     PollOutcome poll(String ownerUserId, String taskId);
 
-    /** 二维码内容 URL。 */
+    /**
+     * 二维码内容 URL。
+     * <p>实现只按 taskId 拼 URL，不校验任务是否存在：未知 taskId 也会返回一个 URL，不会被本地拒绝。
+     * taskId 必须来自 {@link #createTask}。</p>
+     *
+     * @param taskId createTask 返回的任务 id，必须非 null/blank
+     * @return 二维码内容 URL
+     */
     String buildQrUrl(String taskId);
 }

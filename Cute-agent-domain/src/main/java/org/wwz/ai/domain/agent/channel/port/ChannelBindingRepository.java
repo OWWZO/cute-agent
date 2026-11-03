@@ -15,15 +15,25 @@ public interface ChannelBindingRepository {
     /** 按状态查询的默认安全上限。 */
     int DEFAULT_STATUS_LIST_LIMIT = 500;
 
+    /**
+     * 按主键查询。不返回软删除（{@code deleted = 1}）的行；{@code bindingId} 为 null 时返回 empty。
+     */
     Optional<ChannelBinding> findById(Long bindingId);
 
+    /**
+     * 按 owner + 平台查询。不返回软删除（{@code deleted = 1}）的行。
+     */
     Optional<ChannelBinding> findByOwner(String ownerUserId, String platform);
 
+    /**
+     * 按平台 + appId 查询。不返回软删除（{@code deleted = 1}）的行。
+     */
     Optional<ChannelBinding> findByAppId(String platform, String appId);
 
     /**
      * 按状态查询的默认入口；等价于 {@code listByStatus(status, DEFAULT_STATUS_LIST_LIMIT)}。
-     * <p>状态桶可能包含大量 ERROR / RETRY 绑定，调用方不应假设返回全量。</p>
+     * <p>状态桶可能包含大量 ERROR / RETRY 绑定，调用方不应假设返回全量。
+     * 不返回软删除（{@code deleted = 1}）的行。</p>
      */
     default List<ChannelBinding> listByStatus(String status) {
         return listByStatus(status, DEFAULT_STATUS_LIST_LIMIT);
@@ -59,7 +69,11 @@ public interface ChannelBindingRepository {
         }
     }
 
-    /** 只更新状态相关字段（status / lastError / connectedAt），不碰凭证。 */
+    /**
+     * 只更新状态相关字段（status / lastError / connectedAt），不碰凭证。
+     * <p>三个字段都是直接覆盖写入：{@code lastError}/{@code connectedAt} 传 null 会清空对应列，
+     * 而不是保持原值。软删除（{@code deleted = 1}）的行不会被更新。</p>
+     */
     void updateStatus(Long bindingId, String status, String lastError, java.time.LocalDateTime connectedAt);
 
     /** 解绑：软删除 + 置 DISABLED。 */
