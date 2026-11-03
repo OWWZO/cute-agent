@@ -30,12 +30,13 @@ import {
 } from "@/services/sopWorkspace";
 import { toast } from "sonner";
 
-import type { SopEditorDraft, SopItem, SopRecallTestResult, SopStatus } from "./types";
+import type { SopEditorDraft, SopItem, SopRecallTestResult, SopStatus, SopStep } from "./types";
 import {
   createEmptyDraft,
   createEmptyStep,
   resolveToolBaseUrl,
   sopItemToDraft,
+  statusBadgeClass,
   statusLabel,
 } from "./utils";
 
@@ -43,14 +44,14 @@ interface WorkspaceSopProps {
   embedded?: boolean;
 }
 
+const ALL_STATUS = "__all__";
+
 const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
   const toolBaseUrl = useMemo(() => resolveToolBaseUrl(), []);
   const [items, setItems] = useState<SopItem[]>([]);
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  // 「全部状态」在 Select 里需要一个非空 value；空字符串表示未筛选。
-  const ALL_STATUS = "__all__";
   const [loadingList, setLoadingList] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -103,20 +104,26 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
   };
 
   const updateStepTitle = (index: number, title: string) => {
+    updateStepAt(index, (step) => ({ ...step, title }));
+  };
+
+  const updateStepAt = (index: number, update: (step: SopStep) => SopStep) => {
     setDraft((prev) => {
+      const current = prev.sopSteps[index];
+      if (!current) {
+        return prev;
+      }
       const sopSteps = [...prev.sopSteps];
-      sopSteps[index] = { ...sopSteps[index], title };
+      sopSteps[index] = update(current);
       return { ...prev, sopSteps };
     });
   };
 
   const updateSubStep = (stepIndex: number, subIndex: number, value: string) => {
-    setDraft((prev) => {
-      const sopSteps = [...prev.sopSteps];
-      const steps = [...(sopSteps[stepIndex]?.steps || [])];
+    updateStepAt(stepIndex, (step) => {
+      const steps = [...step.steps];
       steps[subIndex] = value;
-      sopSteps[stepIndex] = { ...sopSteps[stepIndex], steps };
-      return { ...prev, sopSteps };
+      return { ...step, steps };
     });
   };
 
@@ -140,25 +147,20 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
   };
 
   const addSubStep = (stepIndex: number) => {
-    setDraft((prev) => {
-      const sopSteps = [...prev.sopSteps];
-      const steps = [...(sopSteps[stepIndex]?.steps || []), ""];
-      sopSteps[stepIndex] = { ...sopSteps[stepIndex], steps };
-      return { ...prev, sopSteps };
+    updateStepAt(stepIndex, (step) => {
+      return { ...step, steps: [...step.steps, ""] };
     });
   };
 
   const removeSubStep = (stepIndex: number, subIndex: number) => {
-    setDraft((prev) => {
-      const sopSteps = [...prev.sopSteps];
-      const steps = [...(sopSteps[stepIndex]?.steps || [])];
+    updateStepAt(stepIndex, (step) => {
+      const steps = [...step.steps];
       if (steps.length <= 1) {
         steps[0] = "";
       } else {
         steps.splice(subIndex, 1);
       }
-      sopSteps[stepIndex] = { ...sopSteps[stepIndex], steps };
-      return { ...prev, sopSteps };
+      return { ...step, steps };
     });
   };
 
@@ -378,11 +380,7 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                     <span
                       className={cn(
                         "shrink-0 rounded-full px-2 py-0.5 text-ui-sm",
-                        item.status === "online"
-                          ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
-                          : item.status === "draft"
-                            ? "bg-[var(--chat-surface-muted)] text-[var(--chat-text-soft)]"
-                            : "bg-[var(--chat-surface-muted)] text-[var(--chat-text-soft)]"
+                        statusBadgeClass(item.status)
                       )}
                     >
                       {statusLabel(item.status)}
@@ -592,7 +590,7 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
                     注入文本预览
                   </div>
                   <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap rounded-2xl bg-[var(--chat-surface-soft)] p-3 text-ui-sm leading-5 text-[var(--chat-text-soft)]">
-                    {recallResult.choosedSopString || "(空)"}
+                    {recallResult.chosenSopString || "(空)"}
                   </pre>
                 </div>
               </>

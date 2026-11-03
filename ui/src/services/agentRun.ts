@@ -6,6 +6,7 @@ import { clearAuthSession, getAccessToken } from "@/stores/auth";
 import { emitAuthSessionExpired } from "@/services/authSessionExpired";
 
 const customHost = resolveServiceBaseUrl(SERVICE_BASE_URL);
+const AGENT_RUN_API_PREFIX = "/api/agent/run";
 
 export const AGENT_QUERY_SUBMIT_URL = `${customHost}/web/api/v1/gpt/queryAgentStreamIncr`;
 
@@ -122,11 +123,11 @@ export async function submitAgentQuery(body: unknown): Promise<AgentQuerySubmitR
 
 export const agentRunApi = {
   stop: (payload: { sessionId?: string; requestId: string }) =>
-    api.post<Record<string, unknown>>("/api/agent/run/stop", payload) as unknown as Promise<
+    api.post<Record<string, unknown>>(`${AGENT_RUN_API_PREFIX}/stop`, payload) as unknown as Promise<
       Record<string, unknown>
     >,
   inject: (payload: { sessionId?: string; requestId: string; text: string }) =>
-    api.post<Record<string, unknown>>("/api/agent/run/inject", payload) as unknown as Promise<
+    api.post<Record<string, unknown>>(`${AGENT_RUN_API_PREFIX}/inject`, payload) as unknown as Promise<
       Record<string, unknown>
     >,
 };
