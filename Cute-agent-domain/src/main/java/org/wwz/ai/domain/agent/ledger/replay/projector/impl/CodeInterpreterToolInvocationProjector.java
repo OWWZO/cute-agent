@@ -40,7 +40,9 @@ public class CodeInterpreterToolInvocationProjector extends AbstractToolInvocati
         Map<String, Object> resultMap = new LinkedHashMap<>();
         resultMap.put("isFinal", true);
         resultMap.put("codeOutput", codeOutput);
-        resultMap.put("data", codeOutput);
+        // 实时 SSE 的 data 是累计正文（回退到 codeOutput），与 codeOutput 不是同一份内容。
+        resultMap.put("data", StringUtils.defaultIfBlank(
+                output == null ? null : output.getContent(), codeOutput));
         if (StringUtils.isNotBlank(output == null ? null : output.getContent())) {
             resultMap.put("content", output.getContent());
         }

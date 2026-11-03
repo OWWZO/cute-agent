@@ -41,6 +41,7 @@ public interface IExecutionLedgerReconcileRepository {
      */
     int updateToolInvocationFinish(ToolInvocation invocation);
 
+    /** 未命中返回 {@code null}。 */
     DialogueSession querySessionBySessionId(String sessionId);
 
     int updateSessionRunFinish(String sessionId,

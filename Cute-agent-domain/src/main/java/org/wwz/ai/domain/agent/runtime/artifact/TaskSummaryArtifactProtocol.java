@@ -35,7 +35,7 @@ public final class TaskSummaryArtifactProtocol {
             return TaskSummaryResult.builder().taskSummary("").build();
         }
         String[] parts = raw.split(Pattern.quote(ToolArtifactFormatter.ARTIFACT_DELIMITER), 2);
-        List<String> requestedKeys = parts.length < 2 ? List.of() : splitArtifactItems(parts[1].trim());
+        List<String> requestedKeys = parts.length < 2 ? List.of() : splitArtifactKeys(parts[1].trim());
         return TaskSummaryResult.builder()
                 .taskSummary(raw)
                 .artifactKeys(requestedKeys)
@@ -70,7 +70,8 @@ public final class TaskSummaryArtifactProtocol {
         return payload;
     }
 
-    private static List<String> splitArtifactItems(String artifactKeys) {
+    /** 按分隔符拆分 {@code $$$} 点名并去空；实时与历史回放共用同一份解析规则。 */
+    public static List<String> splitArtifactKeys(String artifactKeys) {
         if (StringUtils.isBlank(artifactKeys)) {
             return List.of();
         }

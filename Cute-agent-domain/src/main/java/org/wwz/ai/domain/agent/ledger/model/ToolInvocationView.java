@@ -62,6 +62,7 @@ public class ToolInvocationView {
      */
     private ToolStructuredOutput structuredOutput;
 
+    /** 执行状态，取值见 {@code ExecutionLedgerConstants.STATUS_*}；可能为 {@code null}，比较前须判空。 */
     private Integer status;
 
     private String errorMsg;

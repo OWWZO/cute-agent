@@ -1,5 +1,7 @@
 package org.wwz.ai.domain.agent.ledger.model.tooloutput;
 
+import org.wwz.ai.domain.agent.runtime.tool.common.canvas.CanvasToolNames;
+
 import java.util.Set;
 
 /**
@@ -15,7 +17,7 @@ public final class ToolOutputNames {
     /** Legacy output name kept only so old ledger rows remain readable. */
     public static final String REPORT_TOOL = "report_tool";
     /** Structured tool name; not yet a dedicated output table (artifact + projector). */
-    public static final String CANVAS_PUBLISH = "canvas_publish";
+    public static final String CANVAS_PUBLISH = CanvasToolNames.CANVAS_PUBLISH;
     public static final String DATA_ANALYSIS = "data_analysis";
     public static final String MULTIMODAL_AGENT = "multimodalagent_tool";
     public static final String IMAGE_GENERATION = "image_generation_tool";

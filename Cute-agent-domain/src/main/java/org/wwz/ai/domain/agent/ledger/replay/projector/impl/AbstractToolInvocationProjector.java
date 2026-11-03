@@ -145,7 +145,7 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
     protected ProjectedReplayEvent buildTaskEvent(AgentStreamAccumulator state,
                                                   ToolInvocationView invocation,
                                                   String logicalMessageType,
-                                                  Object responsePayload,
+                                                  Map<String, Object> responsePayload,
                                                   List<Map<String, Object>> artifactRefs) {
         String taskId = state.getTaskId();
         String orderKey = taskId + ":" + logicalMessageType;
