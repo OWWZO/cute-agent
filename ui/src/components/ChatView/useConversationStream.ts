@@ -89,10 +89,26 @@ const SESSION_CONTROL_PACKAGES = new Set([
   "heartbeat",
   "follow_idle",
   "follow_pending",
+  "run_wake",
+  "run_wake_failed",
 ]);
 
 export function isSessionControlPackage(packageType?: string): boolean {
   return SESSION_CONTROL_PACKAGES.has(String(packageType || ""));
+}
+
+/**
+ * 本轮是否派发过后台子 Agent（含已结算）。
+ * 用于决定 root result 后是否继续保留观察流，等待可能的 run_wake。
+ */
+export function hasBackgroundTaskCard(chat?: CHAT.ChatItem | null): boolean {
+  return (chat?.multiAgent?.tasks || []).flat().some((task) => {
+    if (!task) {
+      return false;
+    }
+    const map = (task.resultMap || {}) as Record<string, unknown>;
+    return map.run_in_background === true || map.runInBackground === true;
+  });
 }
 
 /** 同一 requestId 的重复 finished 帧只允许触发一次会话文件刷新。 */
@@ -1545,6 +1561,14 @@ export function useConversationStream(
       const { finished, resultMap, packageType } = data;
       // 到达这里的都是本条流真正投递出来的帧（含控制帧），据此判断「空流」。
       sawAnyFrame = true;
+      if (packageType === "run_wake") {
+        handleBackgroundRunWake(conversationId, data);
+        return;
+      }
+      if (packageType === "run_wake_failed") {
+        handleBackgroundRunWakeFailed(conversationId, data);
+        return;
+      }
       // 会话控制帧的 reqId 由后端会话级 Hub 填充，可能是 sessionId；
       // 先处理控制语义，不能按普通业务帧的 requestId 规则丢弃。
       if (
@@ -1695,7 +1719,14 @@ export function useConversationStream(
         followReconnectContextsRef.current.delete(requestId);
         followReconnectAttemptsRef.current.delete(requestId);
         clearFollowReconnectTimer(requestId);
-        unbindLiveStream(conversationId, abortController);
+        // 后台任务在飞时保留观察流：后续 tool_result / run_wake 还要经这条连接到达。
+        const keepForBackground =
+          !isHitlYieldEvent(eventData)
+          && !hasPendingAskUserQuestion(currentChat)
+          && (hasRunningBackgroundTask(currentChat) || hasBackgroundTaskCard(currentChat));
+        if (!keepForBackground) {
+          unbindLiveStream(conversationId, abortController);
+        }
         notifyTurnSettled(requestId);
         if (isHitlYieldEvent(eventData) || hasPendingAskUserQuestion(currentChat)) {
           currentChat = applyWaitingUserInputState(currentChat);
@@ -1874,8 +1905,82 @@ export function useConversationStream(
     );
   });
 
-  applySessionObservationRef.current = (conversationId, chats) => {
-    const plan = planSessionObservation({
+  /** 后台任务唤醒：后端已派发新 run，前端建占位 chat 并续订新 requestId。 */
+  const handleBackgroundRunWake = useMemoizedFn(
+    (conversationId: string, data: AgentAnswerEnvelope) => {
+      const resultMap = data.resultMap || {};
+      const requestId = String(resultMap.requestId || data.reqId || "");
+      if (!requestId) {
+        return;
+      }
+      const snapshot =
+        conversationSnapshotsRef.current.get(conversationId) ||
+        (conversationRef.current.id === conversationId
+          ? conversationRef.current
+          : undefined);
+      if (!snapshot) {
+        return;
+      }
+      // 幂等：同 requestId 的重复 run_wake 不重复建 chat。
+      if ((snapshot.chatList || []).some((item) => item.requestId === requestId)) {
+        return;
+      }
+      const sessionId = String(resultMap.sessionId || snapshot.sessionId || "");
+      const deepThink = Boolean(snapshot.deepThink);
+      const wakeChat: CHAT.ChatItem = {
+        ...createRunningChat(
+          { message: "", files: [], deepThink },
+          sessionId,
+          requestId,
+          deepThink
+        ),
+        backgroundWake: true,
+      };
+      commitConversation(conversationId, {
+        ...snapshot,
+        id: conversationId,
+        chatList: [...(snapshot.chatList || []), wakeChat],
+      });
+      if (conversationRef.current.id === conversationId) {
+        onPrepareStreamingWorkspace?.();
+      }
+      // 旧 run 的观察流已经完成使命；释放后按新 requestId 重新订阅。
+      releaseLiveObservation(conversationId);
+      followActiveRun(requestId, {
+        conversationId,
+        sessionId,
+        requestId,
+        productType: snapshot.productType,
+        deepThink,
+        seedChat: wakeChat,
+      });
+    }
+  );
+
+  const handleBackgroundRunWakeFailed = useMemoizedFn(
+    (conversationId: string, data: AgentAnswerEnvelope) => {
+      const resultMap = data.resultMap || {};
+      const requestId = String(resultMap.requestId || data.reqId || "");
+      if (!requestId) {
+        return;
+      }
+      const snapshot =
+        conversationSnapshotsRef.current.get(conversationId) || conversationRef.current;
+      if (!(snapshot.chatList || []).some((item) => item.requestId === requestId)) {
+        return;
+      }
+      commitConversation(conversationId, {
+        ...snapshot,
+        id: conversationId,
+        chatList: (snapshot.chatList || []).filter((item) => item.requestId !== requestId),
+      });
+      if (conversationRef.current.id === conversationId) {
+        setLoading(false);
+      }
+    }
+  );
+
+  applySessionObservationRef.current = (conversationId, chats) => {    const plan = planSessionObservation({
       conversationId,
       chats,
       live: [...liveStreamsRef.current.values()].map((entry) => ({
@@ -2076,7 +2181,10 @@ export function useConversationStream(
       clearActiveRun(resumeRequestId);
       followReconnectContextsRef.current.delete(resumeRequestId);
       clearFollowReconnectTimer(resumeRequestId);
-      unbindLiveStream(conversationId, abortController);
+      // 本轮有后台任务时保留观察流，等 run_wake 接管。
+      if (!hasRunningBackgroundTask(currentChat) && !hasBackgroundTaskCard(currentChat)) {
+        unbindLiveStream(conversationId, abortController);
+      }
       notifyTurnSettled(resumeRequestId);
       currentChat = {
         ...currentChat,
@@ -2275,6 +2383,14 @@ export function useConversationStream(
         return;
       }
       followReconnectAttemptsRef.current.set(resumeRequestId, 0);
+      if (packageType === "run_wake") {
+        handleBackgroundRunWake(conversationId, data);
+        return;
+      }
+      if (packageType === "run_wake_failed") {
+        handleBackgroundRunWakeFailed(conversationId, data);
+        return;
+      }
       if (packageType === "follow_idle") {
         sawFollowIdle = true;
         void resyncAfterResumeDisconnect();
@@ -2861,6 +2977,14 @@ export function useConversationStream(
       }
       // 收到任意有效帧说明主观察流正常，后续断开不应沿用旧的退避次数。
       followReconnectAttemptsRef.current.set(requestId, 0);
+      if (packageType === "run_wake") {
+        handleBackgroundRunWake(conversationId, data);
+        return;
+      }
+      if (packageType === "run_wake_failed") {
+        handleBackgroundRunWakeFailed(conversationId, data);
+        return;
+      }
       const streamStillActive = isActiveStream();
       const isTerminalGuardError =
         Boolean(finished) &&
@@ -3022,7 +3146,14 @@ export function useConversationStream(
         followReconnectContextsRef.current.delete(requestId);
         followReconnectAttemptsRef.current.delete(requestId);
         clearFollowReconnectTimer(requestId);
-        unbindLiveStream(conversationId, abortController);
+        // 后台任务在飞时保留观察流：后续 tool_result / run_wake 还要经这条连接到达。
+        const keepForBackground =
+          !isHitlYieldEvent(eventData)
+          && !hasPendingAskUserQuestion(currentChat)
+          && (hasRunningBackgroundTask(currentChat) || hasBackgroundTaskCard(currentChat));
+        if (!keepForBackground) {
+          unbindLiveStream(conversationId, abortController);
+        }
         notifyTurnSettled(requestId);
         // plan_approval / ask_user_question 让步后的 finished 必须进 WAITING_INPUT，不能标 SUCCESS
         if (isHitlYieldEvent(eventData) || hasPendingAskUserQuestion(currentChat)) {
@@ -3119,20 +3250,8 @@ export function useConversationStream(
       if (followReconnectContextsRef.current.has(requestId)) return true;
       const runStatus = String(currentChat.metrics?.status || "").toUpperCase();
       if (runStatus === "RUNNING") return true;
-      return (currentChat.multiAgent?.tasks || []).flat().some((task) => {
-        if (!task) return false;
-        const map = (task.resultMap || {}) as Record<string, unknown>;
-        const background =
-          map.run_in_background === true || map.runInBackground === true;
-        if (!background) return false;
-        const obs = String(
-          task.toolResult?.toolResult || map.toolResult || map.answer || ""
-        );
-        return (
-          String(map.status || "").toLowerCase() === "running" ||
-          /"status"\s*:\s*"running"/i.test(obs)
-        );
-      });
+      // 本轮派发过后台子 Agent：即使已完成，也可能在 500ms 合并窗口后到达 run_wake。
+      return hasBackgroundTaskCard(currentChat);
     };
 
     let streamOpened = false;
@@ -3186,6 +3305,7 @@ export function useConversationStream(
       }
       // 主结论已收口 loading=false，但后台子 Agent 仍可能在跑；不能因 loading 关掉 follow。
       if (!shouldKeepObserving()) {
+        unbindLiveStream(conversationId, abortController);
         return;
       }
       const live = liveStreamsRef.current.get(conversationId);
@@ -3236,6 +3356,7 @@ export function useConversationStream(
           return;
         }
         if (!shouldKeepObserving()) {
+          unbindLiveStream(conversationId, abortController);
           return;
         }
         const live = liveStreamsRef.current.get(conversationId);

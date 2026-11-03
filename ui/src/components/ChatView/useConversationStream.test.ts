@@ -96,6 +96,8 @@ describe("useConversationStream helpers", () => {
     expect(isSessionControlPackage("heartbeat")).toBe(true);
     expect(isSessionControlPackage("follow_pending")).toBe(true);
     expect(isSessionControlPackage("follow_idle")).toBe(true);
+    expect(isSessionControlPackage("run_wake")).toBe(true);
+    expect(isSessionControlPackage("run_wake_failed")).toBe(true);
     expect(isSessionControlPackage("result")).toBe(false);
   });
 
