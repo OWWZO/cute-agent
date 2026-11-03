@@ -9,6 +9,9 @@ import lombok.ToString;
 
 /**
  * skill_view(file_path) 加载结果。
+ * <p>{@code binary=false} 时 {@link #content} 是 UTF-8 解码后的全文（超过单次注入上限时只含开头，
+ * {@link #truncated}=true）；{@code binary=true} 时 {@code content} 只是人类可读占位摘要
+ * （如 {@code "[Binary file: name, size: N bytes]"}），不是原始字节。{@link #size} 始终是文件字节数。</p>
  */
 @Data
 @Builder

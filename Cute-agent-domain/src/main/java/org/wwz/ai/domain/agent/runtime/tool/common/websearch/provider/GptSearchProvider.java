@@ -131,6 +131,4 @@ public final class GptSearchProvider implements SearchProvider {
             }
         }
     }
-
-    /** Responses API 与 Chat Completions 的正文位置不同，这里统一兜底。 */
 }

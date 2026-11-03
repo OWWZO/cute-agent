@@ -35,7 +35,7 @@ public class SlidesGenerateTool extends AbstractDocGenTool {
         properties.put("title", stringProp("Deck title (auto title slide when first slide is not layout=title)."));
         properties.put("subtitle", stringProp("Deck subtitle."));
         properties.put("author", stringProp("Author."));
-        properties.put("theme", stringProp("Theme, default executive_light."));
+        properties.put("theme", stringProp("Theme, default executive_light; built-in or saved via theme_designer."));
         properties.put("aspect", stringProp("Aspect ratio, default 16:9."));
         properties.put("slides", arrayProp("Non-empty array of slide objects.", objectProp("One slide: layout, title, body markdown, optional image/chart/quote fields.")));
         properties.put("fileName", stringProp("Alias of output_path."));

@@ -28,7 +28,10 @@ public class SubAgentResult {
     private int totalToolUseCount;
     private long totalDurationMs;
     private String errorMsg;
-    /** 本轮结束时工作记忆是否成功写入；resume 前主 Agent 应检查此标记 */
+    /**
+     * 本轮结束时工作记忆是否成功写入（三态）：{@code true}=已写入，{@code false}=写入失败，
+     * {@code null}=未尝试/未知。resume 前主 Agent 应检查此标记，不得把 null 当作失败或成功。
+     */
     private Boolean memoryPersisted;
 
     public boolean isCompleted() {

@@ -23,7 +23,7 @@ public class SubAgentDefinitionLoader {
     /**
      * 重新加载可配置子 Agent（内置不变）。
      *
-     * @return 成功写入的配置条数
+     * @return 成功写入的配置条数；仓储未注入时为 0；加载异常时为 -1（保留当前内置类型）
      */
     public int reload() {
         if (repository == null) {

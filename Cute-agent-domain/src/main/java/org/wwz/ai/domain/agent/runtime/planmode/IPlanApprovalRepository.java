@@ -38,5 +38,11 @@ public interface IPlanApprovalRepository {
 
     boolean casCancel(String approvalId, String userId);
 
+    /**
+     * 按 sourceRequestId 批量取消。
+     * <p>只更新 {@link PlanApprovalStatuses#CANCELABLE} 中的状态（PENDING / RESUME_PENDING）为 CANCELLED；
+     * RESUMING 与终态记录不受影响。返回实际更新的行数（不是匹配行数）。{@code reason} 当前不会持久化
+     * （记录与表均无 reason 字段），仅保留给调用方表达取消原因。</p>
+     */
     int cancelBySourceRequestId(String sourceRequestId, String reason);
 }

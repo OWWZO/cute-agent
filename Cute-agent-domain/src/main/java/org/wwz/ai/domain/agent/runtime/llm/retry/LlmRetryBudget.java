@@ -38,7 +38,11 @@ public enum LlmRetryBudget {
         return isUnbounded() || attempt < loopMaxAttempts;
     }
 
-    /** 写进状态事件 / 日志的 maxAttempts：unbounded 下是哨兵 0。 */
+    /**
+     * 写进状态事件 / 日志的 maxAttempts：unbounded 下返回哨兵 {@link #UNBOUNDED_MAX_ATTEMPTS_SENTINEL}（0）。
+     * <p>0 不是可用次数：下游渲染 {@code attempt/maxAttempts} 或做除法前必须先判断
+     * {@link #isUnbounded()} 并特判哨兵，否则会出现 {@code x/0} 或 {@link ArithmeticException}。</p>
+     */
     public int statusMaxAttempts(int maxAttempts) {
         return isUnbounded() ? UNBOUNDED_MAX_ATTEMPTS_SENTINEL : maxAttempts;
     }
