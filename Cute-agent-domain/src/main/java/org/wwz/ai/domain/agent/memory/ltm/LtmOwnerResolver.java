@@ -5,7 +5,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.types.agent.user.UserRequestContext;
 
 /**
- * 解析策展记忆 owner：优先 userId，其次 ERP 标识，最后按会话隔离兜底。
+ * 解析策展记忆 owner：优先显式 userId，其次请求上下文 userId，再次 ERP 标识，最后按会话隔离兜底。
  * <p>无法解析出任何身份时返回 {@code null}，调用方必须跳过 LTM 读写（fail-closed），
  * 不再回退到全局 {@code anonymous} —— 那会让所有未认证调用共享同一份记忆。</p>
  */

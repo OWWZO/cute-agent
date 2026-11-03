@@ -29,6 +29,11 @@ public interface BackgroundReviewService {
                 null);
     }
 
+    /**
+     * 成功回合后按频率决定是否调度后台 review。
+     * <p>{@code parentTools} 允许为 {@code null}：7 参便捷重载即以 {@code null} 委托，
+     * 表示「不带父工具运行」，实现不得直接解引用或遍历它。</p>
+     */
     void maybeScheduleAfterSuccessTurn(String sessionId,
                                        String requestId,
                                        LtmOwner owner,
