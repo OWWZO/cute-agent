@@ -81,8 +81,8 @@ public class ListMcpResourcesTool implements BaseTool {
             return ToolResultPayload.okData(McpToolNames.LIST_MCP_RESOURCES, fields);
         } catch (Exception e) {
             log.warn("ListMcpResources failed", e);
-            String msg = "ListMcpResources 失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
-            return ToolResultPayload.failureFrom(msg, null);
+            // MCP 连接异常的 message 常含内部地址 / 端口 / token，对外只给通用文案，细节留在日志。
+            return ToolResultPayload.failureFrom("ListMcpResources 失败：MCP 资源列表读取异常", null);
         }
     }
 

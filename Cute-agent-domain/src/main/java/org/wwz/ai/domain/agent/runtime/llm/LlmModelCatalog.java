@@ -52,9 +52,11 @@ public class LlmModelCatalog {
     }
 
     /**
-     * 解析模型配置。命中 DB 返回 settings；未命中返回 empty。
+     * 原始解析入口：同时服务用户引用、备用模型引用和内部 binding 引用（{@code __db_binding__:}）。
+     * <p>因此不适用于未经校验的外部输入——用户来源的 modelRef 必须先通过
+     * {@link #isUserSelectableModel(String)}。命中 DB 返回 settings；未命中返回 empty。</p>
      *
-     * @param modelRef modelId、上游 modelName，或空/default 表示取第一个可用
+     * @param modelRef modelId、上游 modelName、内部 binding 引用，或空/default 表示取第一个可用
      */
     public Optional<LLMSettings> resolve(String modelRef) {
         return resolve(modelRef, System.currentTimeMillis());
@@ -96,16 +98,10 @@ public class LlmModelCatalog {
                 || modelRef.trim().startsWith(BINDING_REF_PREFIX)) {
             return false;
         }
-        String normalized = modelRef.trim();
-        for (LlmModelBinding binding : loadUsable(System.currentTimeMillis())) {
-            if (binding == null || isFallback(binding.getModelUsage())) {
-                continue;
-            }
-            if (normalized.equals(binding.getModelId()) || normalized.equals(binding.getModelName())) {
-                return true;
-            }
-        }
-        return false;
+        // 必须与 resolve → pick 的优先级共用同一判定：否则 fallback 行 modelId 与 primary 行
+        // modelName 同名时，这里放行而 pick 会先命中 fallback，校验与解析结论不一致。
+        LlmModelBinding picked = pick(loadUsable(System.currentTimeMillis()), modelRef.trim());
+        return picked != null && !isFallback(picked.getModelUsage());
     }
 
     Optional<LLMSettings> resolve(String modelRef, long nowMs) {

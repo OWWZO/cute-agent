@@ -84,11 +84,11 @@ public class DesktopControlRepository implements IDesktopControlRepository {
     }
 
     @Override
-    public boolean markCompleted(String controlId) {
+    public boolean markCompleted(String controlId, String userId) {
         if (StringUtils.isBlank(controlId)) {
             return false;
         }
-        return desktopControlDao.markCompleted(controlId.trim()) > 0;
+        return desktopControlDao.markCompleted(controlId.trim(), StringUtils.trimToNull(userId)) > 0;
     }
 
     @Override

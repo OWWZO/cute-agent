@@ -1,6 +1,8 @@
 package org.wwz.ai.domain.agent.runtime.agent;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.experimental.Accessors;
 import org.wwz.ai.domain.agent.ledger.model.replay.ReplayTiming;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolStructuredOutput;
@@ -22,6 +24,9 @@ public class ToolExecutionOutcome {
     private String llmObservation;
     private ToolStructuredOutput structuredOutput;
     private String errorMsg;
+    /** 图片二进制载荷，体积大且含用户数据，禁止进入 toString / equals / hashCode。 */
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private String base64Image;
     private String imageMimeType;
     private ReplayTiming timing;

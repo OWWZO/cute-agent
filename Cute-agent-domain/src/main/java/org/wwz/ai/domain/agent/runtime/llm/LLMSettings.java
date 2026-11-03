@@ -4,7 +4,9 @@ import com.alibaba.fastjson.annotation.JSONField;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.Map;
 
@@ -27,7 +29,10 @@ public class LLMSettings {
     @JSONField(name = "api_type")
     private String apiType;
 
+    /** 明文凭证，禁止进入 toString / equals / hashCode。JSON 字段名 apikey 是对外契约，保持不变。 */
     @JSONField(name = "apikey")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private String apiKey;
 
     @JSONField(name = "api_version")

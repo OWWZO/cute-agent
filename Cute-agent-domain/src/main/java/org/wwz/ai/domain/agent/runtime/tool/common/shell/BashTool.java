@@ -235,7 +235,11 @@ public class BashTool implements BaseTool {
             }
             return ToolResultPayload.fromData(data);
         } catch (Exception e) {
-            log.error("{} bash remote execute error, input={}",
+            // 命令里常内联 token / Authorization 头，ERROR 日志只留 requestId 与异常类型。
+            log.error("{} bash remote execute error: {}",
+                    context == null ? "unknown" : context.getRequestId(),
+                    e.getClass().getSimpleName());
+            log.debug("{} bash remote execute error detail, input={}",
                     context == null ? "unknown" : context.getRequestId(),
                     input,
                     e);

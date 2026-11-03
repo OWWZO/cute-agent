@@ -201,7 +201,8 @@ public class ToolResult {
                 .append(", status=").append(status);
 
         if (isSuccess()) {
-            sb.append(", result=").append(result);
+            // 工具载荷是任意对象，可能含凭证 / PII 或超大内容：只输出类型与长度。
+            sb.append(", result=").append(summarizePayload(result));
         } else {
             sb.append(", error='").append(error).append("'");
         }
@@ -212,5 +213,15 @@ public class ToolResult {
 
         sb.append("}");
         return sb.toString();
+    }
+
+    private static String summarizePayload(Object payload) {
+        if (payload == null) {
+            return "null";
+        }
+        if (payload instanceof CharSequence text) {
+            return payload.getClass().getSimpleName() + "(length=" + text.length() + ")";
+        }
+        return payload.getClass().getSimpleName();
     }
 }

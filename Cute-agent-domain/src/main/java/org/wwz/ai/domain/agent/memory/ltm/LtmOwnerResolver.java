@@ -10,6 +10,9 @@ import org.wwz.ai.types.agent.user.UserRequestContext;
 @Slf4j
 public final class LtmOwnerResolver {
 
+    /** 无身份来源时的兜底 owner id；需要真实归属的调用方必须把它当作「未解析」处理。 */
+    public static final String ANONYMOUS_OWNER_ID = "anonymous";
+
     private LtmOwnerResolver() {
     }
 
@@ -19,7 +22,7 @@ public final class LtmOwnerResolver {
         if (StringUtils.isBlank(resolvedUserId)) {
             // 异步/调度线程没有请求上下文时会走到这里，留下线索便于排查记忆错配。
             log.warn("LTM owner 解析回退到 anonymous：userId 与 erp 均为空，且当前线程无用户请求上下文");
-            resolvedUserId = "anonymous";
+            resolvedUserId = ANONYMOUS_OWNER_ID;
         }
         return LtmOwner.user(resolvedUserId);
     }

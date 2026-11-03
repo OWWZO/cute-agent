@@ -81,7 +81,7 @@ public class SessionCapabilityServiceMcpTest {
         }
 
         @Override
-        public Path assertPathAllowed(Path candidatePath) {
+        public Path resolveAllowedPath(Path candidatePath) {
             return candidatePath;
         }
 

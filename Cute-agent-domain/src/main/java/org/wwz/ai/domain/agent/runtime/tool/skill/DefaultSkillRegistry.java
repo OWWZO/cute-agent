@@ -180,7 +180,7 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
     }
 
     @Override
-    public Path assertPathAllowed(Path candidatePath) {
+    public Path resolveAllowedPath(Path candidatePath) {
         Path normalizedCandidatePath = candidatePath.toAbsolutePath().normalize();
         for (SkillDescriptor descriptor : descriptors) {
             Path skillBasePath = descriptor.getBasePath().toAbsolutePath().normalize();

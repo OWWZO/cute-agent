@@ -36,7 +36,22 @@ public class LogPrinter implements Printer {
             log.debug("{} {} {} {} {} {} {}", request.getRequestId(), messageId, messageType, message, extraResultMap, digitalEmployee, isFinal);
             return;
         }
-        log.info("{} {} {} {} {} {} {}", request.getRequestId(), messageId, messageType, message, extraResultMap, digitalEmployee, isFinal);
+        // INFO 只留结构信息：消息可能含用户内容 / PII / 工具结果，完整载荷只在 DEBUG 输出。
+        log.info("{} {} {} messageLength={} extraKeys={} {} {}",
+                request.getRequestId(), messageId, messageType,
+                lengthOf(message), keysOf(extraResultMap), digitalEmployee, isFinal);
+        log.debug("{} {} {} {} {} {} {}", request.getRequestId(), messageId, messageType, message, extraResultMap, digitalEmployee, isFinal);
+    }
+
+    private static int lengthOf(Object message) {
+        if (message == null) {
+            return 0;
+        }
+        return message instanceof CharSequence text ? text.length() : String.valueOf(message).length();
+    }
+
+    private static Object keysOf(Map<String, Object> extraResultMap) {
+        return extraResultMap == null ? "-" : extraResultMap.keySet();
     }
 
     @Override

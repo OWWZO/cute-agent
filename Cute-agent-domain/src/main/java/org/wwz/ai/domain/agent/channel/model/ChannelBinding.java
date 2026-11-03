@@ -1,9 +1,12 @@
 package org.wwz.ai.domain.agent.channel.model;
 
+import com.alibaba.fastjson.annotation.JSONField;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -33,7 +36,10 @@ public class ChannelBinding {
 
     private String appId;
 
-    /** 明文 AppSecret。禁止打印。 */
+    /** 明文 AppSecret。禁止打印、序列化，也不参与对象身份判定。 */
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JSONField(serialize = false)
     private String appSecret;
 
     private String botOpenid;

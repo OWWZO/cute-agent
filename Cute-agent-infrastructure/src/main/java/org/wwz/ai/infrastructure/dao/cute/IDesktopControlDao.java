@@ -26,7 +26,7 @@ public interface IDesktopControlDao {
     int casClaimResume(@Param("resumeRequestId") String resumeRequestId,
                        @Param("userId") String userId);
 
-    int markCompleted(@Param("controlId") String controlId);
+    int markCompleted(@Param("controlId") String controlId, @Param("userId") String userId);
 
     int markFailed(@Param("controlId") String controlId, @Param("status") String status);
 
