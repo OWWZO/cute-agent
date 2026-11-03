@@ -41,8 +41,8 @@ public record BrowserCommandResult(String rpcId,
     }
 
     public static BrowserCommandResult failure(String rpcId,
-                                               String error,
-                                               String errorCode) {
+                                               String errorCode,
+                                               String error) {
         return new BrowserCommandResult(rpcId, false, error, errorCode, null, null);
     }
 
@@ -51,26 +51,26 @@ public record BrowserCommandResult(String rpcId,
     }
 
     public static BrowserCommandResult offline(String rpcId) {
-        return failure(rpcId, "浏览器未连接", "browser_offline");
+        return failure(rpcId, "browser_offline", "浏览器未连接");
     }
 
     public static BrowserCommandResult unsupported(String rpcId) {
-        return failure(rpcId, "不允许的浏览器动作", "unsupported_action");
+        return failure(rpcId, "unsupported_action", "不允许的浏览器动作");
     }
 
     public static BrowserCommandResult invalid(String rpcId, String error) {
-        return failure(rpcId, error, "invalid_body");
+        return failure(rpcId, "invalid_body", error);
     }
 
     public static BrowserCommandResult duplicate(String rpcId) {
-        return failure(rpcId, "RPC ID 已存在", "duplicate_rpc_id");
+        return failure(rpcId, "duplicate_rpc_id", "RPC ID 已存在");
     }
 
     public static BrowserCommandResult unknown(String rpcId) {
-        return failure(rpcId, "浏览器操作结果未知", "command_result_unknown");
+        return failure(rpcId, "command_result_unknown", "浏览器操作结果未知");
     }
 
     public static BrowserCommandResult rpcFailed(String rpcId, String error) {
-        return failure(rpcId, error, "rpc_failed");
+        return failure(rpcId, "rpc_failed", error);
     }
 }

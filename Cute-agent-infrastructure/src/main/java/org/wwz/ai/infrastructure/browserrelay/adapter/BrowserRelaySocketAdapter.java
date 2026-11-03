@@ -227,7 +227,7 @@ public class BrowserRelaySocketAdapter implements BrowserRelaySocketPort {
             if (!userId.equals(rpc.userId) || !connectionId.equals(rpc.connectionId)) {
                 return false;
             }
-            rpc.future.complete(BrowserCommandResult.failure(entry.getKey(), message, "browser_offline"));
+            rpc.future.complete(BrowserCommandResult.failure(entry.getKey(), "browser_offline", message));
             return true;
         });
     }
