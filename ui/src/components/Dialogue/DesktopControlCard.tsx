@@ -77,7 +77,7 @@ const DesktopControlCard: FC<DesktopControlCardProps> = memo(({ tool }) => {
       <div className="kimi-ui-card__head">
         <span className="kimi-qcard-ic">🖥</span>
         <span className="kimi-qcard-title">桌面控制</span>
-        <span className="kimi-appr-badge" style={{ marginLeft: "auto" }}>
+        <span className="kimi-appr-badge ml-auto">
           {done ? "已完成" : "待操作"}
         </span>
       </div>

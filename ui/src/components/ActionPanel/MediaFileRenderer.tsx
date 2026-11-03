@@ -5,7 +5,6 @@ import { normalizeFileUrlForBrowser } from "@/utils/fileUrl";
 import { cn } from "@/lib/utils";
 import Loading from "./Loading";
 
-const LOADING_CLASS = "mr-32";
 const ERROR_CLASS =
   "m-6 min-w-[260px] max-w-[calc(100%-48px)] [&_[data-slot=alert-description]]:break-words [&_[data-slot=alert-description]]:whitespace-normal";
 
@@ -99,7 +98,7 @@ const MediaFileRenderer: CuteType.FC<MediaFileRendererProps> = React.memo((props
     >
       {status === "loading" ? (
         <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-          <Loading className={LOADING_CLASS} />
+          <Loading />
         </div>
       ) : null}
 

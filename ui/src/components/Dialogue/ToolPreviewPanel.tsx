@@ -1,8 +1,7 @@
 import { Fragment, memo, useMemo } from "react";
-import { ArrowLeft, ChevronRightIcon, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Info, X } from "lucide-react";
 import { useRequest } from "ahooks";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Info } from "lucide-react";
 import { DiffCodeFence } from "./markdown/KimiCodeFence";
 import { ToolOutputBlock } from "./tools/ToolOutputBlock";
 import { PatchViewer } from "../ActionPanel/codeViewer/PatchViewer";
@@ -240,7 +239,7 @@ export const ToolPreviewPanel = memo(function ToolPreviewPanel({
           {crumb.parents.map((segment, index) => (
             <Fragment key={`${segment}-${index}`}>
               <span className="shrink-0">{segment}</span>
-              <ChevronRightIcon className="size-3.5 shrink-0 text-foreground-subtlest" />
+              <ChevronRight className="size-3.5 shrink-0 text-foreground-subtlest" />
             </Fragment>
           ))}
           <span className="inline-flex min-w-0 items-center gap-1 text-foreground">

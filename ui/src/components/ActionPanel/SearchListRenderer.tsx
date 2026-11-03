@@ -172,10 +172,7 @@ const SearchListRenderer: CuteType.FC<SearchListRendererProps> = React.memo(({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p
-            className="text-ui-xs font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]"
-            style={{ fontFamily: "var(--font-sans)" }}
-          >
+          <p className="font-sans text-ui-xs font-semibold uppercase tracking-[0.12em] text-[var(--chat-text-muted)]">
             {eyebrow}
           </p>
           <p className="mt-0.5 text-[length:var(--content-font-size)] font-medium tracking-[-0.02em] text-[var(--chat-text)]">

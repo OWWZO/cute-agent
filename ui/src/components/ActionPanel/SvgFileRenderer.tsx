@@ -6,26 +6,13 @@ import { CircleAlert, Download } from "lucide-react";
 import { downloadFile } from "@/utils";
 import { normalizeFileUrlForBrowser } from "@/utils/fileUrl";
 import { ViewerPanelShell } from "@/components/ui/viewer-panel-shell";
-import { cn } from "@/lib/utils";
 import Loading from "./Loading";
 import SourceCodeView from "./SourceCodeView";
 import PreviewModeToggle, { type PreviewViewMode } from "./PreviewModeToggle";
+import "./svg-file-renderer.css";
 
-const LOADING_CLASS = "mr-32";
 const ERROR_CLASS =
   "m-6 min-w-[260px] max-w-[calc(100%-48px)] [&_[data-slot=alert-description]]:break-words [&_[data-slot=alert-description]]:whitespace-normal";
-
-const CHECKERBOARD_STYLE: React.CSSProperties = {
-  backgroundColor: "var(--chat-surface)",
-  backgroundImage: [
-    "linear-gradient(45deg, var(--chat-surface-muted) 25%, transparent 25%)",
-    "linear-gradient(-45deg, var(--chat-surface-muted) 25%, transparent 25%)",
-    "linear-gradient(45deg, transparent 75%, var(--chat-surface-muted) 75%)",
-    "linear-gradient(-45deg, transparent 75%, var(--chat-surface-muted) 75%)",
-  ].join(","),
-  backgroundPosition: "0 0, 0 4px, 4px -4px, -4px 0",
-  backgroundSize: "8px 8px",
-};
 
 interface SvgFileRendererProps {
   fileUrl: string;
@@ -98,7 +85,7 @@ const SvgFileRenderer: CuteType.FC<SvgFileRendererProps> = React.memo((props) =>
     if (loading) {
       return (
         <div className="flex h-full min-h-[240px] items-center justify-center">
-          <Loading className={LOADING_CLASS} />
+          <Loading />
         </div>
       );
     }
@@ -120,10 +107,7 @@ const SvgFileRenderer: CuteType.FC<SvgFileRendererProps> = React.memo((props) =>
     }
 
     return (
-      <div
-        className={cn("flex h-full min-h-[240px] items-center justify-center overflow-auto p-6")}
-        style={CHECKERBOARD_STYLE}
-      >
+      <div className="svg-preview-checkerboard flex h-full min-h-[240px] items-center justify-center overflow-auto p-6">
         <img
           src={graphicSource}
           alt={fileName || "SVG 预览"}

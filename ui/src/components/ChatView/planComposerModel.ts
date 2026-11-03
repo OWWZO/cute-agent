@@ -1,5 +1,10 @@
 import { pickFirstText, resolveTaskResultMap } from "@/utils/chat/toolCalls";
 
+const PLAN_STEP_MARKS: Record<string, string> = {
+  completed: "[x]",
+  in_progress: "[~]",
+};
+
 /**
  * 从当前会话 taskList / chat 中推导「输入框上方」要展示的计划。
  * 优先 ExitPlanMode 的 planContent，其次 PlanSolve 结构化 stages。
@@ -277,8 +282,7 @@ export function buildComposerPlanModel(params: {
       : structuredPlan.stages || [];
     const lines = steps.map((step, index) => {
       const status = structuredPlan.stepStatus?.[index] || "not_started";
-      const mark =
-        status === "completed" ? "[x]" : status === "in_progress" ? "[~]" : "[ ]";
+      const mark = PLAN_STEP_MARKS[status] ?? "[ ]";
       return `${mark} ${step}`;
     });
     return {

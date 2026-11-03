@@ -109,6 +109,12 @@ export default function BrowserRelayChip({ disabled }: Props) {
 
   const connected = Boolean(status.connected);
   const origin = pairing?.relayUrl ? resolveRelayOrigin(pairing.relayUrl) : "";
+  let buttonTitle = "连接本机 Chrome/Edge";
+  if (connected) {
+    buttonTitle = status.tabTitle || status.tabUrl || "浏览器已连接";
+  } else if (pairing) {
+    buttonTitle = `等待扩展连接；配对码 ${pairing.code}，服务地址 ${origin}`;
+  }
 
   return (
     <div className="flex min-w-0 items-center gap-1">
@@ -119,13 +125,7 @@ export default function BrowserRelayChip({ disabled }: Props) {
           "inline-flex h-8 max-w-[140px] items-center gap-1 rounded-md px-2 text-ui-sm text-foreground hover:bg-black/[0.04]",
           connected && "bg-brand text-white hover:bg-brand hover:text-white"
         )}
-        title={
-          connected
-            ? (status.tabTitle || status.tabUrl || "浏览器已连接")
-            : pairing
-              ? `等待扩展连接；配对码 ${pairing.code}，服务地址 ${origin}`
-              : "连接本机 Chrome/Edge"
-        }
+        title={buttonTitle}
         onClick={connected ? onDisconnect : onConnect}
       >
         <Globe className="size-3.5 shrink-0" />

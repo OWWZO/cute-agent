@@ -54,6 +54,12 @@ export function LightweightDiffPreview({
           }
 
           const { parts } = row;
+          let lineStatusLabel = "";
+          if (parts.kind === "added") {
+            lineStatusLabel = "新增";
+          } else if (parts.kind === "removed") {
+            lineStatusLabel = "删除";
+          }
           return (
             <div
               className={cn("kimi-diff-row", `is-${parts.kind}`)}
@@ -63,6 +69,9 @@ export function LightweightDiffPreview({
                 <span className="kimi-diff-gutter" aria-hidden="true">
                   {index + 1}
                 </span>
+              ) : null}
+              {lineStatusLabel ? (
+                <span className="sr-only">{lineStatusLabel}</span>
               ) : null}
               <code className="kimi-diff-code">
                 {renderLineContent?.(parts, index) ?? (parts.content || " ")}

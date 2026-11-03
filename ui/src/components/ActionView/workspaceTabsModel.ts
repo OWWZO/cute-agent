@@ -91,7 +91,7 @@ export function formatTabRelativeTime(
   timestampMs: number | undefined,
   now: number
 ): string {
-  if (timestampMs == null || !Number.isFinite(timestampMs)) {
+  if (typeof timestampMs !== "number" || !Number.isFinite(timestampMs)) {
     return "";
   }
   const diff = Math.max(0, now - timestampMs);

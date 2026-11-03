@@ -15,7 +15,9 @@ import { useStreetRoute } from "./use-street-route";
 const ROUTE = "route";
 // Room for the controls on top and for labels, which hang below and beside each pin.
 const FRAME_PADDING = { top: 70, left: 72, bottom: 50, right: 72 };
+// Long enough to read as one camera move, short enough not to delay the answer.
 const FLY_MS = 920;
+// The route draws just behind the framing animation rather than competing with it.
 const DRAW_MS = 760;
 
 type Place = { key: string; label: string; lat: number; lng: number; category?: string; icon: string | null; order: number };
@@ -24,6 +26,30 @@ function setLine(map: MapLibreMap, points: LatLng[]) {
   (map.getSource(ROUTE) as GeoJSONSource | undefined)?.setData({
     type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: points.map(lngLat) },
   });
+}
+
+function resolveMapHeight(height?: number): string {
+  return `min(${Math.min(720, Math.max(200, height ?? 400))}px, max(280px, 82vw))`;
+}
+
+function resolveRouteKind(
+  route: boolean | undefined,
+  streetPoints: LatLng[] | null | undefined
+): "none" | "street" | "overview" | "loading" {
+  if (!route) return "none";
+  if (streetPoints?.length) return "street";
+  if (streetPoints === null) return "overview";
+  return "loading";
+}
+
+function resolveRouteNote(routeKind: "none" | "street" | "overview" | "loading"): string {
+  if (routeKind === "street") {
+    return "The line follows streets (OSRM / OpenStreetMap, driving profile); it is an overview, not turn-by-turn directions.";
+  }
+  if (routeKind === "none") {
+    return "";
+  }
+  return "The line joins the places in order. Street routing is loading or unavailable.";
 }
 
 /** Markers as plain data. While streaming, only finished markers count, so a half-written -12 never moves a pin. */
@@ -98,7 +124,7 @@ export const MapView = defineComponent({
     const [mapError, setMapError] = useState(false);
     const dark = useColorScheme(container) === "dark";
     // Phones get a shorter map so it never fills the whole screen.
-    const height = `min(${Math.min(720, Math.max(200, props.height ?? 400))}px, max(280px, 82vw))`;
+    const height = resolveMapHeight(props.height);
 
     const places = placesOf(props.markers, streaming);
     const visible = places.filter((p) => group === "all" || p.category === group);
@@ -106,7 +132,7 @@ export const MapView = defineComponent({
     const placeSignature = JSON.stringify(places.map((p) => [p.key, p.lat, p.lng, p.icon, p.category, p.order]));
     const routingKey = visible.map((p) => `${p.lng},${p.lat}`).join(";");
     const streetPoints = useStreetRoute(routingKey, !!props.route);
-    const routeKind = !props.route ? "none" : streetPoints?.length ? "street" : streetPoints === null ? "overview" : "loading";
+    const routeKind = resolveRouteKind(props.route, streetPoints);
     select.current = (label) => selection.setValue(label);
     useDialog(container, expanded, () => setExpanded(false));
 
@@ -252,14 +278,7 @@ export const MapView = defineComponent({
       return () => cancelAnimationFrame(frame);
     }, [expanded]);
 
-    const routeNote = useMemo(
-      () => routeKind === "street"
-        ? "The line follows streets (OSRM / OpenStreetMap, driving profile); it is an overview, not turn-by-turn directions."
-        : routeKind === "none"
-          ? ""
-          : "The line joins the places in order. Street routing is loading or unavailable.",
-      [routeKind]
-    );
+    const routeNote = useMemo(() => resolveRouteNote(routeKind), [routeKind]);
     const routeStatus = useMemo(
       () => ({
         street: "Street route loaded.",

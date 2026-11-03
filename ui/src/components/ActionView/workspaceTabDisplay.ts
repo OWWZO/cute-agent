@@ -123,7 +123,7 @@ export function resolveWorkspaceTabDisplay(tab: WorkspaceTab): WorkspaceTabDispl
     title: file.name || "未命名文件",
     icon: {
       kind: "badge",
-      badge: fileKindBadge(kind)
+      badge: fileKindBadge(kind),
     },
     hint: file.relativePath || file.originFileName,
     typeHint: (file.type || file.name?.split(".").pop() || "").toLowerCase(),

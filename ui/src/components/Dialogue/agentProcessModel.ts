@@ -8,6 +8,10 @@ import { isTimelineToolActive } from "@/components/ChatView/streamState";
 import { isFileListOnlyTask } from "@/utils/taskArtifacts";
 import { hashContent } from "@/lib/hashContent";
 
+function isNil(value: unknown): value is null | undefined {
+  return value === null || value === undefined;
+}
+
 export type ProcessStepKind =
   | "thinking"
   | "assistant_reply"
@@ -168,7 +172,7 @@ export function resolveAssistantReplyText(tool: CHAT.Task): string {
 }
 
 export function parseMessageTimeMs(value?: unknown): number | undefined {
-  if (value == null || value === "") {
+  if (isNil(value) || value === "") {
     return undefined;
   }
 
@@ -193,7 +197,7 @@ export function parseMessageTimeMs(value?: unknown): number | undefined {
 }
 
 export function formatProcessDuration(ms?: number): string {
-  if (ms == null || !Number.isFinite(ms) || ms < 0) {
+  if (isNil(ms) || !Number.isFinite(ms) || ms < 0) {
     return "";
   }
   if (ms < 100) {
@@ -421,7 +425,7 @@ function asRecord(value: unknown): TimingRecord | undefined {
 }
 
 function resolveDurationMs(value: unknown): number | undefined {
-  if (value == null || (typeof value === "string" && !value.trim())) {
+  if (isNil(value) || (typeof value === "string" && !value.trim())) {
     return undefined;
   }
   if (typeof value === "number") {
@@ -437,7 +441,7 @@ function resolveDurationMs(value: unknown): number | undefined {
 function firstDurationMs(...values: unknown[]): number | undefined {
   for (const value of values) {
     const durationMs = resolveDurationMs(value);
-    if (durationMs != null) {
+    if (!isNil(durationMs)) {
       return durationMs;
     }
   }
@@ -456,7 +460,7 @@ function firstTimestampMs(
       continue;
     }
     const timestampMs = parseMessageTimeMs(source[key]);
-    if (timestampMs != null) {
+    if (!isNil(timestampMs)) {
       return timestampMs;
     }
   }
@@ -534,7 +538,7 @@ function resolveExplicitInterval(tool: CHAT.Task): TimeInterval | undefined {
     const startedAtMs = firstTimestampMs(source, "startedAt", "started_at");
     const finishedAtMs = firstTimestampMs(source, "finishedAt", "finished_at");
 
-    if (startedAtMs != null && finishedAtMs != null && finishedAtMs >= startedAtMs) {
+    if (!isNil(startedAtMs) && !isNil(finishedAtMs) && finishedAtMs >= startedAtMs) {
       return { startedAtMs, finishedAtMs };
     }
   }
@@ -572,7 +576,7 @@ function resolveTaskInterval(
   const startedAtMs = resolveTaskStartedAtMs(tool);
   if (
     options.loading &&
-    startedAtMs != null &&
+    !isNil(startedAtMs) &&
     (isTimelineToolActive(tool) || !isStepCompleted(tool))
   ) {
     return {
@@ -591,37 +595,37 @@ function resolveSingleToolDuration(
 ): number | undefined {
   // 新回放 timing 是最可信的单 invocation 事实。
   const timingDurationMs = resolveTimingDurationMs(step.tool);
-  if (timingDurationMs != null) {
+  if (!isNil(timingDurationMs)) {
     return timingDurationMs;
   }
 
   const resultMapDurationMs = resolveResultMapDurationMs(step.tool);
-  if (resultMapDurationMs != null) {
+  if (!isNil(resultMapDurationMs)) {
     return resultMapDurationMs;
   }
 
   const subAgentDurationMs = resolveSubAgentDurationMs(step.tool);
-  if (subAgentDurationMs != null) {
+  if (!isNil(subAgentDurationMs)) {
     return subAgentDurationMs;
   }
 
   const explicitIntervalDurationMs = durationFromInterval(
     resolveExplicitInterval(step.tool)
   );
-  if (explicitIntervalDurationMs != null) {
+  if (!isNil(explicitIntervalDurationMs)) {
     return explicitIntervalDurationMs;
   }
 
   const legacyDurationMs = resolveLegacyDurationMs(step.tool);
-  if (legacyDurationMs != null) {
+  if (!isNil(legacyDurationMs)) {
     return legacyDurationMs;
   }
 
   // 旧实时事件只有 messageTime 时，只能用下一个明确事件时间作为保守边界。
   // 整轮 finishedAt 不在这里使用，避免把 run 尾部伪装成工具耗时。
   if (
-    step.startedAtMs != null &&
-    nextStartedAtMs != null &&
+    !isNil(step.startedAtMs) &&
+    !isNil(nextStartedAtMs) &&
     nextStartedAtMs >= step.startedAtMs
   ) {
     return nextStartedAtMs - step.startedAtMs;
@@ -629,7 +633,7 @@ function resolveSingleToolDuration(
 
   if (
     options.loading &&
-    step.startedAtMs != null &&
+    !isNil(step.startedAtMs) &&
     (isTimelineToolActive(step.tool) || !isStepCompleted(step.tool))
   ) {
     return Math.max(options.nowMs - step.startedAtMs, 0);
@@ -670,7 +674,7 @@ function resolveGroupDurationMs(
 ): number | undefined {
   const intervals = steps
     .map((step) => resolveTaskInterval(step.tool, options))
-    .filter((interval): interval is TimeInterval => interval != null);
+    .filter((interval): interval is TimeInterval => !isNil(interval));
   return mergeIntervals(intervals);
 }
 
@@ -684,7 +688,7 @@ function estimateDurations(
   for (let index = steps.length - 1; index >= 0; index -= 1) {
     nextStartedAt[index] = next;
     const startedAtMs = steps[index]?.startedAtMs;
-    if (startedAtMs != null) {
+    if (!isNil(startedAtMs)) {
       next = startedAtMs;
     }
   }
@@ -953,20 +957,20 @@ function resolveRunDurationMs(
   nowMs: number
 ): number | undefined {
   const recordedDurationMs = resolveDurationMs(chat.runDurationMs);
-  if (recordedDurationMs != null) {
+  if (!isNil(recordedDurationMs)) {
     return recordedDurationMs;
   }
 
   const runFinishedAtMs = parseMessageTimeMs(chat.finishedAt);
   if (
-    startedAtMs != null &&
-    runFinishedAtMs != null &&
+    !isNil(startedAtMs) &&
+    !isNil(runFinishedAtMs) &&
     runFinishedAtMs >= startedAtMs
   ) {
     return runFinishedAtMs - startedAtMs;
   }
 
-  if (chat.loading && startedAtMs != null) {
+  if (chat.loading && !isNil(startedAtMs)) {
     return Math.max(nowMs - startedAtMs, 0);
   }
 
@@ -1294,12 +1298,12 @@ export function buildAgentProcessViewModel(
         return [];
       })
       .map((step) => step.startedAtMs)
-      .find((value) => value != null);
-    if (thought.streaming && startedAtMs != null) {
+      .find((value) => !isNil(value));
+    if (thought.streaming && !isNil(startedAtMs)) {
       thought.durationMs = Math.max(nowMs - startedAtMs, 0);
-    } else if (startedAtMs != null && firstStepStart != null && firstStepStart >= startedAtMs) {
+    } else if (!isNil(startedAtMs) && !isNil(firstStepStart) && firstStepStart >= startedAtMs) {
       thought.durationMs = firstStepStart - startedAtMs;
-    } else if (startedAtMs != null && finishedAtMs != null) {
+    } else if (!isNil(startedAtMs) && !isNil(finishedAtMs)) {
       thought.durationMs = Math.max(finishedAtMs - startedAtMs, 0);
     }
     thought.durationLabel = formatProcessDuration(thought.durationMs);

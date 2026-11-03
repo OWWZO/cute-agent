@@ -504,6 +504,44 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     event.currentTarget.form?.requestSubmit();
   };
 
+  const renderSubmitControl = () => {
+    if (!busy || onInject) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PromptInputSubmit
+              className={cn(
+                "cute-send-btn relative flex size-8 items-center justify-center rounded-full border-0 p-0 shadow-none transition-opacity",
+                "bg-primary text-primary-foreground hover:bg-primary/80",
+                "disabled:cursor-not-allowed disabled:bg-primary disabled:text-primary-foreground disabled:opacity-45"
+              )}
+              disabled={!canSubmit}
+              variant="ghost"
+            >
+              <ArrowUpIcon className="size-[15px] stroke-[2.25]" />
+            </PromptInputSubmit>
+          </TooltipTrigger>
+          <TooltipContent className={AI_CHAT_FLOATING_CLASS} side="top">
+            {busy && onInject ? "发送指导（注入当前任务）" : "发送"}
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+    if (busy) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="sr-only">任务进行中</span>
+          </TooltipTrigger>
+          <TooltipContent className={AI_CHAT_FLOATING_CLASS} side="top">
+            任务进行中
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+    return null;
+  };
+
   return (
     <TooltipProvider>
       <div className="w-full" ref={inputShellRef}>
@@ -744,35 +782,7 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
                   </TooltipContent>
                 </Tooltip>
               ) : null}
-              {(!busy || onInject) ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <PromptInputSubmit
-                      className={cn(
-                        "cute-send-btn relative flex size-8 items-center justify-center rounded-full border-0 p-0 shadow-none transition-opacity",
-                        "bg-primary text-primary-foreground hover:bg-primary/80",
-                        "disabled:cursor-not-allowed disabled:bg-primary disabled:text-primary-foreground disabled:opacity-45"
-                      )}
-                      disabled={!canSubmit}
-                      variant="ghost"
-                    >
-                      <ArrowUpIcon className="size-[15px] stroke-[2.25]" />
-                    </PromptInputSubmit>
-                  </TooltipTrigger>
-                  <TooltipContent className={AI_CHAT_FLOATING_CLASS} side="top">
-                    {busy && onInject ? "发送指导（注入当前任务）" : "发送"}
-                  </TooltipContent>
-                </Tooltip>
-              ) : busy ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="sr-only">任务进行中</span>
-                  </TooltipTrigger>
-                  <TooltipContent className={AI_CHAT_FLOATING_CLASS} side="top">
-                    任务进行中
-                  </TooltipContent>
-                </Tooltip>
-              ) : null}
+              {renderSubmitControl()}
             </PromptInputTools>
           </PromptInputFooter>
         </PromptInput>

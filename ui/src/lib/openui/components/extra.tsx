@@ -10,7 +10,7 @@ import { z } from "zod/v4";
 import { inline } from "./markdown";
 import { children, cx } from "./style";
 
-const str = (value: unknown) => (value == null ? "" : String(value));
+const str = (value: unknown) => (value === null || value === undefined ? "" : String(value));
 /** A slot that takes a component, a list of them, or plain text. */
 const slot = z.union([z.string(), children]);
 type Render = (value: unknown) => ReactNode;
@@ -25,7 +25,7 @@ export const Carousel = defineComponent({
   component: function CarouselView({ props, renderNode }) {
     const ref = useRef<HTMLDivElement>(null);
     const [edges, setEdges] = useState({ start: true, end: true });
-    const items = (Array.isArray(props.children) ? props.children.flat() : []).filter((c) => c != null);
+    const items = (Array.isArray(props.children) ? props.children.flat() : []).filter((c) => c !== null && c !== undefined);
     const width = Math.min(640, Math.max(80, props.itemWidth ?? 240));
     useLayoutEffect(() => {
       const el = ref.current;
@@ -43,7 +43,7 @@ export const Carousel = defineComponent({
     const page = (dir: number) => ref.current?.scrollBy({ left: dir * ref.current.clientWidth * 0.85, behavior: "smooth" });
     return (
       <div className="iui-carousel">
-        <div ref={ref} className="iui-carousel-track" style={{ gap: props.gap != null ? Math.max(0, props.gap) * 4 : undefined }}>
+        <div ref={ref} className="iui-carousel-track" style={{ gap: props.gap !== null && props.gap !== undefined ? Math.max(0, props.gap) * 4 : undefined }}>
           {items.map((item, i) => (
             <div key={i} className="iui-carousel-item" style={{ width }}>
               {renderNode(item)}

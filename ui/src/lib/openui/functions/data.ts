@@ -55,7 +55,10 @@ export const Top = defineFunction({
     const ranked = rows
       .map((row, i) => ({ row, i, v: toNum(read(row, field)) }))
       .sort((a, b) => {
-        if (a.v === null || b.v === null) return a.v === b.v ? a.i - b.i : a.v === null ? 1 : -1;
+        if (a.v === null || b.v === null) {
+          if (a.v === b.v) return a.i - b.i;
+          return a.v === null ? 1 : -1;
+        }
         return (a.v - b.v) * sign || a.i - b.i;
       });
     return ranked.slice(0, Math.max(0, Math.trunc(n))).map((r) => r.row);
@@ -69,7 +72,9 @@ function compare(a: unknown, b: unknown): number {
   if (x !== null && y !== null) return x - y;
   const s = String(a);
   const t = String(b);
-  return s < t ? -1 : s > t ? 1 : 0;
+  if (s < t) return -1;
+  if (s > t) return 1;
+  return 0;
 }
 
 export const Between = defineFunction({
@@ -81,8 +86,9 @@ export const Between = defineFunction({
   fn: ({ rows, field, min, max }) =>
     rows.filter((row) => {
       const v = read(row, field);
-      if (v == null) return false;
-      return (min == null || compare(v, min) >= 0) && (max == null || compare(v, max) <= 0);
+      if (v === null || v === undefined) return false;
+      return (min === null || min === undefined || compare(v, min) >= 0) &&
+        (max === null || max === undefined || compare(v, max) <= 0);
     }),
 });
 
