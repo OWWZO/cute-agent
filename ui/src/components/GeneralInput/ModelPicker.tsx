@@ -46,11 +46,11 @@ const ModelPicker: CuteType.FC<Props> = ({
           }
           title={isEmpty ? "模型列表加载中" : "选择本轮模型"}
         >
-          <Cpu className="size-3.5 shrink-0 opacity-80" />
+          <Cpu className="size-3.5 shrink-0" />
           <span className="max-w-[100px] truncate">
             {current?.modelName || "模型"}
           </span>
-          <ChevronDownIcon className="size-3.5 shrink-0 opacity-50" />
+          <ChevronDownIcon className="size-3.5 shrink-0" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

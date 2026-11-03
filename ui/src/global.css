@@ -4823,7 +4823,7 @@ ol {
   border-radius: 6px !important;
   border-color: transparent !important;
   background: transparent !important;
-  color: var(--color-text-muted) !important;
+  color: var(--color-text) !important;
   box-shadow: none !important;
 }
 

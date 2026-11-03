@@ -73,7 +73,7 @@ const ThinkingToggle: CuteType.FC<Props> = ({
           }
           title={thinking ? `深度思考：${label}` : "开启深度思考"}
         >
-          <Lightbulb className="size-3.5 shrink-0 opacity-80" />
+          <Lightbulb className="size-3.5 shrink-0" />
           {label ? (
             <span className="text-ui-xs font-medium">{label}</span>
           ) : (

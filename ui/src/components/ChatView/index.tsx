@@ -442,9 +442,9 @@ const ChatView: CuteType.FC<Props> = (props) => {
    * 挂载机制），不再是独占面板 —— 所以它们不再需要「返回上一屏」的回退路径。
    */
   const [thinkingDetail, setThinkingDetail] = useState<string | null>(null);
-  /** 右上角「智能体」面板形态：默认 auto（宽屏展开、窄屏胶囊），输入框徽标可强制展开 */
+  /** 头部「智能体」面板形态：默认收起为胶囊，避免常驻面板遮挡消息；输入框徽标可强制展开 */
   const [agentsPanelVariant, setAgentsPanelVariant] =
-    useState<AgentsPanelVariant>("auto");
+    useState<AgentsPanelVariant>("mini");
   /** 已自动开过详情 tab 的子 Agent toolCallId：同一条只自动开一次，不覆盖用户手动关闭 */
   const autoOpenedAgentRef = useRef("");
   const lastAutoOpenedDesktopControlRef = useRef("");
@@ -1878,6 +1878,15 @@ const ChatView: CuteType.FC<Props> = (props) => {
               {(!hasWorkspaceLayout || !isFocusMode) ? (
                 <div className="flex shrink-0 items-center gap-1">
                   {renderWorkspaceReopenTrigger()}
+                  {/* 智能体入口与文件夹按钮并列；展开面板从头部向下浮出，避免盖住消息。 */}
+                  <SubAgentsPanel
+                    chat={activeChat}
+                    chats={conversation.chatList}
+                    variant={agentsPanelVariant}
+                    onVariantChange={setAgentsPanelVariant}
+                    onOpenAgent={openAgentPanel}
+                    onOpenDirectory={openSubAgentDirectory}
+                  />
                   <button
                     type="button"
                     onClick={() => onOpenTaskFiles?.()}
@@ -1916,17 +1925,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
                 </ConversationContent>
                 <ConversationScrollButton />
               </Conversation>
-
-              {/* 右上角「智能体」浮动面板：全部子智能体（同步 + 后台）的运行态入口
-                      （移植 ZCode ConversationStatusPanel）；已结束的从页脚进目录 tab */}
-              <SubAgentsPanel
-                chat={activeChat}
-                chats={conversation.chatList}
-                variant={agentsPanelVariant}
-                onVariantChange={setAgentsPanelVariant}
-                onOpenAgent={openAgentPanel}
-                onOpenDirectory={openSubAgentDirectory}
-              />
 
               <ConversationTurnNavigator
                 chats={turnChatList}
@@ -2029,8 +2027,10 @@ const ChatView: CuteType.FC<Props> = (props) => {
           //    百分比语义。漏了 `%` 会把对话区压成 24~56px，工作区吃掉整屏。
           // 2. `defaultSize` 必须用常量：绑定拖拽中的宽度 state 会让库把布局重置
           //    回原值，分隔条拖不动。宽度回写统一走 `groupRef.setLayout()`。
-          minSize={panelPercent(isFocusMode ? 24 : MIN_LEFT_WIDTH)}
-          maxSize={panelPercent(isFocusMode ? 28 : MAX_LEFT_WIDTH)}
+          // 约束始终用常规区间：沉浸模式只走 setLayout(24%)，不再同步改 min/max。
+          // 否则退出沉浸的那一帧，宽度恢复会先被旧的 maxSize(28%) 夹住，导致对话区变小。
+          minSize={panelPercent(MIN_LEFT_WIDTH)}
+          maxSize={panelPercent(MAX_LEFT_WIDTH)}
           defaultSize={CHAT_PANEL_DEFAULT_SIZE}
         >
           {chatColumn}

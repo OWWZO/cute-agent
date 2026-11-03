@@ -152,116 +152,110 @@ const SubAgentsPanel = memo(function SubAgentsPanel({
     return null;
   }
 
-  // 收起态：单颗胶囊（截图 1）：🤖 + 「N 运行」
-  if (!expanded) {
-    return (
-      <div className="pointer-events-none absolute right-4 top-4 z-20">
-        <button
-          type="button"
-          className={cn(
-            "pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-popover px-3 py-1.5 shadow-md transition-colors hover:bg-hover",
-            "text-ui-base font-medium",
-            hasRunning ? "text-foreground" : "text-foreground-subtle"
-          )}
-          onClick={() => onVariantChange("panel")}
-          aria-label={`智能体 · ${countLabel}`}
-          data-testid="sub-agents-pill"
-        >
-          <BotIcon className="size-4 shrink-0" />
-          <span className="tabular-nums">{countLabel}</span>
-        </button>
-      </div>
-    );
-  }
-
-  // 展开态：面板（截图 2）—— 头部「智能体 N 运行」+ … + 收起，随后是运行中条目，
-  // 页脚一行「已结束 N」进目录（ZCode `EndedSubagentDirectoryRow`）。
+  // 入口固定在聊天头部、与文件夹按钮并列；面板向下浮出，不再常驻遮挡消息。
   return (
-    <div className="pointer-events-none absolute right-4 top-4 z-20">
-      <div
-        className="pointer-events-auto w-80 max-w-[calc(100%-2rem)] overflow-hidden rounded-2xl border border-border bg-popover shadow-md"
-        data-testid="sub-agents-panel"
+    <div className="relative">
+      <button
+        type="button"
+        className={cn(
+          "flex h-8 items-center gap-1.5 rounded-full px-2.5 text-ui-base font-medium transition-colors hover:bg-hover",
+          hasRunning ? "text-foreground" : "text-foreground-subtle"
+        )}
+        onClick={() => onVariantChange(expanded ? "mini" : "panel")}
+        aria-label={`智能体 · ${countLabel}`}
+        aria-expanded={expanded}
+        data-testid="sub-agents-pill"
       >
-        <div className="flex items-center gap-1.5 px-3.5 pb-1 pt-2.5">
-          <span className="min-w-0 flex-1 truncate text-ui-base font-semibold text-foreground-subtle">
-            智能体
-          </span>
-          <span className="shrink-0 text-ui-base font-semibold text-foreground-subtle tabular-nums">
-            {countLabel}
-          </span>
-          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex size-7 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-                aria-label="智能体面板显示模式"
-              >
-                <EllipsisIcon className="size-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              side="bottom"
-              sideOffset={6}
-              className="w-[132px] rounded-lg border border-popover-border bg-popover p-1 shadow-md"
-            >
-              {(["auto", "panel", "mini"] as AgentsPanelVariant[]).map((key) => (
+        <BotIcon className="size-4 shrink-0" />
+        <span className="tabular-nums">{countLabel}</span>
+      </button>
+
+      {expanded ? (
+        <div
+          className="absolute right-0 top-full z-30 mt-2 w-80 max-w-[80vw] overflow-hidden rounded-2xl border border-border bg-popover shadow-md"
+          data-testid="sub-agents-panel"
+        >
+          <div className="flex items-center gap-1.5 px-3.5 pb-1 pt-2.5">
+            <span className="min-w-0 flex-1 truncate text-ui-base font-semibold text-foreground-subtle">
+              智能体
+            </span>
+            <span className="shrink-0 text-ui-base font-semibold text-foreground-subtle tabular-nums">
+              {countLabel}
+            </span>
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+              <DropdownMenuTrigger asChild>
                 <button
-                  key={key}
                   type="button"
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-base transition-colors",
-                    variant === key
-                      ? "bg-menu-hover text-foreground"
-                      : "text-foreground-subtle hover:bg-menu-hover hover:text-foreground"
-                  )}
-                  onClick={() => {
-                    onVariantChange(key);
-                    setMenuOpen(false);
-                  }}
+                  className="flex size-7 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                  aria-label="智能体面板显示模式"
                 >
-                  {AGENTS_PANEL_VARIANT_LABELS[key]}
+                  <EllipsisIcon className="size-4" />
                 </button>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <button
-            type="button"
-            className="flex size-7 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-            aria-label="收起智能体面板"
-            onClick={() => onVariantChange("mini")}
-          >
-            <Minimize2Icon className="size-4" />
-          </button>
-        </div>
-
-        {resolvedItems.length > 0 ? (
-          <div className="flex max-h-[min(50vh,360px)] flex-col gap-0.5 overflow-y-auto px-1.5 pb-1">
-            {resolvedItems.map((item) => (
-              <AgentRow key={item.id} item={item} now={now} onOpen={handleOpen} />
-            ))}
-          </div>
-        ) : null}
-
-        {endedItems.length > 0 ? (
-          <div className="px-1.5 pb-2 pt-0.5">
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                side="bottom"
+                sideOffset={6}
+                className="w-[132px] rounded-lg border border-popover-border bg-popover p-1 shadow-md"
+              >
+                {(["auto", "panel", "mini"] as AgentsPanelVariant[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-base transition-colors",
+                      variant === key
+                        ? "bg-menu-hover text-foreground"
+                        : "text-foreground-subtle hover:bg-menu-hover hover:text-foreground"
+                    )}
+                    onClick={() => {
+                      onVariantChange(key);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    {AGENTS_PANEL_VARIANT_LABELS[key]}
+                  </button>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-hover"
-              onClick={onOpenDirectory}
-              data-testid="sub-agents-ended-row"
+              className="flex size-7 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+              aria-label="收起智能体面板"
+              onClick={() => onVariantChange("mini")}
             >
-              <span className="min-w-0 flex-1 truncate text-ui-base text-foreground-subtle">
-                已结束
-              </span>
-              <span className="shrink-0 text-ui-base tabular-nums text-foreground-subtle">
-                {endedItems.length}
-              </span>
-              <ChevronRightIcon className="size-4 shrink-0 text-foreground-subtlest" />
+              <Minimize2Icon className="size-4" />
             </button>
           </div>
-        ) : null}
-      </div>
+
+          {resolvedItems.length > 0 ? (
+            <div className="flex max-h-[min(50vh,360px)] flex-col gap-0.5 overflow-y-auto px-1.5 pb-1">
+              {resolvedItems.map((item) => (
+                <AgentRow key={item.id} item={item} now={now} onOpen={handleOpen} />
+              ))}
+            </div>
+          ) : null}
+
+          {endedItems.length > 0 ? (
+            <div className="px-1.5 pb-2 pt-0.5">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-hover"
+                onClick={onOpenDirectory}
+                data-testid="sub-agents-ended-row"
+              >
+                <span className="min-w-0 flex-1 truncate text-ui-base text-foreground-subtle">
+                  已结束
+                </span>
+                <span className="shrink-0 text-ui-base tabular-nums text-foreground-subtle">
+                  {endedItems.length}
+                </span>
+                <ChevronRightIcon className="size-4 shrink-0 text-foreground-subtlest" />
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 });

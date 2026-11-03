@@ -76,13 +76,13 @@ export default function AgentBrowserChip({ disabled }: Props) {
         type="button"
         disabled={disabled || busy}
         className={cn(
-          "inline-flex h-8 max-w-[170px] min-w-0 items-center gap-1 rounded-md px-2 text-ui-sm text-foreground-subtle hover:bg-black/[0.04] hover:text-foreground",
+          "inline-flex h-8 max-w-[170px] min-w-0 items-center gap-1 rounded-md px-2 text-ui-sm text-foreground hover:bg-black/[0.04]",
           status?.exists && "text-success hover:text-success"
         )}
         title={title}
         onClick={() => void openLiveView()}
       >
-        <Cloud className="size-3.5 shrink-0 opacity-80" />
+        <Cloud className="size-3.5 shrink-0" />
         <span className="truncate">{status?.exists ? "Agent 浏览器" : "启动 Agent 浏览器"}</span>
       </button>
       {status?.exists ? (
@@ -94,7 +94,7 @@ export default function AgentBrowserChip({ disabled }: Props) {
             type="button"
             aria-label="重置 Agent 浏览器"
             disabled={disabled || busy}
-            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtle hover:bg-black/[0.04] hover:text-foreground disabled:opacity-45"
+            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-black/[0.04] disabled:opacity-45"
             title="重置 Agent 浏览器并清除页面状态"
             onClick={() => void reset()}
           >

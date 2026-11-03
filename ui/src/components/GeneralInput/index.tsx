@@ -7,7 +7,6 @@ import {
   ChevronDownIcon,
   ListTodo,
   SearchIcon,
-  Type,
 } from "lucide-react";
 
 import { AI_CHAT_FLOATING_CLASS } from "@/components/ai-elements/aiChatSurfaceClass";
@@ -47,7 +46,6 @@ import {
   type CatalogModelRecord,
 } from "@/services/catalog";
 import ContextRing, { type ContextUsageView } from "./ContextRing";
-import MarkdownBar from "./MarkdownBar";
 import ModelPicker from "./ModelPicker";
 import ThinkingToggle, { type ThinkingEffort } from "./ThinkingToggle";
 import BrowserRelayChip from "./BrowserRelayChip";
@@ -158,9 +156,9 @@ const menuItemClassName = (active: boolean) =>
 const toolBtnClassName = (active?: boolean, disabled?: boolean) =>
   cn(
     "cute-composer-tool inline-flex h-8 max-w-full items-center gap-1 rounded-md px-2 text-ui-base font-medium transition-colors",
-    "text-foreground-subtle hover:bg-hover hover:text-foreground",
+    "text-foreground hover:bg-hover",
     active && "text-foreground",
-    disabled && "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-foreground-subtle"
+    disabled && "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-foreground"
   );
 
 const GeneralInput: CuteType.FC<Props> = (props) => {
@@ -200,7 +198,6 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
-  const [markdownBarOpen, setMarkdownBarOpen] = useState(false);
   const [models, setModels] = useState<CatalogModelRecord[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
   // 库值为 null（用户从未在这个会话显式选过）时回退到默认；组件按 sessionId 有 key，
@@ -542,15 +539,6 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
               onRemoveConversationSelection={promptContexts.removeConversationSelection}
             />
 
-            {markdownBarOpen ? (
-              <MarkdownBar
-                textareaRef={textareaRef}
-                value={question}
-                onChange={handleQuestionChange}
-                disabled={disabled}
-              />
-            ) : null}
-
             <PromptInputTextarea
               ref={textareaRef}
               className={cn(
@@ -622,7 +610,7 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
                   }
                   onClick={() => setForcePlanMode((value) => !value)}
                 >
-                  <ListTodo className="size-3.5 shrink-0 opacity-80" />
+                  <ListTodo className="size-3.5 shrink-0" />
                   <span className="truncate">计划</span>
                 </button>
               ) : null}
@@ -636,11 +624,11 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
                         disabled={disabled}
                         className={toolBtnClassName(!isDataAgent, disabled)}
                       >
-                        <CurrentModeIcon className="size-3.5 shrink-0 opacity-80" />
+                        <CurrentModeIcon className="size-3.5 shrink-0" />
                         <span className="truncate">{currentModeOption.label}</span>
                         <ChevronDownIcon
                           className={cn(
-                            "size-3.5 shrink-0 opacity-50 transition-transform",
+                            "size-3.5 shrink-0 transition-transform",
                             modeMenuOpen && "rotate-180"
                           )}
                         />
@@ -696,20 +684,10 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
                         handleSelectionChange(DATA_AGENT_PRODUCT, false);
                       }}
                     >
-                      <BarChart3Icon className="size-3.5 shrink-0 opacity-80" />
+                      <BarChart3Icon className="size-3.5 shrink-0" />
                       <span className="truncate">数据分析</span>
                     </button>
                   ) : null}
-
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    className={toolBtnClassName(markdownBarOpen, disabled)}
-                    title="格式工具条（Markdown）"
-                    onClick={() => setMarkdownBarOpen((v) => !v)}
-                  >
-                    <Type className="size-3.5 shrink-0 opacity-80" />
-                  </button>
 
                   <ThinkingToggle
                     supported={supportsThinking}

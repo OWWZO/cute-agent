@@ -32,15 +32,15 @@ export default function SubAgentsChip({
       type="button"
       disabled={disabled}
       className={cn(
-        "inline-flex h-8 min-w-0 items-center gap-1 rounded-md px-2 text-ui-base font-medium text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground",
-        disabled && "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-foreground-subtle"
+        "inline-flex h-8 min-w-0 items-center gap-1 rounded-md px-2 text-ui-base font-medium text-foreground transition-colors hover:bg-hover",
+        disabled && "cursor-not-allowed opacity-45 hover:bg-transparent"
       )}
       title={title}
       aria-label={title}
       data-testid="sub-agents-composer-chip"
       onClick={onOpen}
     >
-      <BotIcon className="size-3.5 shrink-0 opacity-80" />
+      <BotIcon className="size-3.5 shrink-0" />
       <span className="tabular-nums">{count}</span>
     </button>
   );
