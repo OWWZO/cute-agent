@@ -55,7 +55,6 @@ public class UserQuestionYieldService {
             // 会永远缺对应 tool 消息（网关 400 且不可续跑）；宁可失败让调用方重试或报错。
             throw new IllegalStateException("无法定位 AskUserQuestion 的 toolCallId，拒绝落库不可续跑的问询");
         }
-        // yield 时 memory 只有 assistant.tool_calls、尚无 tool result；先补 waiting 占位，避免网关 400。
         PendingYieldToolCalls.appendWaitingToolResult(
                 executor == null || executor.getMemory() == null ? null : executor.getMemory().getMessages(),
                 toolCallId,

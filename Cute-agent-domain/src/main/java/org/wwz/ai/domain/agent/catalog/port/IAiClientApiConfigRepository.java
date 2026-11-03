@@ -7,8 +7,9 @@ import java.util.Optional;
 
 /**
  * API 配置持久化端口。
- * <p>写方法返回 {@code false} 表示未影响任何行（目标行不存在或已删除）；持久化/基础设施错误必须抛出，
- * 不得吞掉后返回 {@code false}。{@code apiId} 是唯一业务键（DB 唯一索引），调用方须传入非空非空白值。</p>
+ * <p>写方法返回 {@code false} 表示未影响任何行（目标行不存在、已删除，或提交值与库内一致）；
+ * 持久化/基础设施错误必须抛出，不得吞掉后返回 {@code false}。{@code apiId} 是唯一业务键（DB 唯一索引），
+ * 调用方须传入非空非空白值。</p>
  */
 public interface IAiClientApiConfigRepository {
 

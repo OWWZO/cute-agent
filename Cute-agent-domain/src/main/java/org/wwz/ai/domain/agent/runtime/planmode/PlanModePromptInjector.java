@@ -66,12 +66,9 @@ public final class PlanModePromptInjector {
 
     public static String ensurePlanModeInstructions(String systemPrompt) {
         String base = systemPrompt == null ? "" : systemPrompt.replace("\r\n", "\n").replace('\r', '\n');
-        // 去掉旧 V1 标记块，避免双份
+        // 已有当前标记时直接返回，避免重复追加。
         if (base.contains(PLAN_MODE_INSTRUCTIONS_MARKER)) {
             return base;
-        }
-        if (base.contains("PLAN_MODE_INSTRUCTIONS_V1")) {
-            // 仍补 V2 全文（幂等靠 V2 marker）
         }
         String block = PLAN_MODE_INSTRUCTIONS.trim();
         if (base.isBlank()) {

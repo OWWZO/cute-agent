@@ -42,7 +42,7 @@ final class ToolCallJson {
         }
     }
 
-    /** 归一后解析成通用对象；失败返回 null（SSE 卡片允许没有入参）。 */
+    /** 解析归一后的 JSON；空值和非法 JSON 已归一为 {@code {}}，仅解析器异常时返回 null。 */
     static Object parseOrNull(String payload) {
         try {
             return MAPPER.readValue(normalize(payload), Object.class);

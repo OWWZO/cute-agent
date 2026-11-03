@@ -139,6 +139,8 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
             // run 结束时重新读取所有子事实再汇总计数，避免并发写入期间依赖创建阶段的过期快照。
             DialogueRun existing = executionLedgerWriteRepository.queryRunByRequestId(record.getRequestId());
             if (existing == null) {
+                log.warn("finishRun skipped: run not found, requestId={}, runId={}",
+                        record.getRequestId(), record.getRunId());
                 return;
             }
             List<LlmInvocation> llmInvocations = executionLedgerWriteRepository.queryLlmInvocationsByRunId(existing.getId());
