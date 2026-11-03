@@ -49,25 +49,33 @@ export interface ParsedConversationSelectionPrompt {
   references: ConversationSelectionAttachment[];
 }
 
-export function isConversationSelectionAddToChatEvent(
-  event: Event
-): event is CustomEvent<ConversationSelectionText & { id?: string }> {
+function isCustomEventWithObjectDetail<T>(
+  event: Event,
+  type: string
+): event is CustomEvent<T> {
   return (
-    event.type === CONVERSATION_SELECTION_ADD_TO_CHAT_EVENT &&
+    event.type === type &&
     "detail" in event &&
     typeof (event as CustomEvent<unknown>).detail === "object" &&
     (event as CustomEvent<unknown>).detail !== null
   );
 }
 
+export function isConversationSelectionAddToChatEvent(
+  event: Event
+): event is CustomEvent<ConversationSelectionText & { id?: string }> {
+  return isCustomEventWithObjectDetail<ConversationSelectionText & { id?: string }>(
+    event,
+    CONVERSATION_SELECTION_ADD_TO_CHAT_EVENT
+  );
+}
+
 export function isConversationSelectionRemoveFromChatEvent(
   event: Event
 ): event is CustomEvent<ConversationSelectionRemovePayload> {
-  return (
-    event.type === CONVERSATION_SELECTION_REMOVE_FROM_CHAT_EVENT &&
-    "detail" in event &&
-    typeof (event as CustomEvent<unknown>).detail === "object" &&
-    (event as CustomEvent<unknown>).detail !== null
+  return isCustomEventWithObjectDetail<ConversationSelectionRemovePayload>(
+    event,
+    CONVERSATION_SELECTION_REMOVE_FROM_CHAT_EVENT
   );
 }
 

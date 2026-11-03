@@ -17,6 +17,7 @@ type SetOpen = (next: boolean | ((previous: boolean) => boolean)) => void;
  * 没有落点 —— 不要为了「凑齐三件套」硬塞进来。
  *
  * `key` 为空串时视为「无稳定身份」，退化成普通 `useState`，避免所有匿名卡共用一条状态。
+ * 模块级开合表没有订阅通知：同一个 key 同时只应由一个存活实例持有，复用 key 的实例不会自动同步。
  */
 export function useToolCardOpen(key: string, defaultOpen: boolean): [boolean, SetOpen] {
   const persistable = key.trim().length > 0;

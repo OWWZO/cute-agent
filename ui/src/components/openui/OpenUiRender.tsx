@@ -31,9 +31,8 @@ export interface OpenUiRenderProps {
 export function OpenUiRender({ text, streaming, onAction, onStateUpdate }: OpenUiRenderProps) {
   const handleAction = useCallback(
     (event: ActionEvent) => {
-      const libraryHandled = runLibraryAction(event);
-      if (libraryHandled) {
-        void libraryHandled;
+      const libraryAction = runLibraryAction(event);
+      if (libraryAction) {
         return;
       }
       onAction?.(event);
