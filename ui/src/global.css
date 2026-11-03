@@ -705,7 +705,6 @@
   h3 { font-size: 1.5rem; }
 }
 /* 项目特殊样式 */
-@import './assets/styles/common.css';
 @import './assets/styles/RelayIcon.css';
 @import './assets/styles/github-markdown.css';
 @import './components/chat/chat-shell.css';

@@ -40,9 +40,9 @@ async def post_bash(body: BashSandboxRequest):
     try:
         result = await run_bash_sandbox(body)
         return result.model_dump(by_alias=True)
-    except Exception as exc:
+    except Exception:
         logger.exception("[bash] request_id={} failed", body.request_id)
-        return _error_response(500, f"bash sandbox failed: {exc}")
+        return _error_response(500, "bash sandbox failed")
 
 
 @router.post("/desktop_session/open")
@@ -57,9 +57,9 @@ async def post_desktop_session_open(body: DesktopSessionOpenRequest):
         return result.model_dump(by_alias=True)
     except DesktopSessionError as exc:
         return _error_response(exc.status_code, exc.message)
-    except Exception as exc:
+    except Exception:
         logger.exception("[desktop_session] open request_id={} failed", body.request_id)
-        return _error_response(500, f"desktop_session open failed: {exc}")
+        return _error_response(500, "desktop_session open failed")
 
 
 @router.post("/desktop_session/close")
@@ -73,8 +73,8 @@ async def post_desktop_session_close(body: DesktopSessionCloseRequest):
         return close_desktop_session(body)
     except DesktopSessionError as exc:
         return _error_response(exc.status_code, exc.message)
-    except Exception as exc:
+    except Exception:
         logger.exception(
             "[desktop_session] close request_id={} failed", body.request_id
         )
-        return _error_response(500, f"desktop_session close failed: {exc}")
+        return _error_response(500, "desktop_session close failed")

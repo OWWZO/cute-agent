@@ -11,4 +11,11 @@ package org.wwz.ai.application.auth.command;
  * @param password  登录密码
  */
 public record AuthLoginCommand(String loginName, String account, String password) {
+
+    @Override
+    public String toString() {
+        return "AuthLoginCommand[loginName=" + loginName
+                + ", account=" + account
+                + ", password=<redacted>]";
+    }
 }

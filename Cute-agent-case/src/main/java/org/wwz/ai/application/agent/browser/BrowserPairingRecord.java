@@ -1,6 +1,7 @@
 package org.wwz.ai.application.agent.browser;
 
 import lombok.Builder;
+import lombok.ToString;
 import lombok.Value;
 
 /**
@@ -13,7 +14,9 @@ import lombok.Value;
 public class BrowserPairingRecord {
 
     String userId;
+    @ToString.Exclude
     String token;
+    @ToString.Exclude
     String code;
     String relayUrl;
 

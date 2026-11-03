@@ -53,14 +53,12 @@ async def proxy_sandbox_tool(request: Request) -> Response:
     try:
         async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             upstream = await client.post(target, content=body, headers=headers)
-    except httpx.RequestError as exc:
+    except httpx.RequestError:
         logger.exception("[sandbox-proxy] {} -> {} failed", name, target)
         return Response(
             status_code=502,
             media_type="application/json",
-            content=(
-                f'{{"code":502,"message":"sandbox proxy failed: {type(exc).__name__}: {exc}"}}'
-            ).encode("utf-8"),
+            content=b'{"code":502,"message":"sandbox proxy failed"}',
         )
 
     media = upstream.headers.get("content-type") or "application/json"
