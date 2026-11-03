@@ -21,6 +21,7 @@ import org.wwz.ai.domain.agent.rag.model.vector.VectorSearchHit;
 import org.wwz.ai.domain.agent.rag.model.vector.VectorSearchRequest;
 import org.wwz.ai.domain.agent.rag.model.vector.VectorSearchResult;
 import org.wwz.ai.domain.agent.rag.port.VectorIndexAdminPort;
+import org.wwz.ai.domain.agent.rag.port.VectorPortException;
 import org.wwz.ai.domain.agent.rag.port.VectorSearchPort;
 import org.wwz.ai.infrastructure.dataquery.vector.QdrantProperties;
 
@@ -86,7 +87,7 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
     }
 
     @Override
-    public VectorSearchResult search(VectorSearchRequest request) throws Exception {
+    public VectorSearchResult search(VectorSearchRequest request) {
         if (request == null || StringUtils.isBlank(request.getCollectionName())) {
             throw new IllegalArgumentException("collectionName is empty");
         }
@@ -119,7 +120,7 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
                 }
                 return new VectorSearchResult(hits);
             } catch (IOException e) {
-                throw new IllegalStateException("Qdrant REST 检索失败", e);
+                throw new VectorPortException("Qdrant REST 检索失败", e);
             }
         }
 
@@ -138,28 +139,45 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
         if (request.getScoreThreshold() != null) {
             builder.setScoreThreshold(request.getScoreThreshold());
         }
-        List<Points.ScoredPoint> points = request.getTimeoutMillis() == null
-                ? getClient().searchAsync(builder.build()).get()
-                : getClient().searchAsync(builder.build()).get(request.getTimeoutMillis(), TimeUnit.MILLISECONDS);
+        List<Points.ScoredPoint> points;
+        try {
+            points = request.getTimeoutMillis() == null
+                    ? getClient().searchAsync(builder.build()).get()
+                    : getClient().searchAsync(builder.build()).get(request.getTimeoutMillis(), TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            throw new VectorPortException("Qdrant gRPC 检索失败", e);
+        }
         List<VectorSearchHit> hits = points.stream().map(this::toSearchHit).collect(Collectors.toList());
         return new VectorSearchResult(hits);
     }
 
     @Override
-    public boolean collectionExists(String collectionName) throws Exception {
+    public boolean collectionExists(String collectionName) {
         ResolvedEndpoint endpoint = resolveEndpoint();
         if (shouldUseRestApi(endpoint)) {
-            return listCollectionsByRest(endpoint).contains(collectionName);
+            try {
+                return listCollectionsByRest(endpoint).contains(collectionName);
+            } catch (IOException e) {
+                throw new VectorPortException("Qdrant REST 列举集合失败", e);
+            }
         }
-        return getClient().listCollectionsAsync().get().contains(collectionName);
+        try {
+            return getClient().listCollectionsAsync().get().contains(collectionName);
+        } catch (Exception e) {
+            throw new VectorPortException("Qdrant gRPC 列举集合失败", e);
+        }
     }
 
     @Override
-    public void createCollection(String collectionName, int dimension) throws Exception {
+    public void createCollection(String collectionName, int dimension) {
         ResolvedEndpoint endpoint = resolveEndpoint();
         if (shouldUseRestApi(endpoint)) {
             if (collectionExists(collectionName)) {
-                ensurePayloadIndexes(endpoint, collectionName);
+                try {
+                    ensurePayloadIndexes(endpoint, collectionName);
+                } catch (IOException e) {
+                    throw new VectorPortException("Qdrant REST 确保 payload 索引失败", e);
+                }
                 return;
             }
             Map<String, Object> vectorConfig = new LinkedHashMap<>();
@@ -171,37 +189,49 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
                 executeRestRequest(endpoint, "PUT", "/collections/" + collectionName, body);
                 ensurePayloadIndexes(endpoint, collectionName);
             } catch (IOException e) {
-                throw new IllegalStateException("Qdrant REST 创建集合失败", e);
+                throw new VectorPortException("Qdrant REST 创建集合失败", e);
             }
             return;
         }
         if (!collectionExists(collectionName)) {
-            getClient().createCollectionAsync(collectionName,
-                    io.qdrant.client.grpc.Collections.VectorParams.newBuilder()
-                            .setDistance(io.qdrant.client.grpc.Collections.Distance.Cosine)
-                            .setSize(dimension)
-                            .build()).get();
+            try {
+                getClient().createCollectionAsync(collectionName,
+                        io.qdrant.client.grpc.Collections.VectorParams.newBuilder()
+                                .setDistance(io.qdrant.client.grpc.Collections.Distance.Cosine)
+                                .setSize(dimension)
+                                .build()).get();
+            } catch (Exception e) {
+                throw new VectorPortException("Qdrant gRPC 创建集合失败", e);
+            }
         }
     }
 
     @Override
-    public void recreateCollection(String collectionName, int dimension) throws Exception {
+    public void recreateCollection(String collectionName, int dimension) {
         ResolvedEndpoint endpoint = resolveEndpoint();
         if (shouldUseRestApi(endpoint)) {
             if (collectionExists(collectionName)) {
-                executeRestRequest(endpoint, "DELETE", "/collections/" + collectionName, null);
+                try {
+                    executeRestRequest(endpoint, "DELETE", "/collections/" + collectionName, null);
+                } catch (IOException e) {
+                    throw new VectorPortException("Qdrant REST 删除集合失败", e);
+                }
             }
             createCollection(collectionName, dimension);
             return;
         }
         if (collectionExists(collectionName)) {
-            getClient().deleteCollectionAsync(collectionName).get();
+            try {
+                getClient().deleteCollectionAsync(collectionName).get();
+            } catch (Exception e) {
+                throw new VectorPortException("Qdrant gRPC 删除集合失败", e);
+            }
         }
         createCollection(collectionName, dimension);
     }
 
     @Override
-    public void upsert(String collectionName, List<VectorPoint> points) throws Exception {
+    public void upsert(String collectionName, List<VectorPoint> points) {
         if (StringUtils.isBlank(collectionName)) {
             throw new IllegalArgumentException("集合名为空！");
         }
@@ -224,7 +254,7 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
                 executeRestRequest(endpoint, "PUT", "/collections/" + collectionName + "/points?wait=true", body);
                 return;
             } catch (IOException e) {
-                throw new IllegalStateException("Qdrant REST 写入向量失败", e);
+                throw new VectorPortException("Qdrant REST 写入向量失败", e);
             }
         }
         List<Points.PointStruct> pointStructs = new ArrayList<>(points.size());
@@ -235,11 +265,15 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
                     .putAllPayload(toQdrantPayload(point.getPayload()))
                     .build());
         }
-        getClient().upsertAsync(collectionName, pointStructs).get();
+        try {
+            getClient().upsertAsync(collectionName, pointStructs).get();
+        } catch (Exception e) {
+            throw new VectorPortException("Qdrant gRPC 写入向量失败", e);
+        }
     }
 
     @Override
-    public void deleteByIds(String collectionName, List<String> ids) throws Exception {
+    public void deleteByIds(String collectionName, List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             throw new IllegalArgumentException("vectorIdList is null!");
         }
@@ -247,26 +281,42 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
         if (shouldUseRestApi(endpoint)) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("points", ids);
-            executeRestRequest(endpoint, "POST", "/collections/" + collectionName + "/points/delete?wait=true", body);
+            try {
+                executeRestRequest(endpoint, "POST", "/collections/" + collectionName + "/points/delete?wait=true", body);
+            } catch (IOException e) {
+                throw new VectorPortException("Qdrant REST 删除向量失败", e);
+            }
             return;
         }
         List<Points.PointId> pointIds = ids.stream()
                 .map(value -> id(UUID.fromString(value)))
                 .collect(Collectors.toList());
-        getClient().deleteAsync(collectionName, pointIds).get();
+        try {
+            getClient().deleteAsync(collectionName, pointIds).get();
+        } catch (Exception e) {
+            throw new VectorPortException("Qdrant gRPC 删除向量失败", e);
+        }
     }
 
     @Override
-    public void deleteByFilter(String collectionName, VectorFilter filter) throws Exception {
+    public void deleteByFilter(String collectionName, VectorFilter filter) {
         Map<String, Object> must = filter == null ? Collections.emptyMap() : filter.getMust();
         ResolvedEndpoint endpoint = resolveEndpoint();
         if (shouldUseRestApi(endpoint)) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("filter", convertFilterToRest(must));
-            executeRestRequest(endpoint, "POST", "/collections/" + collectionName + "/points/delete?wait=true", body);
+            try {
+                executeRestRequest(endpoint, "POST", "/collections/" + collectionName + "/points/delete?wait=true", body);
+            } catch (IOException e) {
+                throw new VectorPortException("Qdrant REST 按过滤删除失败", e);
+            }
             return;
         }
-        getClient().deleteAsync(collectionName, toQdrantFilter(must)).get();
+        try {
+            getClient().deleteAsync(collectionName, toQdrantFilter(must)).get();
+        } catch (Exception e) {
+            throw new VectorPortException("Qdrant gRPC 按过滤删除失败", e);
+        }
     }
 
     private QdrantClient getClient() {
