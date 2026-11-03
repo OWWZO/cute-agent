@@ -54,8 +54,10 @@ public class GptQueryApplicationServiceUserIdBindingTest {
                 .query("帮我总结一下这个项目")
                 .build();
         Mockito.when(mapper.toExecutionCommand(params, "user-001")).thenReturn(agentRequest);
+        DialogueSession session = DialogueSession.builder().sessionId("session-001").userId("user-001").build();
         Mockito.when(ownershipService.ensureSessionAccessible("user-001", "session-001", "帮我总结一下这个项目"))
-                .thenReturn(DialogueSession.builder().sessionId("session-001").userId("user-001").build());
+                .thenReturn(session);
+        Mockito.when(ownershipService.resolveRunUserId("user-001", session)).thenReturn("user-001");
 
         CountDownLatch latch = new CountDownLatch(1);
         Mockito.doAnswer(invocation -> {
@@ -99,8 +101,10 @@ public class GptQueryApplicationServiceUserIdBindingTest {
                 .query("继续这个会话")
                 .build();
         Mockito.when(mapper.toExecutionCommand(params, "user-002")).thenReturn(agentRequest);
+        DialogueSession session = DialogueSession.builder().sessionId("session-002").userId("user-002").build();
         Mockito.when(ownershipService.ensureSessionAccessible("user-002", "session-002", "继续这个会话"))
-                .thenReturn(DialogueSession.builder().sessionId("session-002").userId("user-002").build());
+                .thenReturn(session);
+        Mockito.when(ownershipService.resolveRunUserId("user-002", session)).thenReturn("user-002");
 
         UserRequestContext.bind("user-002");
         try {
@@ -115,6 +119,55 @@ public class GptQueryApplicationServiceUserIdBindingTest {
         ArgumentCaptor<AgentExecutionCommand> captor = ArgumentCaptor.forClass(AgentExecutionCommand.class);
         Mockito.verify(dispatchService).dispatch(captor.capture(), Mockito.any());
         Assert.assertEquals("user-002", captor.getValue().getUserId());
+    }
+
+    @Test
+    public void shouldExecuteOwnerProxyRunAsChannelSessionIdentity() throws Exception {
+        GptQueryApplicationService service = newService();
+        AgentExecutionCommandMapper mapper = Mockito.mock(AgentExecutionCommandMapper.class);
+        IAgentDispatchService dispatchService = Mockito.mock(IAgentDispatchService.class);
+        ConversationSessionAuthorizationService ownershipService =
+                Mockito.mock(ConversationSessionAuthorizationService.class);
+
+        ReflectionTestUtils.setField(service, "agentExecutionCommandMapper", mapper);
+        ReflectionTestUtils.setField(service, "agentDispatchService", dispatchService);
+        ReflectionTestUtils.setField(service, "conversationSessionAuthorizationService", ownershipService);
+
+        GptQueryCommand params = GptQueryCommand.builder()
+                .requestId("req-qq").sessionId("qq_c2c_target").query("补充一条指导").build();
+        AgentExecutionCommand agentRequest = AgentExecutionCommand.builder()
+                .requestId("req-qq")
+                .sessionId("qq_c2c_target")
+                .query("补充一条指导")
+                .build();
+        DialogueSession channelSession = DialogueSession.builder()
+                .sessionId("qq_c2c_target")
+                .userId("ch_12_hash")
+                .bindingId(12L)
+                .build();
+        Mockito.when(mapper.toExecutionCommand(params, "owner-001")).thenReturn(agentRequest);
+        Mockito.when(ownershipService.ensureSessionAccessible("owner-001", "qq_c2c_target", "补充一条指导"))
+                .thenReturn(channelSession);
+        Mockito.when(ownershipService.resolveRunUserId("owner-001", channelSession)).thenReturn("ch_12_hash");
+
+        CountDownLatch latch = new CountDownLatch(1);
+        Mockito.doAnswer(invocation -> {
+            latch.countDown();
+            return null;
+        }).when(dispatchService).dispatch(Mockito.any(AgentExecutionCommand.class), Mockito.any());
+
+        UserRequestContext.bind("owner-001");
+        try {
+            service.submitAgentQuery(params);
+        } finally {
+            UserRequestContext.clear();
+        }
+
+        Assert.assertEquals("ch_12_hash", agentRequest.getUserId());
+        Assert.assertTrue("异步派发应已触发", latch.await(3, TimeUnit.SECONDS));
+        ArgumentCaptor<AgentExecutionCommand> captor = ArgumentCaptor.forClass(AgentExecutionCommand.class);
+        Mockito.verify(dispatchService).dispatch(captor.capture(), Mockito.any());
+        Assert.assertEquals("ch_12_hash", captor.getValue().getUserId());
     }
 
     @Test

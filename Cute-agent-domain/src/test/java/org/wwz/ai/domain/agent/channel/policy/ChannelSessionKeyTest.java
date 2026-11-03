@@ -5,6 +5,7 @@ import org.wwz.ai.domain.agent.channel.model.ChannelChatType;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -52,6 +53,23 @@ public class ChannelSessionKeyTest {
         String key = ChannelSessionKey.of(ChannelChatType.GROUP, "g".repeat(32), "u".repeat(32));
         assertEquals(74, key.length());
         assertTrue(key.length() <= ChannelSessionKey.MAX_LENGTH);
+    }
+
+    @Test
+    public void chatTypeOfResolvesEveryChannelPrefix() {
+        assertEquals(ChannelChatType.C2C, ChannelSessionKey.chatTypeOf("qq_c2c_" + OPENID));
+        assertEquals(ChannelChatType.GROUP,
+                ChannelSessionKey.chatTypeOf(ChannelSessionKey.of(ChannelChatType.GROUP, GROUP_OPENID, OPENID)));
+        assertEquals(ChannelChatType.GUILD, ChannelSessionKey.chatTypeOf("qq_guild_ch1"));
+        assertEquals(ChannelChatType.DM, ChannelSessionKey.chatTypeOf("qq_dm_g1"));
+    }
+
+    @Test
+    public void chatTypeOfReturnsNullForNonChannelSessions() {
+        assertNull(ChannelSessionKey.chatTypeOf("session-001"));
+        assertNull(ChannelSessionKey.chatTypeOf("qq_unknown"));
+        assertNull(ChannelSessionKey.chatTypeOf(null));
+        assertNull(ChannelSessionKey.chatTypeOf(" "));
     }
 
     @Test

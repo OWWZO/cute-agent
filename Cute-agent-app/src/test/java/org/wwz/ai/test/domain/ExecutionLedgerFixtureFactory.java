@@ -239,6 +239,8 @@ public final class ExecutionLedgerFixtureFactory {
         long nextToolId = 1L;
         long nextArtifactId = 1L;
         Map<Long, DialogueSession> sessions = new LinkedHashMap<>();
+        /** bindingId → owner_user_id，对应生产 SQL 里对 ai_agent_channel_binding 的子查询。 */
+        Map<Long, String> bindingOwners = new LinkedHashMap<>();
         Map<Long, DialogueRun> runs = new LinkedHashMap<>();
         Map<Long, LlmInvocation> llmInvocations = new LinkedHashMap<>();
         Map<Long, ToolInvocation> toolInvocations = new LinkedHashMap<>();
@@ -522,6 +524,15 @@ public final class ExecutionLedgerFixtureFactory {
             this.store = store;
         }
 
+        /** 与生产 SQL 同口径：本人会话，或该用户是渠道绑定 owner 的会话。 */
+        private boolean visibleToUser(String userId, DialogueSession session) {
+            if (equalsNullable(userId, session.getUserId())) {
+                return true;
+            }
+            String owner = session.getBindingId() == null ? null : store.bindingOwners.get(session.getBindingId());
+            return userId != null && userId.equals(owner);
+        }
+
         @Override
         public int upsertSession(DialogueSessionUpsertRecord record) {
             if (record == null || isBlank(record.getSessionId())) {
@@ -701,6 +712,7 @@ public final class ExecutionLedgerFixtureFactory {
                     .id(session.getId())
                     .sessionId(session.getSessionId())
                     .userId(session.getUserId())
+                    .bindingId(session.getBindingId())
                     .sessionKind(session.getSessionKind())
                     .deleted(session.getDeleted())
                     .build();
@@ -725,7 +737,7 @@ public final class ExecutionLedgerFixtureFactory {
                     .sorted(Comparator.comparing(DialogueSession::getLastActiveAt, Comparator.nullsLast(Comparator.reverseOrder()))
                             .thenComparing(DialogueSession::getId, Comparator.reverseOrder()))
                     .limit(limit)
-                    .map(ExecutionLedgerFixtureFactory::toSessionView)
+                    .map(session -> toSessionViewWithSubCount(session, store))
                     .toList();
         }
 
@@ -741,12 +753,12 @@ public final class ExecutionLedgerFixtureFactory {
         @Override
         public List<DialogueSessionView> queryRecentSessionsByUserId(String userId, int limit) {
             return store.sessions.values().stream()
-                    .filter(item -> item.getDeleted() == 0 && equalsNullable(userId, item.getUserId()))
+                    .filter(item -> item.getDeleted() == 0 && visibleToUser(userId, item))
                     .filter(ExecutionLedgerFixtureFactory::isListableSession)
                     .sorted(Comparator.comparing(DialogueSession::getLastActiveAt, Comparator.nullsLast(Comparator.reverseOrder()))
                             .thenComparing(DialogueSession::getId, Comparator.reverseOrder()))
                     .limit(limit)
-                    .map(ExecutionLedgerFixtureFactory::toSessionView)
+                    .map(session -> toSessionViewWithSubCount(session, store))
                     .toList();
         }
 
@@ -756,14 +768,14 @@ public final class ExecutionLedgerFixtureFactory {
                                                                           Long afterId,
                                                                           int limit) {
             return store.sessions.values().stream()
-                    .filter(item -> item.getDeleted() == 0 && equalsNullable(userId, item.getUserId()))
+                    .filter(item -> item.getDeleted() == 0 && visibleToUser(userId, item))
                     .filter(ExecutionLedgerFixtureFactory::isListableSession)
                     .filter(item -> isAfterSessionCursor(item, afterLastActiveAt, afterId))
                     .sorted(Comparator.comparing(DialogueSession::getLastActiveAt,
                                     Comparator.nullsLast(Comparator.reverseOrder()))
                             .thenComparing(DialogueSession::getId, Comparator.reverseOrder()))
                     .limit(limit)
-                    .map(ExecutionLedgerFixtureFactory::toSessionView)
+                    .map(session -> toSessionViewWithSubCount(session, store))
                     .toList();
         }
 
@@ -1297,6 +1309,7 @@ public final class ExecutionLedgerFixtureFactory {
                 .id(session.getId())
                 .sessionId(session.getSessionId())
                 .userId(session.getUserId())
+                .bindingId(session.getBindingId())
                 .sessionKind(session.getSessionKind())
                 .parentSessionId(session.getParentSessionId())
                 .rootSessionId(session.getRootSessionId())
@@ -1470,11 +1483,25 @@ public final class ExecutionLedgerFixtureFactory {
                 .build();
     }
 
+    /** 侧栏列表视图：额外带上子会话数量，与生产 SQL 的 sub_session_count 语义保持一致。 */
+    private static DialogueSessionView toSessionViewWithSubCount(DialogueSession session,
+                                                                InMemoryLedgerStore store) {
+        DialogueSessionView view = toSessionView(session);
+        int subSessionCount = (int) store.sessions.values().stream()
+                .filter(item -> item.getDeleted() == 0)
+                .filter(item -> session.getSessionId().equals(item.getRootSessionId()))
+                .filter(item -> !session.getSessionId().equals(item.getSessionId()))
+                .count();
+        view.setSubSessionCount(subSessionCount);
+        return view;
+    }
+
     private static DialogueSessionView toSessionView(DialogueSession session) {
         return DialogueSessionView.builder()
                 .id(session.getId())
                 .sessionId(session.getSessionId())
                 .userId(session.getUserId())
+                .bindingId(session.getBindingId())
                 .sessionKind(session.getSessionKind())
                 .parentSessionId(session.getParentSessionId())
                 .rootSessionId(session.getRootSessionId())

@@ -4,9 +4,11 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.application.agent.authorization.SessionNotInteractiveException;
 import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
+import org.wwz.ai.domain.agent.channel.port.ChannelBindingOwnershipPort;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
@@ -145,6 +147,85 @@ public class ConversationSessionAuthorizationServiceTest {
 
         Assert.assertNotNull(session);
         Assert.assertEquals(SessionKind.CONVERSATION.code(), session.getSessionKind());
+    }
+
+    @Test
+    public void shouldAllowChannelOwnerToContinueSession() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx = ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        seedChannelSession(ctx, "ch_12_hash", "qq_c2c_target", 12L);
+        ConversationSessionAuthorizationService service = newService(ctx);
+        bindChannelOwnership(service, 12L, "owner-001");
+
+        DialogueSession submitted = service.ensureSessionAccessible("owner-001", "qq_c2c_target", "继续对话");
+        DialogueSession resumed = service.ensureInteractiveSessionAccessible("owner-001", "qq_c2c_target");
+
+        Assert.assertEquals("ch_12_hash", submitted.getUserId());
+        Assert.assertEquals(Long.valueOf(12L), submitted.getBindingId());
+        Assert.assertNotNull("owner 应能续跑渠道会话", resumed);
+    }
+
+    @Test
+    public void shouldRejectNonOwnerOnChannelSession() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx = ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        seedChannelSession(ctx, "ch_12_hash", "qq_c2c_target", 12L);
+        ConversationSessionAuthorizationService service = newService(ctx);
+        bindChannelOwnership(service, 12L, "owner-001");
+
+        try {
+            service.ensureSessionAccessible("intruder", "qq_c2c_target", "越权续写");
+            Assert.fail("非 owner 不应能续写渠道会话");
+        } catch (SessionOwnershipDeniedException expected) {
+            Assert.assertEquals("当前用户无权访问该会话", expected.getMessage());
+        }
+    }
+
+    @Test
+    public void shouldResolveRunUserIdForChannelOwner() {
+        ConversationSessionAuthorizationService service =
+                newService(ExecutionLedgerFixtureFactory.newLedgerTestContext());
+        bindChannelOwnership(service, 12L, "owner-001");
+
+        DialogueSession channelSession = DialogueSession.builder()
+                .sessionId("qq_c2c_target")
+                .userId("ch_12_hash")
+                .bindingId(12L)
+                .build();
+        DialogueSession webSession = DialogueSession.builder()
+                .sessionId("session-001")
+                .userId("user-001")
+                .build();
+
+        Assert.assertEquals("ch_12_hash", service.resolveRunUserId("owner-001", channelSession));
+        Assert.assertEquals("ch_12_hash", service.resolveRunUserId("ch_12_hash", channelSession));
+        Assert.assertEquals("user-001", service.resolveRunUserId("user-001", webSession));
+        Assert.assertEquals("intruder", service.resolveRunUserId("intruder", channelSession));
+    }
+
+    private static void bindChannelOwnership(ConversationSessionAuthorizationService service,
+                                             long bindingId,
+                                             String ownerUserId) {
+        ReflectionTestUtils.setField(service, "channelBindingOwnershipPort",
+                (ChannelBindingOwnershipPort) (id, userId) ->
+                        id != null && id == bindingId && ownerUserId.equals(userId));
+    }
+
+    private static void seedChannelSession(ExecutionLedgerFixtureFactory.LedgerTestContext ctx,
+                                           String userId,
+                                           String sessionId,
+                                           Long bindingId) {
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        ctx.writeRepository.upsertSession(DialogueSessionUpsertRecord.builder()
+                .sessionId(sessionId)
+                .userId(userId)
+                .bindingId(bindingId)
+                .title("QQ 会话")
+                .status(ExecutionLedgerConstants.STATUS_RUNNING)
+                .runCount(0)
+                .finishedRunCount(0)
+                .failedRunCount(0)
+                .startedAt(now)
+                .lastActiveAt(now)
+                .build());
     }
 
     private static void seedSubAgentSession(ExecutionLedgerFixtureFactory.LedgerTestContext ctx,

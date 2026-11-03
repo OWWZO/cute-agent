@@ -7,10 +7,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.wwz.ai.api.response.Response;
+import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
+import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
 import org.wwz.ai.application.agent.run.AgentRunInjectApplicationService;
 import org.wwz.ai.application.agent.run.AgentRunStopApplicationService;
 import org.wwz.ai.trigger.http.agent.vo.AgentRunInjectReqVO;
 import org.wwz.ai.trigger.http.agent.vo.AgentRunStopReqVO;
+import org.wwz.ai.types.agent.user.UserRequestContext;
 import org.wwz.ai.types.enums.ResponseCode;
 
 import javax.annotation.Resource;
@@ -30,6 +33,9 @@ public class AgentRunController {
     @Resource
     private AgentRunInjectApplicationService agentRunInjectApplicationService;
 
+    @Resource
+    private ConversationSessionAuthorizationService conversationSessionAuthorizationService;
+
     @PostMapping("/stop")
     public Response<Map<String, Object>> stop(@RequestBody AgentRunStopReqVO req) {
         try {
@@ -39,12 +45,28 @@ public class AgentRunController {
                         .info("requestId 不能为空")
                         .build();
             }
+            if (StringUtils.isBlank(req.getSessionId())) {
+                return Response.<Map<String, Object>>builder()
+                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                        .info("sessionId 不能为空")
+                        .build();
+            }
+            // 放开 owner 续写后，必须阻止「拿到 requestId 就能停别人会话」。
+            conversationSessionAuthorizationService.ensureExistingSessionAccessible(
+                    UserRequestContext.requireUserId(),
+                    req.getSessionId()
+            );
             Map<String, Object> data = agentRunStopApplicationService.stop(
                     req.getSessionId(), req.getRequestId());
             return Response.<Map<String, Object>>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
                     .data(data)
+                    .build();
+        } catch (SessionOwnershipDeniedException e) {
+            return Response.<Map<String, Object>>builder()
+                    .code(ResponseCode.FORBIDDEN.getCode())
+                    .info(e.getMessage())
                     .build();
         } catch (Exception e) {
             return Response.<Map<String, Object>>builder()
@@ -69,6 +91,17 @@ public class AgentRunController {
                         .info("text 不能为空")
                         .build();
             }
+            if (StringUtils.isBlank(req.getSessionId())) {
+                return Response.<Map<String, Object>>builder()
+                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                        .info("sessionId 不能为空")
+                        .build();
+            }
+            // 放开 owner 续写后，必须阻止「拿到 requestId 就能往别人会话注入」。
+            conversationSessionAuthorizationService.ensureExistingSessionAccessible(
+                    UserRequestContext.requireUserId(),
+                    req.getSessionId()
+            );
             Map<String, Object> data = agentRunInjectApplicationService.inject(
                     req.getSessionId(), req.getRequestId(), req.getText());
             boolean accepted = Boolean.TRUE.equals(data.get("accepted"));
@@ -77,6 +110,11 @@ public class AgentRunController {
                     .code(accepted || newRun ? ResponseCode.SUCCESS.getCode() : ResponseCode.UN_ERROR.getCode())
                     .info(accepted || newRun ? ResponseCode.SUCCESS.getInfo() : String.valueOf(data.get("message")))
                     .data(data)
+                    .build();
+        } catch (SessionOwnershipDeniedException e) {
+            return Response.<Map<String, Object>>builder()
+                    .code(ResponseCode.FORBIDDEN.getCode())
+                    .info(e.getMessage())
                     .build();
         } catch (Exception e) {
             return Response.<Map<String, Object>>builder()

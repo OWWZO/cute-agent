@@ -34,6 +34,18 @@ public class ConversationSessionRespVO {
     /** 子智能体类型；{@code null} 表示未记录。 */
     private String subAgentType;
 
+    /** 该会话下的子会话数量；侧栏据此决定是否展示展开入口。 */
+    private Integer subSessionCount;
+
+    /** 所属 IM 渠道绑定；{@code null} 表示 Web UI 原生会话。 */
+    private Long bindingId;
+
+    /** 渠道会话形态：C2C / GROUP；非渠道会话为 {@code null}。 */
+    private String channelChatType;
+
+    /** 匿名访客短码（如「访客 a1b2」）；非渠道会话为 {@code null}。 */
+    private String visitorLabel;
+
     private String latestQueryText;
 
     private Integer runCount;

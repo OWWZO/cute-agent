@@ -35,10 +35,12 @@
         <id column="id" property="id"/>
         <result column="session_id" property="sessionId"/>
         <result column="user_id" property="userId"/>
+        <result column="binding_id" property="bindingId"/>
         <result column="session_kind" property="sessionKind"/>
         <result column="parent_session_id" property="parentSessionId"/>
         <result column="root_session_id" property="rootSessionId"/>
         <result column="sub_agent_type" property="subAgentType"/>
+        <result column="sub_session_count" property="subSessionCount"/>
         <result column="title" property="title"/>
         <result column="status" property="status"/>
         <result column="latest_request_id" property="latestRequestId"/>
@@ -75,6 +77,16 @@
         LEFT(latest_summary_text, 241) AS latest_summary_text,
         run_count, finished_run_count, failed_run_count,
         started_at, last_active_at, model, thinking, thinking_effort, deep_think, create_time
+    </sql>
+
+    <!-- 侧栏列表专用：随行返回该会话下的子会话数量，前端据此决定是否展示展开入口。
+         按 root_session_id 统计与 /tree 接口同源；deleted 过滤保证软删子会话不计数。 -->
+    <sql id="dialogueSessionViewColumnsWithSubCount">
+        <include refid="dialogueSessionViewColumns"/>,
+        (SELECT COUNT(*) FROM ai_agent_dialogue_session child
+         WHERE child.root_session_id = ai_agent_dialogue_session.session_id
+           AND child.session_id != ai_agent_dialogue_session.session_id
+           AND child.deleted = 0) AS sub_session_count
     </sql>
 
     <!-- 侧栏白名单：只有 conversation 进列表。子会话靠 session_kind 隐藏，
@@ -214,7 +226,7 @@
     </select>
 
     <select id="queryRecentSessions" resultMap="DialogueSessionViewMap">
-        SELECT <include refid="dialogueSessionViewColumns"/>
+        SELECT <include refid="dialogueSessionViewColumnsWithSubCount"/>
         FROM ai_agent_dialogue_session
         WHERE deleted = 0
         <include refid="listableSessionKindPredicate"/>
@@ -232,20 +244,34 @@
     </select>
 
     <select id="queryRecentSessionsByUserId" resultMap="DialogueSessionViewMap">
-        SELECT <include refid="dialogueSessionViewColumns"/>
+        SELECT <include refid="dialogueSessionViewColumnsWithSubCount"/>
         FROM ai_agent_dialogue_session
-        WHERE user_id = #{userId}
-          AND deleted = 0
+        WHERE deleted = 0
+          AND (
+              user_id = #{userId}
+              OR binding_id IN (
+                  SELECT id FROM ai_agent_channel_binding
+                  WHERE owner_user_id = #{userId}
+                    AND deleted = 0
+              )
+          )
         <include refid="listableSessionKindPredicate"/>
         ORDER BY last_active_at DESC, id DESC
         LIMIT #{limit}
     </select>
 
     <select id="queryRecentSessionsByUserIdAfter" resultMap="DialogueSessionViewMap">
-        SELECT <include refid="dialogueSessionViewColumns"/>
+        SELECT <include refid="dialogueSessionViewColumnsWithSubCount"/>
         FROM ai_agent_dialogue_session
-        WHERE user_id = #{userId}
-          AND deleted = 0
+        WHERE deleted = 0
+          AND (
+              user_id = #{userId}
+              OR binding_id IN (
+                  SELECT id FROM ai_agent_channel_binding
+                  WHERE owner_user_id = #{userId}
+                    AND deleted = 0
+              )
+          )
         <include refid="listableSessionKindPredicate"/>
         <if test="afterId != null">
             <choose>

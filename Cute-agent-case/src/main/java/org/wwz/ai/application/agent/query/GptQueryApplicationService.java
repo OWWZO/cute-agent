@@ -98,11 +98,14 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
 
         String userId = resolveUserId(agentRequest);
         agentRequest.setUserId(userId);
-        conversationSessionAuthorizationService.ensureSessionAccessible(
+        DialogueSession session = conversationSessionAuthorizationService.ensureSessionAccessible(
                 userId,
                 agentRequest.getSessionId(),
                 agentRequest.getQuery()
         );
+        // 渠道会话：owner 在 Web 代聊时，run 仍以会话原身份执行，避免长期记忆串到 owner 名下。
+        String runUserId = conversationSessionAuthorizationService.resolveRunUserId(userId, session);
+        agentRequest.setUserId(runUserId);
         // 会话级偏好落库：用户本轮显式选择的值，未传的列保持库里原值（COALESCE）。
         // 放在鉴权之后——归属未确认前不该写库。
         conversationSessionPreferencesApplicationService.upsertPreferences(
@@ -127,9 +130,9 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         activeAgentRunRegistry.begin(
                 agentRequest.getRequestId(),
                 agentRequest.getSessionId(),
-                userId);
+                runUserId);
 
-        scheduleDispatch(agentRequest, userId);
+        scheduleDispatch(agentRequest, runUserId);
         return AgentQuerySubmitResult.builder()
                 .accepted(true)
                 .sessionId(agentRequest.getSessionId())
@@ -152,7 +155,10 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         if (session == null) {
             throw new SessionOwnershipDeniedException("当前会话不存在");
         }
-        conversationSessionAuthorizationService.ensureInteractiveSessionAccessible(userId, sessionId);
+        DialogueSession authorizedSession =
+                conversationSessionAuthorizationService.ensureInteractiveSessionAccessible(userId, sessionId);
+        // 渠道会话：owner 在 Web 代聊时，run 仍以会话原身份执行，避免长期记忆串到 owner 名下。
+        String runUserId = conversationSessionAuthorizationService.resolveRunUserId(userId, authorizedSession);
 
         SessionPreferences chosen = preferences == null ? SessionPreferences.none() : preferences;
         // 用户本轮显式选择优先；没选则沿用会话元数据。父 Agent 已结束、内存上下文被回收后，
@@ -168,7 +174,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         AgentExecutionCommand agentRequest = AgentExecutionCommand.builder()
                 .requestId(newRequestId())
                 .sessionId(sessionId)
-                .userId(userId)
+                .userId(runUserId)
                 .query(query)
                 .model(model)
                 .thinking(thinking)
@@ -187,8 +193,8 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                     chosen.deepThink());
         }
 
-        activeAgentRunRegistry.begin(agentRequest.getRequestId(), sessionId, userId);
-        scheduleDispatch(agentRequest, userId);
+        activeAgentRunRegistry.begin(agentRequest.getRequestId(), sessionId, runUserId);
+        scheduleDispatch(agentRequest, runUserId);
         return AgentQuerySubmitResult.builder()
                 .accepted(true)
                 .sessionId(sessionId)

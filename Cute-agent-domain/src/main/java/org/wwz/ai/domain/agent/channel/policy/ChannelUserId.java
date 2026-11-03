@@ -28,6 +28,22 @@ public final class ChannelUserId {
         return "ch_" + bindingId + "_" + sha256Hex(platformUserId.trim()).substring(0, HASH_PREFIX_LENGTH);
     }
 
+    /**
+     * 匿名展示短码：从内部 userId 取 hash 前 4 位，如 {@code 访客 a1b2}。
+     * <p>不暴露 openid、昵称或完整 userId，只用于列表里区分不同访客。</p>
+     */
+    public static String shortLabel(String userId) {
+        if (StringUtils.isBlank(userId)) {
+            return null;
+        }
+        int cut = userId.lastIndexOf('_');
+        String hash = cut < 0 ? userId : userId.substring(cut + 1);
+        if (hash.isBlank()) {
+            return null;
+        }
+        return "访客 " + hash.substring(0, Math.min(4, hash.length()));
+    }
+
     private static String sha256Hex(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

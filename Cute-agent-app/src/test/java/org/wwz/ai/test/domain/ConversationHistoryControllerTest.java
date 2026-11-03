@@ -8,6 +8,7 @@ import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.wwz.ai.api.response.Response;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactRecordCommand;
+import org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
@@ -23,6 +24,7 @@ import org.wwz.ai.trigger.http.agent.vo.ConversationHistoryPageRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationRunReplayRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionPageRespVO;
+import org.wwz.ai.trigger.http.agent.vo.ConversationSessionStatusRespVO;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.types.agent.user.UserRequestContext;
 import org.wwz.ai.types.enums.ResponseCode;
@@ -351,6 +353,52 @@ public class ConversationHistoryControllerTest {
     }
 
     @Test
+    public void shouldExposeChannelIdentityOnSessionList() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx = ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        ctx.store.bindingOwners.put(12L, "user-test");
+        seedChannelSession(ctx, "qq_c2c_openid-abcd", 12L, "req-qq-list-001",
+                ExecutionLedgerConstants.STATUS_SUCCESS);
+
+        AgentConversationHistoryController controller = new AgentConversationHistoryController();
+        ReflectionTestUtils.setField(controller, "executionLedgerQueryService", ctx.queryService);
+        ReflectionTestUtils.setField(controller, "conversationHistoryReplayService", ctx.replayService);
+        ReflectionTestUtils.setField(controller, "conversationSessionAuthorizationService",
+                Mockito.mock(ConversationSessionAuthorizationService.class));
+
+        Response<ConversationSessionPageRespVO> response = controller.list(null, null);
+
+        Assert.assertEquals(ResponseCode.SUCCESS.getCode(), response.getCode());
+        Assert.assertEquals(1, response.getData().getSessions().size());
+        ConversationSessionRespVO session = response.getData().getSessions().get(0);
+        Assert.assertEquals("qq_c2c_openid-abcd", session.getSessionId());
+        Assert.assertEquals(Long.valueOf(12L), session.getBindingId());
+        Assert.assertEquals("C2C", session.getChannelChatType());
+        Assert.assertEquals("访客 a1b2", session.getVisitorLabel());
+    }
+
+    @Test
+    public void shouldExposeSessionStatusForChannelWatcher() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx = ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        ctx.store.bindingOwners.put(12L, "user-test");
+        seedChannelSession(ctx, "qq_group_group-lead-member-a", 12L, "req-qq-status-001",
+                ExecutionLedgerConstants.STATUS_RUNNING);
+
+        AgentConversationHistoryController controller = new AgentConversationHistoryController();
+        ReflectionTestUtils.setField(controller, "executionLedgerQueryService", ctx.queryService);
+        ReflectionTestUtils.setField(controller, "conversationHistoryReplayService", ctx.replayService);
+        ReflectionTestUtils.setField(controller, "conversationSessionAuthorizationService",
+                Mockito.mock(ConversationSessionAuthorizationService.class));
+
+        Response<ConversationSessionStatusRespVO> response =
+                controller.status("qq_group_group-lead-member-a");
+
+        Assert.assertEquals(ResponseCode.SUCCESS.getCode(), response.getCode());
+        Assert.assertEquals("RUNNING", response.getData().getStatus());
+        Assert.assertEquals("req-qq-status-001", response.getData().getLatestRequestId());
+        Assert.assertEquals(Long.valueOf(12L), response.getData().getBindingId());
+    }
+
+    @Test
     public void shouldRestoreReactSessionModeFromHistoryDetail() {
         ExecutionLedgerFixtureFactory.LedgerTestContext ctx = ExecutionLedgerFixtureFactory.newLedgerTestContext();
         String fileName = "react-history-report.html";
@@ -503,6 +551,28 @@ public class ConversationHistoryControllerTest {
     @SuppressWarnings("unchecked")
     private Map<String, Object> eventData(AgentStreamResponseVO frame) {
         return (Map<String, Object>) frame.getResultMap().get("eventData");
+    }
+
+    private void seedChannelSession(ExecutionLedgerFixtureFactory.LedgerTestContext ctx,
+                                    String sessionId,
+                                    Long bindingId,
+                                    String requestId,
+                                    Integer status) {
+        LocalDateTime now = LocalDateTime.of(2026, 5, 2, 13, 0, 0);
+        ctx.writeRepository.upsertSession(DialogueSessionUpsertRecord.builder()
+                .sessionId(sessionId)
+                .userId("ch_" + bindingId + "_a1b2c3d4e5f6a7b8")
+                .bindingId(bindingId)
+                .title("QQ 会话")
+                .status(status)
+                .latestRequestId(requestId)
+                .latestQueryText("帮我看下今天的日程")
+                .runCount(1)
+                .finishedRunCount(0)
+                .failedRunCount(0)
+                .startedAt(now)
+                .lastActiveAt(now)
+                .build());
     }
 
     private void seedRun(ExecutionLedgerFixtureFactory.LedgerTestContext ctx,

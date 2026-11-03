@@ -11,6 +11,9 @@ import org.wwz.ai.application.agent.query.ConversationSessionBootstrapApplicatio
 import org.wwz.ai.application.agent.query.ConversationSessionBootstrapApplicationService.ConversationSessionBootstrap;
 import org.wwz.ai.application.agent.stream.AgentStreamFrameMapper;
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.channel.model.ChannelChatType;
+import org.wwz.ai.domain.agent.channel.policy.ChannelSessionKey;
+import org.wwz.ai.domain.agent.channel.policy.ChannelUserId;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryPage;
 import org.wwz.ai.domain.agent.ledger.model.ConversationSessionCursor;
@@ -31,6 +34,7 @@ import org.wwz.ai.trigger.http.agent.vo.ConversationRunReplayRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationRunSummaryRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionPageRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionRespVO;
+import org.wwz.ai.trigger.http.agent.vo.ConversationSessionStatusRespVO;
 import org.wwz.ai.trigger.http.agent.mapper.AgentStreamResponseMapper;
 import org.wwz.ai.trigger.http.agent.vo.AgentStreamResponseVO;
 import org.wwz.ai.types.agent.user.UserRequestContext;
@@ -124,6 +128,39 @@ public class AgentConversationHistoryController {
                     .build();
         } catch (Exception e) {
             return Response.<ConversationSessionPageRespVO>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info(e.getMessage())
+                    .build();
+        }
+    }
+
+    /**
+     * 会话运行状态：Web 端只对当前打开的渠道会话轮询，用来发现 QQ 侧新起的轮次。
+     */
+    @GetMapping("/sessions/{sessionId}/status")
+    public Response<ConversationSessionStatusRespVO> status(
+            @PathVariable("sessionId") String sessionId) {
+        try {
+            conversationSessionAuthorizationService.ensureExistingSessionAccessible(
+                    UserRequestContext.requireUserId(),
+                    sessionId
+            );
+            DialogueSessionView session = executionLedgerQueryService.querySession(sessionId);
+            if (session == null) {
+                throw new IllegalArgumentException("当前会话不存在");
+            }
+            return Response.<ConversationSessionStatusRespVO>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(ConversationSessionStatusRespVO.builder()
+                            .sessionId(session.getSessionId())
+                            .status(resolveStatusLabel(session.getStatus()))
+                            .latestRequestId(session.getLatestRequestId())
+                            .bindingId(session.getBindingId())
+                            .build())
+                    .build();
+        } catch (Exception e) {
+            return Response.<ConversationSessionStatusRespVO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info(e.getMessage())
                     .build();
@@ -248,6 +285,10 @@ public class AgentConversationHistoryController {
         if (session == null) {
             return null;
         }
+        Long bindingId = session.getBindingId();
+        ChannelChatType chatType = bindingId == null
+                ? null
+                : ChannelSessionKey.chatTypeOf(session.getSessionId());
         return ConversationSessionRespVO.builder()
                 .sessionId(session.getSessionId())
                 .title(session.getTitle())
@@ -256,6 +297,10 @@ public class AgentConversationHistoryController {
                 .parentSessionId(session.getParentSessionId())
                 .rootSessionId(session.getRootSessionId())
                 .subAgentType(session.getSubAgentType())
+                .subSessionCount(session.getSubSessionCount())
+                .bindingId(bindingId)
+                .channelChatType(chatType == null ? null : chatType.name())
+                .visitorLabel(bindingId == null ? null : ChannelUserId.shortLabel(session.getUserId()))
                 .latestQueryText(session.getLatestQueryText())
                 .runCount(session.getRunCount())
                 .finishedRunCount(session.getFinishedRunCount())

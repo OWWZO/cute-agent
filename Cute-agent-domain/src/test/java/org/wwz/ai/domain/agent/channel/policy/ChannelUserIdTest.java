@@ -5,6 +5,7 @@ import org.wwz.ai.domain.agent.channel.policy.ChannelUserId;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class ChannelUserIdTest {
@@ -34,6 +35,17 @@ public class ChannelUserIdTest {
         String userId = ChannelUserId.of(999999L, "some-openid");
         assertTrue(userId.matches("ch_\\d+_[0-9a-f]{16}"));
         assertTrue(userId.length() <= 64);
+    }
+
+    @Test
+    public void shortLabelShowsOnlyAnonymousHashPrefix() {
+        assertEquals("访客 a1b2", ChannelUserId.shortLabel("ch_42_a1b2c3d4e5f6a7b8"));
+    }
+
+    @Test
+    public void shortLabelReturnsNullForBlankInput() {
+        assertNull(ChannelUserId.shortLabel(null));
+        assertNull(ChannelUserId.shortLabel(" "));
     }
 
     @Test(expected = IllegalArgumentException.class)

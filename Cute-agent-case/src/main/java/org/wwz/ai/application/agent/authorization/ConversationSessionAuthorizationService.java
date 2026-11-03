@@ -58,7 +58,7 @@ public class ConversationSessionAuthorizationService {
             throw new SessionOwnershipDeniedException("当前会话不存在");
         }
         assertInteractive(session);
-        if (!StringUtils.equals(session.getUserId(), userId)) {
+        if (!canAccessInteractive(session, userId)) {
             throw new SessionOwnershipDeniedException("当前用户无权访问该会话");
         }
         return session;
@@ -171,12 +171,34 @@ public class ConversationSessionAuthorizationService {
                     .build());
             return executionLedgerWriteRepository.querySessionBySessionId(sessionId);
         }
-        if (!StringUtils.equals(existing.getUserId(), userId)) {
-            // 交互路径刻意不放行 owner：owner 对自己的 bot 只有读权限，
-            // 否则他就能往陌生人的 QQ 会话里续写，伪装成对方。
+        if (!canAccessInteractive(existing, userId)) {
+            // 渠道会话放行 owner：这是他自己绑定的 bot，且他在 Web 端能看到全部内容，
+            // 允许在这里继续对话，等同于换一个入口说同一段话。
+            // 非 owner 仍被拒绝，无法往陌生人的 QQ 会话里续写。
             throw new SessionOwnershipDeniedException("当前用户无权访问该会话");
         }
         return existing;
+    }
+
+    /**
+     * 代聊时的执行身份：owner 继续渠道会话时，run 必须用会话原本的 userId 执行，
+     * 否则长期记忆会串到 owner 名下。
+     */
+    public String resolveRunUserId(String currentUserId, DialogueSession session) {
+        if (session == null || session.getBindingId() == null) {
+            return currentUserId;
+        }
+        if (StringUtils.equals(session.getUserId(), currentUserId)) {
+            return currentUserId;
+        }
+        return isChannelOwner(session, currentUserId) ? session.getUserId() : currentUserId;
+    }
+
+    /**
+     * 本人或渠道绑定 owner 均可交互。{@code binding_id} 为空的普通会话行为不变。
+     */
+    private boolean canAccessInteractive(DialogueSession session, String userId) {
+        return StringUtils.equals(session.getUserId(), userId) || isChannelOwner(session, userId);
     }
 
     /**

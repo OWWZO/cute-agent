@@ -89,5 +89,7 @@ public class SubAgentSessionPortAdapterTest {
 
         Assert.assertEquals(1, listed.size());
         Assert.assertEquals("session-user-1", listed.get(0).getSessionId());
+        // 侧栏据此决定是否显示展开箭头：没有子会话时不显示。
+        Assert.assertEquals(Integer.valueOf(1), listed.get(0).getSubSessionCount());
     }
 }

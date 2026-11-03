@@ -259,6 +259,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_session (
     KEY idx_dialogue_session_user_active (user_id, deleted, last_active_at DESC),
     KEY idx_dialogue_session_kind (session_kind, deleted),
     KEY idx_dialogue_session_binding (binding_id, deleted, last_active_at DESC),
+    KEY idx_dialogue_session_root (root_session_id, deleted),
     KEY idx_dialogue_session_active (deleted, last_active_at DESC, id DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话会话\r\n  主表';
 

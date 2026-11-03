@@ -28,6 +28,28 @@ public final class ChannelSessionKey {
         };
     }
 
+    /**
+     * 从会话键反解会话形态；非渠道会话返回 {@code null}。
+     */
+    public static ChannelChatType chatTypeOf(String sessionId) {
+        if (StringUtils.isBlank(sessionId) || !sessionId.startsWith("qq_")) {
+            return null;
+        }
+        if (sessionId.startsWith("qq_c2c_")) {
+            return ChannelChatType.C2C;
+        }
+        if (sessionId.startsWith("qq_group_")) {
+            return ChannelChatType.GROUP;
+        }
+        if (sessionId.startsWith("qq_guild_")) {
+            return ChannelChatType.GUILD;
+        }
+        if (sessionId.startsWith("qq_dm_")) {
+            return ChannelChatType.DM;
+        }
+        return null;
+    }
+
     private static String require(String value, String field) {
         if (StringUtils.isBlank(value)) {
             throw new IllegalArgumentException(field + " 不能为空");
