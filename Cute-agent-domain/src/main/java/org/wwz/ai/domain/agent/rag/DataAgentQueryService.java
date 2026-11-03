@@ -16,7 +16,8 @@ import java.util.Map;
 /** Data Query domain operations for schema recall, NL2SQL, and analytical query execution. */
 public interface DataAgentQueryService {
 
-    Nl2SqlQuery queryAllSchema();
+    /** 构造一个挂载全部模型 schema 的基础查询上下文（不是返回 schema 列表）。 */
+    Nl2SqlQuery buildQueryWithAllSchema();
 
     List<Map<String, Object>> recallSchemaColumns(ColumnSchemaRecallQuery query);
 

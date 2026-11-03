@@ -59,7 +59,7 @@ public class DataAgentQueryServiceImpl implements DataAgentQueryService {
     private Executor toolExecutor;
 
     @Override
-    public Nl2SqlQuery queryAllSchema() {
+    public Nl2SqlQuery buildQueryWithAllSchema() {
         Nl2SqlQuery query = buildBaseQuery("");
         List<DataQuerySchema> schemas = chatModelSchemaService.queryAllSchemas();
         Map<String, List<DataQuerySchema>> schemaMap = schemas.stream()

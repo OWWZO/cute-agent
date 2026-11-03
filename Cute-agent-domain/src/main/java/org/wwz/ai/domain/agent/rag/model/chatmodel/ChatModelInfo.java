@@ -18,5 +18,6 @@ public class ChatModelInfo implements Serializable {
     private String name;
     private String usePrompt;
     private String businessPrompt;
+    /** 软删标记：1=有效，0=已删除（与 PO 的 {@code @TableLogic(value="1", delval="0")} 一致）。 */
     private Integer yn;
 }
