@@ -3,6 +3,7 @@ package org.wwz.ai.infrastructure.adapter.port;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
+import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionIdentity;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionPort;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
@@ -27,14 +28,9 @@ public class SubAgentSessionPortAdapter implements SubAgentSessionPort {
     private final IExecutionLedgerWriteRepository executionLedgerWriteRepository;
 
     @Override
-    public void ensureChildSession(String childSessionId,
-                                   String parentSessionId,
-                                   String userId,
-                                   String title,
-                                   String subAgentType) {
-        if (StringUtils.isAnyBlank(childSessionId, parentSessionId)) {
-            throw new IllegalArgumentException("childSessionId 与 parentSessionId 不能为空");
-        }
+    public void ensureChildSession(SubAgentSessionIdentity identity) {
+        String childSessionId = identity.getChildSessionId();
+        String parentSessionId = identity.getParentSessionId();
         DialogueSession existing = executionLedgerWriteRepository.querySessionBySessionId(childSessionId);
         if (existing != null) {
             // 身份行已存在（重复派发 / 续跑）：保持原样，不覆盖 run 计数与身份列。
@@ -43,12 +39,12 @@ public class SubAgentSessionPortAdapter implements SubAgentSessionPort {
         LocalDateTime now = LocalDateTime.now();
         executionLedgerWriteRepository.upsertSession(DialogueSessionUpsertRecord.builder()
                 .sessionId(childSessionId)
-                .userId(userId)
+                .userId(identity.getUserId())
                 .sessionKind(SessionKind.SUBAGENT.code())
                 .parentSessionId(parentSessionId)
                 .rootSessionId(resolveRootSessionId(parentSessionId))
-                .subAgentType(StringUtils.trimToNull(subAgentType))
-                .title(StringUtils.defaultIfBlank(title, DEFAULT_TITLE))
+                .subAgentType(StringUtils.trimToNull(identity.getSubAgentType()))
+                .title(StringUtils.defaultIfBlank(identity.getTitle(), DEFAULT_TITLE))
                 .status(ExecutionLedgerConstants.STATUS_RUNNING)
                 .runCount(0)
                 .finishedRunCount(0)

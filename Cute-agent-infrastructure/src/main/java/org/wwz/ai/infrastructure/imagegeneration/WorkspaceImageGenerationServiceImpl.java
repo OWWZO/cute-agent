@@ -92,7 +92,7 @@ public class WorkspaceImageGenerationServiceImpl implements IWorkspaceImageGener
 
         return WorkspaceImageGenerationResult.builder()
                 .data(StringUtils.defaultIfBlank(result.getSummary(), "生成完成"))
-                .fileInfo(result.getFiles())
+                .files(result.getFiles())
                 .requestId(requestId)
                 .mode(result.getMode())
                 .usedFallback(result.getUsedFallback())

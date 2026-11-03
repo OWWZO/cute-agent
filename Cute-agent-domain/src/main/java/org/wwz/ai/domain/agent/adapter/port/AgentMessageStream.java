@@ -1,12 +1,20 @@
 package org.wwz.ai.domain.agent.adapter.port;
 
+import java.io.IOException;
+
 /**
  * 协议无关的流式输出端口。
  * domain 只依赖该端口发送增量事件，具体采用 SSE、WebSocket 还是其他协议由 trigger/case 侧适配。
  */
 public interface AgentMessageStream {
 
-    void send(Object payload) throws Exception;
+    /**
+     * 发送一帧增量事件。
+     *
+     * @throws IOException 下游链路故障（网络/序列化失败）。客户端主动断开必须归类为
+     *                     abort（{@link #onAbort} + {@link #isAborted()}），不得作为 IOException 上抛。
+     */
+    void send(Object payload) throws IOException;
 
     void complete();
 

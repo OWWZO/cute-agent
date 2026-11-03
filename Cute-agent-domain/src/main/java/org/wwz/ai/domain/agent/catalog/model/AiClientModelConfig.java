@@ -16,6 +16,11 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class AiClientModelConfig {
 
+    /** 启用。与 DB 列 {@code status=1} 对应；仓储 {@code findEnabled()} 依赖此值。 */
+    public static final int STATUS_ENABLED = 1;
+    /** 停用。与 DB 列 {@code status=0} 对应。 */
+    public static final int STATUS_DISABLED = 0;
+
     private Long id;
     private String modelId;
     private String apiId;
@@ -24,7 +29,8 @@ public class AiClientModelConfig {
     private String modelUsage;
     private Integer supportsThinking;
     private Integer contextWindow;
-    private Integer status;
+    @Builder.Default
+    private Integer status = STATUS_ENABLED;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

@@ -2,6 +2,7 @@ package org.wwz.ai.test.domain.subagent;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionIdentity;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionPort;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionStreamPort;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
@@ -133,11 +134,7 @@ public class SubAgentSessionStreamIsolationTest {
 
     private static final class NoopSessionPort implements SubAgentSessionPort {
         @Override
-        public void ensureChildSession(String childSessionId,
-                                       String parentSessionId,
-                                       String userId,
-                                       String title,
-                                       String subAgentType) {
+        public void ensureChildSession(SubAgentSessionIdentity identity) {
             // 身份落库成功路径
         }
     }

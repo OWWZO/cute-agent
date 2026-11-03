@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionIdentity;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionPort;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionStreamPort;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
@@ -565,12 +566,13 @@ public class SubAgentRunner {
         String title = StringUtils.defaultIfBlank(description,
                 definition == null ? null : definition.getAgentType());
         try {
-            port.ensureChildSession(
-                    childSessionId,
-                    parentContext.getSessionId(),
-                    parentContext.getUserId(),
-                    title,
-                    definition == null ? null : definition.getAgentType());
+            port.ensureChildSession(SubAgentSessionIdentity.builder()
+                    .childSessionId(childSessionId)
+                    .parentSessionId(parentContext.getSessionId())
+                    .userId(parentContext.getUserId())
+                    .title(title)
+                    .subAgentType(definition == null ? null : definition.getAgentType())
+                    .build());
             return true;
         } catch (Exception e) {
             log.error("{} subagent child session persist failed childSessionId={} parentSessionId={}",

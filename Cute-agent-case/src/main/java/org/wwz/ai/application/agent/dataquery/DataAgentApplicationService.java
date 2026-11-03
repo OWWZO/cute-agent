@@ -78,7 +78,7 @@ public class DataAgentApplicationService implements IDataAgentApplicationService
     private AgentMessageStream domainStream(AgentSessionStream stream) {
         return new AgentMessageStream() {
             @Override
-            public void send(Object payload) throws Exception {
+            public void send(Object payload) throws IOException {
                 if (!(payload instanceof DataQueryStreamEvent event)) {
                     throw new IllegalArgumentException("Unexpected Data Query stream event type");
                 }

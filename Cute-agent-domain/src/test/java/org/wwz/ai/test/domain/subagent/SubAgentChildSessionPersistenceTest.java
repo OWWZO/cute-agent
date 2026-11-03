@@ -2,6 +2,7 @@ package org.wwz.ai.test.domain.subagent;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionIdentity;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionPort;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -104,12 +105,9 @@ public class SubAgentChildSessionPersistenceTest {
         private final List<PersistCall> calls = new ArrayList<>();
 
         @Override
-        public void ensureChildSession(String childSessionId,
-                                       String parentSessionId,
-                                       String userId,
-                                       String title,
-                                       String subAgentType) {
-            calls.add(new PersistCall(childSessionId, parentSessionId, userId, title, subAgentType));
+        public void ensureChildSession(SubAgentSessionIdentity identity) {
+            calls.add(new PersistCall(identity.getChildSessionId(), identity.getParentSessionId(),
+                    identity.getUserId(), identity.getTitle(), identity.getSubAgentType()));
             throw new IllegalStateException("db unavailable");
         }
     }

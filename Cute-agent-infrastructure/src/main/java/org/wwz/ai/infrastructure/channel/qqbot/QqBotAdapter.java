@@ -36,11 +36,11 @@ public class QqBotAdapter implements ChannelAdapter {
     }
 
     /**
-     * 推文本。契约要求不抛异常、不截断。
+     * 推文本。契约要求不抛异常、不截断（异常兜底由 {@code ChannelAdapter#pushText} 模板方法执行）。
      * <p>顺序是「先降级 Markdown，再切块」：反过来会让代码块 fence 在切块时被破坏。</p>
      */
     @Override
-    public ChannelPushResult pushText(ChannelTarget target, String text) {
+    public ChannelPushResult doPushText(ChannelTarget target, String text) {
         if (target == null) {
             return ChannelPushResult.fail("target 为空", false);
         }

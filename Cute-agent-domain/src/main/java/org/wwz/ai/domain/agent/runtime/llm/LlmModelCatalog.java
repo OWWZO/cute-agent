@@ -5,6 +5,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.wwz.ai.domain.agent.adapter.repository.ILlmModelConfigRepository;
+import org.wwz.ai.domain.agent.catalog.model.AiClientModelConfig;
 import org.wwz.ai.domain.agent.catalog.model.CatalogModel;
 
 import java.util.ArrayList;
@@ -82,7 +83,7 @@ public class LlmModelCatalog {
                         .modelType(binding.getModelType())
                         .supportsThinking(binding.getSupportsThinking())
                         .contextWindow(binding.getContextWindow())
-                        .status(1)
+                        .status(AiClientModelConfig.STATUS_ENABLED)
                         .build())
                 .toList();
     }
