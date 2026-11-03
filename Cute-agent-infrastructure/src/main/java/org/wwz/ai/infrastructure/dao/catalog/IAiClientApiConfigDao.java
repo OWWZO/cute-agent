@@ -12,18 +12,25 @@ import java.util.List;
 @Mapper
 public interface IAiClientApiConfigDao {
 
+    /** 插入 API 配置，并回填自增主键。 */
     int insert(AiClientApiPO po);
 
+    /** 按主键更新 API 配置。 */
     int updateById(AiClientApiPO po);
 
+    /** 按业务键 apiId 更新 API 配置；可能影响多行。 */
     int updateByApiId(AiClientApiPO po);
 
+    /** 按主键物理删除 API 配置。 */
     int deleteById(Long id);
 
+    /** 按业务键 apiId 物理删除 API 配置；可能影响多行。 */
     int deleteByApiId(String apiId);
 
+    /** 按主键查询；不存在时返回 null。 */
     AiClientApiPO queryById(Long id);
 
+    /** 按业务键 apiId 查询；不存在时返回 null。 */
     AiClientApiPO queryByApiId(String apiId);
 
     List<AiClientApiPO> queryEnabled();

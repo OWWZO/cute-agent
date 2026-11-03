@@ -54,10 +54,6 @@ public final class CsvCodec {
             if (record.size() == 1 && (record.get(0) == null || record.get(0).isEmpty())) {
                 continue;
             }
-            if (rows.size() >= maxRows) {
-                throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_FILE_TOO_LARGE,
-                        "CSV 行数超过上限 " + maxRows);
-            }
             Map<String, String> row = new LinkedHashMap<>();
             for (int c = 0; c < columns.size(); c++) {
                 row.put(columns.get(c), c < record.size() ? record.get(c) : "");

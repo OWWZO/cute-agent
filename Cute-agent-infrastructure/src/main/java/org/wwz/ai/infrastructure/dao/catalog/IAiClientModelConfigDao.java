@@ -9,6 +9,7 @@ import java.util.List;
 /** Catalog 上下文模型配置 DAO。 */
 @Mapper
 public interface IAiClientModelConfigDao {
+    /** 插入模型配置；mapper 使用 generated keys 回填 {@code po.id}。 */
     int insert(AiClientModelPO po);
     int updateById(AiClientModelPO po);
     int updateByModelId(AiClientModelPO po);

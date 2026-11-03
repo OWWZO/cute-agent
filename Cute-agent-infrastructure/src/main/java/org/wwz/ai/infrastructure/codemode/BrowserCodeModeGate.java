@@ -17,6 +17,12 @@ public final class BrowserCodeModeGate {
     private BrowserCodeModeGate() {
     }
 
+    /**
+     * 在用户级监视器内执行 supplier。
+     *
+     * <p>锁获取没有超时，等待线程也不会响应中断；supplier 执行过久会阻塞同一用户的后续命令。
+     * 不同 userId 使用不同监视器，互不阻塞。</p>
+     */
     public static <T> T withUserLock(String userId, java.util.function.Supplier<T> supplier) {
         Object lock = LOCKS.computeIfAbsent(userId == null || userId.isBlank() ? "anonymous" : userId,
                 key -> new Object());

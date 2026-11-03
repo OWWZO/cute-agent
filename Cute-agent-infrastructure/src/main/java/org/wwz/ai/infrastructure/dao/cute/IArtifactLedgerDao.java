@@ -12,8 +12,15 @@ import java.util.List;
 @Mapper
 public interface IArtifactLedgerDao {
 
+    /**
+     * 批量写入产物账本。
+     *
+     * <p>当前 mapper 使用 {@code INSERT IGNORE ... VALUES <foreach>}，调用方必须传入至少一条记录；
+     * 返回实际插入行数。</p>
+     */
     int batchInsertArtifacts(@Param("records") List<ArtifactRecord> records);
 
+    /** 查询单 run 的原始产物行，不做子 Agent 血缘折叠。 */
     List<ArtifactRecord> queryByRunId(@Param("runId") Long runId);
 
     /**

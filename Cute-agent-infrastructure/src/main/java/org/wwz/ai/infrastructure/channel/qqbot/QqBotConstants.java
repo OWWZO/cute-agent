@@ -27,13 +27,21 @@ public final class QqBotConstants {
     public static final String QR_URL_TEMPLATE =
             "https://q.qq.com/qqbot/openclaw/connect.html?task_id={taskId}&_wv=2&source=hermes";
 
+    private static final int INTENT_C2C_GROUP_AT_MESSAGES = 1 << 25;
+    private static final int INTENT_PUBLIC_GUILD_MESSAGES = 1 << 30;
+    private static final int INTENT_DIRECT_MESSAGE = 1 << 12;
+    private static final int INTENT_INTERACTION = 1 << 26;
+
     /**
      * Identify 的 intents 位组合：
      * {@code 1<<25} C2C_GROUP_AT_MESSAGES、{@code 1<<30} PUBLIC_GUILD_MESSAGES、
      * {@code 1<<12} DIRECT_MESSAGE、{@code 1<<26} INTERACTION。
      * <p>漏任何一位都会导致对应事件收不到。</p>
      */
-    public static final int INTENTS = (1 << 25) | (1 << 30) | (1 << 12) | (1 << 26);
+    public static final int INTENTS = INTENT_C2C_GROUP_AT_MESSAGES
+            | INTENT_PUBLIC_GUILD_MESSAGES
+            | INTENT_DIRECT_MESSAGE
+            | INTENT_INTERACTION;
 
     /** 单条消息字符上限。 */
     public static final int MAX_MESSAGE_LENGTH = 4000;

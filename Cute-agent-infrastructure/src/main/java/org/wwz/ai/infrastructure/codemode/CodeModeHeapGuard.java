@@ -39,7 +39,12 @@ public final class CodeModeHeapGuard {
         return SHARED;
     }
 
-    /** 熔断冷却期内返回 true，调用方应直接拒绝执行。 */
+    /**
+     * 熔断冷却期内返回 true，调用方应直接拒绝执行。
+     *
+     * <p>冷却状态属于进程级单例，不区分触发熔断的 Context；一个执行触发后，
+     * 其他执行也会看到同一个冷却期。</p>
+     */
     public boolean coolingDown(long cooldownMs) {
         long trippedAt = trippedAtMs.get();
         if (trippedAt <= 0L) {
