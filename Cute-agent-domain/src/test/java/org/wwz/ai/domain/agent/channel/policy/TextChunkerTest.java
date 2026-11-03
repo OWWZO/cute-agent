@@ -82,6 +82,25 @@ public class TextChunkerTest {
         }
     }
 
+    @Test
+    public void fencedChunksReserveFenceAndPrefixOverhead() {
+        String text = "```java\n" + "int x = 1;\n".repeat(200) + "```";
+        List<String> chunks = TextChunker.split(text, 64);
+        assertTrue(chunks.size() > 1);
+        for (String chunk : chunks) {
+            assertTrue(chunk, chunk.length() <= 64);
+        }
+    }
+
+    @Test
+    public void tailChunkAlsoStaysUnderLimit() {
+        String text = "```\n" + "abcdefghij\n".repeat(30) + "tail";
+        List<String> chunks = TextChunker.split(text, 60);
+        for (String chunk : chunks) {
+            assertTrue(chunk, chunk.length() <= 60);
+        }
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void absurdlySmallLimitIsRejected() {
         TextChunker.split("x".repeat(100), 10);

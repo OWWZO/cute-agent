@@ -107,11 +107,11 @@ public class DialogueRun {
         this.totalTokensTotal = 0;
         this.errorCode = null;
         this.errorMsg = null;
+        this.finalSummaryText = null;
         this.finishedAt = null;
         this.durationMs = null;
-        if (this.startedAt == null) {
-            this.startedAt = now;
-        }
+        // 复用实例时必须以本轮开始时间重新计时，否则 durationMs 会从上一轮的 startedAt 算起。
+        this.startedAt = now == null ? LocalDateTime.now() : now;
     }
 
     public void finishSuccess(String summary) {

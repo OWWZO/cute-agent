@@ -53,6 +53,20 @@ public class Nl2SqlQueryServiceTest {
         Assert.assertEquals("超过上限的结果必须截断", 500, results.get(0).getDataList().size());
     }
 
+    @Test
+    public void unsupportedComparisonOperatorDoesNotAbortQuery() throws Exception {
+        RecordingExecutionPort port = new RecordingExecutionPort();
+        Nl2SqlQueryService service = new Nl2SqlQueryService(new DataQuerySettings(), port, null, null);
+
+        Nl2SqlResult result = result("SELECT * FROM sales_model WHERE NOT (id = 1)");
+
+        List<DataQueryResult> results = service.queryData(request("table", "sales_data"), result);
+
+        Assert.assertEquals(1, results.size());
+        Assert.assertEquals("NOT", results.get(0).getFilters().get(0).getOptName());
+        Assert.assertEquals("SELECT * FROM sales_data WHERE NOT (id = 1)", port.sql);
+    }
+
     private static Nl2SqlQuery request(String modelType, String modelContent) {
         DataQuerySchema schema = new DataQuerySchema();
         schema.setColumnId("id");
@@ -74,9 +88,13 @@ public class Nl2SqlQueryServiceTest {
     }
 
     private static Nl2SqlResult result() {
+        return result("SELECT * FROM " + MODEL_CODE);
+    }
+
+    private static Nl2SqlResult result(String sql) {
         Nl2SqlResult.GeneratedQuery generated = new Nl2SqlResult.GeneratedQuery();
         generated.setQuery("销售额");
-        generated.setNl2sql("SELECT * FROM " + MODEL_CODE);
+        generated.setNl2sql(sql);
 
         Nl2SqlResult result = new Nl2SqlResult();
         result.setCode(200);

@@ -2,6 +2,7 @@ package org.wwz.ai.domain.agent.ledger.replay.projector.impl;
 
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
+import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 import org.wwz.ai.domain.agent.ledger.model.replay.ProjectedReplayEvent;
@@ -33,7 +34,7 @@ public class CodeInterpreterToolInvocationProjector extends AbstractToolInvocati
                 : null;
         String codeOutput = output == null ? "" : StringUtils.defaultString(output.getCodeOutput());
         if (StringUtils.isBlank(codeOutput) && invocation != null) {
-            codeOutput = StringUtils.defaultString(invocation.resolveResultText());
+            codeOutput = fallbackCodeOutput(invocation);
         }
 
         Map<String, Object> resultMap = new LinkedHashMap<>();
@@ -60,5 +61,31 @@ public class CodeInterpreterToolInvocationProjector extends AbstractToolInvocati
                 buildStructuredToolResponse(invocation, "code", resultMap),
                 buildArtifactRefs(artifacts)
         ));
+    }
+
+    /**
+     * 历史行没有结构化输出时，{@code resolveResultText()} 是整包工具结果 JSON；
+     * 直接塞进 codeOutput 会把 JSON 当代码展示，因此优先抽取业务字段，失败再用 errorMsg。
+     */
+    private String fallbackCodeOutput(ToolInvocationView invocation) {
+        if (invocation.getStatus() != null
+                && invocation.getStatus() == ExecutionLedgerConstants.STATUS_FAILED
+                && StringUtils.isNotBlank(invocation.getErrorMsg())) {
+            return invocation.getErrorMsg();
+        }
+        String raw = invocation.resolveResultText();
+        if (StringUtils.isBlank(raw)) {
+            return StringUtils.defaultString(invocation.getErrorMsg());
+        }
+        Map<String, Object> payload = readMap(raw);
+        String fromCodeOutput = stringValue(payload.get("codeOutput"));
+        if (StringUtils.isNotBlank(fromCodeOutput)) {
+            return fromCodeOutput;
+        }
+        String fromContent = stringValue(payload.get("content"));
+        if (StringUtils.isNotBlank(fromContent)) {
+            return fromContent;
+        }
+        return StringUtils.defaultIfBlank(invocation.getErrorMsg(), raw);
     }
 }

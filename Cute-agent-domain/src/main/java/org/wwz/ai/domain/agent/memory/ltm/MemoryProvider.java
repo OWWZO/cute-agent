@@ -12,10 +12,12 @@ public interface MemoryProvider {
     String name();
 
     /**
-     * 外部深度 Provider 占用唯一外部槽位。
+     * 是否占用唯一的外部 Provider 槽位。
+     * <p>必须显式声明为 {@code true}：默认值不能让一个本地/进程内 Provider 意外抢占
+     * 全局外部槽位，从而拒绝真正的远程记忆后端。</p>
      */
     default boolean isExternal() {
-        return true;
+        return false;
     }
 
     default boolean isAvailable() {

@@ -7,8 +7,11 @@ import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.junit.Assert;
 import org.junit.Test;
+import org.wwz.ai.domain.agent.rag.model.sql.FromTable;
 import org.wwz.ai.domain.agent.rag.model.sql.SqlModel;
 import org.wwz.ai.domain.agent.rag.sql.SqlParserUtils;
+
+import java.lang.reflect.Method;
 
 public class SqlParserUtilsTest {
 
@@ -49,6 +52,35 @@ public class SqlParserUtilsTest {
         RuntimeException exception = Assert.assertThrows(RuntimeException.class,
                 () -> SqlParserUtils.parseSelectSql("DELETE FROM sales_data", "mysql"));
         Assert.assertEquals("请检查sql是否正确", exception.getMessage());
+    }
+
+    @Test
+    public void clickHouseDialectEscapesBackslashes() {
+        Assert.assertEquals("'C:\\\\temp'",
+                SqlParserUtils.toSqlString(SqlLiteral.createCharString("C:\\temp", SqlParserPos.ZERO), "clickhouse"));
+        Assert.assertEquals("'abc\\\\'",
+                SqlParserUtils.toSqlString(SqlLiteral.createCharString("abc\\", SqlParserPos.ZERO), "clickhouse"));
+    }
+
+    @Test
+    public void recursiveCteDoesNotOverflowResolution() throws Exception {
+        // 解析器不要求 RECURSIVE 关键字；自引用本身就会触发同一条无限展开路径。
+        String sql = "WITH `t` AS (SELECT * FROM `t`) SELECT * FROM `t`";
+
+        SqlModel model = SqlParserUtils.parseSelectSql(sql, "mysql");
+
+        Assert.assertNotNull(model.getFromTable());
+    }
+
+    @Test
+    public void unknownFromShapeFallsBackInsteadOfIndexingEmptyList() throws Exception {
+        Method method = SqlParserUtils.class.getDeclaredMethod("parseSelectFromTable", SqlNode.class);
+        method.setAccessible(true);
+
+        FromTable table = (FromTable) method.invoke(null, SqlLiteral.createExactNumeric("1", SqlParserPos.ZERO));
+
+        Assert.assertNotNull(table);
+        Assert.assertEquals("1", table.getTableName());
     }
 
     /**

@@ -51,6 +51,20 @@ public class DialogueRunBehaviorTest {
     }
 
     @Test
+    public void restartShouldResetSummaryAndRestartTiming() {
+        DialogueRun run = DialogueRun.builder().requestId("req-1").build();
+        run.start(NOW);
+        run.finishSuccess("上一轮总结", NOW.plusSeconds(10));
+
+        run.start(NOW.plusSeconds(60));
+        Assert.assertNull("复用实例不能继承上一轮总结", run.getFinalSummaryText());
+        Assert.assertEquals(NOW.plusSeconds(60), run.getStartedAt());
+
+        run.finishSuccess("本轮总结", NOW.plusSeconds(65));
+        Assert.assertEquals(Long.valueOf(5000L), run.getDurationMs());
+    }
+
+    @Test
     public void finishSuccessShouldSetTerminalStateAndDuration() {
         DialogueRun run = DialogueRun.builder().requestId("req-1").build();
         run.start(NOW);

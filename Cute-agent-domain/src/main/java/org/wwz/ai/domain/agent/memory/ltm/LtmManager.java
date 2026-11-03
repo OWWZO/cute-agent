@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.memory.ltm;
 
+import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -239,7 +240,8 @@ public class LtmManager {
         try {
             return provider.handleToolCall(toolName, args == null ? Map.of() : args);
         } catch (Exception e) {
-            return "{\"success\":false,\"message\":\"" + e.getMessage() + "\"}";
+            // 异常消息可能含引号/反斜杠/换行，直接拼接会产出非法 JSON；交给序列化器转义。
+            return "{\"success\":false,\"message\":" + JSON.toJSONString(e.getMessage()) + "}";
         }
     }
 

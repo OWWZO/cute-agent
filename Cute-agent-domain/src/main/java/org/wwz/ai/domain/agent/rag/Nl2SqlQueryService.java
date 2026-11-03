@@ -299,7 +299,7 @@ public class Nl2SqlQueryService {
         DataQueryFilter filter = new DataQueryFilter();
         filter.setCol(condition.getIdentifier());
         filter.setOpt(condition.getComparisonType());
-        filter.setOptName(ComparisonType.of(condition.getComparisonType()).getComparisonName());
+        filter.setOptName(resolveComparisonName(condition.getComparisonType()));
         filter.setVal(CollectionUtils.isEmpty(condition.getValueList())
                 ? condition.getValue() : String.join(",", condition.getValueList()));
         DataQuerySchema schema = columnMap.getOrDefault(StringUtils.lowerCase(filter.getCol()),
@@ -307,6 +307,18 @@ public class Nl2SqlQueryService {
         filter.setName(schema == null ? filter.getCol() : schema.getColumnName());
         filter.setDataType(schema == null ? null : schema.getDataType());
         return filter;
+    }
+
+    /**
+     * Calcite 会产出 ComparisonType 之外的算子（如 NOT_BETWEEN），未知算子不能让整条查询失败；
+     * 此时用原始算子名作为展示名。
+     */
+    private String resolveComparisonName(String comparisonType) {
+        try {
+            return ComparisonType.of(comparisonType).getComparisonName();
+        } catch (IllegalArgumentException e) {
+            return comparisonType;
+        }
     }
 
     public void parseChartConfig(List<DataQueryResult> dataList) {
