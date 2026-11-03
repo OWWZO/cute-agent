@@ -21,7 +21,23 @@ public interface BrowserRelayConnection {
 
     boolean isOpen();
 
+    /**
+     * 发送一条 typed 命令。
+     *
+     * <p>传输层失败（对端已断开、写入中断等）应由实现以 {@link java.io.IOException} 抛出；
+     * 命令为空等编程错误保持非受检异常，不被包装成传输失败。</p>
+     */
     void send(BrowserCommand command) throws Exception;
 
+    /**
+     * 终止连接并释放底层资源。
+     *
+     * <p>契约：</p>
+     * <ul>
+     *   <li><b>幂等</b>：重复调用不得抛异常；连接已关闭时直接返回；</li>
+     *   <li><b>可并发</b>：允许与 {@link #send(BrowserCommand)} 并发调用，实现须保证关闭过程线程安全；</li>
+     *   <li><b>异常语义</b>：传输层关闭失败以 {@link java.io.IOException} 抛出，编程错误保持非受检异常。</li>
+     * </ul>
+     */
     void terminate() throws Exception;
 }

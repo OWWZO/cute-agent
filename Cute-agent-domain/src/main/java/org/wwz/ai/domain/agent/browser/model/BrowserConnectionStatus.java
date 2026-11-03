@@ -1,33 +1,18 @@
 package org.wwz.ai.domain.agent.browser.model;
 
+import lombok.Value;
+
 /**
  * Browser relay connectivity and current tab metadata for one user.
  */
+@Value
 public final class BrowserConnectionStatus {
 
-    private final boolean connected;
-    private final String tabUrl;
-    private final String tabTitle;
-
-    public BrowserConnectionStatus(boolean connected, String tabUrl, String tabTitle) {
-        this.connected = connected;
-        this.tabUrl = tabUrl;
-        this.tabTitle = tabTitle;
-    }
+    boolean connected;
+    String tabUrl;
+    String tabTitle;
 
     public static BrowserConnectionStatus offline() {
         return new BrowserConnectionStatus(false, null, null);
-    }
-
-    public boolean isConnected() {
-        return connected;
-    }
-
-    public String getTabUrl() {
-        return tabUrl;
-    }
-
-    public String getTabTitle() {
-        return tabTitle;
     }
 }
