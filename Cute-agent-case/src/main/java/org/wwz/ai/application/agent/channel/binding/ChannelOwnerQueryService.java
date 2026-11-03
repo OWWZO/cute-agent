@@ -1,7 +1,6 @@
 package org.wwz.ai.application.agent.channel.binding;
 
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.channel.model.ChannelBinding;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
@@ -14,7 +13,6 @@ import java.util.List;
  * <p>只返回会话元信息，<b>不返回</b>对方 openid / 昵称——owner 能看到对话内容，
  * 但不应借这个入口反查陌生人身份。</p>
  */
-@Slf4j
 public class ChannelOwnerQueryService {
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -29,6 +27,10 @@ public class ChannelOwnerQueryService {
         this.ledgerReadRepository = ledgerReadRepository;
     }
 
+    /**
+     * 查询绑定下的会话列表。
+     * <p>{@code limit} 会被归一到 {@code [1, 100]}；非正数按 1 处理，大于 100 时按 100 处理。</p>
+     */
     public SessionListView listSessions(Long bindingId, String ownerUserId, int limit) {
         ChannelBinding binding = bindingService.requireOwned(bindingId, ownerUserId);
         int safeLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);

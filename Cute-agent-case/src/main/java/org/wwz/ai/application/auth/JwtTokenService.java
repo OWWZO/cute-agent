@@ -24,6 +24,7 @@ public class JwtTokenService {
     private static final String ACCESS_TOKEN_TYPE_CLAIM = "token_type";
     private static final String ACCESS_TOKEN_TYPE = "access";
     private static final String SESSION_ID_CLAIM = "sid";
+    private static final String ROLE_CLAIM = "role";
 
     private final String secret;
     private final String issuer;
@@ -60,7 +61,7 @@ public class JwtTokenService {
                 .withIssuer(issuer)
                 .withSubject(account.getUserId())
                 .withClaim(SESSION_ID_CLAIM, sessionId)
-                .withClaim("role", account.getRole())
+                .withClaim(ROLE_CLAIM, account.getRole())
                 .withClaim(ACCESS_TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
                 .withIssuedAt(Date.from(issuedAt))
                 .withExpiresAt(Date.from(expiresAt))
@@ -80,7 +81,7 @@ public class JwtTokenService {
             DecodedJWT jwt = verifier.verify(accessToken);
             String userId = jwt.getSubject();
             String sessionIdClaim = jwt.getClaim(SESSION_ID_CLAIM).asString();
-            String role = jwt.getClaim("role").asString();
+            String role = jwt.getClaim(ROLE_CLAIM).asString();
             Date issuedAt = jwt.getIssuedAt();
             Date expiresAt = jwt.getExpiresAt();
             if (userId == null || userId.isBlank()

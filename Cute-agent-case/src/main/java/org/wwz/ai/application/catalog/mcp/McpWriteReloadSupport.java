@@ -10,7 +10,7 @@ import org.wwz.ai.domain.agent.catalog.port.IMcpRuntimeReloadPort;
 /**
  * MCP 配置写后刷新。
  * <p>
- * 语义：配置已落库即视为成功，运行时刷新失败只降级为 info 提示——
+ * 语义：配置已落库即视为成功，运行时刷新失败只降级为 info 提示，并同时记录 WARN 日志——
  * 不能让可选的运行时能力让调用方以为写失败。刷新未改动任何行时直接短路。
  */
 @Slf4j

@@ -24,7 +24,8 @@ public record CatalogSubAgentCreateCommand(
         String systemPrompt,
 
         /**
-         * 允许使用的工具名集合；null 表示不限制，包含 {@code "*"} 也表示全部允许。
+         * 允许使用的工具名集合；inherit 与 custom 模式都会以它作为 allow-list。
+         * null 表示不限制，包含 {@code "*"} 也表示全部允许。
          * 当前创建持久化会把 null 或空集合写为未设置，是否需要“不允许任何工具”应显式确认。
          */
         Set<String> allowedTools,
@@ -37,8 +38,9 @@ public record CatalogSubAgentCreateCommand(
 
         /**
          * 工具策略，仅接受 {@code inherit} 或 {@code custom}（忽略大小写）。
-         * 空白或 null 默认 {@code inherit}：继承父 Agent 工具视图；{@code custom} 才使用
-         * {@link #allowedTools} 和 {@link #deferredTools} 构造自定义视图。
+         * 空白或 null 默认 {@code inherit}：从父 Agent 工具视图继承，但仍受
+         * {@link #allowedTools} 和 {@link #disallowedTools} 过滤；{@code custom} 会使用同样的
+         * 过滤规则并额外按 {@link #deferredTools} 构造自定义延迟工具视图。
          * <p>冲突时 {@link #disallowedTools} 始终优先；{@link #deferredTools} 仅在 custom
          * 模式下生效。</p>
          */

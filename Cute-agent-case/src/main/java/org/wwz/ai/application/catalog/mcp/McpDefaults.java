@@ -10,6 +10,9 @@ final class McpDefaults {
 
     static final String DEFAULT_TRANSPORT_TYPE = "streamable_http";
 
+    /** MCP 默认状态：1 表示启用。 */
+    static final int DEFAULT_STATUS = 1;
+
     /**
      * 默认请求超时数值。单位由 transport 决定，当前实现中 STDIO 按秒解释，
      * SSE/Streamable HTTP 按分钟解释；因此 5 分别表示 5 秒和 5 分钟。
@@ -25,6 +28,6 @@ final class McpDefaults {
      * 都会被归一为启用 1。需要严格校验输入范围的调用方应在写入前自行拒绝非法值。
      */
     static int normalizeStatus(Integer status) {
-        return status != null && status == 0 ? 0 : 1;
+        return status != null && status == 0 ? 0 : DEFAULT_STATUS;
     }
 }
