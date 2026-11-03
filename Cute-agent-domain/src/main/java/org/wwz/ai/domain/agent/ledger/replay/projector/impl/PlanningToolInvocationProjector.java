@@ -52,6 +52,7 @@ public class PlanningToolInvocationProjector extends AbstractToolInvocationProje
                 .messageType("plan")
                 .messageOrder(1)
                 .resultMap(buildPlanPayload(plan, plannerRoundId))
+                .timing(resolveReplayTiming(invocation))
                 .build());
 
         if (!hasCurrentStep(plan)) {
@@ -73,6 +74,7 @@ public class PlanningToolInvocationProjector extends AbstractToolInvocationProje
                     .messageOrder(1)
                     .resultMap(buildTaskPayload(invocation, rawStep, plannerRoundId))
                     .artifactRefs(CollectionUtils.isEmpty(artifacts) ? null : buildArtifactRefs(artifacts))
+                    .timing(resolveReplayTiming(invocation))
                     .build());
         }
         return events;

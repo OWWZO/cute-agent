@@ -20,6 +20,9 @@ public interface SessionWorkingMemoryService {
 
     /**
      * 加载指定 scope 的 READY 消息链。
+     * <p>scope 取值由 {@link WorkingMemoryScopes} 约定：主链路用 {@code main}，
+     * 实现写入前应调用 {@link WorkingMemoryScopes#normalize(String)} 归一空白值；
+     * 未归一的自定义值会形成独立记忆分区，写入成功但主视图读不到。</p>
      */
     List<Message> loadReadyMessages(String sessionId, String memoryScope, String currentRequestId);
 

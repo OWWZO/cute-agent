@@ -28,6 +28,7 @@ public class ToolOutputPersistCommand {
 
     private String toolName;
 
+    /** 工具调用终态 code，取值受执行账本状态映射约束，见 ExecutionLedgerConstants.STATUS_*。 */
     private Integer status;
 
     private String errorMsg;

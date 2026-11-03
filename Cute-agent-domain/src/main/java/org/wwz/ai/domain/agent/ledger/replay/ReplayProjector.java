@@ -57,10 +57,6 @@ public class ReplayProjector {
             events.addAll(projectToolHistory(bundle, state));
         }
 
-        if (!hasLlm && !hasTool) {
-            appendRunSummaryFallback(events, bundle, state);
-            return events;
-        }
         appendRunSummaryFallback(events, bundle, state);
         return events;
     }

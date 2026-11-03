@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -40,6 +41,23 @@ public class DeepSearchToolOutput implements ToolStructuredOutput {
                 stages == null ? new ArrayList<>() : new ArrayList<>(stages),
                 chapters == null ? new ArrayList<>() : new ArrayList<>(chapters)
         );
+    }
+
+    /** 只读视图；setter 与工厂保持一致的 null 归一化语义。 */
+    public List<DeepSearchStage> getStages() {
+        return stages == null ? List.of() : Collections.unmodifiableList(stages);
+    }
+
+    public void setStages(List<DeepSearchStage> stages) {
+        this.stages = stages == null ? new ArrayList<>() : new ArrayList<>(stages);
+    }
+
+    public List<DeepSearchChapter> getChapters() {
+        return chapters == null ? List.of() : Collections.unmodifiableList(chapters);
+    }
+
+    public void setChapters(List<DeepSearchChapter> chapters) {
+        this.chapters = chapters == null ? new ArrayList<>() : new ArrayList<>(chapters);
     }
 
     @Override

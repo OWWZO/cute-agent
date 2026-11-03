@@ -1,5 +1,7 @@
 package org.wwz.ai.domain.agent.memory.ltm;
 
+import java.util.Locale;
+
 /**
  * 内置策展作用域。
  */
@@ -23,7 +25,7 @@ public enum CuratedMemoryScope {
         if (code == null || code.isBlank()) {
             return CURATED;
         }
-        String normalized = code.trim().toLowerCase();
+        String normalized = code.trim().toLowerCase(Locale.ROOT);
         for (CuratedMemoryScope scope : values()) {
             if (scope.code.equals(normalized) || scope.name().equalsIgnoreCase(normalized)) {
                 return scope;

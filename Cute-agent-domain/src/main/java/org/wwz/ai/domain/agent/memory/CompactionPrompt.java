@@ -185,6 +185,10 @@ public final class CompactionPrompt {
     public static String groundHistoricalTaskSnapshot(String body, String latestUserText) {
         String grounded = StringUtils.defaultString(body).trim();
         String actionable = StringUtils.trimToEmpty(latestUserText);
+        if (StringUtils.isBlank(actionable)) {
+            // 没有可追溯的当前任务时不注入空的 Historical Task Snapshot 段。
+            return grounded;
+        }
         boolean cancelled = actionable.matches("(?is).*(cancel|stop|nevermind|算了|取消|停止).*");
         String replacement = "## Historical Task Snapshot\n"
                 + (cancelled ? "Prior in-flight task was cancelled by the user: " : "")

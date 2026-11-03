@@ -21,7 +21,9 @@ import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
 import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 会话历史摘要与回放聚合服务。
@@ -158,15 +160,21 @@ public class ConversationHistoryReplayService {
         }
         List<ConversationHistoryDetail.ConversationRunDetail> runDetails = new ArrayList<>();
         HistoryModeSnapshot historyModeSnapshot = HistoryModeSnapshot.defaultReact();
+        // 按 requestId 关联批量明细，避免依赖 queryRunDetails 的返回顺序造成跨 run 串数据。
+        Map<String, ExecutionRunDetail> runDetailByRequestId = new HashMap<>();
+        for (ExecutionRunDetail detail : batchRunDetails) {
+            if (detail == null || detail.getRun() == null
+                    || StringUtils.isBlank(detail.getRun().getRequestId())) {
+                continue;
+            }
+            runDetailByRequestId.putIfAbsent(detail.getRun().getRequestId(), detail);
+        }
         if (CollectionUtils.isNotEmpty(runs)) {
-            for (int index = 0; index < runs.size(); index++) {
-                DialogueRunView run = runs.get(index);
+            for (DialogueRunView run : runs) {
                 if (run == null || StringUtils.isBlank(run.getRequestId())) {
                     continue;
                 }
-                ExecutionRunDetail runDetail = batchRunDetails != null && index < batchRunDetails.size()
-                        ? batchRunDetails.get(index)
-                        : null;
+                ExecutionRunDetail runDetail = runDetailByRequestId.get(run.getRequestId());
                 ReplayFactBundle bundle = ReplayFactBundle.builder()
                         .run(runDetail == null ? run : runDetail.getRun())
                         .llmInvocations(runDetail == null ? List.of() : runDetail.getLlmInvocations())

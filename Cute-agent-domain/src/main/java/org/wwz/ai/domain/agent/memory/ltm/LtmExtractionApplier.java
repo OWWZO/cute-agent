@@ -3,6 +3,7 @@ package org.wwz.ai.domain.agent.memory.ltm;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -11,6 +12,7 @@ import java.util.List;
 /**
  * 将 LLM 返回的 JSON 操作应用到 CuratedMemoryStore。
  */
+@Slf4j
 public final class LtmExtractionApplier {
 
     private LtmExtractionApplier() {
@@ -46,6 +48,7 @@ public final class LtmExtractionApplier {
             }
             return ops;
         } catch (Exception e) {
+            log.warn("LTM 抽取结果解析失败，按空列表降级: raw={}", StringUtils.abbreviate(raw, 500), e);
             return List.of();
         }
     }

@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.ledger.replay.projector.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
@@ -26,6 +27,7 @@ import java.util.Map;
  * 统一处理账本事实到前端 eventData 的外壳、artifact 合并、tool binding 和子 Agent 嵌套信息；
  * 具体工具只实现自身 payload 的解释，不直接读取数据库。
  */
+@Slf4j
 abstract class AbstractToolInvocationProjector implements ToolInvocationProjector {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -40,6 +42,7 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
                     MAPPER.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class)
             );
         } catch (Exception e) {
+            log.warn("工具回放 JSON 解析失败，按空对象降级: text={}", StringUtils.abbreviate(text, 500), e);
             return new LinkedHashMap<>();
         }
     }
@@ -269,7 +272,7 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
         return String.valueOf(System.currentTimeMillis());
     }
 
-    private ReplayTiming resolveReplayTiming(ToolInvocationView invocation) {
+    protected ReplayTiming resolveReplayTiming(ToolInvocationView invocation) {
         if (invocation == null) {
             return null;
         }
@@ -327,9 +330,7 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
         if (StringUtils.isNotBlank(fileRef.getDomainUrl())) {
             info.put("domainUrl", fileRef.getDomainUrl());
         }
-        if (!info.containsKey("missing")) {
-            info.put("missing", Boolean.FALSE);
-        }
+        info.put("missing", Boolean.FALSE);
         if (fileRef.getFileSize() != null) {
             info.put("fileSize", fileRef.getFileSize());
         }

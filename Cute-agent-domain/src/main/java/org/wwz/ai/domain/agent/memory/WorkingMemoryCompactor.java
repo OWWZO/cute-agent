@@ -20,7 +20,6 @@ import java.util.Set;
 public final class WorkingMemoryCompactor {
 
     public record CompactionWindow(int headEnd, int tailStart, String previousSummary) {
-        public int middleStart() { return headEnd; }
     }
 
     private static final int MAX_TAIL_MESSAGE_FLOOR = 8;
@@ -402,7 +401,7 @@ public final class WorkingMemoryCompactor {
             return n;
         }
         int target = (int) Math.ceil(Math.max(0.0d, budget.getSummaryTargetRatio()) * budget.threshold());
-        int ceiling = Math.max(target, (int) Math.ceil(target * 1.5d));
+        int ceiling = (int) Math.ceil(target * 1.5d);
         int availableTail = Math.max(0, n - head - 1);
         int minTailFloor = Math.min(Math.max(0, budget.getProtectLastN()), MAX_TAIL_MESSAGE_FLOOR);
         int minTail = Math.min(minTailFloor, availableTail);
