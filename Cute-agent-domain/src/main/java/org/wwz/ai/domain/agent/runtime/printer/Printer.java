@@ -13,7 +13,12 @@ public interface Printer {
     /**
      * 发送消息
      *
-     * @param message 消息内容
+     * @param messageId       帧标识；为 null 时由实现生成（当前实现使用 UUID）
+     * @param messageType     帧类型（如 {@code result} / {@code stream_settle} / {@code tool_call_delta}），
+     *                        实现据此选择专属处理并判定终态
+     * @param message         消息内容
+     * @param digitalEmployee 数字员工标识，可为 null；非空时透传到响应与 resultMap
+     * @param isFinal         是否最终帧，原样透传给下游
      */
 
     void send(String messageId, String messageType, Object message, String digitalEmployee, Boolean isFinal);
@@ -36,14 +41,17 @@ public interface Printer {
      * 收在接口里后，新增实现只需覆盖两个核心方法。
      */
 
+    /** 只带类型与内容的便捷重载：{@code messageId}/{@code digitalEmployee} 为 null，{@code isFinal} 为 true。 */
     default void send(String messageType, Object message) {
         send(null, messageType, message, null, true);
     }
 
+    /** 带数字员工的便捷重载：{@code messageId} 为 null，{@code isFinal} 为 true。 */
     default void send(String messageType, Object message, String digitalEmployee) {
         send(null, messageType, message, digitalEmployee, true);
     }
 
+    /** 带帧标识与终态标记的便捷重载：{@code digitalEmployee} 为 null。 */
     default void send(String messageId, String messageType, Object message, Boolean isFinal) {
         send(messageId, messageType, message, (String) null, isFinal);
     }
@@ -79,6 +87,7 @@ public interface Printer {
         send(null, messageType, message, extraResultMap, null, true);
     }
 
+    /** 关闭输出端口，释放底层资源；重复调用应无副作用（当前实现转发为流的 {@code complete()}）。 */
     void close();
 
     void updateAgentType(AgentType agentType);

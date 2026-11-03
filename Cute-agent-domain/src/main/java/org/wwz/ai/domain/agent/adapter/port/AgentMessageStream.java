@@ -5,6 +5,16 @@ import java.io.IOException;
 /**
  * 协议无关的流式输出端口。
  * domain 只依赖该端口发送增量事件，具体采用 SSE、WebSocket 还是其他协议由 trigger/case 侧适配。
+ *
+ * <p>生命周期与并发契约（所有实现必须一致，当前以 SSE 实现为准）：</p>
+ * <ul>
+ *   <li>{@link #complete()} / {@link #completeWithError(Throwable)} 幂等且互斥：
+ *       只有第一次调用生效，之后的调用（含两者交叉）静默忽略；</li>
+ *   <li>进入终态后再调用 {@link #send(Object)} 静默丢弃，不再抛 {@link IOException}；</li>
+ *   <li>{@link #onAbort(Runnable)} 可重复注册且回调累加，每个回调至多执行一次：
+ *       注册时若链路已中断，立即在注册线程执行；否则在检测到中断的线程上执行；</li>
+ *   <li>{@link #isAborted()} 一旦返回 {@code true} 不会回退。</li>
+ * </ul>
  */
 public interface AgentMessageStream {
 
