@@ -7,6 +7,10 @@ import lombok.NoArgsConstructor;
 
 /**
  * rich tool 输出落表命令。
+ * <p>字段可空性：{@code requestId}、{@code toolCallId}、{@code toolName}、{@code status}、
+ * {@code structuredOutput} 必须提供，否则写入方会直接跳过（不抛异常）；
+ * {@code toolInvocationId}/{@code runId}/{@code sessionId} 允许为空——工作台生图等非 run 场景
+ * 只提供请求级关联字段。校验由调用方在构造命令前完成，此处不做统一非空约束。</p>
  */
 @Data
 @Builder

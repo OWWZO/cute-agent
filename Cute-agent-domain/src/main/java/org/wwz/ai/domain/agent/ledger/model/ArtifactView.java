@@ -51,6 +51,11 @@ public class ArtifactView {
 
     private String fileHash;
 
+    /**
+     * 扩展元数据 JSON，原样透传、不保证可解析。
+     * <p>可能为 {@code null} 或非法 JSON；消费方必须自行容错（按缺省值处理），
+     * 不得假设该字段一定包含可解析的 metadata。</p>
+     */
     private String metadataJson;
 
     private LocalDateTime createTime;

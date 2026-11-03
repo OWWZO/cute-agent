@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -47,4 +49,11 @@ public class FeaturedConversationPublicDetail {
     private ConversationHistoryPage historyPage;
 
     private ConversationHistoryDetail historyDetail;
+
+    /**
+     * 标签以只读副本返回，避免调用方通过 getter 改动公共详情载荷。
+     */
+    public List<String> getTags() {
+        return tags == null ? null : Collections.unmodifiableList(new ArrayList<>(tags));
+    }
 }

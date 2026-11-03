@@ -16,7 +16,9 @@ import java.util.List;
  */
 public interface ExecutionLedgerQueryService {
 
-    int DEFAULT_SESSION_RUN_PAGE_SIZE = 100;
+    /** 会话 run 分页的默认页大小，必须严格小于 {@link #MAX_SESSION_RUN_PAGE_SIZE}。 */
+    int DEFAULT_SESSION_RUN_PAGE_SIZE = 50;
+    /** 会话 run 分页的硬上限。 */
     int MAX_SESSION_RUN_PAGE_SIZE = 100;
     int DEFAULT_RECENT_SESSION_PAGE_SIZE = 10;
     int MAX_RECENT_SESSION_PAGE_SIZE = 100;

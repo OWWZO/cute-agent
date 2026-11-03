@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.ledger.replay.projector;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
@@ -10,8 +11,10 @@ import java.util.List;
 
 /**
  * 工具调用历史回放投影器注册表。
- * <p>按 tool_name 选择专用 projector，并在没有匹配实现时使用兜底 projector。</p>
+ * <p>按 tool_name 选择专用 projector，并在没有匹配实现时使用兜底 projector。
+ * 多个 projector 同时匹配时仍按注册顺序取第一个，但会打 warn 日志暴露配置重叠。</p>
  */
+@Slf4j
 @RequiredArgsConstructor
 public class ToolInvocationProjectorRegistry {
 
@@ -40,12 +43,24 @@ public class ToolInvocationProjectorRegistry {
         if (!reuseCurrentTaskGroup && !supportsPlannerTaskGrouping(invocation)) {
             state.renewTaskId();
         }
+        String toolName = invocation == null ? null : invocation.getToolName();
+        ToolInvocationProjector matched = null;
         for (ToolInvocationProjector projector : projectors) {
-            if (projector != null && projector.supports(invocation == null ? null : invocation.getToolName())) {
-                return projector.project(invocation, artifacts, state);
+            if (projector == null || !projector.supports(toolName)) {
+                continue;
             }
+            if (matched == null) {
+                matched = projector;
+                continue;
+            }
+            log.warn("多个 tool projector 同时匹配 toolName={}，使用 {}，忽略 {}",
+                    toolName,
+                    matched.getClass().getSimpleName(),
+                    projector.getClass().getSimpleName());
         }
-        return defaultProjector.project(invocation, artifacts, state);
+        return matched == null
+                ? defaultProjector.project(invocation, artifacts, state)
+                : matched.project(invocation, artifacts, state);
     }
 
     private boolean supportsPlannerTaskGrouping(ToolInvocationView invocation) {

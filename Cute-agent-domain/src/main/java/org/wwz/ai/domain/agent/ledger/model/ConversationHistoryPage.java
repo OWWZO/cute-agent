@@ -3,16 +3,17 @@ package org.wwz.ai.domain.agent.ledger.model;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Lightweight, keyset-paged session history.
  */
 @Data
+@EqualsAndHashCode
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -55,8 +56,10 @@ public class ConversationHistoryPage {
 
     private LocalDateTime lastActiveAt;
 
+    /** 本页 run 摘要；不参与相等性判断，默认与生产方一致使用不可变列表。 */
+    @EqualsAndHashCode.Exclude
     @Builder.Default
-    private List<ConversationRunSummary> runs = new ArrayList<>();
+    private List<ConversationRunSummary> runs = List.of();
 
     private String nextCursor;
 
