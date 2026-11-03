@@ -38,8 +38,8 @@ public final class LtmExtractionApplier {
                     continue;
                 }
                 ops.add(LtmExtractionOp.builder()
-                        .action(StringUtils.defaultString(o.getString("action"), "add").trim().toLowerCase())
-                        .target(StringUtils.defaultString(o.getString("target"), "curated").trim().toLowerCase())
+                        .action(StringUtils.defaultString(o.getString("action"), LtmExtractionOp.ACTION_ADD).trim().toLowerCase())
+                        .target(StringUtils.defaultString(o.getString("target"), LtmExtractionOp.TARGET_CURATED).trim().toLowerCase())
                         .content(StringUtils.trimToEmpty(o.getString("content")))
                         .oldText(StringUtils.trimToEmpty(o.getString("old_text")))
                         .build());
@@ -71,10 +71,10 @@ public final class LtmExtractionApplier {
                 scope = CuratedMemoryScope.CURATED;
             }
             CuratedMemoryWriteResult result = switch (op.getAction()) {
-                case "add" -> store.add(owner, scope, op.getContent(), sessionId, requestId, writeOrigin);
-                case "replace" -> store.replace(owner, scope, op.getOldText(), op.getContent(),
+                case LtmExtractionOp.ACTION_ADD -> store.add(owner, scope, op.getContent(), sessionId, requestId, writeOrigin);
+                case LtmExtractionOp.ACTION_REPLACE -> store.replace(owner, scope, op.getOldText(), op.getContent(),
                         sessionId, requestId, writeOrigin);
-                case "remove" -> store.remove(owner, scope, op.getOldText(), sessionId, requestId, writeOrigin);
+                case LtmExtractionOp.ACTION_REMOVE -> store.remove(owner, scope, op.getOldText(), sessionId, requestId, writeOrigin);
                 default -> null;
             };
             if (result != null && result.isSuccess() && !result.isNoChange()) {

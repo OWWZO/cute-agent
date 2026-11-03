@@ -13,9 +13,16 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class LtmExtractionOp {
-    /** add | replace | remove */
+
+    public static final String ACTION_ADD = "add";
+    public static final String ACTION_REPLACE = "replace";
+    public static final String ACTION_REMOVE = "remove";
+    public static final String TARGET_USER = "user";
+    public static final String TARGET_CURATED = "curated";
+
+    /** 取值见 {@code ACTION_*}。 */
     private String action;
-    /** user | curated */
+    /** 取值见 {@code TARGET_*}。 */
     private String target;
     private String content;
     private String oldText;

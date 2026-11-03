@@ -54,6 +54,8 @@ public interface SessionWorkingMemoryService {
     /**
      * 用压缩后的投影整体替换指定 scope 的 READY turns（旧 turns 标 INVALID）。
      * 仅服务 compaction；不改变 Execution Ledger。
+     * <p>实现必须把「旧 turns 标 INVALID + 写入新投影」放在同一事务内原子完成；
+     * 失败时必须抛出异常，不得吞掉错误留下半替换状态。</p>
      */
     void replaceReadyProjection(String sessionId,
                                 String memoryScope,

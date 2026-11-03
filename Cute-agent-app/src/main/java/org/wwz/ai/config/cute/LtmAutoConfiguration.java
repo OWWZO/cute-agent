@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.wwz.ai.domain.agent.memory.ltm.BackgroundReviewService;
 import org.wwz.ai.domain.agent.memory.ltm.CuratedMemoryStore;
 import org.wwz.ai.domain.agent.memory.ltm.LtmManager;
@@ -42,6 +43,12 @@ public class LtmAutoConfiguration {
         this.properties = properties;
         this.memoryFlushServiceProvider = memoryFlushServiceProvider;
         this.backgroundReviewServiceProvider = backgroundReviewServiceProvider;
+    }
+
+    @PreDestroy
+    public void releaseRuntimeConfig() {
+        // 防止测试/多上下文场景下旧服务被静态定位器继续引用，拖住已关闭的上下文。
+        LtmServices.unbind();
     }
 
     @PostConstruct
