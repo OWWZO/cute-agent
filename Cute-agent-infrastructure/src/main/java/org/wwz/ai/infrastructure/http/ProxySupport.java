@@ -31,23 +31,17 @@ public final class ProxySupport {
         if (trimmed == null) {
             return null;
         }
-        try {
-            URI uri = URI.create(trimmed);
-            String scheme = StringUtils.defaultString(uri.getScheme()).toLowerCase();
-            Proxy.Type type = switch (scheme) {
-                case "http", "https" -> Proxy.Type.HTTP;
-                case "socks", "socks5", "socks5h" -> Proxy.Type.SOCKS;
-                default -> throw new IllegalArgumentException("unsupported proxy scheme: " + scheme);
-            };
-            if (StringUtils.isBlank(uri.getHost()) || uri.getPort() <= 0 || uri.getUserInfo() != null) {
-                throw new IllegalArgumentException("proxy must include host and port without credentials");
-            }
-            return new Proxy(type, new InetSocketAddress(uri.getHost(), uri.getPort()));
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new IllegalArgumentException("invalid proxy configuration: " + trimmed, e);
+        URI uri = URI.create(trimmed);
+        String scheme = StringUtils.defaultString(uri.getScheme()).toLowerCase();
+        Proxy.Type type = switch (scheme) {
+            case "http", "https" -> Proxy.Type.HTTP;
+            case "socks", "socks5", "socks5h" -> Proxy.Type.SOCKS;
+            default -> throw new IllegalArgumentException("unsupported proxy scheme: " + scheme);
+        };
+        if (StringUtils.isBlank(uri.getHost()) || uri.getPort() <= 0 || uri.getUserInfo() != null) {
+            throw new IllegalArgumentException("proxy must include host and port without credentials");
         }
+        return new Proxy(type, new InetSocketAddress(uri.getHost(), uri.getPort()));
     }
 
     /**

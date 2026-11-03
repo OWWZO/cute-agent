@@ -71,7 +71,6 @@ public class SpringAiMessageMapper {
             case SYSTEM -> new SystemMessage(StringUtils.defaultString(message.getContent()));
             case USER -> toUserMessage(message);
             case ASSISTANT -> toAssistantMessage(message);
-            case TOOL -> null;
             default -> throw new IllegalArgumentException("Unsupported message role: " + message.getRole());
         };
     }

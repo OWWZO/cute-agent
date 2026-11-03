@@ -11,24 +11,14 @@ import org.wwz.ai.infrastructure.dataquery.jdbc.catalog.CatalogException;
 
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /** H2 测试/本地数据源的元数据目录，按 MySQL 模式读取 INFORMATION_SCHEMA。 */
 @Slf4j
 public class H2SqlCatalog extends AbstractJdbcCatalog {
 
-    protected static final Set<String> SYS_DATABASES = new HashSet<>(4);
     private static final String SELECT_COLUMNS_SQL_TEMPLATE =
             "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA IN  ('%s') AND TABLE_NAME ='%s' ORDER BY ORDINAL_POSITION ASC";
-
-    static {
-        SYS_DATABASES.add("information_schema");
-        SYS_DATABASES.add("mysql");
-        SYS_DATABASES.add("performance_schema");
-        SYS_DATABASES.add("sys");
-    }
 
     @Override
     public List<DataQueryTable> listTables(Connection connection, String schema) throws CatalogException {
@@ -64,8 +54,8 @@ public class H2SqlCatalog extends AbstractJdbcCatalog {
         String sql = String.format(
                 SELECT_COLUMNS_SQL_TEMPLATE, "PUBLIC", tablePath.toUpperCase());
 
-        try (Statement prepared = connection.createStatement();
-             ResultSet rs = prepared.executeQuery(sql)) {
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(sql)) {
             int i = 1;
             List<DataQueryTableColumn> columnList = new ArrayList<>();
             while (rs.next()) {

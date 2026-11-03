@@ -89,7 +89,6 @@ public class JdbcDataProvider implements DataProvider<JdbcQueryRequest> {
                 }
                 queryResult.setDataList(result);
                 queryResult.setDataSize((long) result.size());
-                queryResult.setQuerySql(request.getSql());
                 queryResult.setQueryEndTime(System.currentTimeMillis());
                 return queryResult;
             }

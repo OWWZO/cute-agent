@@ -12,14 +12,31 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ConversationUploadFileDTO {
+    /** 上传文件展示名。 */
     private String name;
+
+    /** 通用访问 URL；当前上传网关通常填入预览地址。 */
     private String url;
+
+    /** 文件扩展名，不含点号。 */
     private String type;
+
+    /** 文件大小，单位字节。 */
     private Long size;
+
+    /** 下载地址。 */
     private String downloadUrl;
+
+    /** 预览地址。 */
     private String previewUrl;
+
+    /** 基于会话、文件名和内容特征生成的稳定去重键。 */
     private String resourceKey;
+
+    /** HTTP content type。 */
     private String mimeType;
+
+    /** 上传前的原始文件名。 */
     private String originFileName;
 
     public static ConversationUploadFileDTO of(String name,

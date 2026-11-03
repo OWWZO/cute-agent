@@ -48,7 +48,7 @@ public class JdbcConnectionConfig implements Serializable {
     private Integer minIdle = 3;
 
     /**
-     * 最大重试次数1
+     * 最大重试次数；默认 2，连通性测试路径会显式设为 1。
      */
     private int maxRetryTimes = 2;
 

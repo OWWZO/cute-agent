@@ -43,6 +43,7 @@ public class SpringAiToolCallbackAdapter implements ToolCallback {
 
     @Override
     public String call(String toolInput, ToolContext toolContext) {
+        // Domain 工具调用器只接收 JSON 输入；与 RegistryBackedToolCallback 一致，不向下透传 ToolContext。
         return invoke(toolInput);
     }
 

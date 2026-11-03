@@ -18,6 +18,9 @@ import java.util.stream.Collectors;
 /**
  * 进程内策展记忆实现（单测与无 DAO 降级）。
  * 禁止 embedding；有界全量快照。生产主路径见 {@link MyBatisCuratedMemoryStore}。
+ *
+ * <p>写操作成功结果中的 {@code usedChars} 是写入后的用量；失败或无变化结果
+ * 则记录失败前的用量。</p>
  */
 public class InMemoryCuratedMemoryStore implements CuratedMemoryStore {
 
@@ -164,7 +167,7 @@ public class InMemoryCuratedMemoryStore implements CuratedMemoryStore {
         int normalizedLimit = limit <= 0
                 ? DEFAULT_LIST_LIMIT
                 : Math.min(limit, DEFAULT_LIST_LIMIT);
-        List<CuratedMemoryEntry> active = activeList(owner, scope);
+        List<CuratedMemoryEntry> active = existingList(owner, scope);
         if (active.size() <= normalizedLimit) {
             return List.copyOf(active);
         }
@@ -180,7 +183,7 @@ public class InMemoryCuratedMemoryStore implements CuratedMemoryStore {
     }
 
     private void appendBlock(StringBuilder sb, String title, LtmOwner owner, CuratedMemoryScope scope) {
-        List<CuratedMemoryEntry> entries = activeList(owner, scope);
+        List<CuratedMemoryEntry> entries = existingList(owner, scope);
         int used = measure(entries);
         int limit = charLimit(scope);
         int pct = limit == 0 ? 0 : Math.min(100, used * 100 / limit);
@@ -204,7 +207,7 @@ public class InMemoryCuratedMemoryStore implements CuratedMemoryStore {
 
     @Override
     public synchronized int usedChars(LtmOwner owner, CuratedMemoryScope scope) {
-        return measure(activeList(owner, scope));
+        return measure(existingList(owner, scope));
     }
 
     @Override
@@ -214,6 +217,10 @@ public class InMemoryCuratedMemoryStore implements CuratedMemoryStore {
 
     private List<CuratedMemoryEntry> activeList(LtmOwner owner, CuratedMemoryScope scope) {
         return store.computeIfAbsent(key(owner, scope), k -> new ArrayList<>());
+    }
+
+    private List<CuratedMemoryEntry> existingList(LtmOwner owner, CuratedMemoryScope scope) {
+        return store.getOrDefault(key(owner, scope), List.of());
     }
 
     private static String key(LtmOwner owner, CuratedMemoryScope scope) {

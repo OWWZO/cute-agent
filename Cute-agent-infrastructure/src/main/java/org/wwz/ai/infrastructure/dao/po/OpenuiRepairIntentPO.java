@@ -35,7 +35,7 @@ public class OpenuiRepairIntentPO {
     /** SEARCH 原文片段（须在原文中唯一） */
     private String searchText;
 
-    /** REPLACE 替换文本；空串表示删除 */
+    /** REPLACE 替换文本；领域对象会将 null 归一为空串，空串表示删除 */
     private String replaceText;
 
     /** 产出意图的模型名，便于按批次清理 */

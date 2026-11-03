@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * 构建并缓存 Spring AI 工具回调列表，保持原有会话级工具顺序和复用策略。
+ * 构建并缓存 Spring AI 工具回调列表，按工具名大小写不敏感排序以保证稳定顺序。
  */
 @Component
 public class SpringAiToolCallbackProvider {

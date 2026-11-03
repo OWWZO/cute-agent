@@ -37,7 +37,7 @@ public class DataQueryMetadataAdapter implements DataQueryMetadataPort {
 
     @Override
     public List<DataQueryTableColumn> getTableColumnsOfSql(String sql, int limit) {
-        // SQL 字段元数据走独立 provider，避免为了拿列定义把实际数据行读入 domain 查询结果。
+        // executeQuery 会实际执行 SQL；这里只把 ResultSetMetaData 映射为列定义，不把结果行物化到 domain。
         JdbcQueryRequest jdbcQueryRequest = new JdbcQueryRequest();
         jdbcQueryRequest.setJdbcConnectionConfig(JdbcUtils.parseJdbcConnectionConfig(properties));
         jdbcQueryRequest.setSql(sql);
