@@ -90,6 +90,10 @@ export function clonePlanForRender(plan?: MESSAGE.Plan) {
  * 只取分组数、每组卡片数、以及每张卡的 `messageType` / `isFinal` /
  * `resultMap.status` / 入参与出参的长度 —— 这几项覆盖了「卡片新增」与
  * 「同一张卡内容推进」两类变化，又不至于每帧对全文做哈希。
+ *
+ * 子 Agent 的 `subagent_start` / `subagent_progress` 只原地写 childSessionId、
+ * 相位和进度字段，不碰 status / result；这些字段必须进签名，否则派生时间线
+ * 会停在首帧，详情面板拿不到 childSessionId 只能退回合成视图。
  */
 export function buildTaskFactsSignature(
   multiAgent?: MESSAGE.MultiAgent
@@ -103,6 +107,9 @@ export function buildTaskFactsSignature(
     const cards: string[] = [];
     for (const task of group || []) {
       const resultMap = (task?.resultMap || {}) as Record<string, unknown>;
+      const progressLines = Array.isArray(resultMap.subAgentProgressLines)
+        ? resultMap.subAgentProgressLines
+        : [];
       cards.push(
         [
           task?.messageType || "",
@@ -110,6 +117,16 @@ export function buildTaskFactsSignature(
           String(resultMap.status || ""),
           String(resultMap.result || "").length,
           JSON.stringify(resultMap.args ?? "").length,
+          String(resultMap.childSessionId || ""),
+          String(resultMap.subAgentId || ""),
+          String(resultMap.subAgentType || ""),
+          String(resultMap.subAgentPhase || ""),
+          String(resultMap.subAgentDescription || "").length,
+          String(resultMap.subAgentSummary || "").length,
+          progressLines.length,
+          String(progressLines[progressLines.length - 1] || ""),
+          String(resultMap.subAgentLiveText || "").length,
+          String(resultMap.subAgentElapsedMs ?? ""),
         ].join(":")
       );
     }

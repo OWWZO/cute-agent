@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { combineData, handleTaskData } from "@/utils/chat";
+import { findDerivedAgentTaskByToolCallId } from "./taskIdentity";
+import { resolveSubAgentDisplay } from "./subagent";
 
 /**
  * 回归：任务事实是**原地**改写的（`tasks.push`），派生重建的判据必须是内容签名，
@@ -86,6 +88,69 @@ describe("任务事实签名", () => {
     );
 
     expect(chat.taskFactsSignature).toBe(before);
+  });
+
+  it("子 Agent 生命周期与进度帧会改变签名，派生卡能拿到 childSessionId", () => {
+    const chat = makeChat();
+    combineData(
+      {
+        messageType: "task",
+        taskId: "t1",
+        messageId: "call-1",
+        resultMap: {
+          messageType: "tool_call",
+          toolName: "Agent",
+          toolCallId: "call-1",
+          status: "running",
+          input: { description: "写测试 HTML", subagent_type: "general-purpose" },
+        },
+      } as unknown as MESSAGE.EventData,
+      chat
+    );
+    const afterToolCall = chat.taskFactsSignature;
+
+    combineData(
+      {
+        messageType: "task",
+        taskId: "t1",
+        messageId: "call-1",
+        resultMap: {
+          messageType: "subagent_start",
+          childSessionId: "sub_agent-1",
+          parentToolCallId: "call-1",
+          subAgentId: "agent-1",
+          subagentType: "general-purpose",
+          description: "写测试 HTML",
+          status: "running",
+        },
+      } as unknown as MESSAGE.EventData,
+      chat
+    );
+    const afterStart = chat.taskFactsSignature;
+    expect(afterStart).not.toBe(afterToolCall);
+
+    combineData(
+      {
+        messageType: "task",
+        taskId: "t1",
+        messageId: "call-1",
+        resultMap: {
+          messageType: "subagent_progress",
+          parentToolUseId: "call-1",
+          subAgentId: "agent-1",
+          line: "workspace_write",
+          text: "正在写文件",
+        },
+      } as unknown as MESSAGE.EventData,
+      chat
+    );
+    expect(chat.taskFactsSignature).not.toBe(afterStart);
+
+    const derived = handleTaskData(chat, false, chat.multiAgent).currentChat;
+    const card = findDerivedAgentTaskByToolCallId(derived, "call-1");
+    expect(card).toBeTruthy();
+    expect(resolveSubAgentDisplay(card!).childSessionId).toBe("sub_agent-1");
+    expect(resolveSubAgentDisplay(card!).liveText).toBe("正在写文件");
   });
 
   it("按签名重建时，每张新卡都进入派生视图", () => {
