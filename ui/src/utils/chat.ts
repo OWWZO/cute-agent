@@ -633,12 +633,12 @@ function applySubAgentProgress(
   const kind = resolveSubAgentProgressKind(merged);
   const line = asTextField(merged.line);
   const textChunk = asTextField(merged.text);
-  const elapsedMs =
-    typeof merged.elapsedMs === "number"
-      ? merged.elapsedMs
-      : typeof merged.subAgentElapsedMs === "number"
-        ? merged.subAgentElapsedMs
-        : undefined;
+  let elapsedMs: number | undefined;
+  if (typeof merged.elapsedMs === "number") {
+    elapsedMs = merged.elapsedMs;
+  } else if (typeof merged.subAgentElapsedMs === "number") {
+    elapsedMs = merged.subAgentElapsedMs;
+  }
   const phase = asTextField(merged.phase || merged.subAgentPhase);
   const status = asTextField(merged.status);
   const subAgentId = asTextField(merged.agentId || merged.subAgentId);

@@ -66,9 +66,14 @@ export const EditToolCall = memo(function EditToolCall({
   const argStreaming = isToolArgStreaming(tool);
   const showArgStream = shouldShowToolArgStream(tool);
   const streamPath = showArgStream ? resolveToolStreamPath(arg) : "";
-  const summary = showArgStream
-    ? streamPath || (argStreaming ? "生成参数中…" : toolSummary(name, arg))
-    : toolSummary(name, arg);
+  let summary = toolSummary(name, arg);
+  if (showArgStream) {
+    if (streamPath) {
+      summary = streamPath;
+    } else if (argStreaming) {
+      summary = "生成参数中…";
+    }
+  }
   // 参数流期间 arg 每帧都在增长，parse 与 LCS diff 都不便宜，必须按内容记忆。
   const inputJson = useMemo(() => parseToolJson(arg), [arg]);
   const isError = status === "error";

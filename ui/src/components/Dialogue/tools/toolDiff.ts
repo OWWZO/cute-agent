@@ -216,13 +216,14 @@ export function extractEditFileSummaries(
     ];
   }
 
-  const listRaw = Array.isArray(d.files)
-    ? d.files
-    : Array.isArray(d.edits)
-      ? d.edits
-      : Array.isArray(d.changes)
-        ? d.changes
-        : null;
+  let listRaw: unknown[] | null = null;
+  if (Array.isArray(d.files)) {
+    listRaw = d.files;
+  } else if (Array.isArray(d.edits)) {
+    listRaw = d.edits;
+  } else if (Array.isArray(d.changes)) {
+    listRaw = d.changes;
+  }
 
   const entries: Record<string, unknown>[] = listRaw
     ? listRaw.filter(

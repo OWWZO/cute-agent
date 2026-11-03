@@ -31,6 +31,12 @@ export type ParsedTaskResult = {
   isToolResultJsonValid: boolean;
 };
 
+function resolveMediaKind(kind: string | null): "video" | "audio" | null {
+  if (kind === "video") return "video";
+  if (kind === "audio") return "audio";
+  return null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -190,8 +196,7 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
     // 注意 SVG 不算位图：它要「图形 / 源码」双模式，走 useSvg。
     const useImage = primaryKind === "image";
     const useSvg = primaryKind === "svg";
-    const mediaKind: "video" | "audio" | null =
-      primaryKind === "video" ? "video" : primaryKind === "audio" ? "audio" : null;
+    const mediaKind = resolveMediaKind(primaryKind);
     const useMedia = mediaKind !== null;
     const useFile =
       !!primaryFile &&

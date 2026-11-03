@@ -319,11 +319,12 @@ export function toolSummary(name: string, arg: string, full = false): string {
           str(d.subagent_type) ??
           str(d.subAgentType);
         if (label) return c(label);
-        const items = Array.isArray(d.todos)
-          ? d.todos
-          : Array.isArray(d.items)
-            ? d.items
-            : undefined;
+        let items: unknown[] | undefined;
+        if (Array.isArray(d.todos)) {
+          items = d.todos;
+        } else if (Array.isArray(d.items)) {
+          items = d.items;
+        }
         if (items) return c(`${items.length} todos`);
         return fallback();
       }

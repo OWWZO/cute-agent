@@ -9,6 +9,7 @@ const n = (value: unknown) => (typeof value === "number" && Number.isFinite(valu
 const opacity = (value: unknown) => (n(value) === undefined ? undefined : Math.min(1, Math.max(0, value as number)));
 const POINTS = /^[\d\s,.eE+-]*$/;
 const PATH = /^[MmLlHhVvCcSsQqTtAaZz\d\s,.eE+-]*$/;
+const FONT_WEIGHT = { normal: 440, medium: 560, semibold: 640 } as const;
 // Each transform function with a valid argument count, so a value built from
 // state that is not set yet (like "rotate( 90 80)") is dropped, not sent to the DOM.
 const TRANSFORM_ARGS: Record<string, number[]> = { translate: [1, 2], rotate: [1, 3], scale: [1, 2], skewX: [1], skewY: [1], matrix: [6] };
@@ -140,7 +141,7 @@ export const SvgText = defineComponent({
       fontSize={n(props.size) ?? 12}
       fill={fg(props.fill) ?? "currentColor"}
       textAnchor={props.anchor ?? "start"}
-      fontWeight={props.weight === "semibold" ? 640 : props.weight === "medium" ? 560 : 440}
+      fontWeight={FONT_WEIGHT[props.weight ?? "normal"]}
       fontFamily="var(--iui-font)"
     >
       {String(props.text ?? "")}

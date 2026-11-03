@@ -226,7 +226,7 @@ export const TextArea = defineComponent({
 });
 
 const options = z.array(option);
-const optionList = (value: unknown) => (Array.isArray(value) ? (value.flat() as Option[]).filter((o) => o != null).map(toOption) : []);
+const optionList = (value: unknown) => (Array.isArray(value) ? (value.flat() as Option[]).filter((o) => o !== null && o !== undefined).map(toOption) : []);
 
 export const Select = defineComponent({
   name: "Select",
@@ -240,7 +240,7 @@ export const Select = defineComponent({
   component: ({ props, statementId }) => {
     const field = useStateField(useFieldName(props.label, statementId), props.value);
     const choices = optionList(props.options);
-    const value = field.value == null ? "" : String(field.value);
+    const value = field.value === null || field.value === undefined ? "" : String(field.value);
     return (
       <Field label={props.label}>
         <select className="iui-input iui-select" value={value} aria-label={props.label ? undefined : props.placeholder} onChange={(event) => field.setValue(event.target.value)}>
@@ -266,7 +266,7 @@ export const SegmentedControl = defineComponent({
   description: "2 to 4 short choices in a row.",
   component: function SegmentedView({ props, statementId }) {
     const field = useStateField(useFieldName(undefined, statementId), props.value);
-    const value = field.value == null ? "" : String(field.value);
+    const value = field.value === null || field.value === undefined ? "" : String(field.value);
     return (
       <div className={cx("iui-segmented", props.block && "iui-block")} role="radiogroup">
         {optionList(props.options).map((o, i) => (
@@ -366,7 +366,7 @@ export const Checkbox = defineComponent({
 const choice = z.union([z.string(), z.object({ value: z.string(), label: z.string(), description: z.string().optional() })]);
 type Choice = { value: string; label: string; description?: string };
 const choiceList = (value: unknown): Choice[] =>
-  Array.isArray(value) ? (value.flat() as (string | Choice)[]).filter((o) => o != null).map((o) => (typeof o === "string" ? { value: o, label: o } : o)) : [];
+    Array.isArray(value) ? (value.flat() as (string | Choice)[]).filter((o) => o !== null && o !== undefined).map((o) => (typeof o === "string" ? { value: o, label: o } : o)) : [];
 
 export const RadioGroup = defineComponent({
   name: "RadioGroup",
@@ -380,7 +380,7 @@ export const RadioGroup = defineComponent({
   component: function RadioGroupView({ props, statementId }) {
     const field = useStateField(useFieldName(props.label, statementId), props.value);
     const name = useId();
-    const value = field.value == null ? "" : String(field.value);
+    const value = field.value === null || field.value === undefined ? "" : String(field.value);
     const variant = props.variant ?? "list";
     return (
       <fieldset className={cx("iui-radio-group", `iui-radio-${variant}`)}>
@@ -479,6 +479,12 @@ export const Timer = defineComponent({
       setStartedAt(null);
     };
     const done = left === 0 && startedAt !== null;
+    let startLabel = "Resume";
+    if (running) {
+      startLabel = "Pause";
+    } else if (startedAt === null || left === 0) {
+      startLabel = "Start";
+    }
     return (
       <div className={cx("iui-timer", running && "is-running", done && "is-done")} role="timer" aria-label={props.label || "Timer"}>
         <div className="iui-timer-read">
@@ -488,7 +494,7 @@ export const Timer = defineComponent({
         <div className="iui-timer-actions">
           <button type="button" className="iui-button iui-button-solid iui-button-sm" disabled={streaming || left === 0} onClick={toggle}>
             <Glyph name={running ? "pause" : "play"} size={14} />
-            {running ? "Pause" : startedAt === null || left === 0 ? "Start" : "Resume"}
+            {startLabel}
           </button>
           <button type="button" className="iui-button iui-button-ghost iui-button-sm" disabled={streaming || startedAt === null} onClick={reset}>
             <Glyph name="rotate-ccw" size={14} />

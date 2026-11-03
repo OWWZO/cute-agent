@@ -173,7 +173,12 @@ function tickets(input: unknown) {
       const base = { Billing: 9, Technical: 22, Accounts: 6, Shipping: 14 }[team] * { low: 1.6, normal: 1, high: 0.6, urgent: 0.3 }[priority];
       const hours = Math.round(base * (0.4 + r() * 1.6) * 10) / 10;
       const solved = age * 24 > hours * 1.5 || r() < 0.2;
-      const status = solved ? "solved" : r() < 0.6 ? "open" : "pending";
+      let status = "pending";
+      if (solved) {
+        status = "solved";
+      } else if (r() < 0.6) {
+        status = "open";
+      }
       const csat = Math.min(5, Math.max(1, Math.round(5.4 - hours / 14 - r() * 1.8)));
       return {
         id: `T-${date.replaceAll("-", "").slice(2)}${String(i + 1).padStart(2, "0")}`,

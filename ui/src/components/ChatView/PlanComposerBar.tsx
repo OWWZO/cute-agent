@@ -321,7 +321,7 @@ const PlanComposerBarInner: FC<{
         onClick={() => setMinimized((v) => !v)}
         className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left"
       >
-        <span className="kimi-appr-ic" style={{ color: "var(--color-accent)" }}>
+        <span className="kimi-appr-ic text-[var(--color-accent)]">
           {loading && status === "planning" ? (
             <LoaderCircleIcon className="size-4 animate-spin" />
           ) : (

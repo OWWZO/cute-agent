@@ -80,7 +80,6 @@ function MetricCharacter({
             y: "0.45em",
             opacity: 0
           }}
-          style={{ transformOrigin: "50% 50%" }}
           transition={FLIP_TRANSITION}
         >
           {character}

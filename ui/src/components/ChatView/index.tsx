@@ -139,6 +139,26 @@ function chatContentClassName(
   return isFocusMode ? "px-0 md:px-0 lg:px-3" : "px-0 md:px-0 lg:px-5";
 }
 
+function chatHeaderClassName(
+  hasWorkspaceLayout: boolean,
+  isFocusMode: boolean
+): string {
+  if (!hasWorkspaceLayout) {
+    return "mb-3 min-h-[36px] px-1";
+  }
+  return isFocusMode ? "py-3.5 px-3" : "py-3.5 px-5";
+}
+
+function composerDockClassName(
+  hasWorkspaceLayout: boolean,
+  isFocusMode: boolean
+): string {
+  if (!hasWorkspaceLayout) {
+    return "pb-5 pt-4";
+  }
+  return isFocusMode ? "pb-4 pt-3 px-2" : "pb-4 pt-3 px-4";
+}
+
 type Props = {
   inputInfo: CHAT.TInputInfo;
   inputDraft?: string;
@@ -1864,14 +1884,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
                 "cute-chat-header flex items-center justify-between",
                 // 头部不再画横线：面板本身已经是带框的卡片，内部再画一条会把
                 // 标题框成「卡里套卡」。层级交给间距表达。
-                hasWorkspaceLayout
-                  ? "py-3.5"
-                  : "mb-3 min-h-[36px]",
-                hasWorkspaceLayout
-                  ? isFocusMode
-                    ? "px-3"
-                    : "px-5"
-                  : "px-1"
+                chatHeaderClassName(hasWorkspaceLayout, isFocusMode)
               )}
             >
               {renderHeaderStatus({showDeepThink: hasWorkspaceLayout ? !isFocusMode : true,})}
@@ -1953,14 +1966,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
                   transition={SPRING_GENTLE}
                   className={cn(
                     "shrink-0 bg-[var(--color-bg)] motion-reduce:translate-none",
-                    hasWorkspaceLayout
-                      ? "pb-4 pt-3"
-                      : "pb-5 pt-4",
-                    hasWorkspaceLayout
-                      ? isFocusMode
-                        ? "px-2"
-                        : "px-4"
-                      : ""
+                    composerDockClassName(hasWorkspaceLayout, isFocusMode)
                   )}
                   data-composer-dock="true"
                 >

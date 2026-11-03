@@ -98,14 +98,9 @@ function Photo(props: PhotoProps) {
   const current = [src, ...(found ?? [])].find((url): url is string => !!url && !failed.includes(url));
   const settled = !current && (!needSearch || found !== undefined);
   const ratio = typeof props.aspectRatio === "number" && props.aspectRatio > 0.2 && props.aspectRatio < 5 ? props.aspectRatio : 1.5;
-  return (
-    <div
-      className={cx("iui-image", props.fit === "contain" && "is-contain", loaded === current && "is-loaded")}
-      style={{ aspectRatio: ratio, borderRadius: radius(props.radius ?? "lg") }}
-      role={current ? undefined : "img"}
-      aria-label={current ? undefined : alt}
-    >
-      {current ? (
+  const renderBody = () => {
+    if (current) {
+      return (
         <img
           key={current}
           src={current}
@@ -115,9 +110,21 @@ function Photo(props: PhotoProps) {
           onLoad={() => setLoaded(current)}
           onError={() => setFailed((list) => [...list, current])}
         />
-      ) : settled ? (
-        <ImageIcon aria-hidden className="iui-image-empty" strokeWidth={1.5} />
-      ) : null}
+      );
+    }
+    if (settled) {
+      return <ImageIcon aria-hidden className="iui-image-empty" strokeWidth={1.5} />;
+    }
+    return null;
+  };
+  return (
+    <div
+      className={cx("iui-image", props.fit === "contain" && "is-contain", loaded === current && "is-loaded")}
+      style={{ aspectRatio: ratio, borderRadius: radius(props.radius ?? "lg") }}
+      role={current ? undefined : "img"}
+      aria-label={current ? undefined : alt}
+    >
+      {renderBody()}
     </div>
   );
 }

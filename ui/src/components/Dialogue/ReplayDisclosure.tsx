@@ -179,6 +179,13 @@ const ReplayDisclosure: FC<ReplayDisclosureProps> = (props) => {
     onToggle?.(!open);
   };
 
+  let ariaAction = "展开回放";
+  let title = "展开当前 run 的完整回放";
+  if (collapsible) {
+    ariaAction = open ? "折叠过程" : "展开过程";
+    title = open ? "折叠本轮执行过程" : "展开本轮执行过程";
+  }
+
   return (
     // 分隔线挂在外层容器上（ZCode `AssistantHistoryStatus` 同款）：`pb-2` 也在外层，
     // 按钮本身只负责文字 + 箭头，不参与分隔线绘制。
@@ -190,16 +197,8 @@ const ReplayDisclosure: FC<ReplayDisclosureProps> = (props) => {
         onClick={handleRequest}
         disabled={isLoading}
         aria-busy={isLoading || undefined}
-        aria-label={`${label}，${
-          collapsible ? (open ? "折叠" : "展开") + "过程" : "展开回放"
-        }`}
-        title={
-          collapsible
-            ? open
-              ? "折叠本轮执行过程"
-              : "展开本轮执行过程"
-            : "展开当前 run 的完整回放"
-        }
+        aria-label={`${label}，${ariaAction}`}
+        title={title}
         data-process-open={collapsible ? String(open) : undefined}
         className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-lg text-foreground-subtle focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)] disabled:cursor-wait disabled:opacity-60"
       >

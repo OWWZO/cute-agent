@@ -31,14 +31,14 @@
   border-radius: var(--radius-xl, 0.75rem) var(--radius-xs, 2px) var(--radius-xl, 0.75rem) var(--radius-xl, 0.75rem);
   border: 1px solid var(--chat-user-bubble-border, currentColor);
   background: var(--chat-user-bubble, var(--zc-surface, transparent));
-  padding: 12px 16px;
+  padding: 0.857em 1.143em;
   font-size: var(--ui-font-size, 14px);
   font-weight: 400;
   line-height: 1.5;
   color: var(--zc-foreground, inherit);
   white-space: pre-wrap;
   overflow-wrap: break-word;
-  word-break: break-word;
+  word-break: normal;
 }
 
 @keyframes image-enter {

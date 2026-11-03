@@ -88,6 +88,7 @@ declare global {
     interface MultiAgent {
       tasks: Task[][]
       plan?: Plan
+      /** 后端事件字段为 snake_case，前端保留原始键名。 */
       plan_thought?: string
       plannerRounds?: PlannerRound[]
     }

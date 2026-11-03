@@ -11,7 +11,7 @@ export function read(item: unknown, field: string): unknown {
   if (!field) return item;
   let cur: unknown = item;
   for (const key of field.split(".")) {
-    if (cur == null || typeof cur !== "object") return undefined;
+    if (cur === null || typeof cur !== "object") return undefined;
     cur = (cur as Record<string, unknown>)[key];
   }
   return cur;
@@ -73,7 +73,14 @@ export function groups(rows: unknown[], key: string): Map<string | number, unkno
   const out = new Map<string | number, unknown[]>();
   for (const row of rows) {
     const raw = read(row, key);
-    const k = typeof raw === "number" ? raw : raw == null || raw === "" ? "Unknown" : String(raw);
+    let k: string | number;
+    if (typeof raw === "number") {
+      k = raw;
+    } else if (raw === null || raw === undefined || raw === "") {
+      k = "Unknown";
+    } else {
+      k = String(raw);
+    }
     const bucket = out.get(k);
     if (bucket) bucket.push(row);
     else out.set(k, [row]);

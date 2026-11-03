@@ -49,6 +49,19 @@ function pickPlanFields(tool: CHAT.Task) {
   };
 }
 
+function resolveDecision(
+  status: string,
+  approved: boolean | undefined
+): "approved" | "rejected" | null {
+  if (status === "approved" || status === "rejected") {
+    return status;
+  }
+  if (status === "decided") {
+    return approved === false ? "rejected" : "approved";
+  }
+  return null;
+}
+
 const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
   const {
     resultMap,
@@ -75,13 +88,7 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
   const [submitting, setSubmitting] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [decision, setDecision] = useState<"approved" | "rejected" | null>(
-    status === "approved" || status === "rejected"
-      ? (status as "approved" | "rejected")
-      : status === "decided"
-        ? approved === false
-          ? "rejected"
-          : "approved"
-        : null
+    resolveDecision(status, approved)
   );
 
   useEffect(() => {

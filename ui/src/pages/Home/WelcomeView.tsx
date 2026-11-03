@@ -155,10 +155,7 @@ export default function WelcomeView(props: {
             <div className="orb-intro mx-auto mb-5 flex justify-center">
               <AnimatedOrb size={88} />
             </div>
-            <h1
-              className="text-blur-intro mb-3 text-display-md font-medium leading-[1.08] tracking-[-0.02em] text-[var(--chat-text)] md:text-display-2xl lg:text-display-4xl"
-              style={{ fontFamily: "var(--font-sans)" }}
-            >
+            <h1 className="text-blur-intro mb-3 font-sans text-display-md font-medium leading-[1.08] tracking-[-0.02em] text-[var(--chat-text)] md:text-display-2xl lg:text-display-4xl">
               <KeyboardTypewriter
                 texts={HERO_TYPEWRITER_TEXTS}
                 speed={80}

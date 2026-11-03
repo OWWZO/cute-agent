@@ -91,6 +91,19 @@ const taskTitleClass =
 const taskMetaClass =
   "truncate text-ui-sm text-[var(--color-text-muted)]";
 
+function subAgentIconClassName(failed: boolean, running: boolean): string {
+  let tone = "border-[var(--chat-border)] text-[var(--chat-accent)]";
+  if (failed) {
+    tone = "border-[var(--color-danger)]/50 text-[var(--color-danger)]";
+  } else if (running) {
+    tone = "border-[var(--chat-accent)]/45 text-[var(--chat-accent)]";
+  }
+  return [
+    "relative flex size-7 shrink-0 items-center justify-center rounded-lg border",
+    tone,
+  ].join(" ");
+}
+
 export const ToolItem: FC<ToolItemProps> = memo(({
   tool,
   chat,
@@ -294,6 +307,12 @@ export const ToolItem: FC<ToolItemProps> = memo(({
       }
 
       const canOpenPanel = canOpenTaskWorkspacePanel(tool);
+      let deepSearchIcon = <FileTextIcon className="size-4" />;
+      if (loading) {
+        deepSearchIcon = <LoaderCircleIcon className="size-4 animate-spin" />;
+      } else if (isSearching) {
+        deepSearchIcon = <SearchIcon className="size-4" />;
+      }
       return (
         <div
           className={
@@ -307,13 +326,7 @@ export const ToolItem: FC<ToolItemProps> = memo(({
         >
           {isDeepSearchInline ? (
             <div className={taskIconClass}>
-              {loading ? (
-                <LoaderCircleIcon className="size-4 animate-spin" />
-              ) : isSearching ? (
-                <SearchIcon className="size-4" />
-              ) : (
-                <FileTextIcon className="size-4" />
-              )}
+              {deepSearchIcon}
             </div>
           ) : loading ? (
             <div className={taskIconClass}>
@@ -421,16 +434,7 @@ const SubAgentTimelineCard: FC<{
             <ChevronRightIcon className="size-3.5" />
           )}
         </button>
-        <div
-          className={[
-            "relative flex size-7 shrink-0 items-center justify-center rounded-lg border",
-            subAgentFailed
-              ? "border-[var(--color-danger)]/50 text-[var(--color-danger)]"
-              : subAgentRunning
-                ? "border-[var(--chat-accent)]/45 text-[var(--chat-accent)]"
-                : "border-[var(--chat-border)] text-[var(--chat-accent)]",
-          ].join(" ")}
-        >
+        <div className={subAgentIconClassName(subAgentFailed, subAgentRunning)}>
           {subAgentRunning ? (
             <StatusDot status="running" />
           ) : (

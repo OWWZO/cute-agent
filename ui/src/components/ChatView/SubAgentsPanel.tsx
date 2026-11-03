@@ -103,10 +103,15 @@ const SubAgentsPanel = memo(function SubAgentsPanel({
   onOpenDirectory?: () => void;
 }) {
   const isWide = useIsWideViewport();
-  const items = useMemo(
-    () => collectSubAgentRoster(chats?.length ? chats : chat ? [chat] : [], chat),
-    [chats, chat]
-  );
+  const items = useMemo(() => {
+    let rosterChats: CHAT.ChatItem[] = [];
+    if (chats?.length) {
+      rosterChats = chats;
+    } else if (chat) {
+      rosterChats = [chat];
+    }
+    return collectSubAgentRoster(rosterChats, chat);
+  }, [chats, chat]);
   const runningItems = useMemo(() => selectRunningSubAgents(items), [items]);
   const endedItems = useMemo(() => selectEndedSubAgents(items), [items]);
   const hasRunning = runningItems.length > 0;

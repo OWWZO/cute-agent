@@ -43,13 +43,17 @@ function renderFieldControl(
   onChange: (value: unknown) => void,
   hasError = false,
 ): ReactNode {
+  const describedBy = [
+    field.description ? `tool-field-description-${field.name}` : "",
+    hasError ? `tool-field-error-${field.name}` : "",
+  ].filter(Boolean).join(" ");
   const common = {
     id: `tool-field-${field.name}`,
     name: field.name,
     placeholder: field.placeholder,
     className: inputClassName(hasError),
     "aria-invalid": hasError || undefined,
-    "aria-describedby": field.description ? `tool-field-description-${field.name}` : undefined,
+    "aria-describedby": describedBy || undefined,
   };
 
   switch (field.type) {
@@ -109,8 +113,7 @@ function renderFieldControl(
     case "boolean":
       return (
         <input
-          id={common.id}
-          name={common.name}
+          {...common}
           type="checkbox"
           checked={value === true}
           onChange={(event) => onChange(event.currentTarget.checked)}
@@ -291,7 +294,7 @@ export default function ToolTaskDialog({
                   </p>
                 ) : null}
                 {errors[field.name] ? (
-                  <p className="mt-1 text-ui-sm text-[var(--color-danger)]" role="alert">{errors[field.name]}</p>
+                  <p id={`tool-field-error-${field.name}`} className="mt-1 text-ui-sm text-[var(--color-danger)]" role="alert">{errors[field.name]}</p>
                 ) : null}
               </div>
             ))}
