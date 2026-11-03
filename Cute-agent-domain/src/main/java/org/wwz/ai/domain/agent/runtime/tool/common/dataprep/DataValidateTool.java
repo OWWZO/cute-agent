@@ -39,10 +39,10 @@ public class DataValidateTool extends AbstractDocReadTool {
         Map<String, Object> schema = objectSchema(properties, List.of());
         // 至少要有一个校验输入/规则，否则远端调用只会失败或返回空报告。
         schema.put("anyOf", List.of(
-                Map.of("required", List.of("schema")),
-                Map.of("required", List.of("rules")),
-                Map.of("required", List.of("data")),
-                Map.of("required", List.of("source_path"))));
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("schema")),
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("rules")),
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("data")),
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("source_path"))));
         return schema;
     }
 }
