@@ -204,6 +204,12 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
                 throw new VectorPortException("Qdrant gRPC 创建集合失败", e);
             }
         }
+        try {
+            ensureGrpcPayloadIndexes(collectionName);
+        } catch (Exception e) {
+            // 索引补齐失败不能改变创建集合本身的成功/失败语义。
+            log.warn("Qdrant gRPC 确保 payload 索引失败，collection={}", collectionName, e);
+        }
     }
 
     @Override
@@ -428,6 +434,20 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
         body.put("field_name", "modelCode");
         body.put("field_schema", "keyword");
         executeRestRequest(endpoint, "PUT", "/collections/" + collectionName + "/index?wait=true", body);
+    }
+
+    private void ensureGrpcPayloadIndexes(String collectionName) throws Exception {
+        if (!StringUtils.equals(collectionName, VectorDataQueryDefaults.SCHEMA_COLLECTION_NAME)) {
+            return;
+        }
+        getClient().createPayloadIndexAsync(
+                collectionName,
+                "modelCode",
+                io.qdrant.client.grpc.Collections.PayloadSchemaType.Keyword,
+                null,
+                true,
+                null,
+                null).get();
     }
 
     private Points.Filter toQdrantFilter(Map<String, Object> values) {

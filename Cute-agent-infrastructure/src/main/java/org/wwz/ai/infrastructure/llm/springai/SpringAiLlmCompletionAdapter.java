@@ -1,6 +1,5 @@
 package org.wwz.ai.infrastructure.llm.springai;
 
-import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -25,6 +24,10 @@ import reactor.core.publisher.Flux;
 
 import java.net.Proxy;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -83,11 +86,26 @@ public class SpringAiLlmCompletionAdapter implements LlmCompletionPort, LlmChatM
     private String buildCacheKey(LLMSettings settings) {
         return String.join("::",
                 StringUtils.defaultString(settings.getModel()),
-                StringUtils.defaultString(settings.getBaseUrl()),
-                StringUtils.defaultString(settings.getInterfaceUrl()),
-                StringUtils.defaultString(settings.getApiKey()),
-                JSON.toJSONString(settings.getExtParams()),
-                StringUtils.defaultString(cuteConfig.getLlmProxy()));
+                StringUtils.trimToEmpty(settings.getBaseUrl()),
+                resolveCompletionsPath(settings),
+                sha256Hex(StringUtils.defaultString(settings.getApiKey())),
+                StringUtils.defaultString(StringUtils.trimToNull(cuteConfig.getLlmProxy())));
+    }
+
+    private String resolveCompletionsPath(LLMSettings settings) {
+        return StringUtils.isNotBlank(settings.getInterfaceUrl())
+                ? settings.getInterfaceUrl().trim()
+                : "/v1/chat/completions";
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 
     private OpenAiChatModel createModel(LLMSettings settings) {
@@ -95,9 +113,7 @@ public class SpringAiLlmCompletionAdapter implements LlmCompletionPort, LlmChatM
         if (StringUtils.isBlank(baseUrl)) {
             throw new IllegalArgumentException("Base URL is not configured for model: " + settings.getModel());
         }
-        String completionsPath = StringUtils.isNotBlank(settings.getInterfaceUrl())
-                ? settings.getInterfaceUrl().trim()
-                : "/v1/chat/completions";
+        String completionsPath = resolveCompletionsPath(settings);
         String proxy = StringUtils.trimToNull(cuteConfig.getLlmProxy());
         OpenAiApi.Builder apiBuilder = OpenAiApi.builder()
                 .baseUrl(baseUrl)

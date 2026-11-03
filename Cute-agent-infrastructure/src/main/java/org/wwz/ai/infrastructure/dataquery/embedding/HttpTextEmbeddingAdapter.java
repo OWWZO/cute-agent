@@ -12,6 +12,7 @@ import org.wwz.ai.domain.agent.rag.model.embedding.TextEmbeddingRequest;
 import org.wwz.ai.domain.agent.rag.model.embedding.TextEmbeddingResult;
 import org.wwz.ai.domain.agent.rag.port.TextEmbeddingPort;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -76,6 +77,35 @@ public class HttpTextEmbeddingAdapter implements TextEmbeddingPort {
         if (vectors == null) {
             return null;
         }
+        if (vectors instanceof com.alibaba.fastjson.JSONArray vectorArray) {
+            List<List<Float>> converted = convertVectorRows(vectorArray);
+            return converted == null ? castVectorRows(vectors) : converted;
+        }
+        return castVectorRows(vectors);
+    }
+
+    private List<List<Float>> convertVectorRows(com.alibaba.fastjson.JSONArray vectorArray) {
+        List<List<Float>> result = new ArrayList<>(vectorArray.size());
+        for (Object rawVector : vectorArray) {
+            if (!(rawVector instanceof com.alibaba.fastjson.JSONArray values)) {
+                return null;
+            }
+            List<Float> vector = new ArrayList<>(values.size());
+            for (Object rawValue : values) {
+                if (rawValue == null) {
+                    vector.add(null);
+                } else if (rawValue instanceof Number number) {
+                    vector.add(number.floatValue());
+                } else {
+                    return null;
+                }
+            }
+            result.add(vector);
+        }
+        return result;
+    }
+
+    private List<List<Float>> castVectorRows(Object vectors) {
         return JSONObject.parseObject(JSONObject.toJSONString(vectors), new TypeReference<>() {
         });
     }

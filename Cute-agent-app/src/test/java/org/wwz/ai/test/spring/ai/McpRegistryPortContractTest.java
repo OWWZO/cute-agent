@@ -29,7 +29,7 @@ public class McpRegistryPortContractTest {
         Assert.assertTrue(executor.listGlobalEnabledTools().isEmpty());
         Assert.assertTrue(executor.listGlobalEnabledResources().isEmpty());
         Assert.assertFalse(executor.hasAnyResources());
-        Mockito.verify(configRepository, Mockito.atLeastOnce()).findEnabled();
+        Mockito.verify(configRepository, Mockito.times(1)).findEnabled();
     }
 
     /**
