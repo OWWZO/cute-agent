@@ -4,8 +4,8 @@
 
 :class:`TabularSchema` captures the shape of a result so downstream
 tools, UI widgets, and the LLM can reason about it without scanning the
-raw rows. Inference is done once when a tool finishes so it costs
-O(columns) not O(rows × columns).
+raw rows. Inference is done once when a tool finishes and scans the
+result rows to compute null/unique counts, so it is O(rows × columns).
 """
 
 from __future__ import annotations

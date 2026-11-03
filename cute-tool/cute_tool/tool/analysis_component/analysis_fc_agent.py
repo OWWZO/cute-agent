@@ -253,6 +253,7 @@ def _merge_chat_completion_stream(lines: Any) -> Dict[str, Any]:
     """把 Chat Completions SSE 分片还原为下游现有的 message 结构。"""
     content_parts: List[str] = []
     tool_calls: Dict[int, Dict[str, Any]] = {}
+    argument_parts: Dict[int, List[str]] = {}
     metadata: Dict[str, Any] = {}
     role = "assistant"
     finish_reason = None
@@ -335,7 +336,7 @@ def _merge_chat_completion_stream(lines: Any) -> Dict[str, Any]:
                     merged["function"]["name"] = function["name"]
                 arguments = function.get("arguments")
                 if isinstance(arguments, str):
-                    merged["function"]["arguments"] += arguments
+                    argument_parts.setdefault(index, []).append(arguments)
 
         # 兼容仍返回旧版 function_call 增量的 OpenAI 兼容网关。
         function_call = delta.get("function_call") or message.get("function_call")
@@ -353,7 +354,7 @@ def _merge_chat_completion_stream(lines: Any) -> Dict[str, Any]:
                 merged["function"]["name"] = function_call["name"]
             arguments = function_call.get("arguments")
             if isinstance(arguments, str):
-                merged["function"]["arguments"] += arguments
+                argument_parts.setdefault(0, []).append(arguments)
 
     if not saw_chunk:
         raise RuntimeError("analysis FC LLM returned an empty streaming response")
@@ -363,6 +364,8 @@ def _merge_chat_completion_stream(lines: Any) -> Dict[str, Any]:
         "content": "".join(content_parts),
     }
     if tool_calls:
+        for index, parts in argument_parts.items():
+            tool_calls[index]["function"]["arguments"] = "".join(parts)
         message["tool_calls"] = [tool_calls[index] for index in sorted(tool_calls)]
     result: Dict[str, Any] = {
         **metadata,

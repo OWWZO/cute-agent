@@ -144,7 +144,7 @@ class AnalysisContext(object):
     @property
     def schemas_markdown(self) -> str:
         """将 schema 转为 Markdown 表格，便于模型阅读。"""
-        schemas = ""
+        schemas: list[str] = []
         for s in self.schemas:
             columns = (
                 "| name | type | comment | valueExample |\n| --- | --- | --- | --- |\n"
@@ -160,8 +160,10 @@ class AnalysisContext(object):
                 for c in s["schemaList"]
                 if c.get("analyzeSuggest", 0) == -1
             ]
-            schemas += f"""\ntable: {s["modelName"]}\n\ncolumns:\n\n{columns}\n\nnoAnalysisColumns: {noAnalysisColumns}\n"""
-        return schemas
+            schemas.append(
+                f"""\ntable: {s["modelName"]}\n\ncolumns:\n\n{columns}\n\nnoAnalysisColumns: {noAnalysisColumns}\n"""
+            )
+        return "".join(schemas)
 
     def save_insight(self, df: "pd.DataFrame", insight: str, analysis_process: str):  # type: ignore
         """保存一步分析得到的洞察（数据帧 + 结论 + 过程）。"""

@@ -277,13 +277,14 @@ async def code_interpreter_agent(
 
                 # 表格文件
                 if file_name.split(".")[-1] in ["xlsx", "xls", "csv"]:
-                    pd.set_option("display.max_columns", None)
                     df = (
                         pd.read_csv(file_path)
                         if file_name.endswith(".csv")
                         else pd.read_excel(file_path)
                     )
-                    files.append({"path": file_path, "abstract": f"{df.head(10)}"})
+                    with pd.option_context("display.max_columns", None):
+                        abstract = f"{df.head(10)}"
+                    files.append({"path": file_path, "abstract": abstract})
                 # 文本文件
                 elif file_name.split(".")[-1] in ["txt", "md", "html"]:
                     try:
@@ -291,9 +292,7 @@ async def code_interpreter_agent(
                             files.append(
                                 {
                                     "path": file_path,
-                                    "abstract": "".join(rf.readlines())[
-                                        :max_file_abstract_size
-                                    ],
+                                    "abstract": rf.read(max_file_abstract_size),
                                 }
                             )
                     except UnicodeDecodeError:
@@ -302,9 +301,7 @@ async def code_interpreter_agent(
                             files.append(
                                 {
                                     "path": file_path,
-                                    "abstract": "".join(rf.readlines())[
-                                        :max_file_abstract_size
-                                    ],
+                                    "abstract": rf.read(max_file_abstract_size),
                                 }
                             )
 

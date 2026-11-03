@@ -25,19 +25,19 @@ class _BoundLogger:
         return f"{base} {parts}"
 
     def debug(self, event: str, **kwargs: Any) -> None:
-        _loguru.debug(self._fmt(event, kwargs))
+        _loguru.opt(lazy=True).debug("{}", lambda: self._fmt(event, kwargs))
 
     def info(self, event: str, **kwargs: Any) -> None:
-        _loguru.info(self._fmt(event, kwargs))
+        _loguru.opt(lazy=True).info("{}", lambda: self._fmt(event, kwargs))
 
     def warning(self, event: str, **kwargs: Any) -> None:
-        _loguru.warning(self._fmt(event, kwargs))
+        _loguru.opt(lazy=True).warning("{}", lambda: self._fmt(event, kwargs))
 
     def error(self, event: str, **kwargs: Any) -> None:
-        _loguru.error(self._fmt(event, kwargs))
+        _loguru.opt(lazy=True).error("{}", lambda: self._fmt(event, kwargs))
 
     def exception(self, event: str, **kwargs: Any) -> None:
-        _loguru.exception(self._fmt(event, kwargs))
+        _loguru.opt(lazy=True).exception("{}", lambda: self._fmt(event, kwargs))
 
 
 def get_logger(name: str | None = None) -> _BoundLogger:

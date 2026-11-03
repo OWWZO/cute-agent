@@ -203,12 +203,16 @@ def _figure_bbox(page, number: str, kind: str) -> list[float] | None:
     except Exception:  # noqa: BLE001 - defensive against odd PDFs
         return None
 
+    words_by_line: dict[tuple[Any, Any], list[Any]] = {}
+    for word in words:
+        words_by_line.setdefault((word[5], word[6]), []).append(word)
+
     caption: list[float] | None = None
-    for i, w in enumerate(words):
+    for w in words:
         token = str(w[4]).lower().strip(".:")
         if token not in {"figure", "fig", "table"}:
             continue
-        line_words = [ww for ww in words if ww[5] == w[5] and ww[6] == w[6]]
+        line_words = words_by_line[(w[5], w[6])]
         line_text = " ".join(str(ww[4]) for ww in line_words)
         if not re.search(rf"\b{re.escape(number)}\b", line_text):
             continue

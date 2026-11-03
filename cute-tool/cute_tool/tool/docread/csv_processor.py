@@ -18,7 +18,8 @@ _SNIFF_BYTES = 65536
 
 def _detect_encoding(path: Path) -> str:
     # 这里只读取有限前缀：编码探测不应为了打开一个大表而先把整个文件载入内存。
-    raw = path.read_bytes()[:_SNIFF_BYTES]
+    with path.open("rb") as file:
+        raw = file.read(_SNIFF_BYTES)
     try:
         raw.decode("utf-8")
         return "utf-8"

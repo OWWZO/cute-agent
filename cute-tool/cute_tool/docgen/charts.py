@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 _DEFAULT_DPI = 160
+_CJK_FONT_NAMES: dict[str, str] = {}
 
 
 def render_chart_png(
@@ -84,9 +85,14 @@ def _configure_matplotlib_cjk(matplotlib: Any) -> None:
     try:
         from matplotlib import font_manager
 
-        font_manager.fontManager.addfont(font_path)
-        font_name = font_manager.FontProperties(fname=font_path).get_name()
-        matplotlib.rcParams["font.sans-serif"] = [font_name, *matplotlib.rcParams["font.sans-serif"]]
+        font_name = _CJK_FONT_NAMES.get(font_path)
+        if font_name is None:
+            font_manager.fontManager.addfont(font_path)
+            font_name = font_manager.FontProperties(fname=font_path).get_name()
+            _CJK_FONT_NAMES[font_path] = font_name
+        families = matplotlib.rcParams["font.sans-serif"]
+        if font_name not in families:
+            matplotlib.rcParams["font.sans-serif"] = [font_name, *families]
     except Exception as exc:  # noqa: BLE001 - a missing font must not drop the chart
         logger.warning("docgen_chart_cjk_font_unavailable", error=str(exc), font_path=font_path)
 
