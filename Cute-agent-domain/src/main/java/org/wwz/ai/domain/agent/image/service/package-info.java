@@ -1,10 +1,15 @@
 /**
- * 工作台生图 capability。
+ * 生图工作台领域服务契约（{@code image.service} 子包）。
  * <p>
- * 承载生图工作台的领域契约与领域服务：模型（{@code model}）、下游调用端口（{@code port}）
- * 与执行内核/批次持久化服务（{@code service}）。技术实现（HTTP 客户端、DAO、文件服务）
- * 归属 {@code org.wwz.ai.infrastructure.imagegeneration}，应用编排归属
- * {@code org.wwz.ai.application.agent.image}，HTTP 适配归属
+ * 本包只声明服务接口：执行内核（{@code IImageGenerationExecutionKernel}）、
+ * 批次持久化（{@code IImageGenerationBatchPersistenceService}）与工作台入口
+ * （{@code IWorkspaceImageGenerationService}）。领域模型在兄弟包
+ * {@code org.wwz.ai.domain.agent.image.model}，下游调用端口在
+ * {@code org.wwz.ai.domain.agent.image.port}。
+ * <p>
+ * 技术实现：{@code IWorkspaceImageGenerationService} 由
+ * {@code org.wwz.ai.infrastructure.imagegeneration} 实现；应用编排在
+ * {@code org.wwz.ai.application.agent.image}，HTTP 适配在
  * {@code org.wwz.ai.trigger.http.agent.image}。
  */
 package org.wwz.ai.domain.agent.image.service;

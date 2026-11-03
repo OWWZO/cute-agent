@@ -37,6 +37,12 @@ public interface SessionContextCompactionService {
         return applyIfNeeded(sessionId, WorkingMemoryScopes.MAIN, requestId, messages);
     }
 
+    /**
+     * 若超阈值则按给定 scope 压缩；未压缩时原样返回入参。
+     * <p><b>列表所有权：</b>实现不得原地修改 {@code messages}；未发生压缩时返回入参本身
+     * （同一实例或等值列表），发生压缩时返回新的 List。调用方以「返回值与入参相同或相等」
+     * 判断本轮是否压缩，原地修改会被误判为未变化。</p>
+     */
     List<Message> applyIfNeeded(String sessionId, String memoryScope, String requestId, List<Message> messages);
 
     /**
@@ -65,6 +71,10 @@ public interface SessionContextCompactionService {
      * mid-run 压缩的唯一实现点：短重载都委托到这里。
      * <p>实现必须覆写本方法；{@code flushParity}/{@code promptShape}/{@code tokenSnapshot}
      * 是 Hermes prompt-cache 对齐所需的 mid-run 上下文，不得静默丢弃。</p>
+     * <p>上述三个上下文参数均可为 {@code null}：3/4/5 参重载会以 {@code null} 传入缺失项。
+     * 实现必须逐项判空；缺失时按「无该上下文」处理并回退到本地估算，不得直接解引用。</p>
+     * <p><b>列表所有权：</b>与 {@code applyIfNeeded} 相同——不得原地修改入参；
+     * 未压缩时原样返回入参，压缩时返回新的 List。</p>
      */
     List<Message> applyIfNeededMidRun(String sessionId,
                                       String memoryScope,
