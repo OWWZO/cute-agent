@@ -142,7 +142,7 @@ public class BaseAgentStreamEventHandler {
                         .timing(timing)
                         .build();
             case "plan":
-                if (eventResult.isInitPlan()) {
+                if (eventResult.markPlanInitialized()) {
                     if (isFinal) {
                         eventResult.getResultMap().put("plan", agentResponse.getPlan());
                     }

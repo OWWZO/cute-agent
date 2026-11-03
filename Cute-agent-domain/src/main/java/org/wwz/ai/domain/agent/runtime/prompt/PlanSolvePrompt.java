@@ -121,14 +121,8 @@ public final class PlanSolvePrompt {
         if (base == null || base.isEmpty()) {
             return "";
         }
-        for (String legacy : new String[]{
-                 "PLAN_SOLVE_ORCHESTRATION_V1",
-                 "PLAN_SOLVE_ORCHESTRATION_V2",
-                 "PLAN_SOLVE_ORCHESTRATION_V3",
-                 "PLAN_SOLVE_ORCHESTRATION_V4",
-                 "PLAN_SOLVE_ORCHESTRATION_V5",
-                 "PLAN_SOLVE_ORCHESTRATION_V6"
-        }) {
+        for (int version = 1; version < currentOrchestrationVersion(); version++) {
+            String legacy = "PLAN_SOLVE_ORCHESTRATION_V" + version;
             if (!base.contains(legacy)) {
                 continue;
             }
@@ -146,5 +140,18 @@ public final class PlanSolvePrompt {
             base = (base.substring(0, start) + base.substring(end)).trim();
         }
         return base;
+    }
+
+    /** 从当前 marker 推导版本号，升级 marker 时 legacy 清理范围随之扩展。 */
+    private static int currentOrchestrationVersion() {
+        int markerIndex = ORCHESTRATION_MARKER.lastIndexOf("_V");
+        if (markerIndex < 0) {
+            return 1;
+        }
+        try {
+            return Integer.parseInt(ORCHESTRATION_MARKER.substring(markerIndex + 2));
+        } catch (NumberFormatException e) {
+            return 1;
+        }
     }
 }

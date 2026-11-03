@@ -122,6 +122,9 @@ public class LlmProviderBusinessException extends RuntimeException {
         }
 
         public LlmProviderBusinessException build() {
+            if (providerCode == null || providerCode.isBlank()) {
+                throw new IllegalArgumentException("providerCode must not be blank");
+            }
             LlmProviderBusinessException error = new LlmProviderBusinessException(this);
             if (cause != null) {
                 error.initCause(cause);

@@ -20,13 +20,16 @@ public class SubAgentDefinitionRecord {
 
     private String systemPrompt;
 
-    private Set<String> allowedTools;
+    @Builder.Default
+    private Set<String> allowedTools = Set.of();
 
-    private Set<String> disallowedTools;
+    @Builder.Default
+    private Set<String> disallowedTools = Set.of();
 
     private String toolPolicyMode;
 
-    private Set<String> deferredTools;
+    @Builder.Default
+    private Set<String> deferredTools = Set.of();
 
     private Integer maxSteps;
 

@@ -14,17 +14,21 @@ public interface IPlanApprovalRepository {
 
     Optional<PlanApprovalRecord> findByResumeRequestId(String resumeRequestId);
 
+    /** 「开放」定义必须与 {@link PlanApprovalStatuses#OPEN} 一致（PENDING/RESUME_PENDING/RESUMING）。 */
     List<PlanApprovalRecord> listOpenBySessionId(String sessionId);
 
+    /** 必须与 {@link #listOpenBySessionId} 使用同一组开放状态。 */
     boolean hasOpenBySessionId(String sessionId);
 
     /**
      * CAS PENDING → RESUME_PENDING；成功返回 true。
+     * <p>返回 false 表示记录不存在、userId 不匹配或状态已冲突，三者不做区分。</p>
      */
     boolean casDecidePending(String approvalId, String userId, PlanApprovalDecision decision, String resumeRequestId);
 
     /**
      * CAS RESUME_PENDING → RESUMING；成功返回 true。
+     * <p>返回 false 表示记录不存在、userId 不匹配或状态已冲突，三者不做区分。</p>
      */
     boolean casClaimResume(String resumeRequestId, String userId);
 

@@ -29,8 +29,8 @@ public class AgentStreamAccumulatorTest {
     public void aggregatesPlanAndNestedTaskStateOnce() {
         AgentStreamAccumulator accumulator = new AgentStreamAccumulator();
 
-        Assert.assertTrue(accumulator.isInitPlan());
-        Assert.assertFalse(accumulator.isInitPlan());
+        Assert.assertTrue(accumulator.markPlanInitialized());
+        Assert.assertFalse(accumulator.markPlanInitialized());
         accumulator.setPlannerRoundId("round-1");
         accumulator.setResultMapTask(new ArrayList<>(List.of("task-1")));
         accumulator.setResultMapSubTask("tool-1");

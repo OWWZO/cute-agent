@@ -5,6 +5,8 @@ package org.wwz.ai.domain.agent.runtime.planmode;
  */
 public class PlanApprovalRequiredException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     private final String planContent;
     private final String planFilePath;
     private final String toolCallId;
