@@ -28,6 +28,8 @@ public class SubAgentDefinition {
 
     /**
      * 允许的工具名；null 或含 "*" 表示在全局过滤后全部允许。
+     * <p><b>空集合表示不允许任何工具</b>，不是「全部允许」——空名单是表达
+     * 「这个子 Agent 不需要工具」的最自然写法，不能静默升级成全部权限。</p>
      */
     @Builder.Default
     private Set<String> allowedTools = null;
@@ -54,9 +56,7 @@ public class SubAgentDefinition {
     private Integer maxSteps;
 
     public boolean allowsAllTools() {
-        return allowedTools == null
-                || allowedTools.isEmpty()
-                || allowedTools.contains("*");
+        return allowedTools == null || allowedTools.contains("*");
     }
 
     public boolean usesCustomToolPolicy() {

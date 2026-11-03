@@ -52,6 +52,12 @@ public class Nl2SqlQueryService {
 
     public static final String NL2SQL_URL = "/v1/tool/nl2sql";
 
+    /**
+     * NL2SQL 结果行数安全上限。生成 SQL 即使没有 LIMIT，也必须在数据源侧把返回行数压到该值内，
+     * 防止被提示词注入诱导的全表扫描把结果集读爆内存。
+     */
+    private static final int MAX_RESULT_ROWS = 500;
+
     private final DataQuerySettings settings;
     private final DataQueryExecutionPort dataQueryExecutionPort;
     private final RemoteHttpPort remoteHttpPort;
@@ -156,8 +162,13 @@ public class Nl2SqlQueryService {
                 realSql = realSql.replaceAll(code + "|`" + code + "`", tableName);
             }
 
+            // 真正执行的是替换表名后的 realSql，必须对最终 SQL 再做一次只读校验，
+            // 否则配置的模型内容/替换结果可以把校验过的 SELECT 改写成非查询语句。
+            if (!SqlParserUtils.isSelectSql(realSql, request.getDbType())) {
+                throw new RuntimeException("nl2sql 生成的 SQL 不是只读 SELECT，已拒绝执行");
+            }
             log.info("{},{} 执行sql:{}", request.getTraceId(), request.getRequestId(), realSql);
-            SqlExecutionResult queryResult = dataQueryExecutionPort.query(realSql);
+            SqlExecutionResult queryResult = dataQueryExecutionPort.query(realSql, MAX_RESULT_ROWS);
             log.info("{},{} 查询sql结果大小：{}", request.getTraceId(), request.getRequestId(), queryResult.getDataSize());
 
             DataQueryResult queryData = new DataQueryResult();
@@ -165,11 +176,20 @@ public class Nl2SqlQueryService {
             queryData.setFilters(filters);
             queryData.setQuestion(generatedQuery.getQuery());
             queryData.setNl2sqlResult(realSql);
-            queryData.setDataList(queryResult.getDataList());
+            queryData.setDataList(capResultRows(request, queryResult.getDataList()));
             dataList.add(queryData);
         }
         parseChartConfig(dataList);
         return dataList;
+    }
+
+    /** 端口实现应已在数据源侧限流；这里再兜底截断一次，保证上限不依赖单个适配器实现。 */
+    private List<Map<String, Object>> capResultRows(Nl2SqlQuery request, List<Map<String, Object>> rows) {
+        if (rows == null || rows.size() <= MAX_RESULT_ROWS) {
+            return rows;
+        }
+        log.warn("{},{} 查询结果超过 {} 行，已截断", request.getTraceId(), request.getRequestId(), MAX_RESULT_ROWS);
+        return new ArrayList<>(rows.subList(0, MAX_RESULT_ROWS));
     }
 
     private List<DataQueryColumn> parseColumns(SqlModel sqlModel, Map<String, DataQuerySchema> columnMap) {

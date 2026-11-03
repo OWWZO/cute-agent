@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
 import java.util.Base64;
+import java.util.regex.Pattern;
 
 /**
  * keyset cursor 的二进制编解码框架。
@@ -15,12 +16,19 @@ import java.util.Base64;
  * 各 cursor（session / run）只按自己的字段顺序读写 DataStream，框架统一负责
  * Base64url 包装、版本头、读尽校验与异常归一。这些安全约束 duplicated 一次
  * 就等于可以被单独绕过一次，因此集中在这里：
- * 字符集白名单挡住非 base64url 输入、版本头拒绝未来格式、
- * {@code available() != 0} 拒绝尾随数据、所有失败一律归一为 IllegalArgumentException。
+ * 字符集白名单挡住非 base64url 输入、长度上限挡住超大 cursor、
+ * 版本头拒绝未来格式、{@code available() != 0} 拒绝尾随数据、
+ * 所有失败一律归一为 IllegalArgumentException。
  */
 public final class KeysetCursorCodec {
 
-    private static final String URL_SAFE_ALPHABET = "[A-Za-z0-9_-]+";
+    private static final Pattern URL_SAFE_PATTERN = Pattern.compile("[A-Za-z0-9_-]+");
+
+    /**
+     * cursor 载荷只有几十字节，编码后远小于该上限；先卡长度再解码，
+     * 避免攻击者用多兆字节的 query 参数换取等量的解码/解析开销。
+     */
+    private static final int MAX_ENCODED_LENGTH = 512;
 
     private KeysetCursorCodec() {
     }
@@ -47,7 +55,8 @@ public final class KeysetCursorCodec {
      * @param invalidMessage 异常文案，沿用各 cursor 原有的措辞（调用方可能据此定位）
      */
     public static <T> T decode(String encoded, int version, String invalidMessage, PayloadReader<T> reader) {
-        if (encoded == null || encoded.isBlank() || !encoded.matches(URL_SAFE_ALPHABET)) {
+        if (encoded == null || encoded.isBlank() || encoded.length() > MAX_ENCODED_LENGTH
+                || !URL_SAFE_PATTERN.matcher(encoded).matches()) {
             throw invalidCursor(invalidMessage);
         }
         try {

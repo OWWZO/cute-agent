@@ -170,8 +170,9 @@ public class VectorService {
         if (collectionName == null || collectionName.isBlank()) {
             throw new IllegalArgumentException("collectionName is null!");
         }
-        if (filter == null) {
-            throw new IllegalArgumentException("filter is null!");
+        if (filter == null || filter.isEmpty()) {
+            // 空过滤在向量库里等价于 match-all，必须显式拒绝，避免误删整个集合。
+            throw new IllegalArgumentException("filter is empty!");
         }
         try {
             if (vectorIndexAdminPort == null) {

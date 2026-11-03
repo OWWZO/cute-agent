@@ -43,6 +43,12 @@ public class KeysetCursorCodecTest {
     }
 
     @Test
+    public void rejectsOversizedEncodedValueBeforeDecoding() {
+        assertRejected(() -> RunCursor.decode("A".repeat(513)));
+        assertRejected(() -> ConversationSessionCursor.decode("A".repeat(10_000)));
+    }
+
+    @Test
     public void rejectsNullOrBlankEncodedValue() {
         assertRejected(() -> RunCursor.decode(null));
         assertRejected(() -> RunCursor.decode(""));

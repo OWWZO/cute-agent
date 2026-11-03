@@ -300,7 +300,11 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
 
     @Override
     public void deleteByFilter(String collectionName, VectorFilter filter) {
-        Map<String, Object> must = filter == null ? Collections.emptyMap() : filter.getMust();
+        // 空过滤在 Qdrant 里等价于 match-all，会把整个 collection 删掉；必须显式拒绝。
+        if (filter == null || filter.getMust() == null || filter.getMust().isEmpty()) {
+            throw new IllegalArgumentException("filter is null or empty!");
+        }
+        Map<String, Object> must = filter.getMust();
         ResolvedEndpoint endpoint = resolveEndpoint();
         if (shouldUseRestApi(endpoint)) {
             Map<String, Object> body = new LinkedHashMap<>();

@@ -182,6 +182,19 @@ public class SkillFrontMatterParserTest {
         Assert.assertFalse(frontMatter.warnings().isEmpty());
     }
 
+    /**
+     * 重复键是作者笔误；解析器必须留 warning，而不是静默让后者覆盖前者。
+     */
+    @Test
+    public void duplicateKeysProduceWarning() {
+        SkillFrontMatter frontMatter = SkillFrontMatterParser.parse(
+                "---\nname: first\nname: second\n---\n\nbody\n");
+
+        Assert.assertTrue(frontMatter.hasFrontMatter());
+        Assert.assertFalse("重复键必须产生 warning", frontMatter.warnings().isEmpty());
+        Assert.assertEquals("second", frontMatter.fields().get("name"));
+    }
+
     @Test
     public void shouldReturnEmptyForBlankInput() {
         SkillFrontMatter frontMatter = SkillFrontMatterParser.parse("");

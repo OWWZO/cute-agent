@@ -1,6 +1,11 @@
 package org.wwz.ai.domain.agent.runtime.tool;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONException;
+import com.alibaba.fastjson.serializer.JSONSerializer;
+import com.alibaba.fastjson.serializer.SerializeWriter;
+import com.alibaba.fastjson.serializer.SerializerFeature;
+import com.alibaba.fastjson.serializer.ValueFilter;
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -26,6 +31,12 @@ public final class ToolObservationSerializer {
             "\n...[output truncated at the context cap. Narrow the query, or read the file in smaller "
                     + "windows with workspace_read(start_line, line_count)]...";
 
+    /**
+     * 序列化缓冲的额外余量。限制的是「写出去的上限」，缓冲区允许略大于 cap，
+     * 这样单个被截断的超长字符串仍能写进缓冲区，不会只留下一个很短的半截 JSON。
+     */
+    private static final int JSON_SERIALIZE_HEADROOM = 8_192;
+
     private ToolObservationSerializer() {
     }
 
@@ -44,7 +55,7 @@ public final class ToolObservationSerializer {
             return truncateForLlm(text, cap);
         }
         try {
-            return truncateForLlm(JSON.toJSONString(data), cap);
+            return toBoundedJson(data, cap);
         } catch (Exception ignore) {
             return truncateForLlm(String.valueOf(data), cap);
         }
@@ -66,7 +77,7 @@ public final class ToolObservationSerializer {
             payload.put("error", errorText);
             payload.put("detail", detail);
             try {
-                return truncateForLlm(JSON.toJSONString(payload), cap);
+                return toBoundedJson(payload, cap);
             } catch (Exception ignore) {
                 return truncateForLlm("Error: " + errorText, cap);
             }
@@ -104,6 +115,46 @@ public final class ToolObservationSerializer {
             return serializeSuccess(payload.getToolResult(), cap);
         }
         return truncateForLlm("", cap);
+    }
+
+    /**
+     * 边写边限长：输出上限仍是 {@code cap}，但不再先把整个对象序列化成完整字符串。
+     * 未超限时输出与 {@link JSON#toJSONString(Object)} 完全一致；超限时返回等长的截断结果。
+     */
+    private static String toBoundedJson(Object value, int cap) {
+        if (cap <= 0) {
+            return JSON.toJSONString(value);
+        }
+        // 单个超长字符串先截断，避免一次写入就撑爆序列化缓冲。
+        ValueFilter limitLongStrings = (object, name, fieldValue) ->
+                fieldValue instanceof String text && text.length() > cap
+                        ? truncateForLlm(text, cap)
+                        : fieldValue;
+        SerializeWriter writer = new SerializeWriter(
+                null, JSON.DEFAULT_GENERATE_FEATURE, new SerializerFeature[0]);
+        int maxBufferSize = cap + JSON_SERIALIZE_HEADROOM;
+        if (maxBufferSize > writer.getBufferLength()) {
+            writer.setMaxBufSize(maxBufferSize);
+        }
+        try {
+            JSONSerializer serializer = new JSONSerializer(writer);
+            serializer.addFilter(limitLongStrings);
+            serializer.write(value);
+            String json = writer.toString();
+            return json.length() <= cap ? json : truncateForLlm(json, cap);
+        } catch (JSONException exception) {
+            if (!isOutputLimitExceeded(exception)) {
+                throw exception;
+            }
+            String partial = writer.toString();
+            return truncateForLlm(partial + TRUNCATION_NOTICE, cap);
+        }
+    }
+
+    /** fastjson 的缓冲区上限信号；其它序列化异常仍走调用方的兜底路径。 */
+    private static boolean isOutputLimitExceeded(JSONException exception) {
+        String message = exception.getMessage();
+        return message != null && message.startsWith("serialize exceeded MAX_OUTPUT_LENGTH=");
     }
 
     public static String truncateForLlm(String value) {

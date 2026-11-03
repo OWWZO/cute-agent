@@ -59,7 +59,9 @@ public class ChatModelSchemaService {
         List<ChatModelSchema> saveList = new ArrayList<>();
         for (DataQueryTableColumn column : columnList) {
             String columnId = column.getName();
-            if (ignoreFields.contains(columnId)) {
+            // ignoreFields 统一按 lower-case + trim 归一后再比较，避免配置大小写/空格差异
+            // 让本应排除的敏感列漏进 schema 与向量库。
+            if (ignoreFields.contains(normalizeField(columnId))) {
                 continue;
             }
             ChatModelSchema schema = new ChatModelSchema();
@@ -151,11 +153,22 @@ public class ChatModelSchemaService {
         return chatModelMetadataRepository.listDistinctSchemas(modelCode);
     }
 
+    /**
+     * 解析忽略字段配置。返回值已 trim + 小写归一，调用方可以直接用
+     * {@link #normalizeField} 归一后的列名比较。
+     */
     public Set<String> getIgnoreFields(String ignoreFields) {
         if (StringUtils.isBlank(ignoreFields)) {
             return Collections.emptySet();
         }
-        return Arrays.stream(ignoreFields.split(",")).collect(Collectors.toSet());
+        return Arrays.stream(ignoreFields.split(","))
+                .map(ChatModelSchemaService::normalizeField)
+                .filter(field -> !field.isEmpty())
+                .collect(Collectors.toSet());
+    }
+
+    private static String normalizeField(String field) {
+        return StringUtils.trimToEmpty(field).toLowerCase(Locale.ROOT);
     }
 
     public Set<String> getDefaultRecallFields(String defaultRecallFields) {

@@ -3,7 +3,9 @@ package org.wwz.ai.domain.agent.ledger.model;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
 import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
 
@@ -24,6 +26,12 @@ public class ConversationRunReplay {
 
     private ContextUsagePayload contextUsage;
 
+    /**
+     * 完整回放帧可能极多；排除出 toString/equals，避免一次误日志就把所有帧拼成字符串，
+     * 也让 equals/hashCode 不再随帧数线性变慢。
+     */
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     @Builder.Default
     private List<AgentStreamResult> replayFrames = List.of();
 

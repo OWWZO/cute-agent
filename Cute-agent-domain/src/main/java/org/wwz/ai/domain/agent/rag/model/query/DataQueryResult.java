@@ -1,12 +1,20 @@
 package org.wwz.ai.domain.agent.rag.model.query;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 import java.util.List;
 import java.util.Map;
 
-/** Structured answer for one NL2SQL-generated query. */
+/**
+ * Structured answer for one NL2SQL-generated query.
+ * <p>结果集字段排除出 toString/equals：避免误日志把整表数据（可能含 PII）打出来，
+ * 也避免 equals/hashCode 随行数线性变慢。</p>
+ */
 @Data
+@ToString(exclude = {"dataList", "querySqlList", "nl2sqlResult"})
+@EqualsAndHashCode(exclude = {"dataList", "querySqlList", "nl2sqlResult"})
 public class DataQueryResult {
     private String question;
     private List<Map<String, Object>> dataList;

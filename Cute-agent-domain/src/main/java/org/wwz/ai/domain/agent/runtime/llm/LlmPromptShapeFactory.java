@@ -14,11 +14,14 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * 与 LLM 实际发送请求共用的 prompt shape 构造。
  */
 public final class LlmPromptShapeFactory {
+
+    private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
 
     private LlmPromptShapeFactory() {
     }
@@ -78,7 +81,7 @@ public final class LlmPromptShapeFactory {
                                 ToolSchemaNormalizer.normalizeSchema(tool.toParams(tools.getAgentContext()), tool.getName()),
                                 tool.getName()));
                 prompt.append(String.format("- `%s`%n```json %s ```%n",
-                        tool.getName(), JSON.toJSONString(functionMap)));
+                        promptData(tool.getName()), promptData(JSON.toJSONString(functionMap))));
             }
         }
         if (tools.getMcpToolMap() != null) {
@@ -94,10 +97,21 @@ public final class LlmPromptShapeFactory {
                                 ToolSchemaNormalizer.normalizeSchemaAsMap(tool.getParameters(), tool.getName()),
                                 tool.getName()));
                 prompt.append(String.format("- `%s`%n```json %s ```%n",
-                        tool.getName(), JSON.toJSONString(functionMap)));
+                        promptData(tool.getName()), promptData(JSON.toJSONString(functionMap))));
             }
         }
         return prompt.toString();
+    }
+
+    /**
+     * MCP/工具元数据属于外部数据，不是系统指令。其中的 {@code ```} 会提前闭合 json 围栏、
+     * 控制字符（换行等）可以伪造新的指令行；统一替换为无害字符后再拼进 system prompt。
+     */
+    private static String promptData(String text) {
+        if (text == null) {
+            return "";
+        }
+        return CONTROL_CHARS.matcher(text.replace("```", "'''")).replaceAll(" ");
     }
 
     @SuppressWarnings("unchecked")
