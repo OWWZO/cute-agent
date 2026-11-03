@@ -171,7 +171,7 @@ public class ToolResult {
     public <T> T getResultOrDefault(Class<T> resultType, T defaultValue) {
         try {
             return getResultOrThrow(resultType);
-        } catch (Exception e) {
+        } catch (IllegalStateException | ClassCastException e) {
             return defaultValue;
         }
     }

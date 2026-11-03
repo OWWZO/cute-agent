@@ -7,7 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.wwz.ai.domain.agent.runtime.dto.DeepSearchrResponse;
+import org.wwz.ai.domain.agent.runtime.dto.DeepSearchResponse;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchChapter;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchDoc;
@@ -46,7 +46,7 @@ public class DeepSearchStructuredResultBuilder {
     private static final int OBSERVATION_CHAPTER_SUMMARY_MAX_LEN = 400;
 
     private final LinkedHashSet<String> decomposedQueries = new LinkedHashSet<>();
-    private final LinkedHashMap<String, List<DeepSearchrResponse.SearchDoc>> searchResults = new LinkedHashMap<>();
+    private final LinkedHashMap<String, List<DeepSearchResponse.SearchDoc>> searchResults = new LinkedHashMap<>();
     private final Map<String, Set<String>> searchResultDedup = new LinkedHashMap<>();
     private final LinkedHashMap<String, DeepSearchChapter> chapters = new LinkedHashMap<>();
     private String query;
@@ -59,7 +59,7 @@ public class DeepSearchStructuredResultBuilder {
     /**
      * 记录 deep_search 的阶段事件。
      */
-    public void recordEvent(DeepSearchrResponse response) {
+    public void recordEvent(DeepSearchResponse response) {
         if (response == null) {
             return;
         }
@@ -139,7 +139,7 @@ public class DeepSearchStructuredResultBuilder {
         return JSON.toJSONString(observation);
     }
 
-    private void recordExtend(DeepSearchrResponse.SearchResult searchResult) {
+    private void recordExtend(DeepSearchResponse.SearchResult searchResult) {
         if (searchResult == null || CollectionUtils.isEmpty(searchResult.getQuery())) {
             return;
         }
@@ -151,24 +151,24 @@ public class DeepSearchStructuredResultBuilder {
         }
     }
 
-    private void recordSearch(DeepSearchrResponse.SearchResult searchResult) {
+    private void recordSearch(DeepSearchResponse.SearchResult searchResult) {
         if (searchResult == null || CollectionUtils.isEmpty(searchResult.getQuery())) {
             return;
         }
         List<String> queries = searchResult.getQuery();
-        List<List<DeepSearchrResponse.SearchDoc>> docsList = searchResult.getDocs();
+        List<List<DeepSearchResponse.SearchDoc>> docsList = searchResult.getDocs();
         for (int idx = 0; idx < queries.size(); idx++) {
             String normalizedQuery = StringUtils.trimToNull(queries.get(idx));
             if (normalizedQuery == null) {
                 continue;
             }
             decomposedQueries.add(normalizedQuery);
-            List<DeepSearchrResponse.SearchDoc> docsBucket = searchResults.computeIfAbsent(normalizedQuery, key -> new ArrayList<>());
+            List<DeepSearchResponse.SearchDoc> docsBucket = searchResults.computeIfAbsent(normalizedQuery, key -> new ArrayList<>());
             Set<String> dedupBucket = searchResultDedup.computeIfAbsent(normalizedQuery, key -> new HashSet<>());
             if (docsList == null || idx >= docsList.size() || docsList.get(idx) == null) {
                 continue;
             }
-            for (DeepSearchrResponse.SearchDoc doc : docsList.get(idx)) {
+            for (DeepSearchResponse.SearchDoc doc : docsList.get(idx)) {
                 if (doc == null) {
                     continue;
                 }
@@ -180,7 +180,7 @@ public class DeepSearchStructuredResultBuilder {
         }
     }
 
-    private void recordChapterSummary(DeepSearchrResponse response) {
+    private void recordChapterSummary(DeepSearchResponse response) {
         String chapterId = StringUtils.defaultIfBlank(response.getChapterId(),
                 "C" + (chapters.size() + 1));
         String title = StringUtils.defaultIfBlank(response.getChapterTitle(), chapterId);
@@ -201,7 +201,7 @@ public class DeepSearchStructuredResultBuilder {
                 }
             }
             if (CollectionUtils.isNotEmpty(response.getSearchResult().getDocs())) {
-                for (List<DeepSearchrResponse.SearchDoc> bucket : response.getSearchResult().getDocs()) {
+                for (List<DeepSearchResponse.SearchDoc> bucket : response.getSearchResult().getDocs()) {
                     if (bucket == null) {
                         continue;
                     }
@@ -243,7 +243,7 @@ public class DeepSearchStructuredResultBuilder {
         }
         if (!searchResults.isEmpty()) {
             List<DeepSearchQueryResult> results = new ArrayList<>();
-            for (Map.Entry<String, List<DeepSearchrResponse.SearchDoc>> entry : searchResults.entrySet()) {
+            for (Map.Entry<String, List<DeepSearchResponse.SearchDoc>> entry : searchResults.entrySet()) {
                 results.add(DeepSearchQueryResult.of(entry.getKey(), toDocs(entry.getValue())));
             }
             stages.add(DeepSearchStage.search(results));
@@ -282,7 +282,7 @@ public class DeepSearchStructuredResultBuilder {
         return list;
     }
 
-    private String buildDocDedupKey(DeepSearchrResponse.SearchDoc doc) {
+    private String buildDocDedupKey(DeepSearchResponse.SearchDoc doc) {
         return StringUtils.defaultString(doc.getLink())
                 + "|"
                 + StringUtils.defaultString(doc.getTitle())
@@ -290,8 +290,8 @@ public class DeepSearchStructuredResultBuilder {
                 + StringUtils.defaultString(doc.getContent());
     }
 
-    private DeepSearchrResponse.SearchDoc copyDoc(DeepSearchrResponse.SearchDoc doc) {
-        return DeepSearchrResponse.SearchDoc.builder()
+    private DeepSearchResponse.SearchDoc copyDoc(DeepSearchResponse.SearchDoc doc) {
+        return DeepSearchResponse.SearchDoc.builder()
                 .doc_type(doc.getDoc_type())
                 .content(doc.getContent())
                 .title(doc.getTitle())
@@ -299,12 +299,12 @@ public class DeepSearchStructuredResultBuilder {
                 .build();
     }
 
-    private List<DeepSearchDoc> toDocs(List<DeepSearchrResponse.SearchDoc> rawDocs) {
+    private List<DeepSearchDoc> toDocs(List<DeepSearchResponse.SearchDoc> rawDocs) {
         List<DeepSearchDoc> docs = new ArrayList<>();
         if (rawDocs == null) {
             return docs;
         }
-        for (DeepSearchrResponse.SearchDoc rawDoc : rawDocs) {
+        for (DeepSearchResponse.SearchDoc rawDoc : rawDocs) {
             if (rawDoc == null) {
                 continue;
             }
@@ -319,13 +319,13 @@ public class DeepSearchStructuredResultBuilder {
 
     private List<DeepSearchObservationQueryResult> buildObservationResults() {
         List<DeepSearchObservationQueryResult> results = new ArrayList<>();
-        for (Map.Entry<String, List<DeepSearchrResponse.SearchDoc>> entry : searchResults.entrySet()) {
+        for (Map.Entry<String, List<DeepSearchResponse.SearchDoc>> entry : searchResults.entrySet()) {
             List<DeepSearchObservationDoc> docs = new ArrayList<>();
-            List<DeepSearchrResponse.SearchDoc> rawDocs = entry.getValue();
+            List<DeepSearchResponse.SearchDoc> rawDocs = entry.getValue();
             if (rawDocs != null) {
                 int docLimit = Math.min(rawDocs.size(), OBSERVATION_DOC_LIMIT_PER_QUERY);
                 for (int idx = 0; idx < docLimit; idx++) {
-                    DeepSearchrResponse.SearchDoc rawDoc = rawDocs.get(idx);
+                    DeepSearchResponse.SearchDoc rawDoc = rawDocs.get(idx);
                     if (rawDoc == null) {
                         continue;
                     }

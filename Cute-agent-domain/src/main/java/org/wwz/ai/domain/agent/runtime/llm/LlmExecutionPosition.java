@@ -61,6 +61,7 @@ public final class LlmExecutionPosition {
         private final AgentRunState state;
         private final String previousAgentName;
         private final Integer previousStepNo;
+        private boolean closed;
 
         private Scope(AgentRunState state, String previousAgentName, Integer previousStepNo) {
             this.state = state;
@@ -70,9 +71,10 @@ public final class LlmExecutionPosition {
 
         @Override
         public void close() {
-            if (state == null) {
+            if (state == null || closed) {
                 return;
             }
+            closed = true;
             if (previousAgentName == null && previousStepNo == null) {
                 state.clearExecutionPosition();
             } else {

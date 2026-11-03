@@ -11,6 +11,10 @@ public interface AgentWorkExecutor extends Executor {
 
     void execute(Runnable command, String scene, String requestId);
 
+    /**
+     * 通用 {@link Executor} 入口的降级路径：场景记为 {@code "unknown"}、请求标识为 {@code null}。
+     * <p>需要事件归属/链路关联的调用方应使用三参重载。</p>
+     */
     @Override
     default void execute(Runnable command) {
         execute(command, "unknown", null);

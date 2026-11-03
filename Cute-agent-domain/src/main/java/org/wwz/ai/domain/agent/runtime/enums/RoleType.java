@@ -1,9 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.enums;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
 /**
  * 消息角色类型枚举
  */
@@ -14,10 +10,6 @@ public enum RoleType {
     TOOL("tool");
 
     private final String value;
-
-    private static final Set<String> ROLE_VALUES = new HashSet<>(Arrays.asList(
-            "user", "system", "assistant", "tool"
-    ));
 
     RoleType(String value) {
         this.value = value;
@@ -31,15 +23,26 @@ public enum RoleType {
      * 检查角色值是否有效
      */
     public static boolean isValid(String role) {
-        return ROLE_VALUES.contains(role);
+        if (role == null) {
+            return false;
+        }
+        for (RoleType type : RoleType.values()) {
+            if (type.value.equals(role)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
      * 从字符串获取角色类型
      */
     public static RoleType fromString(String role) {
+        if (role == null) {
+            throw new IllegalArgumentException("Role must not be null");
+        }
         for (RoleType type : RoleType.values()) {
-            if (type.getValue().equals(role)) {
+            if (type.value.equals(role)) {
                 return type;
             }
         }

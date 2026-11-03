@@ -396,6 +396,7 @@ public class BaseAgentStreamEventHandler {
         return payload;
     }
 
+    @SuppressWarnings("unchecked")
     private void appendSubAgentNestingTags(Map<String, Object> payload, Map<String, Object> resultMap) {
         if (payload == null || resultMap == null || resultMap.isEmpty()) {
             return;

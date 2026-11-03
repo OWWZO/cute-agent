@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.llm;
 
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.wwz.ai.domain.agent.runtime.enums.RoleType;
 
@@ -14,6 +15,7 @@ import java.util.List;
  * 不可变契约：所有字段 final，工具调用列表做防御性复制；需要变体时用 {@code toBuilder()}。
  */
 @Getter
+@EqualsAndHashCode
 @Builder(toBuilder = true)
 public class LlmMessage {
 
