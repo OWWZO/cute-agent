@@ -153,22 +153,18 @@ public class ToolCollection {
     }
 
     /**
-     * 统一执行工具（核心方法）
-     * 逻辑分支：
-     * 1. 优先执行基础工具（本地）；
-     * 2. 基础工具不存在时执行MCP远程工具；
-     * 3. 工具不存在时记录错误日志并返回null。
-     * @param name 工具名称（唯一标识）
-     * @param toolInput 工具输入参数（Object类型，适配不同工具的参数格式，如String/JSONObject）
-     * @return Object 工具执行结果：
-     *         - 基础工具：返回 tool.execute() 的原始结果对象；
-     *         - MCP工具：返回远程调用的响应结果字符串；
-     *         - 工具不存在：返回null。
-     */
-    /**
      * 统一执行工具，并显式传入本次调用的上下文。
      * <p>
      * context 为空时沿用实例上绑定的 {@code agentContext}，保证后台与测试路径行为不变。
+     * {@code name} 为 {@link McpToolNames#TOOL_CALL} 时先由 {@code DeferredToolCall} 解包；
+     * 延迟工具被直接调用时返回提示文案而不是执行。
+     *
+     * @param name      工具名称；也接受 ToolCall 包装（由 DeferredToolCall 解包）
+     * @param toolInput 工具输入参数，具体类型由工具约定（如 String / JSONObject）
+     * @param context   本次调用上下文，可为 null
+     * @return 工具执行结果；基础工具返回其 {@code execute} 结果，MCP 工具返回响应字符串；
+     *         延迟工具需经 ToolCall 调用，直接调用时返回提示字符串；白名单拒绝时返回拒绝文案；
+     *         未知工具返回 null
      */
     public Object execute(String name, Object toolInput, AgentContext context) {
         AgentContext effective = context != null ? context : agentContext;
@@ -190,12 +186,9 @@ public class ToolCollection {
     }
 
     /**
-     * 执行已解析的真实工具名（eager 本地 / eager MCP / 延迟本地或 MCP）。
-     * pipeline 解包后走这里，避免再次命中 deferred 拒绝或二次 ToolCall 解包。
-     */
-    /**
-     * 执行已解析的真实工具名，并显式传入本次调用的上下文。
+     * 执行已解析的真实工具名（eager 本地 / eager MCP / 延迟本地或 MCP），并显式传入本次调用的上下文。
      * <p>
+     * pipeline 解包后走这里，避免再次命中 deferred 拒绝或二次 ToolCall 解包。
      * 无状态工具通过 {@link BaseTool#execute(Object, AgentContext)} 拿到上下文，
      * 不再依赖实例字段绑定；尚未迁移的工具仍回落旧签名，行为不变。
      */

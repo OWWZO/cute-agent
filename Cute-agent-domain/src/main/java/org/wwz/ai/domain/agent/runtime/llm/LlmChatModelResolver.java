@@ -12,5 +12,10 @@ package org.wwz.ai.domain.agent.runtime.llm;
  */
 public interface LlmChatModelResolver {
 
+    /**
+     * 让已缓存的 ChatModel 实例失效；下一次解析按最新配置惰性重建。
+     * <p>实现必须线程安全且幂等：管理写路径可能与请求线程并发调用。调用不得阻塞，也不得影响
+     * 已经发出给调用方的模型实例——失效只清缓存，不中断在途请求。</p>
+     */
     void invalidateAll();
 }

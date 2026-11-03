@@ -104,7 +104,7 @@ public class CuteRuntimeDependencies {
     TaskScheduler heartbeatScheduler;
 
     /**
-     * 工具批 allOf 超时秒数；null 或 ≤0 表示不超时（仅测试夹具）。
+     * 工具批 allOf 超时秒数；null 时按默认 600 处理，≤0 表示不超时（仅测试夹具）。
      */
     Long toolBatchTimeoutSeconds;
 

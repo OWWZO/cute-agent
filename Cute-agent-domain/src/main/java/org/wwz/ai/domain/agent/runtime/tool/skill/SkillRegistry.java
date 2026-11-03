@@ -20,7 +20,8 @@ public interface SkillRegistry {
     }
 
     /**
-     * 当前目录快照的版本标识，仅在 {@link #refresh()} 改变目录内容后变化，供缓存与调试使用。
+     * 当前目录快照的版本标识（十进制递增序号），每次重扫并替换快照都会 +1，即使扫描结果内容未变化；
+     * {@link #refreshIfStale()} 命中缓存时不变化。仅供缓存失效判断与调试，不保证跨进程/重启稳定。
      */
     String version();
 

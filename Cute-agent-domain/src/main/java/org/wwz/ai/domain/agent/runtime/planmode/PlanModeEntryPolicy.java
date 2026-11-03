@@ -35,7 +35,8 @@ public final class PlanModeEntryPolicy {
     }
 
     /**
-     * 当前 request 写入账本之前调用：已有 plan_solve run 即视为非首轮。
+     * 在装配阶段调用：此时当前 request 的 run 已由 {@code ExecutionLedgerRunSupport.initializeRun} 写入账本，
+     * 因此必须用 {@code currentRequestId} 排除自身；剩余任一 plan_solve run 即视为非首轮。
      */
     public static boolean hasPriorPlanSolveUserTurn(List<DialogueRunView> runs, String currentRequestId) {
         if (runs == null || runs.isEmpty()) {

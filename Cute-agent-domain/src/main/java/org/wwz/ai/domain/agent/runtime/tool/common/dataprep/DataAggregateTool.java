@@ -42,9 +42,12 @@ public class DataAggregateTool extends AbstractDocReadTool {
         properties.put("source_path", stringProp("CSV/JSON/JSONL/Parquet path under workspace"));
         properties.put("group_by", Map.of("type", "array", "items", Map.of("type", "string"), "description", "Group-by columns"));
         properties.put("aggregations", objectProp("column -> sum|mean|avg|count|min|max|..."));
-        properties.put("pivot_index", Map.of("type", "array", "items", Map.of("type", "string")));
-        properties.put("pivot_columns", Map.of("type", "array", "items", Map.of("type", "string")));
-        properties.put("pivot_values", Map.of("type", "array", "items", Map.of("type", "string")));
+        properties.put("pivot_index", Map.of("type", "array", "items", Map.of("type", "string"),
+                "description", "Columns to use as pivot row index"));
+        properties.put("pivot_columns", Map.of("type", "array", "items", Map.of("type", "string"),
+                "description", "Columns whose distinct values become pivot output columns"));
+        properties.put("pivot_values", Map.of("type", "array", "items", Map.of("type", "string"),
+                "description", "Columns to aggregate in the pivot"));
         properties.put("pivot_aggfunc", stringProp("Pivot agg: sum|mean|count|min|max|..."));
         properties.put("output_format", stringProp("records | dict"));
         return objectSchema(properties, List.of("operation"));

@@ -35,8 +35,8 @@ public class DocumentTemplateTool extends AbstractDocGenTool {
     protected Map<String, Object> defaultParams() {
         // 文档和幻灯片共用一份 schema，通过 kind 区分 content 与 slides 的解释方式。
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("action", stringProp("save | list | get | delete | preview | generate"));
-        properties.put("name", stringProp("Template name (required except list)"));
+        properties.put("action", stringProp("save | list | get | delete | preview | generate (name required for all except list)"));
+        properties.put("name", stringProp("Template name (required for every action except list; enforced by backend)"));
         properties.put("kind", stringProp("document | deck"));
         properties.put("description", stringProp("One-line description for list"));
         properties.put("content", stringProp("Document markdown body with Jinja2 placeholders"));
@@ -46,7 +46,7 @@ public class DocumentTemplateTool extends AbstractDocGenTool {
         properties.put("defaults", objectProp("Extra generate defaults (toc, cover, header, ...)"));
         properties.put("values", objectProp("Variable values for preview/generate"));
         properties.put("output_path", stringProp("generate: output file name e.g. report.pdf / deck.pptx"));
-        properties.put("format", stringProp("generate document: pdf|docx|html|markdown"));
+        properties.put("format", stringProp("generate document: pdf|docx|html|markdown; deck output format is inferred from output_path (e.g. deck.pptx)"));
         properties.put("overwrite", boolProp("save: replace existing template, default true"));
         return objectSchema(properties, List.of("action"));
     }

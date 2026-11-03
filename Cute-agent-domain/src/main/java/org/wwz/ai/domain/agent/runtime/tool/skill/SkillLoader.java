@@ -18,6 +18,11 @@ package org.wwz.ai.domain.agent.runtime.tool.skill;
  */
 public interface SkillLoader {
 
+    /**
+     * 加载 skill 主文档（SKILL.md）。
+     * <p>永不返回 null；{@code ref} 为 null 或 skill 未注册时抛 {@link SkillLoadException}。
+     * 每次调用按需读取文件，不缓存正文。</p>
+     */
     SkillDocument load(SkillRef ref);
 
     SkillFile loadFile(SkillRef ref, String relativePath);

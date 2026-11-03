@@ -3,10 +3,6 @@ package org.wwz.ai.domain.agent.runtime.dto;
 
 
 
-/**
- * 消息类 - 表示代理系统中的各种消息
- */
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -29,8 +25,8 @@ import java.util.List;
  * 3. 多模态支持：内置base64Image字段，适配图文混合的消息交互；
  * 4. 工具调用适配：内置toolCallId/toolCalls字段，支撑ReAct范式的工具调用流程。
  *
- * @author （可补充作者信息）
- * @date （可补充日期）
+ * @author wwz
+ * @date 2026-02-18
  */
 @Data // Lombok注解：自动生成getter/setter/toString/equals/hashCode等方法
 @Builder // Lombok注解：支持链式构建消息对象（如Message.builder().role(RoleType.USER).content("你好").build()）

@@ -59,8 +59,12 @@ public interface BaseTool {
     /**
      * 显式接收上下文的执行入口。
      *
-     * @param input   工具入参
-     * @param context 本次调用的 Agent 上下文
+     * @param input   工具入参；具体类型由各工具约定（常见 String / Map / JSONObject），
+     *                建议用 {@code ToolArgs} 统一解析，不得假设固定类型；可为 null
+     * @param context 本次调用的 Agent 上下文，可为 null（与 {@link #getDescription(AgentContext)} 一致）；
+     *                依赖运行时依赖的实现必须先判空并返回失败载荷，不得直接解引用
+     * @return 工具执行结果（本地工具通常为 {@code ToolResultPayload}）；业务失败用失败载荷表达，
+     *         不抛出受检异常
      */
     Object execute(Object input, AgentContext context);
 }

@@ -2,6 +2,12 @@ package org.wwz.ai.domain.agent.runtime.desktopcontrol;
 
 import java.util.List;
 
+/**
+ * 桌面控制任务状态常量。
+ * <p>PENDING / RESUME_PENDING / RESUMING 是开放态（{@link #OPEN}）；COMPLETED / CANCELLED / FAILED 是终态。
+ * RESUMING 表示续跑已被认领、正在执行，此时取消会与续跑收口竞争，因此 {@link #CANCELABLE}
+ * 只包含 PENDING / RESUME_PENDING——这是有意为之，不是遗漏。</p>
+ */
 public final class DesktopControlStatuses {
 
     public static final String PENDING = "PENDING";

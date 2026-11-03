@@ -51,7 +51,7 @@ public class DocumentGenerateTool extends AbstractDocGenTool {
         properties.put("date", stringProp("Date string on cover."));
         properties.put("subject", stringProp("Subject metadata."));
         properties.put("keywords", arrayProp("Keyword metadata.", stringProp("Keyword.")));
-        properties.put("theme", stringProp("Theme name, e.g. professional."));
+        properties.put("theme", stringProp("Theme name, e.g. professional; built-in or saved via theme_designer."));
         properties.put("toc", boolProp("Include table of contents."));
         properties.put("cover", Map.of("description", "true for a cover page, or an object with title, subtitle, author, date, organization, and logo_path.", "anyOf", List.of(Map.of("type", "boolean"), objectProp("Cover object"))));
         properties.put("numbered_headings", boolProp("Number headings 1 / 1.1 / 1.1.1 (PDF)."));

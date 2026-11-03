@@ -14,6 +14,16 @@ import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
  * 误以为需要重放/复制事件。
  */
 public interface AgentStreamEventHandler {
+    /**
+     * 把单个运行事件投影为增量响应，并就地推进调用方持有的累积器。
+     *
+     * @param request     当前执行命令，提供 requestId / agentType 等归属信息
+     * @param response    当前单个流事件
+     * @param eventResult 本轮聚合状态；实现会就地推进 taskOrder / messageOrder 等字段，
+     *                    所有权仍归调用方，调用方必须按事件顺序串行调用，不得并发共享同一累积器
+     * @return 增量结果，永不返回 null；实现内部异常必须转换为失败终态结果
+     *         （如 {@code status=failed}、{@code complete=true}），不得把异常抛给调用方
+     */
     AgentStreamResult handle(AgentExecutionCommand request,
                              AgentStreamEvent response,
                              AgentStreamAccumulator eventResult);

@@ -37,7 +37,7 @@ public class ThemeDesignerTool extends AbstractDocGenTool {
         // action 决定后端所需字段；其余字段按 create/save/list 等操作按需解释。
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("action", stringProp(ACTIONS));
-        properties.put("name", stringProp("Theme name (required except list)"));
+        properties.put("name", stringProp("Theme name (required for every action except list; enforced by backend)"));
         properties.put("kind", stringProp("document | deck"));
         properties.put("primary", stringProp("create: brand primary color #RRGGBB"));
         properties.put("accent", stringProp("create: optional accent #RRGGBB"));

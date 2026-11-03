@@ -3,6 +3,13 @@ package org.wwz.ai.domain.agent.runtime.desktopcontrol;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 桌面控制任务仓储端口。
+ * <p>常规状态机：{@code PENDING → RESUME_PENDING → RESUMING → COMPLETED}；
+ * PENDING / RESUME_PENDING 可被 CAS 取消为 CANCELLED；FAILED 为终态。
+ * CAS 方法统一以返回 {@code false} 表示「前置条件不满足」（记录不存在、状态不符或归属不匹配），
+ * 不抛出业务异常。</p>
+ */
 public interface IDesktopControlRepository {
 
     void insert(DesktopControlRecord record);
@@ -22,6 +29,11 @@ public interface IDesktopControlRepository {
      */
     boolean casResumePending(String controlId, String userId, String resumeRequestId);
 
+    /**
+     * CAS：把 {@code RESUME_PENDING} 推进到 {@code RESUMING}，按 resumeRequestId 定位记录并校验归属。
+     * <p>返回 {@code false} 表示记录不存在、当前不是 RESUME_PENDING（含已被认领）、归属不匹配或并发落败；
+     * 不区分具体原因，调用方需自行查询记录状态。</p>
+     */
     boolean casClaimResume(String resumeRequestId, String userId);
 
     /**
@@ -40,5 +52,10 @@ public interface IDesktopControlRepository {
      */
     boolean markStatus(String controlId, String status);
 
+    /**
+     * CAS：把 {@link DesktopControlStatuses#CANCELABLE} 中的状态（PENDING / RESUME_PENDING）推进到
+     * {@code CANCELLED}，并校验归属。
+     * <p>返回 {@code false} 表示记录不存在、当前状态不可取消（RESUMING 及终态）或归属不匹配。</p>
+     */
     boolean casCancel(String controlId, String userId);
 }

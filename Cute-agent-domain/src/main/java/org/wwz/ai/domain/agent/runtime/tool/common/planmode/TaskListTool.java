@@ -30,8 +30,8 @@ public class TaskListTool implements BaseTool {
 
     @Override
     public String getDescription() {
-        return "列出当前会话全部任务的摘要（id、subject、status、blockedBy）。"
-                + "无参数。需要详情时用 TaskGet。";
+        return "列出当前会话全部任务的摘要（id、subject、status、owner、blockedBy）。"
+                + "blockedBy 只包含尚未完成的依赖；无参数。需要详情时用 TaskGet。";
     }
 
     @Override

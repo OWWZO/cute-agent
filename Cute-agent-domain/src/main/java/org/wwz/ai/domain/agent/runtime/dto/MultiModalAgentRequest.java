@@ -21,7 +21,9 @@ import java.util.Map;
 @AllArgsConstructor
 public class MultiModalAgentRequest {
     private String requestId;
+    /** mragQuery 的检索问题，服务端必填（空白会被拒绝）；本端由工具入参 question 填充。 */
     private String question;
+    /** 当前 agent 上下文的原始 query；mragQuery 服务端不消费该字段（按未知字段忽略），仅随请求透传。 */
     private String query;
     private Boolean stream;
     private Boolean contentStream;

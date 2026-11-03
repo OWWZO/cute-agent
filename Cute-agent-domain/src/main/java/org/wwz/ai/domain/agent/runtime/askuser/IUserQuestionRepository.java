@@ -20,8 +20,15 @@ public interface IUserQuestionRepository {
      */
     boolean insertIfAbsent(UserQuestionRecord record);
 
+    /**
+     * 按 questionId 查询；null/空白返回 {@link Optional#empty()}，查询前去除首尾空白。
+     */
     Optional<UserQuestionRecord> findByQuestionId(String questionId);
 
+    /**
+     * 按 resumeRequestId 查询；null/空白返回 {@link Optional#empty()}，查询前去除首尾空白。
+     * <p>resumeRequestId 在库中带唯一约束（{@code uk_user_question_resume}），同一 id 至多一条未删除记录。</p>
+     */
     Optional<UserQuestionRecord> findByResumeRequestId(String resumeRequestId);
 
     List<UserQuestionRecord> listOpenBySessionId(String sessionId);
@@ -31,11 +38,17 @@ public interface IUserQuestionRepository {
 
     /**
      * CAS PENDING → RESUME_PENDING；成功返回 true。
+     * <p>questionId 或 resumeRequestId 为 null/空白时直接返回 false；{@code answers} 为 null 时按空 map 持久化。
+     * {@code userId} 为 null/空白时不校验归属（可命中任意用户或未绑定用户的记录）。实现必须在调用时
+     * 完成序列化/复制，调用方事后修改 {@code answers} 不得影响已持久化内容。</p>
      */
     boolean casAnswerPending(String questionId, String userId, Map<String, String> answers, String resumeRequestId);
 
     /**
      * CAS RESUME_PENDING → RESUMING；成功返回 true。
+     * <p>返回 false 不区分以下原因：resumeRequestId 为 null/空白、记录不存在、当前状态不是 RESUME_PENDING
+     * （包括已被认领进入 RESUMING）、归属不匹配、并发认领落败。本方法没有「已在 RESUMING 即幂等成功」的语义，
+     * 调用方需要区分时必须先查询记录状态。</p>
      */
     boolean casClaimResume(String resumeRequestId, String userId);
 

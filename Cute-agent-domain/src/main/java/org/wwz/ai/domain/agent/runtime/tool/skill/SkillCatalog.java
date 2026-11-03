@@ -13,7 +13,9 @@ import java.util.Optional;
 public interface SkillCatalog {
 
     /**
-     * 目录是否启用；禁用时调用方应视为空目录。
+     * 目录是否启用。禁用时快照为空：{@link #list()} / {@link #search(SkillQuery)} 返回空集合，
+     * {@link #find(String)} 返回 {@link Optional#empty()}，{@link #resolve(String)} /
+     * {@link #getRequired(String)} 抛 {@link SkillLoadException}。
      */
     boolean isEnabled();
 
@@ -21,9 +23,22 @@ public interface SkillCatalog {
 
     List<SkillSearchHit> search(SkillQuery query);
 
+    /**
+     * 解析 identifier 为 SkillRef；未找到时抛 {@link SkillLoadException}（不返回 null）。
+     * <p>接受的写法与 {@link #find(String)} 一致：skill id、相对路径、{@code source:name} /
+     * {@code source:relativePath}、唯一的裸 name。</p>
+     */
     SkillRef resolve(String identifier);
 
+    /**
+     * 按 identifier 查找；null/空白或未找到返回 {@link Optional#empty()}。
+     * <p>接受 skill id、相对路径、{@code source:name} / {@code source:relativePath}、唯一的裸 name；
+     * 裸 name 命中多条时抛 {@link SkillLoadException}（歧义，需要更精确的写法）。</p>
+     */
     Optional<SkillDescriptor> find(String identifier);
 
+    /**
+     * 与 {@link #find(String)} 相同的查找规则，但未找到时抛 {@link SkillLoadException}（不返回 null）。
+     */
     SkillDescriptor getRequired(String identifier);
 }

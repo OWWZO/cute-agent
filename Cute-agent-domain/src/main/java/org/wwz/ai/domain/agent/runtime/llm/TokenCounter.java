@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  */
 public class TokenCounter {
 
-    /** 每 token 默认按 4 字节估算。 */
+    /** 每 token 默认按 4 字符估算。 */
     public static final int CHARS_PER_TOKEN = 4;
     public static final String SOURCE_LOCAL_ESTIMATE = "local_estimate";
     public static final String SOURCE_PROVIDER_USAGE = "provider_usage";
