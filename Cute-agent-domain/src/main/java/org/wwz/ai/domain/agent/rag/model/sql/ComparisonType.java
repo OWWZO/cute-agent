@@ -40,13 +40,24 @@ public enum ComparisonType {
     public static final Set<ComparisonType> MORE_PARAM_TYPE =
             Collections.unmodifiableSet(EnumSet.of(IN, NOT_IN, BETWEEN));
 
+    /** SQL 比较符（如 {@code >=}、{@code LIKE}）。 */
     @Getter
     private final String comparison;
 
+    /** 面向用户的中文名称。 */
     @Getter
     private final String comparisonName;
+    /** 关系代数片段模板，参数同样以 {@code %s} 占位。 */
     @Getter
     private final String relationalAlgebra;
+
+    /**
+     * SQL 片段模板，{@code ${value}} 是待填充的原始值占位符。
+     * <p><b>安全契约：</b>消费方不得把用户/模型提供的值直接做字符串替换后执行。
+     * 必须按方言绑定参数（PreparedStatement）或按方言规则完整转义；
+     * {@code LIKE} 系列还需转义 {@code %}、{@code _} 与转义符本身，
+     * 否则本模板就是注入/通配符注入的入口。</p>
+     */
     @Getter
     private final String relationalAlgebraSql;
 

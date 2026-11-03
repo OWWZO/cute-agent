@@ -117,7 +117,8 @@ public final class SkillFrontMatterParser {
 
     private static Yaml newYaml() {
         LoaderOptions options = new LoaderOptions();
-        options.setAllowDuplicateKeys(true);
+        // 重复键是作者笔误，静默后者覆盖前者会让字段值不可预测；关闭后统一走降级解析并留下 warning。
+        options.setAllowDuplicateKeys(false);
         return new Yaml(new SafeConstructor(options));
     }
 

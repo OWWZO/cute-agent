@@ -20,6 +20,8 @@ public final class MarkdownToPlainText {
     private static final Pattern STRIKE = Pattern.compile("~~(.+?)~~");
     private static final Pattern INLINE_CODE = Pattern.compile("`([^`\\n]+)`");
     private static final Pattern TABLE_SEPARATOR = Pattern.compile("^\\s*\\|?[\\s:|-]+\\|[\\s:|-]*$");
+    private static final Pattern HORIZONTAL_RULE = Pattern.compile("^[-*_]\\s*[-*_]\\s*[-*_][-\\s*_]*$");
+    private static final Pattern BLOCKQUOTE_PREFIX = Pattern.compile("^\\s*>\\s?");
 
     private MarkdownToPlainText() {
     }
@@ -120,9 +122,9 @@ public final class MarkdownToPlainText {
         String trimmed = line.stripLeading();
         if (trimmed.startsWith(">")) {
             // 引用去掉 > 标记但保留缩进语义，不引入新前缀避免和列表混淆。
-            return line.replaceFirst("^\\s*>\\s?", "");
+            return BLOCKQUOTE_PREFIX.matcher(line).replaceFirst("");
         }
-        if (trimmed.matches("^[-*_]\\s*[-*_]\\s*[-*_][-\\s*_]*$")) {
+        if (HORIZONTAL_RULE.matcher(trimmed).matches()) {
             // 分隔线在纯文本里没有意义。
             return "";
         }

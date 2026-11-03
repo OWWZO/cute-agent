@@ -12,6 +12,8 @@ public final class LlmUserFacingError {
 
     private static final Pattern STATUS_IN_MESSAGE = Pattern.compile("(?:status\\s*code|http\\s*status)[^0-9]{0,16}(\\d{3})",
             Pattern.CASE_INSENSITIVE);
+    /** 形如 {@code Unknown status code [524]} 的状态码，同样只编译一次。 */
+    private static final Pattern STATUS_IN_BRACKETS = Pattern.compile("\\[(\\d{3})]");
 
     private static final Set<Integer> TIMEOUT_STATUS_CODES = Set.of(408, 504, 522, 524);
     private static final Set<Integer> UNAVAILABLE_STATUS_CODES = Set.of(500, 502, 503, 520, 521, 523, 525, 527);
@@ -77,7 +79,7 @@ public final class LlmUserFacingError {
                     return Integer.parseInt(matcher.group(1));
                 }
                 // Unknown status code [524]
-                Matcher bracket = Pattern.compile("\\[(\\d{3})]").matcher(message);
+                Matcher bracket = STATUS_IN_BRACKETS.matcher(message);
                 if (message.toLowerCase(Locale.ROOT).contains("status") && bracket.find()) {
                     return Integer.parseInt(bracket.group(1));
                 }

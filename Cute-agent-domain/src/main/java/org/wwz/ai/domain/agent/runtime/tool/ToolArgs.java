@@ -2,6 +2,7 @@ package org.wwz.ai.domain.agent.runtime.tool;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.parser.ParserConfig;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Collections;
@@ -16,6 +17,16 @@ import java.util.Map;
  * 供各工具在 {@code execute} 开头一次性取值。
  */
 public final class ToolArgs {
+
+    /**
+     * 模型可控文本一律用 safeMode 解析：显式关闭 autoType，禁止 {@code @type}
+     * 触发任意类实例化或 getter 副作用，不依赖 fastjson 的全局默认配置。
+     */
+    private static final ParserConfig SAFE_PARSER_CONFIG = new ParserConfig();
+
+    static {
+        SAFE_PARSER_CONFIG.setSafeMode(true);
+    }
 
     private ToolArgs() {
     }
@@ -36,7 +47,7 @@ public final class ToolArgs {
         }
         if (input instanceof String text && StringUtils.isNotBlank(text)) {
             try {
-                Object parsed = JSON.parse(text);
+                Object parsed = JSON.parse(text, SAFE_PARSER_CONFIG);
                 if (parsed instanceof Map<?, ?> map) {
                     return unmodifiable(stringKeyed(map));
                 }

@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 处理 Domain LLM stream event 的流式响应聚合器。
@@ -93,10 +92,11 @@ public class StreamResponseHandler {
         int[] intervals = resolveIntervals();
         int[] tokenIndex = new int[]{1};
         int[] emittedLength = new int[]{0};
+        int[] hiddenMarkerIndex = new int[]{-1};
         LlmUsageSnapshot[] usageHolder = new LlmUsageSnapshot[]{LlmUsageSnapshot.empty()};
-        AtomicReference<String> partial = new AtomicReference<>();
 
-        java.util.function.Supplier<String> partialContent = () -> partial.get();
+        // partial 只在取消时读取：按需从缓冲区生成快照，避免每个 chunk 都 toString 一遍（O(n²)）。
+        java.util.function.Supplier<String> partialContent = () -> snapshotPartial(allContent, hiddenStartMarker);
         try {
             streamCall.subscribe(event -> {
                 try {
@@ -109,12 +109,9 @@ public class StreamResponseHandler {
                     if (StringUtils.isBlank(chunkContent)) {
                         return;
                     }
-                    allContent.append(chunkContent);
-                    String visible = extractVisibleContent(allContent.toString(), hiddenStartMarker);
-                    partial.set(visible.trim().isEmpty() ? null : visible.trim());
-                    if (pushToClient && messageId != null && visible.length() > emittedLength[0]) {
-                        streamBuffer.append(visible, emittedLength[0], visible.length());
-                        emittedLength[0] = visible.length();
+                    boolean emitted = appendVisibleContent(allContent, chunkContent, hiddenStartMarker,
+                            hiddenMarkerIndex, streamBuffer, emittedLength, pushToClient && messageId != null);
+                    if (emitted) {
                         if (shouldFlush(tokenIndex[0], intervals[0], intervals[1])) {
                             sendStreamEvent(context, messageId, context.getStreamMessageType(),
                                     streamBuffer.toString(), runtimeTiming, false);
@@ -215,8 +212,8 @@ public class StreamResponseHandler {
         LlmUsageSnapshot[] usageHolder = new LlmUsageSnapshot[]{LlmUsageSnapshot.empty()};
         int[] chunkCount = new int[]{0};
         int[] toolDeltaCount = new int[]{0};
-        AtomicReference<String> partial = new AtomicReference<>();
-        java.util.function.Supplier<String> partialContent = partial::get;
+        // partial 只在取消时读取，按需生成快照，避免每个 chunk 都复制整个已累积正文。
+        java.util.function.Supplier<String> partialContent = () -> snapshotToolPartial(allContent);
 
         try {
             streamCall.subscribe(event -> {
@@ -258,8 +255,9 @@ public class StreamResponseHandler {
                     }
 
                     if (StringUtils.isNotEmpty(chunkContent)) {
-                        allContent.append(chunkContent);
-                        partial.set(allContent.toString().trim());
+                        synchronized (allContent) {
+                            allContent.append(chunkContent);
+                        }
                         if (pushToClient && messageId != null && context.getPrinter() != null) {
                             streamBuffer.append(chunkContent);
                             if (shouldFlush(tokenIndex[0], intervals[0], intervals[1])) {
@@ -516,34 +514,97 @@ public class StreamResponseHandler {
         return tokenIndex == firstInterval || tokenIndex % sendInterval == 0;
     }
 
+    /**
+     * 追加 reasoning 增量。用 CharSequence 前缀比较代替 {@code all.toString()}，
+     * 避免每个 chunk 都复制已累积的完整推理正文。
+     */
     private static String appendReasoningChunk(StringBuilder all, String chunk) {
         if (chunk == null || chunk.isEmpty()) {
             return "";
         }
-        String soFar = all.toString();
-        if (soFar.isEmpty()) {
+        if (all.length() == 0) {
             all.append(chunk);
             return chunk;
         }
-        if (chunk.startsWith(soFar)) {
-            String delta = chunk.substring(soFar.length());
+        if (startsWith(chunk, all)) {
+            String delta = chunk.substring(all.length());
             all.setLength(0);
             all.append(chunk);
             return delta;
         }
-        if (soFar.startsWith(chunk)) {
+        if (startsWith(all, chunk)) {
             return "";
         }
         all.append(chunk);
         return chunk;
     }
 
-    private String extractVisibleContent(String allContent, String hiddenStartMarker) {
-        if (StringUtils.isBlank(hiddenStartMarker)) {
-            return allContent;
+    private static boolean startsWith(CharSequence text, CharSequence prefix) {
+        if (text == null || prefix == null || text.length() < prefix.length()) {
+            return false;
         }
-        int markerIndex = allContent.indexOf(hiddenStartMarker);
-        return markerIndex >= 0 ? allContent.substring(0, markerIndex) : allContent;
+        for (int i = 0; i < prefix.length(); i++) {
+            if (text.charAt(i) != prefix.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 追加当前 chunk 并计算可见长度。marker 只会出现一次且一旦出现就不再展开，
+     * 因此只需从上次扫描位置附近继续查找，避免每个 chunk 全量重扫。
+     *
+     * @return 是否有新的可见内容被写进 streamBuffer
+     */
+    private static boolean appendVisibleContent(StringBuilder allContent,
+                                                String chunkContent,
+                                                String hiddenStartMarker,
+                                                int[] hiddenMarkerIndex,
+                                                StringBuilder streamBuffer,
+                                                int[] emittedLength,
+                                                boolean pushContent) {
+        synchronized (allContent) {
+            int previousLength = allContent.length();
+            allContent.append(chunkContent);
+            int markerIndex = hiddenMarkerIndex[0];
+            if (markerIndex < 0 && StringUtils.isNotBlank(hiddenStartMarker)) {
+                int searchFrom = Math.max(0, previousLength - hiddenStartMarker.length() + 1);
+                markerIndex = allContent.indexOf(hiddenStartMarker, searchFrom);
+                hiddenMarkerIndex[0] = markerIndex;
+            }
+            int visibleLength = markerIndex >= 0 ? markerIndex : allContent.length();
+            if (!pushContent || visibleLength <= emittedLength[0]) {
+                return false;
+            }
+            streamBuffer.append(allContent, emittedLength[0], visibleLength);
+            emittedLength[0] = visibleLength;
+            return true;
+        }
+    }
+
+    /** 取消时生成可见正文快照；与订阅线程的追加共用同一把锁。 */
+    private static String snapshotPartial(StringBuilder allContent, String hiddenStartMarker) {
+        synchronized (allContent) {
+            String visible = extractVisibleContent(allContent, hiddenStartMarker);
+            String trimmed = visible.trim();
+            return trimmed.isEmpty() ? null : trimmed;
+        }
+    }
+
+    private static String snapshotToolPartial(StringBuilder allContent) {
+        synchronized (allContent) {
+            return allContent.toString().trim();
+        }
+    }
+
+    private static String extractVisibleContent(CharSequence allContent, String hiddenStartMarker) {
+        String content = allContent.toString();
+        if (StringUtils.isBlank(hiddenStartMarker)) {
+            return content;
+        }
+        int markerIndex = content.indexOf(hiddenStartMarker);
+        return markerIndex >= 0 ? content.substring(0, markerIndex) : content;
     }
 
     private void mergeToolCalls(List<LlmToolCall> toolCalls,

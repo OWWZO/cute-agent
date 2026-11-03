@@ -23,10 +23,15 @@ public class ReplayTiming implements Serializable {
     public static final String SOURCE_RUNTIME = "runtime";
     public static final String SOURCE_INFERRED = "inferred";
 
-    private LocalDateTime startedAt;
-    private LocalDateTime finishedAt;
-    private Long durationMs;
-    private String source;
+    /**
+     * 计时字段用 volatile：{@code finishRuntime} 会按「durationMs/source 先写、finishedAt 后写」
+     * 的顺序发布，保证读端一旦看到 finishedAt 非空，就一定能看到本次收口的 duration/source。
+     * <p>调用方仍不得在多个线程间随意共享可变实例；需要快照请用 {@link #copyOf}。</p>
+     */
+    private volatile LocalDateTime startedAt;
+    private volatile LocalDateTime finishedAt;
+    private volatile Long durationMs;
+    private volatile String source;
 
     /** 运行时计时起点。 */
     public static ReplayTiming startRuntime() {
@@ -38,15 +43,17 @@ public class ReplayTiming implements Serializable {
 
     /**
      * 收口运行时计时：已收口或未开始则原样返回，避免重复覆盖既有耗时。
+     * <p>先写 durationMs/source，最后写 finishedAt 作为发布标记，避免并发读端看到
+     * 「已结束但没有耗时」的半成品。</p>
      */
     public static ReplayTiming finishRuntime(ReplayTiming timing) {
         if (timing == null || timing.getFinishedAt() != null || timing.getStartedAt() == null) {
             return timing;
         }
         LocalDateTime finishedAt = LocalDateTime.now();
-        timing.setFinishedAt(finishedAt);
         timing.setDurationMs(Math.max(0L, Duration.between(timing.getStartedAt(), finishedAt).toMillis()));
         timing.setSource(SOURCE_RUNTIME);
+        timing.setFinishedAt(finishedAt);
         return timing;
     }
 

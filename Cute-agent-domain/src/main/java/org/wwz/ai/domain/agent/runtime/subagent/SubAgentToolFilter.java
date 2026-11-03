@@ -105,7 +105,7 @@ public final class SubAgentToolFilter {
         DeferredToolCatalog parentCatalog = parentTools.getDeferredToolCatalog();
         if (parentCatalog != null && parentCatalog.size() > 0) {
             DeferredToolCatalog childCatalog = parentCatalog.filter(entry ->
-                    isAllowed(entry.getName(), allowAll || allowed.contains(McpToolNames.TOOL_CALL),
+                    isAllowed(entry.getName(), retainsParentCatalog(allowAll, allowed),
                             allowed, disallowed));
             if (childCatalog.size() > 0) {
                 child.setDeferredToolCatalog(childCatalog);
@@ -154,7 +154,7 @@ public final class SubAgentToolFilter {
 
         DeferredToolCatalog parentCatalog = parentTools.getDeferredToolCatalog();
         if (parentCatalog != null) {
-            boolean retainParentCatalog = allowAll || allowed.contains(McpToolNames.TOOL_CALL);
+            boolean retainParentCatalog = retainsParentCatalog(allowAll, allowed);
             for (DeferredToolEntry entry : parentCatalog.listAll()) {
                 if (!isAllowed(entry.getName(),
                         retainParentCatalog,
@@ -174,6 +174,17 @@ public final class SubAgentToolFilter {
         if (!deferred.isEmpty()) {
             child.setDeferredToolCatalog(new DeferredToolCatalog(deferred));
         }
+    }
+
+    /**
+     * 父级 deferred catalog 的保留判定。
+     * <p>这是本类唯一一处「允许 ToolCall」同时改变工具可见范围的地方：ToolCall 是桥工具，
+     * 被允许后本来就能触达 catalog 里的任意条目，若把 catalog 当未授权删掉，子 Agent 会
+     * 出现「桥能调、但列表里看不到」的不一致；因此这里刻意让权限判断与延迟放置判断共用
+     * 同一个标志。eager 工具仍严格按 allowedTools 过滤，不受该例外影响。</p>
+     */
+    private static boolean retainsParentCatalog(boolean allowAll, Set<String> allowed) {
+        return allowAll || allowed.contains(McpToolNames.TOOL_CALL);
     }
 
     private static boolean isAllowed(String name,

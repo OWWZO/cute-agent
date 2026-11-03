@@ -2,11 +2,13 @@ package org.wwz.ai.domain.agent.runtime.planmode;
 
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.runtime.tool.ToolArgs;
 import org.wwz.ai.domain.agent.runtime.tool.common.AgentDispatchTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.mcp.McpToolNames;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskToolNames;
 
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -37,8 +39,7 @@ public final class PlanModeToolPolicy {
             "skill_view",
             "skills_search",
             McpToolNames.TOOL_SEARCH,
-            McpToolNames.TOOL_DESCRIBE,
-            McpToolNames.TOOL_CALL
+            McpToolNames.TOOL_DESCRIBE
     );
 
     /** 执行本机命令 / 操作浏览器：不是"检索"，而是有副作用的外部动作，plan 期仍拦。 */
@@ -88,6 +89,11 @@ public final class PlanModeToolPolicy {
         }
         String name = toolName.trim();
         String lower = name.toLowerCase(Locale.ROOT);
+        if (McpToolNames.TOOL_CALL.equals(name)) {
+            // ToolCall 本身只是转发器：真正是否有副作用取决于 arguments.name 指向的工具。
+            // 必须递归同一门禁，否则任何写操作都能借 ToolCall 绕过 plan 期保护。
+            return denyToolCall(state, args);
+        }
         if (ALWAYS_ALLOWED.contains(name)) {
             // 主 Agent 在 plan 期允许这些工具。子 Agent 不经过本策略（context.isSubAgent() 直接放行），
             // 其工具池由 SubAgentFilter 管理，且不会剥离 workspace_write/workspace_edit。
@@ -115,6 +121,22 @@ public final class PlanModeToolPolicy {
             return "Plan mode: 工具「" + name + "」可能修改状态，已禁止。请退出 plan mode 并获用户批准后再用。";
         }
         return null;
+    }
+
+    /**
+     * 解析 ToolCall 的目标工具并按同一策略复检；目标名缺失或指向桥工具时拒绝，
+     * 因为无法证明该调用只读。
+     */
+    private static String denyToolCall(PlanModeState state, Object args) {
+        Map<String, Object> call = ToolArgs.map(args);
+        String target = ToolArgs.str(call.get("name"));
+        if (StringUtils.isBlank(target)) {
+            return "Plan mode: ToolCall 必须显式指定目标工具名（name），无法确认是否只读，已拒绝。";
+        }
+        if (McpToolNames.isBridge(target)) {
+            return "Plan mode: ToolCall 不能转而调用桥工具「" + target + "」。";
+        }
+        return denyReason(state, target, ToolArgs.map(call.get("arguments")));
     }
 
     private static boolean isPlanRelativePath(String path) {

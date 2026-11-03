@@ -1,5 +1,6 @@
 package org.wwz.ai.test.domain;
 
+import com.alibaba.fastjson.JSON;
 import org.junit.Assert;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.runtime.tool.ToolObservationSerializer;
@@ -55,6 +56,26 @@ public class ToolObservationSerializerTest {
     @Test
     public void failureWithoutDetailUsesErrorPrefix() {
         Assert.assertEquals("Error: network down", ToolObservationSerializer.serializeFailure("network down", null));
+    }
+
+    @Test
+    public void oversizedJsonIsCutToCapWithNotice() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("content", "x".repeat(500_000));
+
+        String serialized = ToolObservationSerializer.serializeSuccess(data, 4096);
+
+        Assert.assertEquals(4096, serialized.length());
+        Assert.assertTrue(serialized.startsWith("{\"content\":\""));
+        Assert.assertTrue(serialized.endsWith(ToolObservationSerializer.TRUNCATION_NOTICE));
+    }
+
+    @Test
+    public void jsonUnderCapStaysByteIdenticalToDefaultSerializer() {
+        Map<String, Object> data = Map.of("tool", "excel_reader", "ok", true);
+
+        Assert.assertEquals(JSON.toJSONString(data),
+                ToolObservationSerializer.serializeSuccess(data, ToolObservationSerializer.DEFAULT_LLM_TOOL_STRING_CAP));
     }
 
     @Test

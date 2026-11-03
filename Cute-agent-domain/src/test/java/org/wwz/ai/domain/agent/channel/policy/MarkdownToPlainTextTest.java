@@ -72,6 +72,11 @@ public class MarkdownToPlainTextTest {
     }
 
     @Test
+    public void blockquoteMarkerIsRemoved() {
+        assertEquals("引用内容", MarkdownToPlainText.convert("> 引用内容"));
+    }
+
+    @Test
     public void horizontalRuleDisappearsButParagraphBreakRemains() {
         assertEquals("上\n\n下", MarkdownToPlainText.convert("上\n\n---\n\n下"));
     }

@@ -14,8 +14,13 @@ public final class MemoryContextFence {
     private static final Pattern INNER_BLOCK = Pattern.compile(
             "<\\s*memory-context\\s*>[\\s\\S]*?</\\s*memory-context\\s*>",
             Pattern.CASE_INSENSITIVE);
+    /**
+     * 只剥离位于文本开头（可带前导空白）的泄漏 note。旧实现会删除正文任意位置出现的
+     * 同名短语，既会误删合法的召回内容，也挡不住变体写法；围栏 note 本来就只会出现在
+     * 块首，因此用 {@code \A} 锚定即可覆盖泄漏场景。
+     */
     private static final Pattern SYSTEM_NOTE = Pattern.compile(
-            "\\[System note:\\s*The following is recalled memory context,[^\\]]*\\]\\s*",
+            "\\A\\s*\\[System note:\\s*The following is recalled memory context,[^\\]]*\\]\\s*",
             Pattern.CASE_INSENSITIVE);
 
     private MemoryContextFence() {

@@ -2,7 +2,9 @@ package org.wwz.ai.test.domain;
 
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.junit.Assert;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.rag.model.sql.SqlModel;
@@ -47,5 +49,16 @@ public class SqlParserUtilsTest {
         RuntimeException exception = Assert.assertThrows(RuntimeException.class,
                 () -> SqlParserUtils.parseSelectSql("DELETE FROM sales_data", "mysql"));
         Assert.assertEquals("请检查sql是否正确", exception.getMessage());
+    }
+
+    /**
+     * MySQL 默认开启反斜杠转义：只加倍单引号而不处理反斜杠时，以 \ 结尾的值会把收尾引号吃掉。
+     */
+    @Test
+    public void mysqlDialectEscapesTrailingBackslashBeforeQuote() {
+        Assert.assertEquals("'abc\\\\'",
+                SqlParserUtils.toSqlString(SqlLiteral.createCharString("abc\\", SqlParserPos.ZERO), "mysql"));
+        Assert.assertEquals("'a''b\\\\'",
+                SqlParserUtils.toSqlString(SqlLiteral.createCharString("a'b\\", SqlParserPos.ZERO), "mysql"));
     }
 }
