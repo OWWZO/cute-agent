@@ -26,14 +26,20 @@ public class AgentExecutionCommand {
     private String outputStyle;
     private String basePrompt;
     private List<org.wwz.ai.domain.agent.runtime.dto.Message> workingMemoryMessages;
+    /**
+     * 是否流式输出。{@code null} 与 {@code false} 等价（消费方一律用 {@code Boolean.TRUE.equals} 判定），
+     * 这里不设默认值以免与上游「未传」语义混淆。
+     */
     private Boolean isStream;
     private List<AgentExecutionFile> sessionFiles;
     private String model;
+    /** 是否开深度思考；{@code null} 表示沿用模型/会话配置，不能折叠成 false。 */
     private Boolean thinking;
     private String thinkingEffort;
     private String resumeQuestionId;
     private String resumeDesktopControlId;
     private String resumeApprovalId;
     private String resumeContextJson;
+    /** 是否强制进入 plan mode；{@code null} 与 {@code false} 等价。 */
     private Boolean forcePlanMode;
 }

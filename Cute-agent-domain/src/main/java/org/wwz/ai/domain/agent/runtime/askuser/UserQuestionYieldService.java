@@ -20,6 +20,9 @@ import java.util.UUID;
 
 /**
  * AskUserQuestion 让步收口：事务内写 question + working_memory + WAITING_INPUT，提交后再发卡片。
+ * <p>注意：{@link ExecutionLedgerRunSupport#finishRun} 会先打内存终态（{@code markTurnClosed}）
+ * 再写账本，而本方法处于 {@code @Transactional} 内；若后续发生回滚，内存上下文已关闭而库内 run
+ * 仍是开放态。当前依赖「本方法内不再抛出异常」这一前提，新增可失败的写入时须先评估该不一致。</p>
  */
 @Slf4j
 @Service

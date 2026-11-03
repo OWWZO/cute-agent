@@ -35,7 +35,8 @@ public class MultiModalAgentResponse {
     private String stage;
 
     /**
-     * 阶段附加元数据（round、hitCount 等）。
+     * 阶段附加元数据（round、hitCount 等）。上游为自由 JSON 对象，
+     * 消费方按 {@code Map<String, Object>} 读取；未使用，仅透传。
      */
     private Object meta;
 
@@ -49,6 +50,7 @@ public class MultiModalAgentResponse {
         private Delta delta;
         private String finishReason;
         private Integer index;
+        /** OpenAI 兼容字段；上游可能为数组或对象，当前无消费方。 */
         private Object logprobs;
     }
 
@@ -58,9 +60,11 @@ public class MultiModalAgentResponse {
     @AllArgsConstructor
     public static class Delta {
         private String content;
+        /** OpenAI 兼容字段；上游可能为对象，当前无消费方。 */
         private Object functionCall;
         private String refusal;
         private String role;
+        /** OpenAI 兼容字段；上游可能为数组，当前无消费方。 */
         private Object toolCalls;
     }
 

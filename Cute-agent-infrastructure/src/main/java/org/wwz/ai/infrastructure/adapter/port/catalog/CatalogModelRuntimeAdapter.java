@@ -6,7 +6,6 @@ import org.springframework.stereotype.Component;
 import org.wwz.ai.domain.agent.catalog.model.CatalogModel;
 import org.wwz.ai.domain.agent.catalog.port.ICatalogModelRuntimePort;
 import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
-import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalogEntry;
 
 import java.util.List;
 
@@ -18,17 +17,11 @@ public class CatalogModelRuntimeAdapter implements ICatalogModelRuntimePort {
 
     public List<CatalogModel> listUserSelectableModels() {
         LlmModelCatalog catalog = catalogProvider.getIfAvailable();
-        return catalog == null ? List.of() : catalog.listUserSelectableModels().stream().map(this::toModel).toList();
+        return catalog == null ? List.of() : catalog.listUserSelectableModels();
     }
 
     public void invalidateAll() {
         LlmModelCatalog catalog = catalogProvider.getIfAvailable();
         if (catalog != null) catalog.invalidateAll();
-    }
-
-    private CatalogModel toModel(LlmModelCatalogEntry entry) {
-        return CatalogModel.builder().modelId(entry.getModelId()).modelName(entry.getModelName())
-                .modelType(entry.getModelType()).supportsThinking(entry.getSupportsThinking())
-                .contextWindow(entry.getContextWindow()).status(entry.getStatus()).build();
     }
 }

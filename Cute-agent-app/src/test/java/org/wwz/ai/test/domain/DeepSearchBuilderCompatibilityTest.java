@@ -35,7 +35,7 @@ public class DeepSearchBuilderCompatibilityTest {
         Method buildPayload = builderClass.getMethod("buildPayload", String.class);
 
         Object searchDoc = searchDocClass.getDeclaredConstructor().newInstance();
-        invokeSetter(searchDocClass, searchDoc, "setDoc_type", String.class, "web");
+        invokeSetter(searchDocClass, searchDoc, "setDocType", String.class, "web");
         invokeSetter(searchDocClass, searchDoc, "setContent", String.class, repeat("出口量持续增长，", 12));
         invokeSetter(searchDocClass, searchDoc, "setTitle", String.class, "海关总署：出口量创新高");
         invokeSetter(searchDocClass, searchDoc, "setLink", String.class, "https://example.com/customs");

@@ -70,14 +70,13 @@ public class AgentStreamProjection implements AgentSessionStream {
     private SessionProjectionRegistry projectionRegistry;
     private final AgentExecutionCommand request;
     private final Map<AgentType, AgentStreamEventHandler> handlerMap;
-    private final List<AgentStreamEvent> agentRespList = new ArrayList<>();
     private final AgentStreamAccumulator eventResult = new AgentStreamAccumulator();
     private final List<Runnable> abortHandlers = new CopyOnWriteArrayList<>();
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final AtomicLong eventSequence = new AtomicLong();
     private final long startTime = System.currentTimeMillis();
     /**
-     * 主/子 Agent 并行工具会同时 printer.send。Accumulator / agentRespList 不是线程安全的，
+     * 主/子 Agent 并行工具会同时 printer.send。Accumulator 不是线程安全的，
      * 投影必须单写，否则 taskId、orderMapping、resultMap 会错配到前端。
      */
     private final Object projectionLock = new Object();
@@ -187,7 +186,7 @@ public class AgentStreamProjection implements AgentSessionStream {
             }
 
             // 断流期间仍推进投影状态，避免 rebind 后状态机落后。
-            AgentStreamResult result = handler.handle(request, agentResponse, agentRespList, eventResult);
+            AgentStreamResult result = handler.handle(request, agentResponse, eventResult);
             AgentSessionStreamFrame frame = frameMapper.toFrame(result);
             assignSeq(frame);
             offerReplayBuffer(frame);
@@ -283,7 +282,7 @@ public class AgentStreamProjection implements AgentSessionStream {
         return AgentSessionStreamFrame.builder()
                 .finished(false)
                 .status("success")
-                .responseType(ResponseTypeEnum.text.name())
+                .responseType(ResponseTypeEnum.TEXT.getValue())
                 .response("")
                 .responseAll("")
                 .useTimes(0)
@@ -301,7 +300,7 @@ public class AgentStreamProjection implements AgentSessionStream {
         return AgentSessionStreamFrame.builder()
                 .finished(true)
                 .status("success")
-                .responseType(ResponseTypeEnum.text.name())
+                .responseType(ResponseTypeEnum.TEXT.getValue())
                 .response("")
                 .responseAll("")
                 .useTimes(0)
@@ -323,7 +322,7 @@ public class AgentStreamProjection implements AgentSessionStream {
         return AgentSessionStreamFrame.builder()
                 .finished(false)
                 .status("success")
-                .responseType(ResponseTypeEnum.text.name())
+                .responseType(ResponseTypeEnum.TEXT.getValue())
                 .response("")
                 .responseAll("")
                 .useTimes(0)

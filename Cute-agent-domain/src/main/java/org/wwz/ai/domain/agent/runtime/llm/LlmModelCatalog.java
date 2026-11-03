@@ -5,6 +5,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.wwz.ai.domain.agent.adapter.repository.ILlmModelConfigRepository;
+import org.wwz.ai.domain.agent.catalog.model.CatalogModel;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,7 +62,7 @@ public class LlmModelCatalog {
     /**
      * 返回登录用户可选择的模型目录。备用模型只用于运行时失败重试，不进入用户目录。
      */
-    public List<LlmModelCatalogEntry> listUserSelectableModels() {
+    public List<CatalogModel> listUserSelectableModels() {
         List<LlmModelBinding> bindings = loadUsable(System.currentTimeMillis());
         if (bindings.isEmpty()) {
             return List.of();
@@ -75,7 +76,7 @@ public class LlmModelCatalog {
             unique.putIfAbsent(binding.getModelId().trim(), binding);
         }
         return unique.values().stream()
-                .map(binding -> LlmModelCatalogEntry.builder()
+                .map(binding -> CatalogModel.builder()
                         .modelId(binding.getModelId().trim())
                         .modelName(binding.getModelName())
                         .modelType(binding.getModelType())

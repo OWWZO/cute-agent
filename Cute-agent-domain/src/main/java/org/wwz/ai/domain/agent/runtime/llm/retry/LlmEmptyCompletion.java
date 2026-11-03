@@ -6,8 +6,11 @@ package org.wwz.ai.domain.agent.runtime.llm.retry;
  * <p>移植自 ZCode 的 {@code empty-completion-retry.ts}。场景：provider 返回 200 但既没有正文、
  * 也没有 tool call、也没有 usage —— 上游偶发抖动，重发一次通常就有内容。
  *
- * <p>约束：独立于主重试预算的<b>单次</b>上限（{@link #MAX_RETRIES}），避免把「模型真的返回空」
+ * <p>约束：{@link #MAX_RETRIES} 是独立于主重试预算的<b>单次</b>上限，避免把「模型真的返回空」
  * 拖成无限重试；且不得在用户已取消时重试。
+ * <p>注意：生产链路（{@code LlmResilientCompletionPort}）目前只消费 {@link #MAX_RETRIES}，
+ * 实际闸门内联在调用点，未复用 {@link #canRetry}/{@link #failure()}；后者仅由单测覆盖，
+ * 两者若需合并应以调用点为准（生产闸门不检查主重试预算）。
  */
 public final class LlmEmptyCompletion {
 

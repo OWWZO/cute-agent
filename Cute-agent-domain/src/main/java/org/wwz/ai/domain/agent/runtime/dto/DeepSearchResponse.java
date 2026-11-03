@@ -66,7 +66,9 @@ public class DeepSearchResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class SearchDoc {
-        private String doc_type;
+        /** 上游 cute-tool 的 JSON 键是 {@code doc_type}；这里显式映射，不依赖字段名。 */
+        @com.alibaba.fastjson.annotation.JSONField(name = "doc_type")
+        private String docType;
         private String content;
         private String title;
         private String link;
