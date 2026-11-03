@@ -330,7 +330,7 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     }
 
     private boolean isMeaningfulSessionTitle(String title) {
-        return StringUtils.isNotBlank(title) && !"新对话".equals(title.trim());
+        return StringUtils.isNotBlank(title) && !ExecutionLedgerConstants.DEFAULT_SESSION_TITLE.equals(title.trim());
     }
 
     private String abbreviateSessionTitle(String queryText) {

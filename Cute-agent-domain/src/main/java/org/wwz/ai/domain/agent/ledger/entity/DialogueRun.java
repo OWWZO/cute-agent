@@ -141,10 +141,6 @@ public class DialogueRun {
     /**
      * 是否已经进入终态（成功 / 失败 / 超时 / 停止）。
      */
-    public boolean isFinished() {
-        return isTerminal();
-    }
-
     public boolean isTerminal() {
         return status != null
                 && (status == ExecutionLedgerConstants.STATUS_SUCCESS

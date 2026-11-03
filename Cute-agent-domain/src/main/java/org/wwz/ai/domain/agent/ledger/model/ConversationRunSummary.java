@@ -41,7 +41,9 @@ public class ConversationRunSummary {
 
     private LocalDateTime finishedAt;
 
+    /** 由 run 表 {@code duration_ms} 列读取；与 startedAt/finishedAt 同源，不另行推导。 */
     private Long durationMs;
 
+    /** 是否具备回放标识（当前按 requestId 非空派生），不代表回放数据一定完整。 */
     private Boolean hasReplay;
 }

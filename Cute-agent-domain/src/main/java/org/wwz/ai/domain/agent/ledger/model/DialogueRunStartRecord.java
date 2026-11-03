@@ -9,6 +9,8 @@ import java.time.LocalDateTime;
 
 /**
  * 创建 run 的命令对象。
+ * <p>{@code requestId} 为必填：为空时 {@code AgentExecutionRecorderImpl#createRun} 直接返回
+ * {@code null}，整次 run 不会落账本。{@code runUid} 为空时回退为 {@code requestId}。</p>
  */
 @Data
 @Builder

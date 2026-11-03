@@ -55,6 +55,13 @@ public class DialogueSessionUpsertRecord {
 
     private String latestSummaryText;
 
+    /**
+     * 以下三个计数列由 upsert 路径决定归属：
+     * {@code upsertSessionOnRunStart} 在 SQL 内原子累加 run_count；
+     * {@code updateSessionRunFinish} 原子累加 finished/failed；
+     * {@code upsertSession} 则整行覆盖。run-start 路径不应填写 finished/failed 计数。
+     * 为空表示「不指定」。
+     */
     private Integer runCount;
 
     private Integer finishedRunCount;
