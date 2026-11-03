@@ -29,13 +29,16 @@ final class ToolTimingTracker {
         }
     }
 
-    /** 取计时起点；缺失时补建，保证调用方总能拿到非 null。 */
+    /**
+     * 取计时起点；缺失时补建，保证非空白 toolCallId 的调用方总能拿到非 null。
+     * <p>直接返回 computeIfAbsent 的结果：先 start 再 get 的两步查找会被并发 clear 打断，
+     * 出现「刚补建就被移除」导致返回 null。</p>
+     */
     ReplayTiming resolve(ToolCall command) {
         if (command == null || StringUtils.isBlank(command.getId())) {
             return null;
         }
-        start(List.of(command));
-        return runtimeTimings.get(command.getId());
+        return runtimeTimings.computeIfAbsent(command.getId(), ignored -> ReplayTiming.startRuntime());
     }
 
     /** 把收口时间写回计时并挂到 outcome 上。 */

@@ -261,11 +261,14 @@ public class ToolCollection {
     /**
      * 更新数字员工配置
      * @param digitalEmployee 数字员工配置 JSON 对象
-     * 说明：若传入null，记录错误日志但不抛出异常（容错设计，避免阻断流程）。
+     * 说明：若传入null，记录错误日志但保留既有配置，不抛出异常（容错设计，避免阻断流程）。
      */
     public void updateDigitalEmployee(JSONObject digitalEmployee) {
         if (digitalEmployee == null) {
-            log.error("requestId:{} setDigitalEmployee: 数字员工配置为null", agentContext.getRequestId());
+            log.error("requestId:{} setDigitalEmployee: 数字员工配置为null",
+                    agentContext == null ? "unknown" : agentContext.getRequestId());
+            // 空配置不应把已生效的映射清空，那会打断后续工具的展示归属。
+            return;
         }
         setDigitalEmployees(digitalEmployee);
     }

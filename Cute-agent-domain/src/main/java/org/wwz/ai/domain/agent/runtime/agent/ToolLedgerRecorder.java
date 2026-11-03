@@ -93,7 +93,11 @@ final class ToolLedgerRecorder {
         List<ToolInvocationBatchStartRecord.Item> items = new ArrayList<>(commands.size());
         int dispatchIndex = 1;
         for (ToolCall command : commands) {
-            if (command == null || command.getFunction() == null || StringUtils.isBlank(command.getFunction().getName())) {
+            // 空白 toolCallId 无法登记，也无法计时（timings.resolve 返回 null）；与 ensureIds 保持同样过滤。
+            if (command == null
+                    || StringUtils.isBlank(command.getId())
+                    || command.getFunction() == null
+                    || StringUtils.isBlank(command.getFunction().getName())) {
                 continue;
             }
             ToolDispatch dispatch = dispatches == null ? null : dispatches.get(command.getId());

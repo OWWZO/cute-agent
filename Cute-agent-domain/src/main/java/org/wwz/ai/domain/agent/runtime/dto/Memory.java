@@ -72,13 +72,14 @@ public class Memory {
         Iterator<Message> iterator = messages.iterator();
         while (iterator.hasNext()) {
             Message message = iterator.next();
-            if (message.getRole() == RoleType.TOOL) {
-                iterator.remove();
-            }
-            if (message.getRole() == RoleType.ASSISTANT && Objects.nonNull(message.getToolCalls()) && !message.getToolCalls().isEmpty()) {
-                iterator.remove();
-            }
-            if (Objects.nonNull(message.getContent()) && message.getContent().startsWith(LEGACY_REACT_CONTINUATION_PREFIX)) {
+            // null 元素可能来自 addMessage(null)；同一元素命中多个条件时只能 remove 一次。
+            boolean remove = message == null
+                    || message.getRole() == RoleType.TOOL
+                    || (message.getRole() == RoleType.ASSISTANT
+                    && Objects.nonNull(message.getToolCalls()) && !message.getToolCalls().isEmpty())
+                    || (Objects.nonNull(message.getContent())
+                    && message.getContent().startsWith(LEGACY_REACT_CONTINUATION_PREFIX));
+            if (remove) {
                 iterator.remove();
             }
         }
