@@ -6,14 +6,39 @@ import {
 import { combineData } from "@/utils/chat";
 import { applyWaitingUserInputState } from "@/components/ChatView/streamState";
 import {
-  claimHitlResumeDispatch,
   cloneChatListForHITL,
   commitHITLChat,
   markChatResuming,
   markChatSettled,
   resolveHITLChatIndex,
   resolveHitlResumeIntent,
+  scheduleHitlResumeDispatch,
 } from "@/utils/hitlResumeIntent";
+
+function matchesAskUserCard(
+  tool: CHAT.Task | MESSAGE.Task,
+  questionId: string,
+  toolCallId: string
+): boolean {
+  if (!questionId && !toolCallId) {
+    return false;
+  }
+  if (tool?.messageType !== "ask_user_question") {
+    return false;
+  }
+  const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
+  const nested = (resultMap.resultMap || resultMap) as Record<string, unknown>;
+  const cardQuestionId = String(
+    nested.questionId || resultMap.questionId || ""
+  );
+  const cardToolCallId = String(
+    nested.toolCallId || resultMap.toolCallId || ""
+  );
+  return Boolean(
+    (questionId && cardQuestionId === questionId) ||
+      (toolCallId && cardToolCallId === toolCallId)
+  );
+}
 
 function chatHasQuestion(
   chat: CHAT.ChatItem,
@@ -26,21 +51,7 @@ function chatHasQuestion(
   const groups = chat.multiAgent?.tasks || chat.tasks || [];
   for (const group of groups) {
     for (const tool of group || []) {
-      if (tool?.messageType !== "ask_user_question") {
-        continue;
-      }
-      const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
-      const nested = (resultMap.resultMap || resultMap) as Record<string, unknown>;
-      const cardQuestionId = String(
-        nested.questionId || resultMap.questionId || ""
-      );
-      const cardToolCallId = String(
-        nested.toolCallId || resultMap.toolCallId || ""
-      );
-      if (
-        (questionId && cardQuestionId === questionId) ||
-        (toolCallId && cardToolCallId === toolCallId)
-      ) {
+      if (matchesAskUserCard(tool, questionId, toolCallId)) {
         return true;
       }
     }
@@ -119,7 +130,7 @@ export function mergePendingAskUserQuestions(
       const groups = chat.multiAgent?.tasks || [];
       for (const group of groups) {
         for (const tool of group || []) {
-          if (tool?.messageType !== "ask_user_question") {
+          if (!matchesAskUserCard(tool, questionId, toolCallId)) {
             continue;
           }
           const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
@@ -127,20 +138,6 @@ export function mergePendingAskUserQuestions(
             string,
             unknown
           >;
-          const cardQuestionId = String(
-            nested.questionId || resultMap.questionId || ""
-          );
-          const cardToolCallId = String(
-            nested.toolCallId || resultMap.toolCallId || ""
-          );
-          if (
-            !(
-              (questionId && cardQuestionId === questionId) ||
-              (toolCallId && cardToolCallId === toolCallId)
-            )
-          ) {
-            continue;
-          }
           nested.status = clientStatus;
           if (payload.answers && typeof payload.answers === "object") {
             const answers = payload.answers as Record<string, string | true>;
@@ -220,18 +217,7 @@ export async function restoreAskUserQuestionsForSession(
       conversation,
       Array.isArray(pending) ? pending : []
     );
-    // 下一帧再派发，确保 ChatView 已挂上 resume 事件监听
-    if (autoResumes.length) {
-      window.setTimeout(() => {
-        for (const item of autoResumes) {
-          // 快速切会话 / StrictMode 双调用可能重复派发同一个 resumeRequestId
-          if (!claimHitlResumeDispatch(`ask-user::${item.resumeRequestId}`)) {
-            continue;
-          }
-          dispatchAskUserResume(item);
-        }
-      }, 0);
-    }
+    scheduleHitlResumeDispatch("ask-user", autoResumes, dispatchAskUserResume);
     return next;
   } catch (error) {
     console.warn("恢复 AskUserQuestion pending 失败", error);

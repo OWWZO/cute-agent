@@ -6,14 +6,27 @@ import {
 import { combineData } from "@/utils/chat";
 import { applyWaitingUserInputState } from "@/components/ChatView/streamState";
 import {
-  claimHitlResumeDispatch,
   cloneChatListForHITL,
   commitHITLChat,
   markChatResuming,
   markChatSettled,
   resolveHITLChatIndex,
   resolveHitlResumeIntent,
+  scheduleHitlResumeDispatch,
 } from "@/utils/hitlResumeIntent";
+
+function resolvePlanApprovalId(tool: CHAT.Task | MESSAGE.Task): string {
+  const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
+  const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
+  const toolAny = tool as unknown as Record<string, unknown>;
+  return String(
+    nested.approvalId ||
+      resultMap.approvalId ||
+      toolAny.approvalId ||
+      tool.messageId ||
+      ""
+  );
+}
 
 function chatHasApproval(chat: CHAT.ChatItem, approvalId: string): boolean {
   if (!approvalId) {
@@ -25,17 +38,7 @@ function chatHasApproval(chat: CHAT.ChatItem, approvalId: string): boolean {
       if (tool?.messageType !== "plan_approval") {
         continue;
       }
-      const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
-      const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
-      const toolAny = tool as unknown as Record<string, unknown>;
-      const id = String(
-        nested.approvalId ||
-          resultMap.approvalId ||
-          toolAny.approvalId ||
-          tool.messageId ||
-          ""
-      );
-      if (id === approvalId) {
+      if (resolvePlanApprovalId(tool) === approvalId) {
         return true;
       }
     }
@@ -120,15 +123,7 @@ export function mergePendingPlanApprovals(
             string,
             unknown
           >;
-          const toolAny = tool as unknown as Record<string, unknown>;
-          const cardApprovalId = String(
-            nested.approvalId ||
-              resultMap.approvalId ||
-              toolAny.approvalId ||
-              tool.messageId ||
-              ""
-          );
-          if (cardApprovalId !== approvalId) {
+          if (resolvePlanApprovalId(tool) !== approvalId) {
             continue;
           }
           nested.status = clientStatus;
@@ -229,17 +224,11 @@ export async function restorePlanApprovalsForSession(
       conversation,
       Array.isArray(pending) ? pending : []
     );
-    if (autoResumes.length) {
-      window.setTimeout(() => {
-        for (const item of autoResumes) {
-          // 快速切会话 / StrictMode 双调用可能重复派发同一个 resumeRequestId
-          if (!claimHitlResumeDispatch(`plan-approval::${item.resumeRequestId}`)) {
-            continue;
-          }
-          dispatchPlanApprovalResume(item);
-        }
-      }, 0);
-    }
+    scheduleHitlResumeDispatch(
+      "plan-approval",
+      autoResumes,
+      dispatchPlanApprovalResume
+    );
     return next;
   } catch (error) {
     console.warn("恢复 PlanApproval pending 失败", error);

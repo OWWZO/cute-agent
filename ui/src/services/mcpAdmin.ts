@@ -1,13 +1,8 @@
 import api from "./index";
+import type { CatalogMcpCreatePayload } from "./catalog";
 
-export type McpRecord = {
+export type McpRecord = CatalogMcpCreatePayload & {
   id?: number;
-  mcpId: string;
-  mcpName: string;
-  transportType: string;
-  transportConfig?: string;
-  requestTimeout?: number;
-  status?: number;
 };
 
 const BASE = "/api/v1/admin/ai-client-tool-mcp";

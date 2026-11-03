@@ -34,6 +34,7 @@ import type { SopEditorDraft, SopItem, SopRecallTestResult, SopStatus, SopStep }
 import {
   createEmptyDraft,
   createEmptyStep,
+  DEFAULT_SOP_TYPE,
   resolveToolBaseUrl,
   sopItemToDraft,
   statusBadgeClass,
@@ -177,7 +178,7 @@ const WorkspaceSop: CuteType.FC<WorkspaceSopProps> = ({ embedded }) => {
         sopId: draft.sopId,
         sopName: draft.sopName.trim(),
         sopDesc: draft.sopDesc.trim(),
-        sopType: draft.sopType || "list",
+        sopType: draft.sopType || DEFAULT_SOP_TYPE,
         sopSteps: draft.sopSteps
           .map((step) => ({
             title: step.title.trim(),

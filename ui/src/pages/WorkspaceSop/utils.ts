@@ -3,8 +3,9 @@ import { buildDefaultToolBaseUrl } from "@/pages/WorkspaceImageGeneration/utils"
 import type { SopEditorDraft, SopItem, SopStatus, SopStep } from "./types";
 
 export const SOP_WORKSPACE_STORAGE_KEY = "workspace-sop:state";
-const DEFAULT_SOP_TYPE = "list";
+export const DEFAULT_SOP_TYPE = "list";
 const DEFAULT_SOP_STATUS: SopStatus = "online";
+export const DEFAULT_SOP_PAGE_SIZE = 200;
 
 export function resolveToolBaseUrl(): string {
   return buildDefaultToolBaseUrl();

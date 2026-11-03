@@ -26,6 +26,10 @@ export type SessionTreeNode = {
   depth: number;
 };
 
+function isRootSession(session: ConversationSessionItem): boolean {
+  return !session.parentSessionId && session.sessionKind !== "subagent";
+}
+
 /**
  * 把扁平会话列表组成树。
  *
@@ -42,11 +46,12 @@ export function buildSessionTree(sessions: ConversationSessionItem[]): {
   const orphans: ConversationSessionItem[] = [];
 
   sessions.forEach((session) => {
+    if (isRootSession(session)) {
+      return;
+    }
     if (!session.parentSessionId) {
-      // 子会话却没有父 ID：数据异常，按孤儿处理而不是当成根，否则会混进主会话列表
-      if (session.sessionKind === "subagent") {
-        orphans.push(session);
-      }
+      // 子会话却没有父 ID：数据异常，按孤儿处理而不是当成根。
+      orphans.push(session);
       return;
     }
     if (!known.has(session.parentSessionId)) {
@@ -84,7 +89,7 @@ export function buildSessionTree(sessions: ConversationSessionItem[]): {
 
   // 子会话即使没有父 ID 也不算根，否则会混进主会话列表
   const roots = sessions
-    .filter((session) => !session.parentSessionId && session.sessionKind !== "subagent")
+    .filter(isRootSession)
     .map((session) => buildNode(session, 0, new Set()));
 
   return {

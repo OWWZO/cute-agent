@@ -83,62 +83,66 @@ export interface CatalogSkillPackagePreview {
   nameTaken?: boolean;
 }
 
+export interface CatalogSkillCreatePayload {
+  name?: string;
+  description?: string;
+  content: string;
+}
+
+const CATALOG_BASE = "/api/v1/catalog";
+
 export const catalogApi = {
   listModels: () =>
     api.get<CatalogModelRecord[]>(
-      "/api/v1/catalog/models"
+      `${CATALOG_BASE}/models`
     ) as unknown as Promise<CatalogModelRecord[]>,
 
   createModel: (payload: CatalogModelCreatePayload) =>
-    api.post<boolean>("/api/v1/catalog/models", payload) as unknown as Promise<boolean>,
+    api.post<boolean>(`${CATALOG_BASE}/models`, payload) as unknown as Promise<boolean>,
 
   listSubAgents: () =>
     api.get<CatalogSubAgentRecord[]>(
-      "/api/v1/catalog/sub-agents"
+      `${CATALOG_BASE}/sub-agents`
     ) as unknown as Promise<CatalogSubAgentRecord[]>,
 
   createSubAgent: (payload: CatalogSubAgentCreatePayload) =>
-    api.post<boolean>("/api/v1/catalog/sub-agents", payload) as unknown as Promise<boolean>,
+    api.post<boolean>(`${CATALOG_BASE}/sub-agents`, payload) as unknown as Promise<boolean>,
 
   listCapabilities: () =>
     api.get<CatalogCapabilitiesRecord>(
-      "/api/v1/catalog/capabilities"
+      `${CATALOG_BASE}/capabilities`
     ) as unknown as Promise<CatalogCapabilitiesRecord>,
 
   createMcp: (payload: CatalogMcpCreatePayload) =>
-    api.post<boolean>("/api/v1/catalog/mcps", payload) as unknown as Promise<boolean>,
+    api.post<boolean>(`${CATALOG_BASE}/mcps`, payload) as unknown as Promise<boolean>,
 
-  parseSkillPackage: async (file: File) => {
+  parseSkillPackage: (file: File) => {
     const form = new FormData();
     form.append("file", file);
     return api.post<CatalogSkillPackagePreview>(
-      "/api/v1/catalog/skills/parse-package",
+      `${CATALOG_BASE}/skills/parse-package`,
       form,
     ) as unknown as Promise<CatalogSkillPackagePreview>;
   },
 
-  uploadSkill: async (file: File) => {
+  uploadSkill: (file: File) => {
     const form = new FormData();
     form.append("file", file);
     return api.post<CatalogSkillRecord>(
-      "/api/v1/catalog/skills/upload",
+      `${CATALOG_BASE}/skills/upload`,
       form,
     ) as unknown as Promise<CatalogSkillRecord>;
   },
 
-  createSkill: (payload: {
-    name?: string;
-    description?: string;
-    content: string;
-  }) =>
+  createSkill: (payload: CatalogSkillCreatePayload) =>
     api.post<CatalogSkillRecord>(
-      "/api/v1/catalog/skills/create",
+      `${CATALOG_BASE}/skills/create`,
       payload,
     ) as unknown as Promise<CatalogSkillRecord>,
 
   importSkill: (url: string) =>
     api.post<CatalogSkillRecord>(
-      "/api/v1/catalog/skills/import-url",
+      `${CATALOG_BASE}/skills/import-url`,
       { url },
     ) as unknown as Promise<CatalogSkillRecord>,
 };

@@ -144,8 +144,11 @@ declare global {
       id: string
       timing?: ReplayTiming
       durationMs?: number
+      /** @deprecated 历史兼容字段；新代码使用 durationMs（毫秒）。 */
       duration_ms?: number
+      /** @deprecated 统一使用 durationMs/elapsedMs（均为毫秒）。 */
       elapsedMs?: number
+      /** @deprecated 统一使用 elapsedMs（毫秒），保留用于历史结果回放。 */
       subAgentElapsedMs?: number
     }
 
@@ -268,8 +271,11 @@ declare global {
       subAgentProgressKind?: 'heartbeat' | 'text' | 'line' | string
       subAgentPhase?: string
       durationMs?: number
+      /** @deprecated 历史兼容字段；新代码使用 durationMs（毫秒）。 */
       duration_ms?: number
+      /** @deprecated 统一使用 durationMs/elapsedMs（均为毫秒）。 */
       elapsedMs?: number
+      /** @deprecated 统一使用 elapsedMs（毫秒），保留用于历史结果回放。 */
       subAgentElapsedMs?: number
       subAgentLiveText?: string
       subAgentProgressLines?: string[]
@@ -289,6 +295,7 @@ declare global {
       steps?: Steps[]
     }
 
+    /** ResultMap 的步骤结构；与 Plan.steps（string[]）不是同一契约。 */
     interface Steps {
       status: string,
       goal: string

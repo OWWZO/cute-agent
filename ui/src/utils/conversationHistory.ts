@@ -7,6 +7,11 @@ import type {
 } from "@/services/agentConversation";
 import { GENERIC_TASK_PRODUCT } from "@/utils/constants";
 import { normalizeRunStatus } from "@/utils/runStatus";
+import {
+  AGENT_TYPE_DEEP_THINK,
+  AGENT_TYPE_PLAN_SOLVE,
+} from "@/utils/agentMode";
+import { ARTIFACT_SECTION_DELIMITER } from "@/utils/artifactContent";
 
 import {
   buildConversationTaskData,
@@ -398,7 +403,7 @@ function toTimestamp(value?: string | null, fallback = Date.now()) {
 }
 
 function resolveConversationAgentType(deepThink?: boolean) {
-  return deepThink ? 3 : 5;
+  return deepThink ? AGENT_TYPE_DEEP_THINK : AGENT_TYPE_PLAN_SOLVE;
 }
 
 function buildFallbackConclusionEventData(
@@ -433,8 +438,7 @@ function buildFallbackConclusionEventData(
 
 function resolveFallbackSummary(rawSummaryText?: string | null) {
   const normalized = String(rawSummaryText || "");
-  const delimiter = "$$$";
-  const delimiterIndex = normalized.indexOf(delimiter);
+  const delimiterIndex = normalized.indexOf(ARTIFACT_SECTION_DELIMITER);
   if (delimiterIndex === -1) {
     return {
       summaryText: normalized,
@@ -445,7 +449,7 @@ function resolveFallbackSummary(rawSummaryText?: string | null) {
   }
 
   const artifactKeys = normalized
-    .slice(delimiterIndex + delimiter.length)
+    .slice(delimiterIndex + ARTIFACT_SECTION_DELIMITER.length)
     .trim()
     .split(/[、,\r\n，]+/)
     .map((item) => item.trim())

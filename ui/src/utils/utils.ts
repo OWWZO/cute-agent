@@ -229,16 +229,16 @@ export const getOS = () => {
  * @returns
  */
 export const parseCSVData = (str: string) =>  {
-  const result = [];
+  const result: Record<string, string>[] = [];
   const jsonObj = str.split('\n');
   let arrHeader: string[] = [];
 
-  for (const i in jsonObj) {
-    if (typeof jsonObj[i] === 'string' && jsonObj[i].length > 0) {
-      const row = `${jsonObj[i]}`;
+  jsonObj.forEach((line, index) => {
+    if (line.length > 0) {
+      const row = `${line}`;
       if (row.trim().length > 0) {
-        const kv = jsonObj[i].split(',');
-        if (Number(i) === 0) {
+        const kv = line.split(',');
+        if (index === 0) {
           // 获取column表头
           arrHeader = kv;
         } else {
@@ -256,7 +256,7 @@ export const parseCSVData = (str: string) =>  {
                 } else {
                   obj[name] = '';
                 }
-              } catch (err: any) {
+              } catch (err: unknown) {
                 // throw new Error(err);
                 console.error(err);
                 obj[name] = '';
@@ -267,6 +267,6 @@ export const parseCSVData = (str: string) =>  {
         }
       }
     }
-  }
+  });
   return result;
 };

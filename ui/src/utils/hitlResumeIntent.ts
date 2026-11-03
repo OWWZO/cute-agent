@@ -64,6 +64,25 @@ export function resetHitlResumeDispatch(key?: string): void {
   dispatchedAt.clear();
 }
 
+/** 下一帧派发并去重，确保 ChatView 已挂上 resume 事件监听。 */
+export function scheduleHitlResumeDispatch<T extends { resumeRequestId: string }>(
+  prefix: string,
+  items: readonly T[],
+  dispatch: (item: T) => void
+): void {
+  if (!items.length) {
+    return;
+  }
+  window.setTimeout(() => {
+    for (const item of items) {
+      if (!claimHitlResumeDispatch(`${prefix}::${item.resumeRequestId}`)) {
+        continue;
+      }
+      dispatch(item);
+    }
+  }, 0);
+}
+
 /** 把「运行中」标记打到指定 chat 上（loading + RUNNING + 推进提示） */
 export function markChatResuming(chat: CHAT.ChatItem): CHAT.ChatItem {
   return {

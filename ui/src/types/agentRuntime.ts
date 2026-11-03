@@ -29,9 +29,9 @@ export type ToolCall = {
   /** JSON 字符串化的工具入参 */
   arg: string;
   status: ToolStatus;
-  /** 已格式化的展示时长，保留给工具 chip / Dock。 */
+  /** 已格式化的展示时长；结构化事实以 timingData 为准。 */
   timing?: string;
-  /** 原始 invocation timing，供需要区间语义的运行时视图使用。 */
+  /** 权威 invocation timing，供需要区间语义的运行时视图使用。 */
   timingData?: ReplayTiming;
   /** 展开区按行展示的输出 */
   output?: string[];
@@ -85,6 +85,10 @@ export type ChatTurn = {
   id: string;
   role: TurnRole;
   no: number;
+  /**
+   * 兼容投影：存在 blocks 时，blocks 是内容的唯一有序事实；
+   * text/thinking/tools 仅供未消费 blocks 的旧视图使用。
+   */
   text: string;
   thinking?: string;
   tools?: ToolCall[];

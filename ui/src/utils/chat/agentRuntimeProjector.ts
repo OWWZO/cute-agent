@@ -36,6 +36,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function parseEpochMs(value: unknown, minimum: number): number | undefined {
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < minimum) {
+      return undefined;
+    }
+    return value < 1e12 ? value * 1000 : value;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric >= minimum) {
+    return numeric < 1e12 ? numeric * 1000 : numeric;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function isUserBriefTask(tool?: CHAT.Task): boolean {
   if (!tool) return false;
   if (tool.messageType === "user_brief") return true;
@@ -263,23 +284,6 @@ function resolveTaskStartedAtMs(task: CHAT.Task): number | undefined {
   const nested = isRecord(resultMap.resultMap)
     ? (resultMap.resultMap as Record<string, unknown>)
     : {};
-  const parseMs = (value: unknown): number | undefined => {
-    if (value == null || value === "") return undefined;
-    if (typeof value === "number") {
-      return Number.isFinite(value) && value >= 0
-        ? value < 1e12
-          ? value * 1000
-          : value
-        : undefined;
-    }
-    if (typeof value !== "string") return undefined;
-    const numeric = Number(value);
-    if (Number.isFinite(numeric) && numeric >= 0) {
-      return numeric < 1e12 ? numeric * 1000 : numeric;
-    }
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  };
   const sources: Array<Record<string, unknown>> = [
     isRecord(top.timing) ? (top.timing as Record<string, unknown>) : {},
     top,
@@ -287,13 +291,13 @@ function resolveTaskStartedAtMs(task: CHAT.Task): number | undefined {
     nested,
   ];
   for (const source of sources) {
-    const startedAt = parseMs(source.startedAt ?? source.started_at);
+    const startedAt = parseEpochMs(source.startedAt ?? source.started_at, 0);
     if (startedAt != null) return startedAt;
   }
   return (
-    parseMs(top.messageTime) ??
-    parseMs(resultMap.messageTime) ??
-    parseMs(nested.messageTime)
+    parseEpochMs(top.messageTime, 0) ??
+    parseEpochMs(resultMap.messageTime, 0) ??
+    parseEpochMs(nested.messageTime, 0)
   );
 }
 
@@ -313,7 +317,7 @@ export function projectTurnBlocks(chat: CHAT.ChatItem): TurnBlock[] {
       }
       continue;
     }
-    if (isAssistantTextTask(task) && !isToolishTask(task)) {
+    if (isAssistantTextTask(task)) {
       const text = resolveAssistantText(task);
       if (text) {
         blocks.push({ kind: "text", text });
@@ -374,23 +378,6 @@ function resolveTaskEndedAtMs(task: CHAT.Task): number | undefined {
   const nested = isRecord(resultMap.resultMap)
     ? (resultMap.resultMap as Record<string, unknown>)
     : {};
-  const parseMs = (value: unknown): number | undefined => {
-    if (value == null || value === "") return undefined;
-    if (typeof value === "number") {
-      return Number.isFinite(value) && value > 0
-        ? value < 1e12
-          ? value * 1000
-          : value
-        : undefined;
-    }
-    if (typeof value !== "string") return undefined;
-    const numeric = Number(value);
-    if (Number.isFinite(numeric) && numeric > 0) {
-      return numeric < 1e12 ? numeric * 1000 : numeric;
-    }
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  };
   const sources: Array<Record<string, unknown>> = [
     isRecord(top.timing) ? (top.timing as Record<string, unknown>) : {},
     top,
@@ -398,16 +385,19 @@ function resolveTaskEndedAtMs(task: CHAT.Task): number | undefined {
     nested,
   ];
   for (const source of sources) {
-    const finishedAt = parseMs(source.finishedAt ?? source.finished_at);
+    const finishedAt = parseEpochMs(
+      source.finishedAt ?? source.finished_at,
+      1
+    );
     if (finishedAt != null) return finishedAt;
   }
   const startedAt = resolveTaskStartedAtMs(task);
-  const duration =
-    typeof resultMap.subAgentElapsedMs === "number"
-      ? resultMap.subAgentElapsedMs
-      : typeof top.totalDurationMs === "number"
-        ? (top.totalDurationMs as number)
-        : undefined;
+  let duration: number | undefined;
+  if (typeof resultMap.subAgentElapsedMs === "number") {
+    duration = resultMap.subAgentElapsedMs;
+  } else if (typeof top.totalDurationMs === "number") {
+    duration = top.totalDurationMs;
+  }
   if (startedAt != null && duration != null && duration > 0) {
     return startedAt + duration;
   }

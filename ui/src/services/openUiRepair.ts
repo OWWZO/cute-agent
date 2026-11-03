@@ -18,9 +18,45 @@ export interface OpenUiFixResponse {
   message?: string;
 }
 
+const OPEN_UI_REPAIR_PATH = "/api/agent/openui/repair";
+const OPEN_UI_REPAIR_INTENTS_PATH = `${OPEN_UI_REPAIR_PATH}/intents`;
+
 function resolveBaseUrl() {
   const configured = typeof SERVICE_BASE_URL === "string" ? SERVICE_BASE_URL : "";
   return resolveServiceBaseUrl(configured);
+}
+
+type OpenUiRequestFailure = {
+  status: "error";
+  message: string;
+};
+
+async function postOpenUiRepair<T>(
+  body: unknown,
+  signal?: AbortSignal
+): Promise<T | OpenUiRequestFailure> {
+  const headers = authHeaders();
+  try {
+    const response = await fetch(`${resolveBaseUrl()}${OPEN_UI_REPAIR_PATH}`, {
+      method: "POST",
+      credentials: "include",
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!response.ok) {
+      return {
+        status: "error",
+        message: `HTTP ${response.status}`
+      };
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 /**
@@ -35,35 +71,13 @@ export async function repairOpenUiProgram(
   const { context, signal } = options;
   // 鉴权走 Bearer（AuthenticationFilter 只认这个，不认 cookie）；修复是后台行为，
   // 不走 utils/request 的 axios 实例，避免失败时弹 toast 打断对话。
-  const token = getAccessToken();
-  try {
-    const response = await fetch(`${resolveBaseUrl()}/api/agent/openui/repair`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Device-Id": getDeviceId(),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        program,
-        context: context ?? []
-      }),
-      signal,
-    });
-    if (!response.ok) {
-      return {
-        status: "error",
-        message: `HTTP ${response.status}`
-      };
-    }
-    return (await response.json()) as OpenUiFixResponse;
-  } catch (error) {
-    return {
-      status: "error",
-      message: error instanceof Error ? error.message : String(error)
-    };
-  }
+  return postOpenUiRepair<OpenUiFixResponse>(
+    {
+      program,
+      context: context ?? []
+    },
+    signal
+  );
 }
 
 /** 意图修复（plans/038）：后端只透传模型给的 SEARCH/REPLACE 块，执行与验收都在前端。 */
@@ -101,37 +115,15 @@ export async function repairOpenUiProgramWithIntent(
   }
 ): Promise<OpenUiIntentResponse> {
   const { diagnosis, feedback, signal } = options;
-  const token = getAccessToken();
-  try {
-    const response = await fetch(`${resolveBaseUrl()}/api/agent/openui/repair`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Device-Id": getDeviceId(),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        program,
-        mode: "intent",
-        diagnosis,
-        feedback: feedback ?? null
-      }),
-      signal,
-    });
-    if (!response.ok) {
-      return {
-        status: "error",
-        message: `HTTP ${response.status}`
-      };
-    }
-    return (await response.json()) as OpenUiIntentResponse;
-  } catch (error) {
-    return {
-      status: "error",
-      message: error instanceof Error ? error.message : String(error)
-    };
-  }
+  return postOpenUiRepair<OpenUiIntentResponse>(
+    {
+      program,
+      mode: "intent",
+      diagnosis,
+      feedback: feedback ?? null
+    },
+    signal
+  );
 }
 
 /** 意图重放 key：sessionId + messageId(requestId) + programHash。messageId 沿用会话里的 requestId。 */
@@ -152,12 +144,12 @@ function authHeaders(): Record<string, string> {
 
 /** 通过验收的意图落库（fire-and-forget，失败不影响渲染）。 */
 export async function saveOpenUiRepairIntents(
-  key: Omit<OpenUiRepairIntentKey, "programHash"> & { programHash: string },
+  key: OpenUiRepairIntentKey,
   blocks: ReplaceBlock[],
   model?: string
 ): Promise<boolean> {
   try {
-    const response = await fetch(`${resolveBaseUrl()}/api/agent/openui/repair/intents`, {
+    const response = await fetch(`${resolveBaseUrl()}${OPEN_UI_REPAIR_INTENTS_PATH}`, {
       method: "POST",
       credentials: "include",
       headers: authHeaders(),
@@ -185,7 +177,7 @@ export async function fetchOpenUiRepairIntents(
       messageId,
       programHash
     });
-    const response = await fetch(`${resolveBaseUrl()}/api/agent/openui/repair/intents?${query}`, {
+    const response = await fetch(`${resolveBaseUrl()}${OPEN_UI_REPAIR_INTENTS_PATH}?${query}`, {
       method: "GET",
       credentials: "include",
       headers: authHeaders(),

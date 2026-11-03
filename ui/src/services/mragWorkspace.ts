@@ -14,7 +14,6 @@ import type {
   MRagTurn,
   UploadDocumentResult,
 } from "@/pages/WorkspaceMRag/types";
-import { trimTrailingSlash } from "@/pages/WorkspaceImageGeneration/utils";
 import {
   normalizeFileUrlForBrowser,
   normalizeToolBaseUrlForBrowser,
@@ -190,7 +189,7 @@ export class MRagWorkspaceRequestError extends Error {
 }
 
 function normalizeToolBaseUrl(toolBaseUrl: string): string {
-  return normalizeToolBaseUrlForBrowser(trimTrailingSlash(toolBaseUrl || ""));
+  return normalizeToolBaseUrlForBrowser(toolBaseUrl || "");
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
