@@ -114,7 +114,7 @@ export const Slice = defineFunction({
   returns: z.union([list(), z.string()]),
   fn: ({ list, start, end }) => {
     const to = end === undefined ? undefined : Math.trunc(end);
-    return typeof list === "string" ? list.slice(Math.trunc(start), to) : list.slice(Math.trunc(start), to);
+    return list.slice(Math.trunc(start), to);
   },
 });
 

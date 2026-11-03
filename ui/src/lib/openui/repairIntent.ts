@@ -26,7 +26,10 @@ export interface BlockFailure {
 }
 
 export interface ApplyIntentsResult {
-  /** 应用成功后的程序；没有任何块应用成功时为 null（原文不动） */
+  /**
+   * 应用成功后的程序；没有任何块应用成功时为 null（原文不动）。
+   * 部分块失败时仍会返回已应用的结果，调用方必须同时检查 `failures`。
+   */
   result: string | null;
   appliedCount: number;
   failures: BlockFailure[];

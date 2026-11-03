@@ -32,7 +32,19 @@ export function isoDay(day: number): string {
   return new Date(day * DAY).toISOString().slice(0, 10);
 }
 
-const STYLES: Record<string, Intl.DateTimeFormatOptions> = {
+const DATE_STYLE = z.enum([
+  "date",
+  "short",
+  "long",
+  "weekday",
+  "month",
+  "time",
+  "datetime",
+  "iso",
+]);
+type DateStyle = z.infer<typeof DATE_STYLE>;
+
+const STYLES: Record<Exclude<DateStyle, "iso">, Intl.DateTimeFormatOptions> = {
   date: { month: "short", day: "numeric", year: "numeric" },
   short: { month: "short", day: "numeric" },
   long: { weekday: "long", month: "long", day: "numeric", year: "numeric" },
@@ -56,7 +68,7 @@ export const FormatDate = defineFunction({
     'A date as text: "date" Oct 9, 2026 (default), "short" Oct 9, "long" Friday, October 9, 2026, "weekday" Fri, "month" Oct 2026, "time" 9:30 PM, "datetime", "iso" 2026-10-09. Dates are "YYYY-MM-DD", ISO or a timestamp',
   params: z.object({
     date: date(),
-    style: z.enum(["date", "short", "long", "weekday", "month", "time", "datetime", "iso"]).optional(),
+    style: DATE_STYLE.optional(),
   }),
   returns: z.string(),
   fn: ({ date, style = "date" }) => {
@@ -64,7 +76,10 @@ export const FormatDate = defineFunction({
     if (style === "iso") return isoDay(day);
     // A calendar date formats in UTC so its day never shifts with the viewer's zone
     const at = instant ?? new Date(day * DAY);
-    return at.toLocaleString("en-US", { ...STYLES[style], ...(instant ? {} : { timeZone: "UTC" }) });
+    return at.toLocaleString("en-US", {
+      ...STYLES[style as Exclude<DateStyle, "iso">],
+      ...(instant ? {} : { timeZone: "UTC" }),
+    });
   },
 });
 
@@ -120,6 +135,8 @@ export const MonthsBetween = defineFunction({
     const [y1, m1, d1] = ymd(parseDate(from).day);
     const [y2, m2, d2] = ymd(parseDate(to).day);
     let months = (y2 - y1) * 12 + (m2 - m1);
+  // MonthsBetween counts complete calendar months; this is not always the inverse
+  // of AddMonths after AddMonths clamps an end-of-month date.
     if (months > 0 && d2 < d1) months -= 1;
     if (months < 0 && d2 > d1) months += 1;
     return months;

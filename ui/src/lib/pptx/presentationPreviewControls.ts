@@ -7,6 +7,7 @@
 export const PPTX_MIN_ZOOM_PERCENT = 25;
 export const PPTX_MAX_ZOOM_PERCENT = 300;
 export const PPTX_ZOOM_STEP_PERCENT = 25;
+export const PPTX_DEFAULT_ZOOM_PERCENT = 100;
 
 export function clampPresentationPageNumber(target: number, pageCount: number): number {
   const safePageCount = Math.max(1, Math.floor(pageCount));
@@ -18,7 +19,7 @@ export function clampPresentationPageNumber(target: number, pageCount: number): 
 
 export function clampPresentationZoomPercent(target: number): number {
   if (!Number.isFinite(target)) {
-    return 100;
+    return PPTX_DEFAULT_ZOOM_PERCENT;
   }
   return Math.min(Math.max(PPTX_MIN_ZOOM_PERCENT, Math.round(target)), PPTX_MAX_ZOOM_PERCENT);
 }

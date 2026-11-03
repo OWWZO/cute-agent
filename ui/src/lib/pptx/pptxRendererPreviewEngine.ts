@@ -33,6 +33,9 @@ import type {
 } from "./types";
 import { buildPresentationPageElements } from "./presentationElementModel";
 
+const SINGLE_SLIDE_INDEX = 0;
+const SINGLE_SLIDE_NODE_PREFIX = `slides/${SINGLE_SLIDE_INDEX}/nodes/`;
+
 function readTextBody(textBody: TextBody | undefined) {
   return textBody?.paragraphs
     .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
@@ -117,9 +120,9 @@ class PptxRendererPreviewDocument implements PresentationPreviewDocument {
       groupTextEntries: groupTextIndex
         .filter(
           (entry) =>
-            entry.slideIndex === 0 &&
+            entry.slideIndex === SINGLE_SLIDE_INDEX &&
             entry.textKind === "shape" &&
-            entry.nodePath.startsWith("slides/0/nodes/") &&
+            entry.nodePath.startsWith(SINGLE_SLIDE_NODE_PREFIX) &&
             !directNodeIds.has(entry.nodeId)
         )
         .map((entry) => ({

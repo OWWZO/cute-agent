@@ -194,15 +194,11 @@ export function parsePromptCodeComments(content: string): ParsedCodeCommentPromp
   // 这里不能使用 multiline 的 `$`，否则非贪婪匹配会在第一行 `## Comment 1` 后提前停止，
   // 导致持久化消息无法解析回 comment 附件，只能把原始 markdown 暴露在聊天气泡里。
   const blockMatch = /(?:^|\n\n)# Code comments:\s*\n\n([\s\S]*?)\s*$/.exec(content);
-  if (!blockMatch || blockMatch.index < 0) {
+  if (!blockMatch) {
     return { visibleContent: content, codeCommentAttachments: [] };
   }
 
   const rawBlock = blockMatch[1];
-  if (rawBlock === undefined) {
-    return { visibleContent: content, codeCommentAttachments: [] };
-  }
-
   const rawItems = rawBlock
     .split(/\n(?=## Comment(?:\s+\d+)?\n)/)
     .map((item) => item.trim())

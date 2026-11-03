@@ -13,7 +13,7 @@ export const WHEEL_ZOOM_SENSITIVITY = 0.002;
 export const ZOOM_COMMIT_DELAY_MS = 180;
 
 // 页面尺寸未知时的兜底（A4 / 72dpi）。
-export const DEFAULT_PAGE_SIZE = { width: 595, height: 842 };
+export const DEFAULT_PAGE_SIZE = { width: 595, height: 842 } as const;
 
 export interface PdfPageSize {
   width: number;
