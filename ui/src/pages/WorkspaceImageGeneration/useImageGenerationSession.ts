@@ -137,24 +137,24 @@ function buildBatchAssistantPayload(results: ImageBatchExecutionResult[]) {
       total: results.length,
       successCount,
       failureCount,
-      results: results.map((result) =>
-        result.success
-          ? {
+      results: results.map((result) => {
+        if (result.success) {
+          return {
             index: result.index + 1,
             success: true,
             usedFallback: Boolean(result.response.usedFallback),
             data: result.response.data,
             rawResponse: result.response.rawResponse ?? result.response,
-          }
-          : {
-            index: result.index + 1,
-            success: false,
-            error: toRequestError(result.error).message,
-            rawResponse:
-              toRequestError(result.error).rawResponse ??
-              toRequestError(result.error).message,
-          }
-      ),
+          };
+        }
+        const requestError = toRequestError(result.error);
+        return {
+          index: result.index + 1,
+          success: false,
+          error: requestError.message,
+          rawResponse: requestError.rawResponse ?? requestError.message,
+        };
+      }),
     },
   };
 }
@@ -290,14 +290,13 @@ export function useImageGenerationSession(
           rawResponse: batchPayload.debugPayload,
           timestamp: Date.now(),
         }));
-        setStatus(
-          batchPayload.summary,
-          batchPayload.failureCount === 0
-            ? "success"
-            : batchPayload.outputImages.length
-              ? "default"
-              : "error"
-        );
+        let batchStatusTone: StatusTone = "default";
+        if (batchPayload.failureCount === 0) {
+          batchStatusTone = "success";
+        } else if (batchPayload.outputImages.length === 0) {
+          batchStatusTone = "error";
+        }
+        setStatus(batchPayload.summary, batchStatusTone);
         await reloadHistory();
         return;
       }

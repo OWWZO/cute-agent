@@ -2,6 +2,11 @@ export type WorkspaceTab = "decode" | "generate";
 
 export type RequestMode = "images" | "edits";
 
+/**
+ * Optional URL fields are resolved by `utils.ts` in this order:
+ * preview: previewUrl -> domainUrl -> downloadUrl -> ossUrl;
+ * download: downloadUrl -> ossUrl -> previewUrl -> domainUrl.
+ */
 export type ToolFileInfo = {
   fileName?: string;
   ossUrl?: string | null;
@@ -13,10 +18,11 @@ export type ToolFileInfo = {
 };
 
 export type ImageGenerationToolResponse = {
+  /** Backend summary text for the tool call; image contents are described by `fileInfo`. */
   data: string;
   fileInfo: ToolFileInfo[];
   requestId: string;
-  mode?: RequestMode | "images" | "edits";
+  mode?: RequestMode;
   usedFallback?: boolean;
   rawResponse?: unknown;
 };
@@ -60,6 +66,7 @@ export type ResultImageItem = {
 export type ImageGenerationHistoryBatch = {
   requestId: string;
   prompt: string;
+  /** Raw persisted backend mode; history may predate the current RequestMode union. */
   mode: string;
   size?: string | null;
   batchCount?: number | null;

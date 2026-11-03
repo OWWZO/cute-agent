@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { requestImageGenerationHistory } from "@/services/imageGeneration";
 import type { ImageGenerationHistoryBatch } from "./types";
@@ -16,7 +16,7 @@ export function useImageGenerationHistory() {
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [historyError, setHistoryError] = useState("");
 
-  const loadHistory = async (pageNo = 1, replace = true) => {
+  const loadHistory = useCallback(async (pageNo = 1, replace = true) => {
     if (replace) {
       setHistoryLoading(true);
     } else {
@@ -40,11 +40,11 @@ export function useImageGenerationHistory() {
       setHistoryLoading(false);
       setHistoryLoadingMore(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadHistory(1, true);
-  }, []);
+  }, [loadHistory]);
 
   return {
     historyBatches,
