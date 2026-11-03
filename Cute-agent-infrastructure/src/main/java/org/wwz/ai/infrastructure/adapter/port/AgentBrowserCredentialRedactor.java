@@ -8,11 +8,15 @@ import java.util.regex.Pattern;
 final class AgentBrowserCredentialRedactor {
 
     private static final Pattern NAMED_SECRET = Pattern.compile(
-            "(?i)([\\\"']?(?:cdp_ws_url|jwt)[\\\"']?\\s*[:=]\\s*[\\\"']?)([^\\\"'\\s,}&]+)([\\\"']?)");
+            "(?i)([\\\"']?(?:cdp_ws_url|jwt|api[_-]?key|access[_-]?token|refresh[_-]?token"
+                    + "|token|password|secret)[\\\"']?\\s*[:=]\\s*[\\\"']?)([^\\\"'\\s,}]+)([\\\"']?)");
+    private static final Pattern AUTH_BEARER = Pattern.compile(
+            "(?i)(\\bBearer\\s+)([^\\s\\\"',}]+)");
     private static final Pattern WEBSOCKET_ENDPOINT = Pattern.compile(
             "(?i)wss?://[^\\s\\\"'<>]+");
     private static final Pattern QUERY_SECRET = Pattern.compile(
-            "(?i)([?&](?:jwt|api[_-]?key)=)([^&#\\s\\\"']+)");
+            "(?i)([?&](?:jwt|api[_-]?key|access[_-]?token|refresh[_-]?token|token)=)"
+                    + "([^&#\\s\\\"']+)");
 
     private AgentBrowserCredentialRedactor() {
     }
@@ -25,6 +29,7 @@ final class AgentBrowserCredentialRedactor {
         if (apiKey != null && !apiKey.isBlank()) {
             redacted = redacted.replace(apiKey, "[REDACTED]");
         }
+        redacted = AUTH_BEARER.matcher(redacted).replaceAll("$1[REDACTED]");
         redacted = NAMED_SECRET.matcher(redacted).replaceAll("$1[REDACTED]$3");
         redacted = WEBSOCKET_ENDPOINT.matcher(redacted).replaceAll("[REDACTED]");
         return QUERY_SECRET.matcher(redacted).replaceAll("$1[REDACTED]");

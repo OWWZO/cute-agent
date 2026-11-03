@@ -40,8 +40,7 @@ public class ModelConnectionTestAdapter implements IModelConnectionTestPort {
             return new ModelConnectionTestResult(true, System.currentTimeMillis() - start, "连接成功");
         } catch (Exception e) {
             log.warn("模型连接测试失败 modelReference={}", modelReference, e);
-            return new ModelConnectionTestResult(false, 0, "连接失败: "
-                    + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+            return new ModelConnectionTestResult(false, 0, "连接失败，请查看服务端日志");
         }
     }
 

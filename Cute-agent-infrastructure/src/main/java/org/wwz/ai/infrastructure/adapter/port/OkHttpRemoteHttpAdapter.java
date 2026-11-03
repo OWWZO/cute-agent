@@ -30,6 +30,7 @@ public class OkHttpRemoteHttpAdapter implements RemoteHttpPort {
     private static final long DEFAULT_CONNECT_TIMEOUT_SECONDS = 30L;
     private static final long DEFAULT_READ_TIMEOUT_SECONDS = 300L;
     private static final long DEFAULT_WRITE_TIMEOUT_SECONDS = 300L;
+    private static final int MAX_ERROR_BODY_CHARS = 512;
 
     private final OkHttpClient sharedClient;
 
@@ -47,9 +48,15 @@ public class OkHttpRemoteHttpAdapter implements RemoteHttpPort {
     public String execute(RemoteHttpRequest request) throws IOException {
         RemoteHttpResponse detailed = executeDetailed(request);
         if (detailed.getStatusCode() < 200 || detailed.getStatusCode() >= 300) {
+            String safeUrl = AgentBrowserCredentialRedactor.redact(request.getUrl(), null);
+            String safeBody = AgentBrowserCredentialRedactor.redact(
+                    StringUtils.defaultString(detailed.getBody()), null);
+            if (safeBody.length() > MAX_ERROR_BODY_CHARS) {
+                safeBody = safeBody.substring(0, MAX_ERROR_BODY_CHARS) + "...";
+            }
             throw new IOException("HTTP request failed, code=" + detailed.getStatusCode()
-                    + ", url=" + request.getUrl()
-                    + ", body=" + StringUtils.defaultString(detailed.getBody()));
+                    + ", url=" + safeUrl
+                    + ", body=" + safeBody);
         }
         return detailed.getBody();
     }

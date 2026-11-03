@@ -22,4 +22,20 @@ public record CatalogModelCreateCommand(
 
         /** 状态：0 表示停用，1 表示启用；null 或其他非 0 值在创建路径中按 1 处理。 */
         Integer status) {
+
+    @Override
+    public String toString() {
+        return "CatalogModelCreateCommand[apiId=" + apiId
+                + ", baseUrl=" + baseUrl
+                + ", apiKey=<redacted>"
+                + ", completionsPath=" + completionsPath
+                + ", embeddingsPath=" + embeddingsPath
+                + ", modelId=" + modelId
+                + ", modelName=" + modelName
+                + ", modelType=" + modelType
+                + ", modelUsage=" + modelUsage
+                + ", supportsThinking=" + supportsThinking
+                + ", contextWindow=" + contextWindow
+                + ", status=" + status + "]";
+    }
 }

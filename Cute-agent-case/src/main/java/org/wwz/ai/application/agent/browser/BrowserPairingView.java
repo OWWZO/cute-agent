@@ -1,6 +1,7 @@
 package org.wwz.ai.application.agent.browser;
 
 import lombok.Builder;
+import lombok.ToString;
 import lombok.Value;
 
 /**
@@ -13,9 +14,11 @@ import lombok.Value;
 public class BrowserPairingView {
 
     /** 64 位十六进制 bearer token；正常生产路径非 null，用于 relay 鉴权与重连。 */
+    @ToString.Exclude
     String token;
 
     /** 6 位十进制配对短码；用于人工输入或写入 bsk 配对链接 fragment，过期时间见 {@link #expiresAt}。 */
+    @ToString.Exclude
     String code;
 
     /** relay WebSocket 地址，格式为 {@code ws(s)://host/path}；正常生产路径非 null。 */
@@ -35,5 +38,6 @@ public class BrowserPairingView {
      * <p>为 {@code null} 表示本次配对未生成 bsk 链接（网关未启用）。该 URL 的 fragment
      * 含敏感凭据，禁止完整打印到日志。</p>
      */
+    @ToString.Exclude
     String bskPairingUrl;
 }

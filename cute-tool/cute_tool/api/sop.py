@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from cute_tool.tool.sop_workspace import SopWorkspaceService
@@ -87,7 +88,8 @@ async def list_sops(body: SopListRequest):
         )
         return _ok({"list": items}, body.request_id)
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
+        logger.exception("[sop] list request_id={} failed", body.request_id)
+        raise HTTPException(status_code=500, detail="internal error") from error
 
 
 @router.post("/get")
@@ -100,7 +102,8 @@ async def get_sop(body: SopGetRequest):
     except HTTPException:
         raise
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
+        logger.exception("[sop] get request_id={} failed", body.request_id)
+        raise HTTPException(status_code=500, detail="internal error") from error
 
 
 @router.post("/upsert")
@@ -118,7 +121,8 @@ async def upsert_sop(body: SopUpsertRequest):
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
+        logger.exception("[sop] upsert request_id={} failed", body.request_id)
+        raise HTTPException(status_code=500, detail="internal error") from error
 
 
 @router.post("/delete")
@@ -129,7 +133,8 @@ async def delete_sop(body: SopDeleteRequest):
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
+        logger.exception("[sop] delete request_id={} failed", body.request_id)
+        raise HTTPException(status_code=500, detail="internal error") from error
 
 
 @router.post("/status")
@@ -140,7 +145,8 @@ async def set_sop_status(body: SopStatusRequest):
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
+        logger.exception("[sop] status request_id={} failed", body.request_id)
+        raise HTTPException(status_code=500, detail="internal error") from error
 
 
 @router.post("/recall_test")
@@ -151,4 +157,5 @@ async def recall_test(body: SopRecallTestRequest):
         result = _service(body.request_id).recall_test(body.query.strip())
         return _ok(result, body.request_id)
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
+        logger.exception("[sop] recall_test request_id={} failed", body.request_id)
+        raise HTTPException(status_code=500, detail="internal error") from error

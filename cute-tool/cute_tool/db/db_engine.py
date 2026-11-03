@@ -22,7 +22,7 @@ from sqlmodel import SQLModel
 SQLITE_DB_PATH = os.environ.get("SQLITE_DB_PATH", "autobots.db")
 
 # 同步引擎：建表、脚本初始化
-engine = create_engine(f"sqlite:///{SQLITE_DB_PATH}", echo=True)
+engine = create_engine(f"sqlite:///{SQLITE_DB_PATH}", echo=False)
 
 # 异步引擎：FastAPI 请求路径读写
 async_engine = create_async_engine(

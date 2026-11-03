@@ -21,4 +21,15 @@ public record ApiConfigCommand(
          * <p>null 表示调用方未提供；创建和更新入口当前不会在本命令层统一校验该值。</p>
          */
         Integer status) {
+
+    @Override
+    public String toString() {
+        return "ApiConfigCommand[id=" + id
+                + ", apiId=" + apiId
+                + ", baseUrl=" + baseUrl
+                + ", apiKey=<redacted>"
+                + ", completionsPath=" + completionsPath
+                + ", embeddingsPath=" + embeddingsPath
+                + ", status=" + status + "]";
+    }
 }

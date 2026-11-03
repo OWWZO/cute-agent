@@ -98,8 +98,12 @@ public class SkillCatalogApplicationService {
         }
     }
 
-    private static ApplicationResult<Map<String, Object>> failure(Exception exception, String fallback) {
-        String message = StringUtils.isBlank(exception.getMessage()) ? fallback : exception.getMessage();
+    private ApplicationResult<Map<String, Object>> failure(Exception exception, String fallback) {
+        log.error(fallback, exception);
+        String message = exception instanceof IllegalArgumentException
+                && StringUtils.isNotBlank(exception.getMessage())
+                ? exception.getMessage()
+                : fallback;
         return ApplicationResult.failure(ResponseCode.ILLEGAL_PARAMETER, message, null);
     }
 }

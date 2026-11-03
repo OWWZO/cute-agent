@@ -115,10 +115,13 @@ public class AgentSessionPrinter implements Printer {
                             request.getRequestId(), messageId, message == null ? null : message.getClass().getName());
                 }
             }
+            String messageClass = message == null ? null : message.getClass().getName();
             if ("deep_search".equals(messageType)) {
-                log.debug("{} stream send {} {} {}", request.getRequestId(), messageType, message, digitalEmployee);
+                log.debug("{} stream send {} messageId={} msgClass={} digitalEmployee={}",
+                        request.getRequestId(), messageType, messageId, messageClass, digitalEmployee);
             } else {
-                log.info("{} stream send {} {} {}", request.getRequestId(), messageType, message, digitalEmployee);
+                log.info("{} stream send {} messageId={} msgClass={} digitalEmployee={}",
+                        request.getRequestId(), messageType, messageId, messageClass, digitalEmployee);
             }
 
             // 子 Agent 终答也走 messageType=result，但带 parentToolUseId/subAgentId；

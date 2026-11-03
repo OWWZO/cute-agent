@@ -1,4 +1,9 @@
 package org.wwz.ai.application.auth.result;
 
 public record IssuedAuthToken(AuthResult<AuthTokenResult> result, String refreshToken) {
+
+    @Override
+    public String toString() {
+        return "IssuedAuthToken[result=" + result + ", refreshToken=<redacted>]";
+    }
 }

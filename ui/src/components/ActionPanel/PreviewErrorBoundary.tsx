@@ -35,11 +35,16 @@ export class PreviewErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error(
-      `[PreviewErrorBoundary] ${this.props.label ?? "预览"}组件渲染失败`,
-      error,
-      info.componentStack ?? ""
-    );
+    const label = this.props.label ?? "预览";
+    if (import.meta.env.DEV) {
+      console.error(
+        `[PreviewErrorBoundary] ${label}组件渲染失败`,
+        error,
+        info.componentStack ?? ""
+      );
+      return;
+    }
+    console.error(`[PreviewErrorBoundary] ${label}组件渲染失败: ${error.name}: ${error.message}`);
   }
 
   componentDidUpdate(previousProps: Readonly<PreviewErrorBoundaryProps>) {
