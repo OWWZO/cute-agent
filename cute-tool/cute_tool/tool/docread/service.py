@@ -277,10 +277,6 @@ async def run_pdf_reader(request_id: str, params: dict[str, Any]) -> dict[str, A
 
     tool = PDFReaderTool()
     clean = normalize_pdf_reader_params(_strip_internal(params))
-    clean["workspace_root"] = _workspace(params)
-    # re-inject for path resolver
-    if _workspace(params):
-        clean["workspace_root"] = _workspace(params)
     result = _run_sync_tool(tool, {**params, **clean}, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
         result["data"] = await _maybe_upload_produced_files(request_id, result["data"])

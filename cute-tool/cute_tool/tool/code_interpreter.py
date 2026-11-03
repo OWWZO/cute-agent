@@ -10,8 +10,6 @@
 """
 
 import asyncio
-import importlib
-import json
 import os
 import shutil
 import tempfile
@@ -19,7 +17,6 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 import pandas as pd
-import yaml
 from jinja2 import Template
 from loguru import logger
 from smolagents import (

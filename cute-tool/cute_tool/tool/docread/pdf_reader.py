@@ -366,7 +366,6 @@ class PDFReaderTool(SyncTool):
             doc.close()
 
     def _extract_tables(self, params: dict[str, Any]) -> dict[str, Any]:
-        fitz = _import_fitz()
         doc = self._open_doc(params["file_path"])
         try:
             total_pages = len(doc)
@@ -439,7 +438,6 @@ class PDFReaderTool(SyncTool):
             out_path.mkdir(parents=True, exist_ok=True)
 
             saved_images: list[dict[str, Any]] = []
-            img_count = 0
 
             for page_num in page_indices:
                 page = doc[page_num]
@@ -454,7 +452,6 @@ class PDFReaderTool(SyncTool):
                         if pix.n - pix.alpha > 3:
                             pix = fitz.Pixmap(fitz.csRGB, pix)
 
-                        img_count += 1
                         ext = "png"
                         img_path = out_path / f"page{page_num+1}_img{img_idx+1}.{ext}"
                         pix.save(str(img_path))

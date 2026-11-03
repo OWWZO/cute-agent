@@ -281,7 +281,6 @@ class DataTransformTool(SyncTool):
                     if not expression or not new_column:
                         raise ValueError("derive requires 'expression' and 'new_column'")
 
-                    allowed_names = set(df.columns)
                     safe_funcs = {
                         "abs": abs,
                         "round": round,

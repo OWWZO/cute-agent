@@ -99,11 +99,6 @@ def _resolve_path_like(value: Any, request_id: str, workspace_root: str | None) 
                     )
                 )
                 out = dict(value)
-                out["uri"] = (
-                    f"file://{resolved}"
-                    if not resolved.startswith("file://")
-                    else resolved
-                )
                 # bare absolute path is also accepted by records loader
                 out["uri"] = resolved
                 return out

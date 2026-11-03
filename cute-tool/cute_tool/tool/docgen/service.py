@@ -14,7 +14,7 @@ from typing import Any
 from loguru import logger
 
 from cute_tool.docgen.paths import OUTPUT_DIR
-from cute_tool.util.file_util import upload_file_by_path, upload_file
+from cute_tool.util.file_util import upload_file_by_path
 
 
 def _safe_filename(name: str, default_ext: str) -> str:
