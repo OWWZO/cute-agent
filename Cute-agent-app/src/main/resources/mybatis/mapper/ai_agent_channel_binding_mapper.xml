@@ -42,6 +42,8 @@
     <select id="queryByStatus" resultMap="BindingMap">
         SELECT <include refid="columns"/> FROM ai_agent_channel_binding
         WHERE status = #{status} AND deleted = 0
+        ORDER BY id ASC
+        LIMIT #{limit}
     </select>
 
     <select id="countAll" resultType="long">

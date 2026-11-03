@@ -8,6 +8,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpRequest;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
+import org.wwz.ai.domain.agent.security.OutboundUrlGuard;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -60,6 +61,12 @@ public final class DesktopSessionRemote {
         String url = StringUtils.trimToNull(response.getString("url"));
         if (url == null) {
             throw new IllegalStateException("desktop_session open 未返回 url");
+        }
+        // 远端返回值最终会交给客户端打开：只接受 http(s)，且解析后不能落在内网/回环地址。
+        try {
+            OutboundUrlGuard.validateHttpUrl(url);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("desktop_session open 返回了不安全的 url: " + e.getMessage(), e);
         }
         Double holdUntil = response.getDouble("holdUntil");
         return new OpenResult(url, holdUntil);

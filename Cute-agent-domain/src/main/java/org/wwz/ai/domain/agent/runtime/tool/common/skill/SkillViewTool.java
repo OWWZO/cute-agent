@@ -161,6 +161,11 @@ public class SkillViewTool implements BaseTool {
         if (file.isBinary()) {
             data.put("is_binary", Boolean.TRUE);
         }
+        if (file.isTruncated()) {
+            data.put("truncated", Boolean.TRUE);
+            data.put("content_hint", "文件过大，仅返回开头部分；请用 workspace_read 分页读取 "
+                    + file.getPath());
+        }
         return ToolResultPayload.fromData(data);
     }
 

@@ -42,7 +42,10 @@ public class TableRagService {
             log.warn("{},{} tableRag server error,retry:{}", query.getTraceId(), query.getRequestId(), e.getMessage());
             response = postTableRag(query);
         }
-        log.info("{},{} tableRag result:{}", query.getTraceId(), query.getRequestId(), response);
+        // 召回结果是完整 schema 载荷，info 只记大小，完整内容放 debug，避免日志膨胀与内部元数据外泄。
+        log.info("{},{} tableRag result size={}", query.getTraceId(), query.getRequestId(),
+                response == null ? 0 : response.length());
+        log.debug("{},{} tableRag result:{}", query.getTraceId(), query.getRequestId(), response);
 
         JSONObject body = JSONObject.parseObject(response);
         if (body == null || body.getInteger("code") == null) {

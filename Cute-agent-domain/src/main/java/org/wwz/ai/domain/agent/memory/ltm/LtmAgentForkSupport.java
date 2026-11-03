@@ -2,6 +2,7 @@ package org.wwz.ai.domain.agent.memory.ltm;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
@@ -37,6 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>历史 messages 前缀重放；review/flush 指令仅作为尾部 user</li>
  * </ul>
  */
+@Slf4j
 public final class LtmAgentForkSupport {
 
     private static final int FORK_THREADS = 4;
@@ -248,6 +250,10 @@ public final class LtmAgentForkSupport {
                 List<CuratedMemoryEntry> rows = store.listActive(owner, scope);
                 if (rows == null) {
                     continue;
+                }
+                if (rows.size() >= CuratedMemoryStore.DEFAULT_LIST_LIMIT) {
+                    log.warn("ltm fork snapshot reached limit owner={} scope={} limit={}",
+                            owner, scope, CuratedMemoryStore.DEFAULT_LIST_LIMIT);
                 }
                 for (CuratedMemoryEntry e : rows) {
                     if (e == null || StringUtils.isBlank(e.getContent())) {

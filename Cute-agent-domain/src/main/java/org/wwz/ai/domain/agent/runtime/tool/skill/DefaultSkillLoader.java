@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -19,6 +20,9 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 public class DefaultSkillLoader implements SkillLoader {
+
+    /** 单次 skill_view 注入的文本上限；更大的文件只读开头，避免整文件进内存。 */
+    private static final int MAX_INLINE_TEXT_BYTES = 512 * 1024;
 
     private final SkillCatalog skillCatalog;
     private final SkillMarkdownParser skillMarkdownParser;
@@ -49,6 +53,16 @@ public class DefaultSkillLoader implements SkillLoader {
         }
         try {
             long size = Files.size(target);
+            if (size > MAX_INLINE_TEXT_BYTES) {
+                return SkillFile.builder()
+                        .name(descriptor.getName())
+                        .path(toRelative(basePath, target))
+                        .content(readHead(target, MAX_INLINE_TEXT_BYTES))
+                        .binary(false)
+                        .size(size)
+                        .truncated(true)
+                        .build();
+            }
             try {
                 String content = Files.readString(target, StandardCharsets.UTF_8);
                 return SkillFile.builder()
@@ -69,6 +83,14 @@ public class DefaultSkillLoader implements SkillLoader {
             }
         } catch (IOException e) {
             throw new SkillLoadException("failed to read " + relativePath, e);
+        }
+    }
+
+    private static String readHead(Path target, int maxBytes) throws IOException {
+        try (InputStream in = Files.newInputStream(target)) {
+            byte[] head = in.readNBytes(maxBytes);
+            return new String(head, StandardCharsets.UTF_8)
+                    + "\n…[file truncated at " + maxBytes + " bytes]…";
         }
     }
 

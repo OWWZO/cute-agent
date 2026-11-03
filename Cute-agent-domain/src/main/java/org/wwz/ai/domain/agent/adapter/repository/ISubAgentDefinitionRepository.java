@@ -12,15 +12,28 @@ import java.util.Optional;
  */
 public interface ISubAgentDefinitionRepository {
 
+    /** 默认分页安全上限：调用方不传 limit 时最多读取这么多行。 */
+    int DEFAULT_LIST_LIMIT = 500;
+
     /**
      * 查询全部启用且未删除的子 Agent 定义（运行时 Registry 加载）。
      */
     List<SubAgentDefinition> listEnabled();
 
     /**
-     * 管理端列表（未删除；含禁用）。
+     * 管理端列表（未删除；含禁用）的默认分页入口。
+     * <p>等价于 {@code listAll(0, DEFAULT_LIST_LIMIT)}；超出上限的配置需要通过分页重载读取。</p>
      */
-    List<SubAgentDefinitionRecord> listAll();
+    default List<SubAgentDefinitionRecord> listAll() {
+        return listAll(0, DEFAULT_LIST_LIMIT);
+    }
+
+    /**
+     * 按 {@code update_time DESC, id DESC} 分页读取管理端列表（未删除；含禁用）。
+     * <p>实现必须自行收敛参数：{@code offset < 0} 按 0 处理，{@code limit <= 0} 取默认值，
+     * 且不得把调用方传入的任意大 limit 原样下推。</p>
+     */
+    List<SubAgentDefinitionRecord> listAll(int offset, int limit);
 
     Optional<SubAgentDefinitionRecord> findByAgentKey(String agentKey);
 

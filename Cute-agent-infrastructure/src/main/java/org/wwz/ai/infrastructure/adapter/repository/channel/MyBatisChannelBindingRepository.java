@@ -1,5 +1,6 @@
 package org.wwz.ai.infrastructure.adapter.repository.channel;
 
+import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.channel.model.ChannelBinding;
 import org.wwz.ai.domain.agent.channel.port.ChannelBindingRepository;
 import org.wwz.ai.infrastructure.channel.dao.IAiAgentChannelBindingDao;
@@ -12,6 +13,7 @@ import java.util.Optional;
 /**
  * 绑定仓储的 MyBatis 实现。
  */
+@Slf4j
 public class MyBatisChannelBindingRepository implements ChannelBindingRepository {
 
     private final IAiAgentChannelBindingDao dao;
@@ -39,8 +41,18 @@ public class MyBatisChannelBindingRepository implements ChannelBindingRepository
     }
 
     @Override
-    public List<ChannelBinding> listByStatus(String status) {
-        return dao.queryByStatus(status).stream().map(this::toDomain).toList();
+    public List<ChannelBinding> listByStatus(String status, int limit) {
+        int normalizedLimit = limit <= 0
+                ? DEFAULT_STATUS_LIST_LIMIT
+                : Math.min(limit, DEFAULT_STATUS_LIST_LIMIT);
+        List<ChannelBinding> rows = dao.queryByStatus(status, normalizedLimit).stream()
+                .map(this::toDomain)
+                .toList();
+        if (rows.size() >= normalizedLimit) {
+            log.warn("channelBinding.listByStatus reached limit status={} limit={}；可能仍有未返回行",
+                    status, normalizedLimit);
+        }
+        return rows;
     }
 
     @Override

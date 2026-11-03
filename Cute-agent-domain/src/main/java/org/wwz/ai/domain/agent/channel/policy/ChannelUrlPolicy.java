@@ -1,10 +1,10 @@
 package org.wwz.ai.domain.agent.channel.policy;
 
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.security.OutboundUrlGuard;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.regex.Pattern;
 
 /**
  * 产物链接策略：决定 DB 里的 {@code preview_url} 能不能直接发给 QQ 用户。
@@ -17,8 +17,6 @@ public final class ChannelUrlPolicy {
 
     /** 预览路径，与前端 {@code buildFilePreviewUrlForBrowser} 保持一致。 */
     private static final String PREVIEW_PATH = "/v1/file_tool/preview/";
-
-    private static final Pattern IPV4 = Pattern.compile("^\\d{1,3}(\\.\\d{1,3}){3}$");
 
     private final String publicBaseUrl;
 
@@ -88,44 +86,16 @@ public final class ChannelUrlPolicy {
     }
 
     private static boolean isPrivateHost(String host) {
-        if ("localhost".equals(host) || "localhost.localdomain".equals(host) || "::1".equals(host)) {
-            return true;
-        }
-        // 容器 / 局域网专用域名后缀，公网 DNS 不解析。
-        if (host.endsWith(".internal") || host.endsWith(".local") || host.endsWith(".localhost")) {
-            return true;
-        }
-        if (IPV4.matcher(host).matches()) {
-            String[] parts = host.split("\\.");
-            int a = parse(parts[0]);
-            int b = parse(parts[1]);
-            if (a == 127) {
-                return true;
-            }
-            if (a == 10) {
-                return true;
-            }
-            if (a == 192 && b == 168) {
-                return true;
-            }
-            if (a == 172 && b >= 16 && b <= 31) {
-                return true;
-            }
-            return a == 0;
-        }
-        // 无点的单段主机名只可能是容器 / 内网别名（cute-tool、host.docker.internal 之类）。
-        return !host.contains(".") && !host.contains(":");
-    }
-
-    private static int parse(String segment) {
-        try {
-            return Integer.parseInt(segment);
-        } catch (NumberFormatException e) {
-            return -1;
-        }
+        // 统一由 OutboundUrlGuard 判断地址类别：IPv4 非规范写法、IPv6 ULA/link-local/未指定、
+        // IPv4-mapped、带尾点的 localhost 都在那里收口，避免两套规则漂移。
+        return OutboundUrlGuard.isBlockedHostForDisplay(host);
     }
 
     private static String encodeSegment(String value) {
+        // "." / ".." 是路径穿越段：它们经 URLEncoder 不会被转义，必须在拼接前消除。
+        if (".".equals(value) || "..".equals(value)) {
+            return "_";
+        }
         return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8)
                 .replace("+", "%20");
     }

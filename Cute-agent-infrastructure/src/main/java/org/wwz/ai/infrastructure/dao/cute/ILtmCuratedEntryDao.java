@@ -21,5 +21,6 @@ public interface ILtmCuratedEntryDao {
 
     List<CuratedMemoryEntry> selectActive(@Param("ownerType") String ownerType,
                                           @Param("ownerId") String ownerId,
-                                          @Param("scope") String scope);
+                                          @Param("scope") String scope,
+                                          @Param("limit") int limit);
 }

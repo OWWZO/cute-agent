@@ -21,7 +21,8 @@ public interface IAiAgentChannelBindingDao {
     AiAgentChannelBindingPO queryByAppId(@Param("platform") String platform,
                                          @Param("appId") String appId);
 
-    List<AiAgentChannelBindingPO> queryByStatus(@Param("status") String status);
+    List<AiAgentChannelBindingPO> queryByStatus(@Param("status") String status,
+                                                @Param("limit") int limit);
 
     long countAll();
 

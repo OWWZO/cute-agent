@@ -43,10 +43,18 @@ public class SubAgentDefinitionRepository implements ISubAgentDefinitionReposito
     }
 
     @Override
-    public List<SubAgentDefinitionRecord> listAll() {
-        List<SubAgentDefinitionPO> rows = subAgentDefinitionDao.queryAll();
+    public List<SubAgentDefinitionRecord> listAll(int offset, int limit) {
+        int normalizedOffset = Math.max(offset, 0);
+        int normalizedLimit = limit <= 0
+                ? DEFAULT_LIST_LIMIT
+                : Math.min(limit, DEFAULT_LIST_LIMIT);
+        List<SubAgentDefinitionPO> rows = subAgentDefinitionDao.queryPage(normalizedOffset, normalizedLimit);
         if (rows == null || rows.isEmpty()) {
             return List.of();
+        }
+        if (rows.size() >= normalizedLimit) {
+            log.info("subAgentDefinition.listAll reached limit offset={} limit={}；可能仍有未返回行",
+                    normalizedOffset, normalizedLimit);
         }
         return rows.stream()
                 .map(this::toRecord)

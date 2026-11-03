@@ -89,17 +89,25 @@ public class BackgroundRunReconciler {
             if (batch == null || batch.isEmpty()) {
                 return converged;
             }
+            int pageConverged = 0;
             for (DialogueRun run : batch) {
                 if (run == null || run.getId() == null) {
                     continue;
                 }
                 try {
-                    converged += settleRun(run, now);
+                    int settled = settleRun(run, now);
+                    converged += settled;
+                    pageConverged += settled;
                 } catch (Exception e) {
                     report.addError("run_settle#" + run.getId(), e);
                 }
             }
             if (batch.size() < batchSize) {
+                return converged;
+            }
+            if (pageConverged == 0) {
+                // 页内没有任何行收敛时，下一页仍会返回同一批未收敛行；继续翻页只会重复报错。
+                log.warn("reconcile.run_orphan 本页无进展（{} 行），停止扫描避免重复处理", batch.size());
                 return converged;
             }
         }
@@ -158,6 +166,7 @@ public class BackgroundRunReconciler {
             if (batch == null || batch.isEmpty()) {
                 return converged;
             }
+            int pageConverged = 0;
             for (ToolInvocation invocation : batch) {
                 if (invocation == null || invocation.getId() == null) {
                     continue;
@@ -168,12 +177,17 @@ public class BackgroundRunReconciler {
                     invocation.setFinishedAt(now);
                     if (repository.updateToolInvocationFinish(invocation) > 0) {
                         converged++;
+                        pageConverged++;
                     }
                 } catch (Exception e) {
                     report.addError("tool_settle#" + invocation.getId(), e);
                 }
             }
             if (batch.size() < batchSize) {
+                return converged;
+            }
+            if (pageConverged == 0) {
+                log.warn("reconcile.tool_orphan 本页无进展（{} 行），停止扫描避免重复处理", batch.size());
                 return converged;
             }
         }
@@ -198,6 +212,7 @@ public class BackgroundRunReconciler {
             if (batch == null || batch.isEmpty()) {
                 return converged;
             }
+            int pageConverged = 0;
             for (OrphanBackgroundTaskRow row : batch) {
                 if (row == null || row.getTask() == null || StringUtils.isBlank(row.getSessionId())) {
                     continue;
@@ -209,11 +224,17 @@ public class BackgroundRunReconciler {
                     task.setErrorMsg(StringUtils.defaultIfBlank(task.getErrorMsg(), REASON_SERVER_RESTART));
                     tasklist.upsertBackgroundTask(row.getSessionId(), task);
                     converged++;
+                    pageConverged++;
                 } catch (Exception e) {
                     report.addError("task_settle#" + task.getId(), e);
                 }
             }
             if (batch.size() < batchSize) {
+                return converged;
+            }
+            if (pageConverged == 0) {
+                // 空 sessionId / upsert 失败的行不会被扫描条件过滤，继续翻页只会重复命中。
+                log.warn("reconcile.task_row_lost 本页无进展（{} 行），停止扫描避免重复处理", batch.size());
                 return converged;
             }
         }

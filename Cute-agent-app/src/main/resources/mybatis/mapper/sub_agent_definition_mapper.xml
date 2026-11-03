@@ -41,6 +41,15 @@
         ORDER BY update_time DESC, id DESC
     </select>
 
+    <select id="queryPage" resultMap="SubAgentDefinitionMap">
+        SELECT
+        <include refid="columns"/>
+        FROM ai_agent_sub_agent_definition
+        WHERE deleted = 0
+        ORDER BY update_time DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
     <select id="queryByAgentKey" resultMap="SubAgentDefinitionMap">
         SELECT
         <include refid="columns"/>

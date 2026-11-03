@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.adapter.repository.catalog;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import org.wwz.ai.domain.agent.catalog.model.AiClientApiConfig;
 import org.wwz.ai.domain.agent.catalog.port.IAiClientApiConfigRepository;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** API 配置仓储适配器。 */
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class CatalogApiConfigRepository implements IAiClientApiConfigRepository {
@@ -23,8 +25,28 @@ public class CatalogApiConfigRepository implements IAiClientApiConfigRepository 
     public boolean deleteByApiId(String apiId) { return dao.deleteByApiId(apiId) > 0; }
     public Optional<AiClientApiConfig> findById(Long id) { return Optional.ofNullable(toModel(dao.queryById(id))); }
     public Optional<AiClientApiConfig> findByApiId(String apiId) { return Optional.ofNullable(toModel(dao.queryByApiId(apiId))); }
-    public List<AiClientApiConfig> findEnabled() { return toModels(dao.queryEnabled()); }
-    public List<AiClientApiConfig> findAll() { return toModels(dao.queryAll()); }
+    public List<AiClientApiConfig> findEnabled(int limit) {
+        int normalized = normalizeLimit(limit);
+        List<AiClientApiConfig> rows = toModels(dao.queryEnabledLimit(normalized));
+        if (rows.size() >= normalized) {
+            log.warn("aiClientApi.findEnabled reached limit={}；可能仍有未返回行", normalized);
+        }
+        return rows;
+    }
+
+    public List<AiClientApiConfig> findAll(int offset, int limit) {
+        int normalized = normalizeLimit(limit);
+        List<AiClientApiConfig> rows = toModels(dao.queryPage(Math.max(offset, 0), normalized));
+        if (rows.size() >= normalized) {
+            log.warn("aiClientApi.findAll reached limit offset={} limit={}；可能仍有未返回行",
+                    Math.max(offset, 0), normalized);
+        }
+        return rows;
+    }
+
+    private static int normalizeLimit(int limit) {
+        return limit <= 0 ? DEFAULT_LIST_LIMIT : Math.min(limit, DEFAULT_LIST_LIMIT);
+    }
 
     private static AiClientApiPO toPO(AiClientApiConfig c) {
         return AiClientApiPO.builder().id(c.getId()).apiId(c.getApiId()).baseUrl(c.getBaseUrl()).apiKey(c.getApiKey())

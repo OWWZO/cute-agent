@@ -1186,6 +1186,11 @@ public final class ExecutionLedgerFixtureFactory {
                     .toList();
         }
 
+        @Override
+        public List<ArtifactRecord> queryBySessionIdLimit(String sessionId, int limit) {
+            return queryBySessionId(sessionId).stream().limit(limit).toList();
+        }
+
         private ArtifactRecord foldArtifact(ArtifactRecord artifact,
                                             ToolInvocation parent,
                                             DialogueRun parentRun) {

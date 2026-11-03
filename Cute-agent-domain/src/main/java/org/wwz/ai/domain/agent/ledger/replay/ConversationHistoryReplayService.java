@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.ledger.replay;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryDetail;
@@ -31,11 +32,14 @@ import java.util.Map;
  * 摘要只读取 Execution Ledger 的 session/run 主表；单 run replay 再交给
  * ReplayProjector 生成前端事件。working memory 仅服务下一轮 prompt，不参与用户可见历史回放。
  */
+@Slf4j
 @RequiredArgsConstructor
 public class ConversationHistoryReplayService {
 
     public static final int DEFAULT_HISTORY_PAGE_SIZE = 20;
     public static final int MAX_HISTORY_PAGE_SIZE = 100;
+    /** 兼容视图单次最多回放的 run 数；超长会话应改用分页接口。 */
+    public static final int MAX_HISTORY_RUN_COUNT = 200;
     private static final int SUMMARY_PREVIEW_LENGTH = 240;
 
     private final ExecutionLedgerQueryService executionLedgerQueryService;
@@ -182,18 +186,26 @@ public class ConversationHistoryReplayService {
         List<ExecutionRunDetail> batchRunDetails = new ArrayList<>();
         int offset = 0;
         final int pageSize = ExecutionLedgerQueryService.DEFAULT_SESSION_RUN_PAGE_SIZE;
-        while (true) {
-            List<DialogueRunView> page = executionLedgerQueryService.querySessionRuns(sessionId, offset, pageSize);
+        boolean truncated = false;
+        while (runs.size() < MAX_HISTORY_RUN_COUNT) {
+            int remaining = MAX_HISTORY_RUN_COUNT - runs.size();
+            int pageLimit = Math.min(pageSize, remaining);
+            List<DialogueRunView> page = executionLedgerQueryService.querySessionRuns(sessionId, offset, pageLimit);
             if (CollectionUtils.isEmpty(page)) {
                 break;
             }
             runs.addAll(page);
             // 每页批量补齐事实，避免逐 run 调 queryRunDetail，也避免一次读取无界 run 列表。
             batchRunDetails.addAll(executionLedgerQueryService.queryRunDetails(page));
-            if (page.size() < pageSize) {
+            if (page.size() < pageLimit) {
                 break;
             }
-            offset += pageSize;
+            offset += pageLimit;
+            truncated = runs.size() >= MAX_HISTORY_RUN_COUNT;
+        }
+        if (truncated) {
+            log.warn("conversationHistory hit run cap sessionId={} cap={}；请改用分页历史接口",
+                    sessionId, MAX_HISTORY_RUN_COUNT);
         }
         List<ConversationHistoryDetail.ConversationRunDetail> runDetails = new ArrayList<>();
         HistoryModeSnapshot historyModeSnapshot = HistoryModeSnapshot.defaultReact();

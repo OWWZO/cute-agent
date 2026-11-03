@@ -107,8 +107,8 @@ public class CatalogConfigurationApplicationServiceTest {
         @Override public boolean deleteByApiId(String apiId) { return true; }
         @Override public Optional<AiClientApiConfig> findById(Long id) { return Optional.empty(); }
         @Override public Optional<AiClientApiConfig> findByApiId(String apiId) { return Optional.ofNullable(existing); }
-        @Override public List<AiClientApiConfig> findEnabled() { return List.of(); }
-        @Override public List<AiClientApiConfig> findAll() { return List.of(); }
+        @Override public List<AiClientApiConfig> findEnabled(int limit) { return List.of(); }
+        @Override public List<AiClientApiConfig> findAll(int offset, int limit) { return List.of(); }
     }
 
     private static final class InMemoryModelRepository implements IAiClientModelConfigRepository {
@@ -127,7 +127,7 @@ public class CatalogConfigurationApplicationServiceTest {
         }
         @Override public List<AiClientModelConfig> findByApiId(String apiId) { return List.of(); }
         @Override public List<AiClientModelConfig> findByModelType(String modelType) { return List.of(); }
-        @Override public List<AiClientModelConfig> findEnabled() { return List.of(); }
-        @Override public List<AiClientModelConfig> findAll() { return List.of(); }
+        @Override public List<AiClientModelConfig> findEnabled(int limit) { return List.of(); }
+        @Override public List<AiClientModelConfig> findAll(int offset, int limit) { return List.of(); }
     }
 }

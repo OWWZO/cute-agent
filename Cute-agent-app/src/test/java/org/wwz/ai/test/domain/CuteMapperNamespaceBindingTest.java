@@ -36,6 +36,13 @@ public class CuteMapperNamespaceBindingTest {
         Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.ILlmInvocationLedgerDao.queryByRunId"));
         Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.IToolInvocationLedgerDao.queryByRunId"));
         Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.IArtifactLedgerDao.queryByRunId"));
+        Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.IArtifactLedgerDao.queryBySessionIdLimit"));
+        // 分页重载必须和接口同步注册，否则运行期才会报 Invalid bound statement。
+        Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.ISubAgentDefinitionDao.queryPage"));
+        Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.catalog.IAiClientApiConfigDao.queryPage"));
+        Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.catalog.IAiClientApiConfigDao.queryEnabledLimit"));
+        Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.catalog.IAiClientModelConfigDao.queryPage"));
+        Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.catalog.IAiClientModelConfigDao.queryEnabledLimit"));
         Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.IToolOutputImageGenerationDao.queryPageByRequestSource"));
         // session_search 的 read / scroll 模式依赖这条语句；声明了但 XML 没实现时运行期才报
         // "Invalid bound statement (not found)"，所以在这里锁住。

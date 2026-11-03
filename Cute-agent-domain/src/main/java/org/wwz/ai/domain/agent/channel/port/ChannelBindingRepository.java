@@ -12,13 +12,28 @@ import org.wwz.ai.domain.agent.channel.model.ChannelBinding;
  */
 public interface ChannelBindingRepository {
 
+    /** 按状态查询的默认安全上限。 */
+    int DEFAULT_STATUS_LIST_LIMIT = 500;
+
     Optional<ChannelBinding> findById(Long bindingId);
 
     Optional<ChannelBinding> findByOwner(String ownerUserId, String platform);
 
     Optional<ChannelBinding> findByAppId(String platform, String appId);
 
-    List<ChannelBinding> listByStatus(String status);
+    /**
+     * 按状态查询的默认入口；等价于 {@code listByStatus(status, DEFAULT_STATUS_LIST_LIMIT)}。
+     * <p>状态桶可能包含大量 ERROR / RETRY 绑定，调用方不应假设返回全量。</p>
+     */
+    default List<ChannelBinding> listByStatus(String status) {
+        return listByStatus(status, DEFAULT_STATUS_LIST_LIMIT);
+    }
+
+    /**
+     * 按状态查询最多 {@code limit} 行（{@code limit <= 0} 取默认上限）。
+     * <p>实现必须把 LIMIT 下推到 SQL，不得先全表加载再内存截断。</p>
+     */
+    List<ChannelBinding> listByStatus(String status, int limit);
 
     /** 全局绑定数，用于上限校验。 */
     long countAll();

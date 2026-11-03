@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.adapter.repository.catalog;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import org.wwz.ai.domain.agent.catalog.model.AiClientModelConfig;
 import org.wwz.ai.domain.agent.catalog.port.IAiClientModelConfigRepository;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** 模型配置仓储适配器。 */
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class CatalogModelConfigRepository implements IAiClientModelConfigRepository {
@@ -26,8 +28,28 @@ public class CatalogModelConfigRepository implements IAiClientModelConfigReposit
     public List<AiClientModelConfig> findAllByModelId(String id) { return toModels(dao.queryAllByModelId(id)); }
     public List<AiClientModelConfig> findByApiId(String id) { return toModels(dao.queryByApiId(id)); }
     public List<AiClientModelConfig> findByModelType(String type) { return toModels(dao.queryByModelType(type)); }
-    public List<AiClientModelConfig> findEnabled() { return toModels(dao.queryEnabled()); }
-    public List<AiClientModelConfig> findAll() { return toModels(dao.queryAll()); }
+    public List<AiClientModelConfig> findEnabled(int limit) {
+        int normalized = normalizeLimit(limit);
+        List<AiClientModelConfig> rows = toModels(dao.queryEnabledLimit(normalized));
+        if (rows.size() >= normalized) {
+            log.warn("aiClientModel.findEnabled reached limit={}；可能仍有未返回行", normalized);
+        }
+        return rows;
+    }
+
+    public List<AiClientModelConfig> findAll(int offset, int limit) {
+        int normalized = normalizeLimit(limit);
+        List<AiClientModelConfig> rows = toModels(dao.queryPage(Math.max(offset, 0), normalized));
+        if (rows.size() >= normalized) {
+            log.warn("aiClientModel.findAll reached limit offset={} limit={}；可能仍有未返回行",
+                    Math.max(offset, 0), normalized);
+        }
+        return rows;
+    }
+
+    private static int normalizeLimit(int limit) {
+        return limit <= 0 ? DEFAULT_LIST_LIMIT : Math.min(limit, DEFAULT_LIST_LIMIT);
+    }
 
     private static AiClientModelPO toPO(AiClientModelConfig c) {
         return AiClientModelPO.builder().id(c.getId()).modelId(c.getModelId()).apiId(c.getApiId()).modelName(c.getModelName())

@@ -48,6 +48,9 @@ public final class SkillPackageParser {
     }
 
     public static ParsedSkillPackage parse(byte[] zip) {
+        if (zip == null) {
+            throw new SkillLoadException("技能包内容不能为空");
+        }
         String skillMd = null;
         String skillDir = null;
         List<String> extras = new ArrayList<>();
@@ -125,6 +128,9 @@ public final class SkillPackageParser {
      * 解压为相对路径 → 字节（剥外层目录），供落地到 skill root。
      */
     public static Map<String, byte[]> unpack(byte[] zip) {
+        if (zip == null) {
+            throw new SkillLoadException("技能包内容不能为空");
+        }
         String skillDir = null;
         Map<String, byte[]> files = new LinkedHashMap<>();
         int entries = 0;

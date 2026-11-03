@@ -205,6 +205,48 @@ public class BackgroundRunReconcilerTest {
         Assert.assertEquals(0, report.getTaskConverged());
     }
 
+    @Test
+    public void shouldStopPagingWhenNoRunConverges() {
+        repository.insertRun("req-bad-1", "sess-bad", NOW.minusMinutes(30));
+        repository.insertRun("req-bad-2", "sess-bad", NOW.minusMinutes(29));
+        repository.failRunSettle = true;
+        BackgroundRunReconciler reconciler =
+                new BackgroundRunReconciler(repository, tasklist, GRACE_MS, 2);
+
+        BackgroundRunReconciler.Report report = reconciler.reconcile(NOW);
+
+        Assert.assertEquals("整页无进展时只扫一页", 1, repository.runScanCalls);
+        Assert.assertEquals("只处理首屏两行，不能重复 200 页", 2, repository.runSettleCalls);
+        Assert.assertEquals(2, report.getErrors().size());
+    }
+
+    @Test
+    public void shouldStopPagingWhenBackgroundTaskRowsHaveNoSession() {
+        repository.backgroundTasks.add(OrphanBackgroundTaskRow.builder()
+                .sessionId(" ")
+                .task(RuntimeBackgroundTask.builder()
+                        .id("task-blank-1")
+                        .status(RuntimeBackgroundTask.STATUS_RUNNING)
+                        .startedAtMs(0L)
+                        .build())
+                .build());
+        repository.backgroundTasks.add(OrphanBackgroundTaskRow.builder()
+                .sessionId(null)
+                .task(RuntimeBackgroundTask.builder()
+                        .id("task-blank-2")
+                        .status(RuntimeBackgroundTask.STATUS_RUNNING)
+                        .startedAtMs(0L)
+                        .build())
+                .build());
+        BackgroundRunReconciler reconciler =
+                new BackgroundRunReconciler(repository, tasklist, GRACE_MS, 2);
+
+        BackgroundRunReconciler.Report report = reconciler.reconcile(NOW);
+
+        Assert.assertEquals(0, report.getTaskConverged());
+        Assert.assertEquals("无 session 的行永远无法收敛，只能扫一页", 1, repository.taskScanCalls);
+    }
+
     private static DialogueRun copyRun(DialogueRun source) {
         return DialogueRun.builder()
                 .id(source.getId())
@@ -244,6 +286,10 @@ public class BackgroundRunReconcilerTest {
         private final java.util.Map<String, DialogueSession> sessions = new java.util.LinkedHashMap<>();
         private final List<OrphanBackgroundTaskRow> backgroundTasks = new ArrayList<>();
         private boolean failRunScan = false;
+        private boolean failRunSettle = false;
+        private int runScanCalls = 0;
+        private int taskScanCalls = 0;
+        private int runSettleCalls = 0;
 
         DialogueRun insertRun(String requestId, String sessionId, LocalDateTime startedAt) {
             DialogueRun run = DialogueRun.builder()
@@ -283,6 +329,7 @@ public class BackgroundRunReconcilerTest {
 
         @Override
         public List<DialogueRun> queryOrphanedRunningRuns(LocalDateTime startedBefore, int limit) {
+            runScanCalls++;
             if (failRunScan) {
                 throw new IllegalStateException("simulated scan failure");
             }
@@ -320,6 +367,7 @@ public class BackgroundRunReconcilerTest {
 
         @Override
         public List<OrphanBackgroundTaskRow> queryOrphanedRunningBackgroundTasks(long startedBeforeMs, int limit) {
+            taskScanCalls++;
             return backgroundTasks.stream()
                     .filter(row -> row.getTask() != null
                             && RuntimeBackgroundTask.STATUS_RUNNING.equals(row.getTask().getStatus())
@@ -330,6 +378,10 @@ public class BackgroundRunReconcilerTest {
 
         @Override
         public int updateRunFinish(DialogueRun run) {
+            runSettleCalls++;
+            if (failRunSettle) {
+                throw new IllegalStateException("simulated settle failure");
+            }
             DialogueRun existing = runs.get(run.getId());
             if (existing == null || existing.isTerminal()) {
                 return 0;

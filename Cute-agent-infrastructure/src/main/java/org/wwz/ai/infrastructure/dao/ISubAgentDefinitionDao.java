@@ -16,6 +16,8 @@ public interface ISubAgentDefinitionDao {
 
     List<SubAgentDefinitionPO> queryAll();
 
+    List<SubAgentDefinitionPO> queryPage(@Param("offset") int offset, @Param("limit") int limit);
+
     SubAgentDefinitionPO queryByAgentKey(@Param("agentKey") String agentKey);
 
     int insert(SubAgentDefinitionPO po);

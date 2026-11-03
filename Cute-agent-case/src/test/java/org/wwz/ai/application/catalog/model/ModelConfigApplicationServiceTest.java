@@ -56,7 +56,7 @@ public class ModelConfigApplicationServiceTest {
         }
         @Override public List<AiClientModelConfig> findByApiId(String apiId) { return List.of(); }
         @Override public List<AiClientModelConfig> findByModelType(String modelType) { return List.of(); }
-        @Override public List<AiClientModelConfig> findEnabled() { return List.of(); }
-        @Override public List<AiClientModelConfig> findAll() { return List.of(); }
+        @Override public List<AiClientModelConfig> findEnabled(int limit) { return List.of(); }
+        @Override public List<AiClientModelConfig> findAll(int offset, int limit) { return List.of(); }
     }
 }

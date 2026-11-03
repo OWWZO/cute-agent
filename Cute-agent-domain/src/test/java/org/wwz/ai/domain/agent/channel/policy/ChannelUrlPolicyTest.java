@@ -88,6 +88,32 @@ public class ChannelUrlPolicyTest {
     }
 
     @Test
+    public void nonCanonicalIpv4AndIpv6InternalsAreUnreachable() {
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://0177.0.0.1/x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://0x7f.0.0.1/x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://2130706433/x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://127.1/x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://999.1.1.1/x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://[fc00::1]/x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://[fe80::1]/x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://[::]/x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://[::ffff:127.0.0.1]/x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://localhost./x"));
+        assertTrue(ChannelUrlPolicy.isUnreachable("http://metadata.google.internal/x"));
+    }
+
+    @Test
+    public void dotSegmentsCannotEscapePreviewPrefix() {
+        ChannelUrlPolicy policy = new ChannelUrlPolicy("https://example.com/tool");
+        assertEquals(
+                "https://example.com/tool/v1/file_tool/preview/_/_/_/x",
+                policy.toClickableUrl(null, "..", "../../x"));
+        assertEquals(
+                "https://example.com/tool/v1/file_tool/preview/im-abc123/out/_/a.md",
+                policy.toClickableUrl(null, REQ, "out/../a.md"));
+    }
+
+    @Test
     public void chineseFileNameIsPercentEncoded() {
         ChannelUrlPolicy policy = new ChannelUrlPolicy("https://example.com/tool");
         assertEquals(

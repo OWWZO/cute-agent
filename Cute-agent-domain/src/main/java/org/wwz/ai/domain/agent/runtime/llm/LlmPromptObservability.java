@@ -1,5 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.llm;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +13,7 @@ import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * LLM 请求观测：日志 + 轻量落库元数据（systemFingerprint / est tokens / cache）。
@@ -21,7 +23,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class LlmPromptObservability {
 
     private static final TokenCounter TOKEN_COUNTER = new TokenCounter();
-    private static final ConcurrentHashMap<String, PromptSnapshot> LAST_BY_SESSION = new ConcurrentHashMap<>();
+    /**
+     * 只保留最近活跃的会话快照，避免长驻进程里 sessionId 无界增长。
+     * 缓存丢失只会让下一次 cache 对比按 firstSeen 处理，不影响业务。
+     */
+    private static final Cache<String, PromptSnapshot> LAST_BY_SESSION = CacheBuilder.newBuilder()
+            .maximumSize(1_024)
+            .expireAfterAccess(6, TimeUnit.HOURS)
+            .build();
     private static final ThreadLocal<ObservationBundle> LAST_BUNDLE = new ThreadLocal<>();
 
     private LlmPromptObservability() {
@@ -53,7 +62,7 @@ public final class LlmPromptObservability {
         // 推送上下文分段给前端 ContextRing（非阻塞；打印机缺失则跳过）
         publishContextUsage(context, model, estimate);
 
-        PromptSnapshot prev = LAST_BY_SESSION.get(sessionId);
+        PromptSnapshot prev = LAST_BY_SESSION.getIfPresent(sessionId);
         PromptSnapshot curr = new PromptSnapshot(
                 estimate.getSystemFingerprint(),
                 String.join(",", estimate.getToolNames() == null ? List.of() : estimate.getToolNames()),

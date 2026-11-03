@@ -116,4 +116,19 @@
         FROM ai_client_model
         ORDER BY create_time DESC, id DESC
     </select>
+
+    <select id="queryEnabledLimit" resultMap="CatalogAiClientModelMap">
+        SELECT <include refid="CatalogAiClientModelColumns"/>
+        FROM ai_client_model
+        WHERE status = 1
+        ORDER BY create_time DESC, id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="queryPage" resultMap="CatalogAiClientModelMap">
+        SELECT <include refid="CatalogAiClientModelColumns"/>
+        FROM ai_client_model
+        ORDER BY create_time DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
 </mapper>
