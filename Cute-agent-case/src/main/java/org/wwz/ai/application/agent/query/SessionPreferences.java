@@ -5,6 +5,9 @@ import lombok.Builder;
 /**
  * 会话级偏好的本轮显式取值（模型 / 思考 / 思考强度 / Deep Think）。
  * <p>每个字段为 {@code null} 表示「本轮没有显式选择」，落库时保留已有值。</p>
+ * <p>本类型不校验字段组合：例如 {@code thinking=false} 可以与
+ * {@code thinkingEffort} 或 {@code deepThink} 同时出现。运行时当前只把
+ * {@code deepThink != 0} 解释为启用计划求解，其他非零值也会被视为启用。</p>
  */
 @Builder
 public record SessionPreferences(
@@ -18,7 +21,10 @@ public record SessionPreferences(
         return new SessionPreferences(null, null, null, null);
     }
 
-    /** 是否至少选择了一项；全空时调用方不必写库。 */
+    /**
+     * 是否至少选择了一项；全空时调用方不必写库。
+     * <p>新增偏好字段时必须同步扩展本方法，否则该字段不会被持久化。</p>
+     */
     public boolean hasAny() {
         return model != null || thinking != null || thinkingEffort != null || deepThink != null;
     }

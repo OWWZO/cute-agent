@@ -49,7 +49,7 @@ public class McpCatalogApplicationService {
 
     private static CatalogMcp toCatalogMcp(AiClientToolMcpConfig config) {
         return new CatalogMcp(config.getMcpId(), config.getMcpName(), config.getTransportType(),
-                config.getStatus() == null ? 1 : config.getStatus());
+                config.getStatus() == null ? McpDefaults.DEFAULT_STATUS : config.getStatus());
     }
 
 }
