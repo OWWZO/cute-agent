@@ -1,9 +1,8 @@
 package org.wwz.ai.domain.agent.ledger.model;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -12,21 +11,29 @@ import java.time.LocalDateTime;
  *
  * <p>The encoded value is opaque to callers, but always carries the session,
  * create time and primary key needed by the ordered run query.</p>
+ *
+ * <p>字段不可变，只能通过 {@link #from}、{@link #validated}、{@link #decode} 构造，
+ * 保证不变量（非空 sessionId/createTime、{@code id > 0}）在对象生命周期内始终成立。</p>
  */
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter
+@EqualsAndHashCode
+@ToString
 public class RunCursor {
 
     private static final int VERSION = 1;
     private static final String INVALID_MESSAGE = "非法 cursor";
 
-    private String sessionId;
+    private final String sessionId;
 
-    private LocalDateTime createTime;
+    private final LocalDateTime createTime;
 
-    private Long id;
+    private final Long id;
+
+    private RunCursor(String sessionId, LocalDateTime createTime, Long id) {
+        this.sessionId = sessionId;
+        this.createTime = createTime;
+        this.id = id;
+    }
 
     public static RunCursor from(DialogueRunView run) {
         if (run == null) {

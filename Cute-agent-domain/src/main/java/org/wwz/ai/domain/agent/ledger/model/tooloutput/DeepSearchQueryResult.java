@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -24,5 +25,12 @@ public class DeepSearchQueryResult {
      */
     public static DeepSearchQueryResult of(String query, List<DeepSearchDoc> docs) {
         return new DeepSearchQueryResult(query, docs == null ? new ArrayList<>() : new ArrayList<>(docs));
+    }
+
+    /**
+     * 文档列表以只读副本返回，避免调用方直接改动结果对象。
+     */
+    public List<DeepSearchDoc> getDocs() {
+        return docs == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(docs));
     }
 }

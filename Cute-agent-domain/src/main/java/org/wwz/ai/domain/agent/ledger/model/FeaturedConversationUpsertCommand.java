@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -35,4 +37,11 @@ public class FeaturedConversationUpsertCommand {
     private Integer sortOrder;
 
     private String operator;
+
+    /**
+     * 标签以只读副本返回，避免调用方在命令交给仓储后继续改动其状态。
+     */
+    public List<String> getTags() {
+        return tags == null ? null : Collections.unmodifiableList(new ArrayList<>(tags));
+    }
 }
