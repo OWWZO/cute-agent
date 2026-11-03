@@ -73,7 +73,14 @@ public interface IExecutionLedgerWriteRepository {
 
     void insertToolInvocation(ToolInvocation invocation);
 
-    void updateToolInvocationFinish(ToolInvocation invocation);
+    /**
+     * 结算工具调用终态。守卫与 {@code IExecutionLedgerReconcileRepository#updateToolInvocationFinish}
+     * 一致（仅更新 {@code status=RUNNING AND finished_at IS NULL} 的行），返回受影响行数。
+     *
+     * @return 0 表示该调用已结算过（重复/迟到回调）或不存在，调用方据此保证幂等；
+     *         返回类型与 reconcile 端口一致，使单一适配器可以同时实现两个端口
+     */
+    int updateToolInvocationFinish(ToolInvocation invocation);
 
     int batchInsertArtifacts(List<ArtifactRecord> records);
 
