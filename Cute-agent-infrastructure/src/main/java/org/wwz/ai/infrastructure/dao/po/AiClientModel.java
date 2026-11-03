@@ -59,12 +59,12 @@ public class AiClientModel {
     private Integer status;
 
     /**
-     * 创建时间
+     * 创建时间；由调用方提供并原样写入，持久化层不自动填充。
      */
     private LocalDateTime createTime;
 
     /**
-     * 更新时间
+     * 更新时间；由调用方提供并原样写入，持久化层不自动填充。
      */
     private LocalDateTime updateTime;
 

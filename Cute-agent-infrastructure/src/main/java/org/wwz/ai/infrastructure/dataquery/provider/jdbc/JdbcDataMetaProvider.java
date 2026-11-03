@@ -18,9 +18,9 @@ import static org.wwz.ai.infrastructure.dataquery.jdbc.catalog.AbstractJdbcCatal
 /**
  * JDBC 元数据查询适配器。
  *
- * <p>表/列目录查询委托给与数据源匹配的 {@code JdbcCatalog}；SQL 字段探测则只读取
- * ResultSetMetaData，不消费查询结果。该边界让 NL2SQL 可以预览结构，同时避免把元数据
- * 探测误当成一次完整数据查询。</p>
+ * <p>表/列目录查询委托给与数据源匹配的 {@code JdbcCatalog}；SQL 字段探测会执行
+ * 查询并读取 ResultSetMetaData，但不把结果行物化到领域查询结果。驱动仍可能按照
+ * limit 预取部分行，调用方不能把该路径视为零执行开销。</p>
  */
 @Slf4j
 @Service
@@ -56,7 +56,7 @@ public class JdbcDataMetaProvider implements DataMetaProvider<JdbcQueryRequest> 
                 ResultSetMetaData metaData = rs.getMetaData();
                 int columnCount = metaData.getColumnCount();
 
-                // 只读取 ResultSetMetaData，不消费数据行；因此该路径适合预览查询结构而不是返回数据。
+                // 只把 ResultSetMetaData 映射为列定义，不遍历结果行；SQL 本身仍由 executeQuery 执行。
                 for (int i = 1; i <= columnCount; i++) {
                     String name = metaData.getColumnLabel(i);
                     int intDataType = metaData.getColumnType(i);
