@@ -52,7 +52,7 @@ public class ConnectionWrapper implements AutoCloseable {
         while (i < maxRetryTime) {
             try {
                 connection = datasourceWrapper.getDataSource().getConnection();
-                log.info("获取数据库链接成功 poolId:{}", jdbcConnectionConfig.getKey());
+                log.info("获取数据库连接成功 poolId:{}", jdbcConnectionConfig.getKey());
                 break;
             } catch (SQLException e) {
                 if (i < maxRetryTime - 1) {
@@ -60,12 +60,12 @@ public class ConnectionWrapper implements AutoCloseable {
                         Thread.sleep(300);
                     } catch (InterruptedException ie) {
                         throw new JdbcBizException(
-                                "重试获取数据库链接失败",
+                                "重试获取数据库连接失败",
                                 ie);
                     }
-                    log.warn("获取数据库链接失败, 重试次数 {}", i + 1);
+                    log.warn("获取数据库连接失败, 重试次数 {}", i + 1);
                 } else {
-                    log.error("重试{}次后未后成功", i + 1);
+                    log.error("重试{}次后未成功", i + 1);
                     throw new JdbcBizException(e);
                 }
             }

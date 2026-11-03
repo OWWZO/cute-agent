@@ -4,6 +4,8 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.wwz.ai.infrastructure.dao.po.UserAccountPO;
 
+import java.time.LocalDateTime;
+
 /**
  * user_account data access object.
  */
@@ -23,9 +25,9 @@ public interface IUserAccountDao {
 
     int updatePassword(@Param("userId") String userId,
                        @Param("passwordHash") String passwordHash,
-                       @Param("updateTime") java.time.LocalDateTime updateTime);
+                       @Param("updateTime") LocalDateTime updateTime);
 
     int updateLastLoginAt(@Param("userId") String userId,
-                          @Param("lastLoginAt") java.time.LocalDateTime lastLoginAt);
+                          @Param("lastLoginAt") LocalDateTime lastLoginAt);
 
 }

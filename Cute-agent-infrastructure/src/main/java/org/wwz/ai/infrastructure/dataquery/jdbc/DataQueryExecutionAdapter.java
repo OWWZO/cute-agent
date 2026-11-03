@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.wwz.ai.domain.agent.rag.model.query.SqlExecutionResult;
 import org.wwz.ai.domain.agent.rag.port.DataQueryExecutionPort;
-import org.wwz.ai.infrastructure.dataquery.jdbc.JdbcDataSourceProperties;
 import org.wwz.ai.infrastructure.dataquery.provider.jdbc.JdbcDataProvider;
 import org.wwz.ai.infrastructure.dataquery.provider.jdbc.JdbcQueryRequest;
 import org.wwz.ai.infrastructure.dataquery.util.JdbcUtils;
