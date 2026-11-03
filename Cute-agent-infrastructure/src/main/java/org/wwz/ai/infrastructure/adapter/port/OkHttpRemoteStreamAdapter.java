@@ -8,6 +8,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import okio.Buffer;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -19,6 +20,7 @@ import org.wwz.ai.domain.agent.adapter.port.RemoteStreamSession;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Objects;
@@ -35,6 +37,7 @@ public class OkHttpRemoteStreamAdapter implements RemoteStreamPort {
     private static final long DEFAULT_CONNECT_TIMEOUT_SECONDS = 30L;
     private static final long DEFAULT_READ_TIMEOUT_SECONDS = 300L;
     private static final long DEFAULT_WRITE_TIMEOUT_SECONDS = 300L;
+    private static final long MAX_ERROR_BODY_BYTES = 64L * 1024;
 
     private final OkHttpClient sharedClient;
 
@@ -72,7 +75,9 @@ public class OkHttpRemoteStreamAdapter implements RemoteStreamPort {
                 String failureBody = null;
                 try (ResponseBody responseBody = response.body()) {
                     if (!response.isSuccessful() || responseBody == null) {
-                        failureBody = responseBody == null ? null : responseBody.string();
+                        failureBody = responseBody == null
+                                ? null
+                                : readBodyPrefix(responseBody, MAX_ERROR_BODY_BYTES);
                         listener.onFailure(
                                 new IOException("Stream request failed, code=" + response.code() + ", url=" + request.getUrl()),
                                 response.code(),
@@ -103,6 +108,19 @@ public class OkHttpRemoteStreamAdapter implements RemoteStreamPort {
             }
         });
         return call::cancel;
+    }
+
+    private String readBodyPrefix(ResponseBody responseBody, long maxBytes) throws IOException {
+        long contentLength = responseBody.contentLength();
+        if (contentLength >= 0 && contentLength <= maxBytes) {
+            return responseBody.string();
+        }
+        Buffer buffer = new Buffer();
+        responseBody.source().read(buffer, maxBytes);
+        Charset charset = responseBody.contentType() == null
+                ? StandardCharsets.UTF_8
+                : responseBody.contentType().charset(StandardCharsets.UTF_8);
+        return buffer.readString(charset);
     }
 
     private OkHttpClient buildClient(RemoteStreamRequest request) {

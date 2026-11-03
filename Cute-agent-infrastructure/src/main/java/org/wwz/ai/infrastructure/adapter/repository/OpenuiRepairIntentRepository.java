@@ -21,6 +21,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OpenuiRepairIntentRepository implements IOpenUiRepairIntentRepository {
 
+    private static final int BATCH_SIZE = 500;
+
     private final IOpenuiRepairIntentDao repairIntentDao;
 
     @Override
@@ -33,12 +35,13 @@ public class OpenuiRepairIntentRepository implements IOpenUiRepairIntentReposito
         List<OpenUiRepairIntent> safeIntents = intents == null ? List.of() : intents;
         repairIntentDao.deleteByProgram(sessionId, messageId, programHash);
         LocalDateTime now = LocalDateTime.now();
+        List<OpenuiRepairIntentPO> rows = new ArrayList<>(safeIntents.size());
         for (int i = 0; i < safeIntents.size(); i++) {
             OpenUiRepairIntent intent = safeIntents.get(i);
             if (intent == null || intent.searchText().isBlank()) {
                 continue;
             }
-            repairIntentDao.insert(OpenuiRepairIntentPO.builder()
+            rows.add(OpenuiRepairIntentPO.builder()
                     .sessionId(sessionId)
                     .messageId(messageId)
                     .programHash(programHash)
@@ -48,6 +51,10 @@ public class OpenuiRepairIntentRepository implements IOpenUiRepairIntentReposito
                     .model(model)
                     .createdAt(now)
                     .build());
+        }
+        for (int start = 0; start < rows.size(); start += BATCH_SIZE) {
+            int end = Math.min(start + BATCH_SIZE, rows.size());
+            repairIntentDao.insertBatch(rows.subList(start, end));
         }
     }
 

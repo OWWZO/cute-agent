@@ -123,7 +123,7 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
                     .status(WorkingMemoryTurn.STATUS_READY)
                     .schemaVersion(1)
                     .messageCount(rows.size())
-                    .tokenEstimate(estimateTokens(projector.hydrate(rows)))
+                    .tokenEstimate(estimateTokens(projectableMessages(turnMessages)))
                     .startedAt(now)
                     .finishedAt(now)
                     .deleted(0)
@@ -177,7 +177,7 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
                     .status(WorkingMemoryTurn.STATUS_READY)
                     .schemaVersion(1)
                     .messageCount(rows.size())
-                    .tokenEstimate(estimateTokens(projector.hydrate(rows)))
+                    .tokenEstimate(estimateTokens(projectableMessages(compactedMessages)))
                     .startedAt(now)
                     .finishedAt(now)
                     .deleted(0)
@@ -204,5 +204,14 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
             return 0;
         }
         return tokenCounter.estimateMessages(messages);
+    }
+
+    private List<Message> projectableMessages(List<Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        return messages.stream()
+                .filter(message -> message != null && message.getRole() != null)
+                .toList();
     }
 }

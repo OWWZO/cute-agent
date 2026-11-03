@@ -25,6 +25,8 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class AgentRepository {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private final IAiClientToolMcpConfigRepository mcpConfigRepository;
 
     public List<AiClientToolMcpVO> queryEnabledAiClientToolMcpVOList() {
@@ -63,9 +65,8 @@ public class AgentRepository {
 
         try {
             if ("sse".equals(transportType)) {
-                ObjectMapper objectMapper = new ObjectMapper();
                 AiClientToolMcpVO.TransportConfigSse configSse =
-                        objectMapper.readValue(transportConfig, AiClientToolMcpVO.TransportConfigSse.class);
+                        OBJECT_MAPPER.readValue(transportConfig, AiClientToolMcpVO.TransportConfigSse.class);
                 mcpVO.setTransportConfigSse(configSse);
             } else if ("stdio".equals(transportType)) {
                 Map<String, AiClientToolMcpVO.TransportConfigStdio.Stdio> stdio = JSON.parseObject(
@@ -76,9 +77,8 @@ public class AgentRepository {
                 configStdio.setStdio(stdio);
                 mcpVO.setTransportConfigStdio(configStdio);
             } else if ("streamable_http".equals(transportType)) {
-                ObjectMapper objectMapper = new ObjectMapper();
                 AiClientToolMcpVO.TransportConfigStreamableHttp configHttp =
-                        objectMapper.readValue(transportConfig, AiClientToolMcpVO.TransportConfigStreamableHttp.class);
+                        OBJECT_MAPPER.readValue(transportConfig, AiClientToolMcpVO.TransportConfigStreamableHttp.class);
                 if (configHttp.getEndpoint() == null || configHttp.getEndpoint().isBlank()) {
                     configHttp.setEndpoint("/mcp");
                 }

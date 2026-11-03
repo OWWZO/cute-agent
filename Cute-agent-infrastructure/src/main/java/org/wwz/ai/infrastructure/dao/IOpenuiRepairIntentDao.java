@@ -21,6 +21,9 @@ public interface IOpenuiRepairIntentDao {
     /** 插入单条意图。 */
     int insert(OpenuiRepairIntentPO intent);
 
+    /** 批量插入意图，减少覆盖式保存的数据库往返。 */
+    int insertBatch(@Param("list") List<OpenuiRepairIntentPO> intents);
+
     /** 按 key 拉全部意图，按 intent_index 升序。 */
     List<OpenuiRepairIntentPO> listByProgram(@Param("sessionId") String sessionId,
                                              @Param("messageId") String messageId,

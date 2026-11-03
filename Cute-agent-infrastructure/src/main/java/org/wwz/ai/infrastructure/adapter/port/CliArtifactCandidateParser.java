@@ -143,6 +143,8 @@ public final class CliArtifactCandidateParser {
                 Object parsed = JSON.parse(trimmed.substring(start, end + 1));
                 if (parsed instanceof JSONObject || parsed instanceof JSONArray) {
                     values.add(parsed);
+                    // The full balanced value has already been inspected recursively.
+                    start = end;
                 }
             } catch (RuntimeException ignore) {
                 // The next JSON-looking span may still contain the actual payload.

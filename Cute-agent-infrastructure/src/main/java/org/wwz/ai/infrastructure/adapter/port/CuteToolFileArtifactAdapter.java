@@ -145,7 +145,9 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
                 .post(body)
                 .build();
         try (Response response = client.newCall(httpRequest).execute()) {
-            String responseText = response.body() == null ? "" : response.body().string();
+            String responseText = response.body() == null
+                    ? ""
+                    : new String(readBody(response.body(), DEFAULT_MAX_RESPONSE_BYTES), StandardCharsets.UTF_8);
             if (!response.isSuccessful()) {
                 throw new IOException("file upload failed, code=" + response.code()
                         + ", url=" + httpRequest.url() + ", body=" + responseText);

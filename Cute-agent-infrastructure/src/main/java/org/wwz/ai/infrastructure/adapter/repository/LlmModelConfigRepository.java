@@ -12,7 +12,9 @@ import org.wwz.ai.infrastructure.dao.po.AiClientApi;
 import org.wwz.ai.infrastructure.dao.po.AiClientModel;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 从 {@code ai_client_model} + {@code ai_client_api} 组装可出站模型绑定。
@@ -31,6 +33,15 @@ public class LlmModelConfigRepository implements ILlmModelConfigRepository {
         if (models == null || models.isEmpty()) {
             return List.of();
         }
+        Map<String, AiClientApi> enabledApisById = new LinkedHashMap<>();
+        List<AiClientApi> enabledApis = aiClientApiDao.queryEnabledApis();
+        if (enabledApis != null) {
+            for (AiClientApi api : enabledApis) {
+                if (api != null && StringUtils.hasText(api.getApiId())) {
+                    enabledApisById.putIfAbsent(api.getApiId(), api);
+                }
+            }
+        }
         List<LlmModelBinding> result = new ArrayList<>();
         for (AiClientModel model : models) {
             if (model == null || !StringUtils.hasText(model.getModelId()) || !StringUtils.hasText(model.getModelName())) {
@@ -39,7 +50,7 @@ public class LlmModelConfigRepository implements ILlmModelConfigRepository {
             if (!StringUtils.hasText(model.getApiId())) {
                 continue;
             }
-            AiClientApi api = aiClientApiDao.queryByApiId(model.getApiId());
+            AiClientApi api = enabledApisById.get(model.getApiId());
             if (api == null || !isEnabled(api.getStatus())) {
                 continue;
             }

@@ -4,7 +4,9 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.codemode.CodeModeErrorCode;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -27,7 +29,7 @@ public final class CodeModeExecutionBudget {
     private int toolCalls;
     private long writtenBytes;
     private final List<String> logs = new ArrayList<>();
-    private final List<String> producedFiles = new ArrayList<>();
+    private final Set<String> producedFiles = new LinkedHashSet<>();
 
     public CodeModeExecutionBudget(long timeoutMs, int maxToolCalls, long maxTotalWriteBytes) {
         long now = System.nanoTime();
@@ -80,7 +82,7 @@ public final class CodeModeExecutionBudget {
     }
 
     public synchronized void produced(String relativePath) {
-        if (relativePath != null && !producedFiles.contains(relativePath)) {
+        if (relativePath != null) {
             producedFiles.add(relativePath);
         }
     }
