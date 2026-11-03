@@ -14,6 +14,13 @@ import java.util.Set;
  */
 public final class BrowserRelayCommandPolicy {
 
+    private static final String ACTION_WAIT_DOWNLOAD = "wait-download";
+    private static final String ACTION_SCREENSHOT = "screenshot";
+    private static final long SCREENSHOT_CAP_MILLIS = 30_000L;
+    private static final long DEFAULT_ACTION_CAP_MILLIS = 60_000L;
+    private static final long MAX_WAIT_DOWNLOAD_MILLIS = 180_000L;
+    private static final long MAX_WAIT_DOWNLOAD_SECONDS = 180L;
+
     private static final Set<String> ALLOWED_ACTIONS = Set.of(
             "exec", "navigate", "tabs", "cookies", "screenshot", "close-window",
             "set-file-input", "insert-text", "bind", "network-capture-start",
@@ -58,27 +65,32 @@ public final class BrowserRelayCommandPolicy {
 
     private long actionCapMillis(BrowserCommand command) {
         String action = command.action() == null ? "" : command.action().value();
-        if ("screenshot".equals(action)) {
-            return 30_000L;
+        if (ACTION_SCREENSHOT.equals(action)) {
+            return SCREENSHOT_CAP_MILLIS;
         }
-        if ("wait-download".equals(action)) {
-            Object timeoutMs = command.parameters().get("timeoutMs");
-            if (timeoutMs instanceof Number number && number.longValue() > 0) {
-                return Math.min(Math.max(1L, number.longValue()), 180_000L);
-            }
-            return 60_000L;
+        if (ACTION_WAIT_DOWNLOAD.equals(action)) {
+            Long timeoutMs = positiveTimeoutMillis(command);
+            return timeoutMs == null ? DEFAULT_ACTION_CAP_MILLIS : Math.min(timeoutMs, MAX_WAIT_DOWNLOAD_MILLIS);
         }
-        return 60_000L;
+        return DEFAULT_ACTION_CAP_MILLIS;
     }
 
     private Duration timeoutFromParameters(BrowserCommand command, Duration defaultTimeout) {
-        if ("wait-download".equals(command.action().value())) {
-            Object timeoutMs = command.parameters().get("timeoutMs");
-            if (timeoutMs instanceof Number number && number.longValue() > 0) {
-                long seconds = Math.min(180L, Math.max(1L, (number.longValue() + 999L) / 1000L));
+        if (ACTION_WAIT_DOWNLOAD.equals(command.action().value())) {
+            Long timeoutMs = positiveTimeoutMillis(command);
+            if (timeoutMs != null) {
+                long seconds = Math.min(MAX_WAIT_DOWNLOAD_SECONDS, Math.max(1L, (timeoutMs + 999L) / 1000L));
                 return Duration.ofSeconds(seconds);
             }
         }
         return defaultTimeout;
+    }
+
+    private static Long positiveTimeoutMillis(BrowserCommand command) {
+        Object timeoutMs = command.parameters().get("timeoutMs");
+        if (timeoutMs instanceof Number number && number.longValue() > 0) {
+            return number.longValue();
+        }
+        return null;
     }
 }
