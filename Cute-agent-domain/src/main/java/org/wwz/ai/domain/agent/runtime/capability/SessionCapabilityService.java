@@ -41,7 +41,10 @@ public class SessionCapabilityService {
     private volatile long discoveredAtMs;
 
     public SessionCapabilitiesView capabilities(String sessionId) {
-        Map<String, Map<String, Boolean>> overrides = repository.findOverrides(sessionId);
+        String normalizedSessionId = normalizeSessionId(sessionId);
+        Map<String, Map<String, Boolean>> overrides = normalizedSessionId == null
+                ? Map.of()
+                : repository.findOverrides(normalizedSessionId);
         Map<String, Boolean> skillOv = overrides.getOrDefault(KIND_SKILL, Map.of());
         Map<String, Boolean> mcpOv = overrides.getOrDefault(KIND_MCP, Map.of());
 
@@ -51,7 +54,7 @@ public class SessionCapabilityService {
                 if (def == null || StringUtils.isBlank(def.getName())) {
                     continue;
                 }
-                boolean enabled = skillOv.getOrDefault(def.getName(), true);
+                boolean enabled = skillOv.getOrDefault(def.getName().trim(), true);
                 skills.add(new CapabilityItem(def.getName(), def.getName(), enabled, "system"));
             }
         }
@@ -64,8 +67,8 @@ public class SessionCapabilityService {
                 if (t == null) {
                     continue;
                 }
-                String mcpId = StringUtils.defaultIfBlank(t.getMcpId(), t.getServerKey());
-                if (StringUtils.isBlank(mcpId) || !seenMcp.add(mcpId)) {
+                String mcpId = StringUtils.trimToNull(StringUtils.defaultIfBlank(t.getMcpId(), t.getServerKey()));
+                if (mcpId == null || !seenMcp.add(mcpId)) {
                     continue;
                 }
                 String label = StringUtils.defaultIfBlank(t.getServerKey(), mcpId);
@@ -105,10 +108,11 @@ public class SessionCapabilityService {
 
     /** 返回本会话禁用的 skill 名 / mcpId（未配置 overrides 则空集 = 全开）。 */
     public DisabledSets loadDisabled(String sessionId) {
-        if (StringUtils.isBlank(sessionId)) {
+        String normalizedSessionId = normalizeSessionId(sessionId);
+        if (normalizedSessionId == null) {
             return DisabledSets.empty();
         }
-        Map<String, Map<String, Boolean>> overrides = repository.findOverrides(sessionId);
+        Map<String, Map<String, Boolean>> overrides = repository.findOverrides(normalizedSessionId);
         Set<String> disabledSkills = new HashSet<>();
         Set<String> disabledMcps = new HashSet<>();
         overrides.getOrDefault(KIND_SKILL, Map.of()).forEach((id, en) -> {
@@ -140,12 +144,16 @@ public class SessionCapabilityService {
         }
 
         public boolean isSkillDisabled(String name) {
-            return name != null && skills.contains(name);
+            return name != null && skills.contains(name.trim());
         }
 
         public boolean isMcpDisabled(String mcpId) {
-            return mcpId != null && mcps.contains(mcpId);
+            return mcpId != null && mcps.contains(mcpId.trim());
         }
+    }
+
+    private String normalizeSessionId(String sessionId) {
+        return StringUtils.trimToNull(sessionId);
     }
 
     /** 供前端 JSON 序列化的 Map 形状 */

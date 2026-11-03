@@ -73,16 +73,21 @@ public class WorkingMemoryProjector {
             }
             RoleType role = parseRole(row.getRole());
             List<ToolCall> toolCalls = parseToolCalls(row.getToolCallsJson());
+            // originMessageKey 是跨投影身份；hydrate 不带上它，重新投影会生成新的 key。
+            String originMessageKey = row.getOriginMessageKey();
             if (role == RoleType.TOOL) {
-                messages.add(Message.toolMessage(row.getContent(), row.getToolCallId(), row.getBase64Image()));
+                messages.add(Message.toolMessage(row.getContent(), row.getToolCallId(),
+                        row.getBase64Image(), originMessageKey));
             } else if (role == RoleType.ASSISTANT && toolCalls != null && !toolCalls.isEmpty()) {
-                messages.add(Message.fromToolCalls(row.getContent(), row.getReasoningContent(), toolCalls));
+                messages.add(Message.fromToolCalls(row.getContent(), row.getReasoningContent(),
+                        toolCalls, originMessageKey));
             } else if (role == RoleType.ASSISTANT) {
-                messages.add(Message.assistantMessage(row.getContent(), row.getReasoningContent(), row.getBase64Image()));
+                messages.add(Message.assistantMessage(row.getContent(), row.getReasoningContent(),
+                        row.getBase64Image(), originMessageKey));
             } else if (role == RoleType.SYSTEM) {
-                messages.add(Message.systemMessage(row.getContent(), row.getBase64Image()));
+                messages.add(Message.systemMessage(row.getContent(), row.getBase64Image(), originMessageKey));
             } else {
-                messages.add(Message.userMessage(row.getContent(), row.getBase64Image()));
+                messages.add(Message.userMessage(row.getContent(), row.getBase64Image(), originMessageKey));
             }
         }
         return messages;

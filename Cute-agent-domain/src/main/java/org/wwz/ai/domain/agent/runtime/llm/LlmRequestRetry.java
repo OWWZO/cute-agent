@@ -195,6 +195,10 @@ public final class LlmRequestRetry {
                                              int attempt,
                                              int maxAttempts,
                                              RuntimeException error) {
+        // 取消后不再做分类、日志、listener 或延时调度等任何副作用。
+        if (result.isCancelled()) {
+            return;
+        }
         LlmFailureClassification failure = LlmFailureClassifier.classify(error, false);
         if (attempt >= maxAttempts - 1 || !failure.isRetryable()) {
             result.completeExceptionally(error);
@@ -221,6 +225,9 @@ public final class LlmRequestRetry {
         CancellableFuture<R> result = new CancellableFuture<>();
         result.bind(source);
         source.whenComplete((value, error) -> {
+            if (result.isCancelled()) {
+                return;
+            }
             if (error != null) {
                 result.completeExceptionally(error);
             } else {
@@ -240,7 +247,10 @@ public final class LlmRequestRetry {
         CancellableFuture<T> bridged = new CancellableFuture<>();
         bridged.bind(activeRequest);
         result.whenComplete((value, error) -> {
-            if (error != null) {
+            if (result.isCancelled()) {
+                // 取消不是完成：继续向下游传播取消，才能中止在途请求。
+                bridged.cancel(true);
+            } else if (error != null) {
                 bridged.completeExceptionally(error);
             } else {
                 bridged.complete(value);

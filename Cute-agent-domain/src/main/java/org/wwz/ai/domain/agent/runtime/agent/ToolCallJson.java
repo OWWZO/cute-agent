@@ -1,5 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.agent;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
 
@@ -11,7 +13,9 @@ import org.apache.commons.lang3.StringUtils;
  */
 final class ToolCallJson {
 
-    static final ObjectMapper MAPPER = new ObjectMapper();
+    /** 小数保留为 BigDecimal，避免高精度坐标/金额在归一过程中丢精度。 */
+    static final ObjectMapper MAPPER = new ObjectMapper()
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
     private ToolCallJson() {
     }
@@ -22,7 +26,9 @@ final class ToolCallJson {
             return "{}";
         }
         try {
-            return MAPPER.readTree(payload).toString();
+            JsonNode node = MAPPER.readTree(payload);
+            // "null" 会解析成 NullNode；数组/标量同样不是工具入参对象，统一退化为 {}。
+            return node != null && node.isObject() ? node.toString() : "{}";
         } catch (Exception ignore) {
             return "{}";
         }

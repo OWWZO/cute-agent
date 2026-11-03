@@ -8,8 +8,10 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.agent.ReactImplAgent;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
+import org.wwz.ai.domain.agent.runtime.agent.ToolExecutionOutcome;
 import org.wwz.ai.domain.agent.runtime.enums.AgentState;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.enums.RoleType;
 import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.prompt.PlanSolvePrompt;
@@ -65,7 +67,28 @@ public class PlanSolveStep2ReactPathTest {
         Assert.assertEquals(1, count);
     }
 
+    @Test
+    public void shouldSynthesizeFailureWhenPipelineDropsToolCall() {
+        DroppingAgent agent = new DroppingAgent(newContext("drop-outcome"));
+        ToolCall command = ToolCall.builder()
+                .id("")
+                .type("function")
+                .function(ToolCall.Function.builder().name("noop").arguments("{}").build())
+                .build();
+        agent.setToolCalls(List.of(command));
+
+        agent.act();
+
+        Message last = agent.getMemory().getLastMessage();
+        Assert.assertEquals(RoleType.TOOL, last.getRole());
+        Assert.assertTrue(last.getContent().contains("工具执行结果缺失"));
+    }
+
     private ReactImplAgent newReactAgent(String sessionId) {
+        return new ReactImplAgent(newContext(sessionId));
+    }
+
+    private AgentContext newContext(String sessionId) {
         CuteConfig config = new CuteConfig();
         ReflectionTestUtils.setField(config, "reactMaxSteps", 5);
         ReflectionTestUtils.setField(config, "reactModelName", "mock-model");
@@ -91,7 +114,19 @@ public class PlanSolveStep2ReactPathTest {
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config))
                 .printer(new NoopPrinter())
                 .build();
-        return new ReactImplAgent(context);
+        return context;
+    }
+
+    /** 模拟 ToolExecutionPipeline 丢弃空 toolCallId，导致 outcome 表缺项。 */
+    private static final class DroppingAgent extends ReactImplAgent {
+        private DroppingAgent(AgentContext context) {
+            super(context);
+        }
+
+        @Override
+        protected Map<String, ToolExecutionOutcome> executeToolOutcomes(List<ToolCall> commands) {
+            return Map.of();
+        }
     }
 
     private static final class NoopPrinter implements Printer {

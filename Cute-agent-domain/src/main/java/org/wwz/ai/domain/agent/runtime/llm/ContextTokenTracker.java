@@ -73,12 +73,17 @@ public final class ContextTokenTracker {
                                                        TokenCounter counter) {
         TokenCounter tokenCounter = counter == null ? new TokenCounter() : counter;
         TokenCounter.PromptEstimate local = tokenCounter.estimatePrompt(shape);
+        List<Message> shapeMessages = shape == null ? List.of() : shape.getMessages();
+        int shapeMessageCount = shapeMessages == null ? 0 : shapeMessages.size();
         if (snapshot != null
                 && snapshot.isUsageAvailable()
                 && snapshot.getLastProviderContextTokens() > 0
+                // 上下文被裁剪/压缩后长度可能小于锚点：此时 provider 基线已过期，
+                // 继续沿用会严重高估，必须回退本地估算。
+                && snapshot.getAnchorMessageCount() <= shapeMessageCount
                 && Objects.equals(snapshot.getPromptShapeFingerprint(), local.getPromptShapeFingerprint())) {
-            List<Message> messages = shape == null ? List.of() : shape.getMessages();
-            int size = messages == null ? 0 : messages.size();
+            List<Message> messages = shapeMessages;
+            int size = shapeMessageCount;
             int anchor = Math.min(Math.max(snapshot.getAnchorMessageCount(), 0), size);
             List<Message> delta = (messages == null || anchor >= size)
                     ? List.of()

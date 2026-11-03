@@ -111,6 +111,35 @@ public class LlmUsageSnapshotTest {
         Assert.assertEquals(Integer.valueOf(0), snapshot.getCompletionAudioTokens());
     }
 
+    @Test
+    public void test_fromObjectParsesRawJsonString() {
+        LlmUsageSnapshot snapshot = LlmUsageSnapshot.fromObject(
+                "{\"prompt_tokens\":12,\"completion_tokens\":3,\"total_tokens\":15}");
+
+        Assert.assertEquals(Integer.valueOf(12), snapshot.getPromptTokens());
+        Assert.assertEquals(Integer.valueOf(3), snapshot.getCompletionTokens());
+        Assert.assertEquals(Integer.valueOf(15), snapshot.getTotalTokens());
+    }
+
+    @Test
+    public void test_nullAliasDoesNotMaskLaterAliasInJsonNode() throws Exception {
+        LlmUsageSnapshot snapshot = LlmUsageSnapshot.fromJsonNode(
+                new ObjectMapper().readTree("{\"prompt_tokens\":null,\"input_tokens\":7}"));
+
+        Assert.assertEquals(Integer.valueOf(7), snapshot.getPromptTokens());
+    }
+
+    @Test
+    public void test_nullAliasDoesNotMaskLaterAliasInMap() {
+        Map<String, Object> usage = new LinkedHashMap<>();
+        usage.put("prompt_tokens", null);
+        usage.put("input_tokens", 42);
+
+        LlmUsageSnapshot snapshot = LlmUsageSnapshot.fromObject(usage);
+
+        Assert.assertEquals(Integer.valueOf(42), snapshot.getPromptTokens());
+    }
+
     public record UsageRecord(
             Integer completionTokens,
             Integer promptTokens,

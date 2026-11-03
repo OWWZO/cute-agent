@@ -82,11 +82,9 @@ public abstract class ReActAgent extends BaseAgent {
         // 1. 执行思考阶段，判断是否需要行动
         boolean shouldAct = think();
         // 模型已返回、工具尚未开始，或思考被中途取消：都不再按失败继续。
+        // 取消路径必须直接短路：继续执行 act() 会发起用户已放弃的工具/LLM 副作用。
         if (context != null && context.isRunCancelled()) {
             setState(AgentState.FINISHED);
-            if (shouldAct) {
-                act();
-            }
             return "Terminated: User stopped";
         }
         if (!shouldAct) {

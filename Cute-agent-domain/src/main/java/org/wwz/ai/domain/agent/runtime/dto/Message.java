@@ -106,10 +106,16 @@ public class Message {
      * 示例：Message.userMessage("帮我分析这张商品图片", base64Str);
      */
     public static Message userMessage(String content, String base64Image) {
+        return userMessage(content, base64Image, null);
+    }
+
+    /** 重建已持久化消息时保留跨投影的来源锚点。 */
+    public static Message userMessage(String content, String base64Image, String originMessageKey) {
         return Message.builder()
                 .role(RoleType.USER)
                 .content(content)
                 .base64Image(base64Image)
+                .originMessageKey(originMessageKey)
                 .build();
     }
 
@@ -121,10 +127,15 @@ public class Message {
      * 示例：Message.systemMessage("你是一名电商市场分析师，严格按照SOP生成报告", null);
      */
     public static Message systemMessage(String content, String base64Image) {
+        return systemMessage(content, base64Image, null);
+    }
+
+    public static Message systemMessage(String content, String base64Image, String originMessageKey) {
         return Message.builder()
                 .role(RoleType.SYSTEM)
                 .content(content)
                 .base64Image(base64Image)
+                .originMessageKey(originMessageKey)
                 .build();
     }
 
@@ -136,15 +147,23 @@ public class Message {
      * 示例：Message.assistantMessage("以下是产品市场竞争力分析...", null);
      */
     public static Message assistantMessage(String content, String base64Image) {
-        return assistantMessage(content, null, base64Image);
+        return assistantMessage(content, null, base64Image, null);
     }
 
     public static Message assistantMessage(String content, String reasoningContent, String base64Image) {
+        return assistantMessage(content, reasoningContent, base64Image, null);
+    }
+
+    public static Message assistantMessage(String content,
+                                           String reasoningContent,
+                                           String base64Image,
+                                           String originMessageKey) {
         return Message.builder()
                 .role(RoleType.ASSISTANT)
                 .content(content)
                 .reasoningContent(reasoningContent)
                 .base64Image(base64Image)
+                .originMessageKey(originMessageKey)
                 .build();
     }
 
@@ -157,11 +176,19 @@ public class Message {
      * 示例：Message.toolMessage("竞品A的市场份额为20%", "call_123", null);
      */
     public static Message toolMessage(String content, String toolCallId, String base64Image) {
+        return toolMessage(content, toolCallId, base64Image, null);
+    }
+
+    public static Message toolMessage(String content,
+                                      String toolCallId,
+                                      String base64Image,
+                                      String originMessageKey) {
         return Message.builder()
                 .role(RoleType.TOOL)
                 .content(content)
                 .toolCallId(toolCallId)
                 .base64Image(base64Image)
+                .originMessageKey(originMessageKey)
                 .build();
     }
 
@@ -173,15 +200,23 @@ public class Message {
      * 场景：大模型思考后决定调用工具，通过该方法创建包含工具调用指令的助手消息。
      */
     public static Message fromToolCalls(String content, List<ToolCall> toolCalls) {
-        return fromToolCalls(content, null, toolCalls);
+        return fromToolCalls(content, null, toolCalls, null);
     }
 
     public static Message fromToolCalls(String content, String reasoningContent, List<ToolCall> toolCalls) {
+        return fromToolCalls(content, reasoningContent, toolCalls, null);
+    }
+
+    public static Message fromToolCalls(String content,
+                                        String reasoningContent,
+                                        List<ToolCall> toolCalls,
+                                        String originMessageKey) {
         return Message.builder()
                 .role(RoleType.ASSISTANT)
                 .content(content)
                 .reasoningContent(reasoningContent)
                 .toolCalls(toolCalls)
+                .originMessageKey(originMessageKey)
                 .build();
     }
 }
