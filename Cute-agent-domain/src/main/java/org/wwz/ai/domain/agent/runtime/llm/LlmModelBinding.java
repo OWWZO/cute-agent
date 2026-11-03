@@ -20,7 +20,10 @@ public class LlmModelBinding {
     String modelUsage;
     /** 对外展示的模型类型。 */
     String modelType;
-    /** 是否支持深度思考（reasoning_effort）。 */
+    /**
+     * 是否支持深度思考（reasoning_effort）：{@code 1}=支持，{@code 0}=不支持，
+     * {@code null}=未配置（调用方不能直接拆箱，按不支持处理）。
+     */
     Integer supportsThinking;
     String baseUrl;
     String apiKey;

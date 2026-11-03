@@ -9,8 +9,8 @@ public class ToolDefinitionCacheTest {
 
     @Test
     public void reusesSameDefinitionForSameContent() {
-        LlmToolDefinition first = ToolDefinitionCache.getOrCreate("cache-test", "description", "{}");
-        LlmToolDefinition second = ToolDefinitionCache.getOrCreate("cache-test", "description", "{}");
+        LlmToolDefinition first = ToolDefinitionCache.getOrCreateFromRawSchemaString("cache-test", "description", "{}");
+        LlmToolDefinition second = ToolDefinitionCache.getOrCreateFromRawSchemaString("cache-test", "description", "{}");
 
         Assert.assertSame(first, second);
     }
@@ -18,7 +18,7 @@ public class ToolDefinitionCacheTest {
     @Test
     public void maximumSizePreventsUnboundedGrowth() {
         for (int i = 0; i < 4100; i++) {
-            ToolDefinitionCache.getOrCreate("cache-test-" + i, "description", "{}");
+            ToolDefinitionCache.getOrCreateFromRawSchemaString("cache-test-" + i, "description", "{}");
         }
 
         Assert.assertTrue(ToolDefinitionCache.size() <= 4096);

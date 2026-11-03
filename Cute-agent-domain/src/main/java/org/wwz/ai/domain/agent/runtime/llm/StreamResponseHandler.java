@@ -496,8 +496,12 @@ public class StreamResponseHandler {
     private int[] resolveIntervals() {
         int firstInterval = 1;
         int sendInterval = 3;
+        if (cuteConfig == null) {
+            log.warn("CuteConfig not injected; using default stream intervals 1,3");
+            return new int[]{firstInterval, sendInterval};
+        }
         try {
-            String rawConfig = cuteConfig == null || cuteConfig.getMessageInterval() == null
+            String rawConfig = cuteConfig.getMessageInterval() == null
                     ? "1,3"
                     : cuteConfig.getMessageInterval().getOrDefault("llm", "1,3");
             String[] intervalConfig = rawConfig.split(",");

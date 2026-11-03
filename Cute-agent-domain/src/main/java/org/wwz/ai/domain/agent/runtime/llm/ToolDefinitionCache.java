@@ -29,7 +29,11 @@ public final class ToolDefinitionCache {
     private ToolDefinitionCache() {
     }
 
-    public static LlmToolDefinition getOrCreate(String name, String description, String inputSchemaJson) {
+    /**
+     * 仅允许规范化后的 schema 进入缓存，避免等价 schema 生成两条缓存条目。
+     * 外部调用请使用 {@link #getOrCreateFromMap} / {@link #getOrCreateFromRawSchemaString}。
+     */
+    private static LlmToolDefinition getOrCreate(String name, String description, String inputSchemaJson) {
         String toolName = StringUtils.defaultString(name);
         String desc = StringUtils.defaultString(description);
         String schema = StringUtils.defaultString(inputSchemaJson);

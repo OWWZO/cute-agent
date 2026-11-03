@@ -14,6 +14,10 @@ public class ContextUsagePayload {
     private int sys;
     private int tools;
     private int history;
+    /**
+     * 文件/附件占用的 token。当前估算器没有文件级拆分，附件内容计入 {@link #history}，
+     * 因此本字段恒为 0（不是「未统计」）。
+     */
     private int files;
     private int max;
     /** 当前请求实际占用；无实测值时回退为 estimatedTotal */
