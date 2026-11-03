@@ -233,6 +233,8 @@ function conversationRunCount(conversation: CHAT.ConversationHistory) {
   return conversation.chatList.length + conversation.dataChatList.length;
 }
 
+const LOCAL_RECENT_SESSION_LIMIT = 20;
+
 /**
  * 本地“新聊天”空草稿只保留一个；已有内容的会话不受影响。
  *
@@ -271,5 +273,5 @@ export function mergeLocalRecentConversations(
       }
       return !(shouldReplaceEmptyDraft && isEmptyConversationDraft(item));
     }),
-  ].slice(0, 20);
+  ].slice(0, LOCAL_RECENT_SESSION_LIMIT);
 }

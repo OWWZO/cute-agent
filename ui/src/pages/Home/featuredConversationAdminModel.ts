@@ -100,3 +100,7 @@ export function getFeaturedConversationStatusLabel(status?: string) {
       return "未创建";
   }
 }
+
+export function isFeaturedConversationOnline(status?: string): boolean {
+  return (status || "").toUpperCase() === "ONLINE";
+}

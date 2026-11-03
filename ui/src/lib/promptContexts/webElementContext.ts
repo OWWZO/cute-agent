@@ -289,7 +289,7 @@ function parseElementItem(rawItem: string, index: number): WebElementAttachment 
 
 export function parsePromptWebElementContexts(content: string): ParsedWebElementPrompt {
   const blockMatch = /(?:^|\n\n)# Web page elements:\s*\n\n([\s\S]*?)\s*$/.exec(content);
-  if (!blockMatch || blockMatch.index < 0) {
+  if (!blockMatch) {
     return { visibleContent: content, webElementContexts: [] };
   }
 

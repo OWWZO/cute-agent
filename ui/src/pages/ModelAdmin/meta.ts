@@ -9,33 +9,35 @@ export type ProviderPreset = {
 };
 
 /** 常用厂商预设：选中后自动填 baseUrl / path，key 仍手填 */
+const DEFAULT_COMPLETIONS_PATH = "/chat/completions";
+
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: "openai",
     label: "OpenAI",
     baseUrl: "https://api.openai.com/v1",
-    completionsPath: "/chat/completions",
+    completionsPath: DEFAULT_COMPLETIONS_PATH,
     keyHint: "platform.openai.com → API keys",
   },
   {
     id: "deepseek",
     label: "DeepSeek",
     baseUrl: "https://api.deepseek.com/v1",
-    completionsPath: "/chat/completions",
+    completionsPath: DEFAULT_COMPLETIONS_PATH,
     keyHint: "platform.deepseek.com",
   },
   {
     id: "moonshot",
     label: "Kimi / Moonshot",
     baseUrl: "https://api.moonshot.cn/v1",
-    completionsPath: "/chat/completions",
+    completionsPath: DEFAULT_COMPLETIONS_PATH,
     keyHint: "platform.moonshot.cn",
   },
   {
     id: "custom",
     label: "自定义",
     baseUrl: "",
-    completionsPath: "/chat/completions",
+    completionsPath: DEFAULT_COMPLETIONS_PATH,
     keyHint: "手填 Base URL 与 Key",
   },
 ];

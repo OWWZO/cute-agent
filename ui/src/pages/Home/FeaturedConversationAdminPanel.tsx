@@ -5,7 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { FeaturedConversationFormState } from "./featuredConversationAdminModel";
-import { getFeaturedConversationStatusLabel } from "./featuredConversationAdminModel";
+import {
+  getFeaturedConversationStatusLabel,
+  isFeaturedConversationOnline,
+} from "./featuredConversationAdminModel";
 
 type FeaturedConversationAdminPanelProps = {
   session: ConversationSessionItem;
@@ -16,14 +19,14 @@ type FeaturedConversationAdminPanelProps = {
   onChange: (patch: Partial<FeaturedConversationFormState>) => void;
   onClose: () => void;
   onSaveDraft: () => void;
-  onPublish: () => void;
+  onToggleStatus: () => void;
 };
 
 function renderActionLabel(record: FeaturedConversationAdminRecord | null) {
   if (!record) {
     return "创建并上线";
   }
-  return record.status?.toUpperCase() === "ONLINE" ? "下线" : "发布上线";
+  return isFeaturedConversationOnline(record.status) ? "下线" : "发布上线";
 }
 
 export default function FeaturedConversationAdminPanel(
@@ -38,7 +41,7 @@ export default function FeaturedConversationAdminPanel(
     onChange,
     onClose,
     onSaveDraft,
-    onPublish,
+    onToggleStatus,
   } = props;
 
   if (loading) {
@@ -168,11 +171,9 @@ export default function FeaturedConversationAdminPanel(
           {record ? "保存修改" : "保存草稿"}
         </Button>
         <Button
-          variant={
-            record?.status?.toUpperCase() === "ONLINE" ? "destructive" : "default"
-          }
+          variant={isFeaturedConversationOnline(record?.status) ? "destructive" : "default"}
           disabled={submitting}
-          onClick={onPublish}
+          onClick={onToggleStatus}
         >
           {renderActionLabel(record)}
         </Button>

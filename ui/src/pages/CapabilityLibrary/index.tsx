@@ -37,6 +37,17 @@ import { isAdminUser, useAuth } from "@/stores/auth";
 
 type Props = { embedded?: boolean };
 
+function createDefaultMcpForm(): McpRecord {
+  return {
+    mcpId: "",
+    mcpName: "",
+    transportType: "streamable_http",
+    transportConfig: '{"baseUri":"http://127.0.0.1:8080/mcp"}',
+    requestTimeout: 5,
+    status: 1,
+  };
+}
+
 const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
   const auth = useAuth();
   const readOnly = !isAdminUser(auth.user);
@@ -62,14 +73,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
 
   // mcp form
   const [mcpOpen, setMcpOpen] = useState(false);
-  const [mcpForm, setMcpForm] = useState<McpRecord>({
-    mcpId: "",
-    mcpName: "",
-    transportType: "streamable_http",
-    transportConfig: '{"baseUri":"http://127.0.0.1:8080/mcp"}',
-    requestTimeout: 5,
-    status: 1,
-  });
+  const [mcpForm, setMcpForm] = useState<McpRecord>(createDefaultMcpForm);
   const mcpFormLocked = readOnly && mcpForm.id != null;
 
   const refresh = useCallback(async () => {
@@ -445,15 +449,7 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                   type="button"
                   className="workspace-admin-primary"
                   onClick={() => {
-                    setMcpForm({
-                      mcpId: "",
-                      mcpName: "",
-                      transportType: "streamable_http",
-                      transportConfig:
-                        '{"baseUri":"http://127.0.0.1:8080/mcp"}',
-                      requestTimeout: 5,
-                      status: 1,
-                    });
+                    setMcpForm(createDefaultMcpForm());
                     setMcpOpen(true);
                   }}
                 >

@@ -8,6 +8,10 @@
  * 颜色值写在 global.css 的 `.kimi-agent-name.is-*` 里，不依赖 Tailwind 调色板是否被保留。
  */
 
+/**
+ * The order is part of the stable hash and the `.kimi-agent-name.is-*` CSS contract.
+ * Do not reorder or mutate the palette without updating both consumers.
+ */
 export const SUBAGENT_COLORS = [
   "yellow",
   "red",
@@ -30,5 +34,5 @@ export function resolveSubagentColorFromName(name: string): SubagentColor {
   for (let index = 0; index < name.length; index += 1) {
     hash = (hash * 31 + name.charCodeAt(index)) >>> 0;
   }
-  return SUBAGENT_COLORS[hash % SUBAGENT_COLORS.length] ?? "blue";
+  return SUBAGENT_COLORS[hash % SUBAGENT_COLORS.length];
 }

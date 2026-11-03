@@ -25,11 +25,17 @@ type FeaturedConversationsViewProps = {
   onSelectCard?: (featuredId: string) => void;
 };
 
+const PUBLIC_CASES_LABEL = "公开案例库";
+const FEATURED_CONVERSATIONS_TITLE = "精品对话";
+const FEATURED_CONVERSATIONS_DESCRIPTION =
+  "浏览管理员公开发布的高质量会话回放，直接查看完整过程与结论。";
+const BACK_TO_HOME_LABEL = "返回首页";
+
 export function FeaturedConversationsView(
   props: FeaturedConversationsViewProps
 ) {
   const hasCards = props.page.list.length > 0;
-  const featuredCount = props.page.total || props.page.list.length;
+  const totalFeaturedCount = props.page.total || props.page.list.length;
 
   return (
     <div className="h-full w-full overflow-y-auto bg-[var(--chat-surface-soft)] text-[var(--chat-text)]">
@@ -38,13 +44,13 @@ export function FeaturedConversationsView(
           <div className="min-w-0">
             <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-[var(--chat-surface-soft)] px-2.5 py-1 text-ui-sm text-[var(--chat-text-muted)]">
               <Sparkles className="h-3.5 w-3.5" />
-              公开案例库
+              {PUBLIC_CASES_LABEL}
             </div>
             <h1 className="text-display-lg font-semibold tracking-[-0.02em] text-[var(--chat-text)] sm:text-display-2xl">
-              精品对话
+              {FEATURED_CONVERSATIONS_TITLE}
             </h1>
             <p className="mt-2 max-w-[48ch] text-ui-base leading-7 text-[var(--chat-text-muted)]">
-              浏览管理员公开发布的高质量会话回放，直接查看完整过程与结论。
+              {FEATURED_CONVERSATIONS_DESCRIPTION}
             </p>
           </div>
 
@@ -56,14 +62,14 @@ export function FeaturedConversationsView(
               className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-[var(--chat-surface-soft)] px-3.5 text-ui-caption font-medium text-[var(--chat-text-soft)] transition-colors hover:text-[var(--chat-text)]"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>返回首页</span>
+              <span>{BACK_TO_HOME_LABEL}</span>
             </Link>
           ) : null}
         </div>
 
         {hasCards && !props.loading ? (
           <div className="mb-5 flex items-center justify-between gap-3 text-ui-sm text-[var(--chat-text-muted)]">
-            <span className="tabular-nums">共 {featuredCount} 个案例</span>
+            <span className="tabular-nums">共 {totalFeaturedCount} 个案例</span>
             <span>点击卡片查看完整回放</span>
           </div>
         ) : null}

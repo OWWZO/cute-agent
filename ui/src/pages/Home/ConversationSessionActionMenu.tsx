@@ -13,6 +13,9 @@ type ConversationSessionActionMenuProps = {
 
 const menuItemClassName =
   "flex w-full items-center gap-2 px-3 py-2 text-ui-sm transition-colors";
+const FEATURE_ACTION_LABEL = "设为精品";
+const PIN_ACTION_LABEL = "置顶";
+const DELETE_ACTION_LABEL = "删除";
 
 export default function ConversationSessionActionMenu(
   props: ConversationSessionActionMenuProps
@@ -38,7 +41,7 @@ export default function ConversationSessionActionMenu(
         )}
       >
         <Star className="h-3.5 w-3.5" />
-        <span>设为精品</span>
+        <span>{FEATURE_ACTION_LABEL}</span>
       </button>
       <button
         type="button"
@@ -46,7 +49,7 @@ export default function ConversationSessionActionMenu(
         className={`${menuItemClassName} text-[var(--chat-text-soft)] hover:bg-[var(--chat-surface-soft)] hover:text-[var(--chat-text)]`}
       >
         <Pin className="h-3.5 w-3.5" />
-        <span>置顶</span>
+        <span>{PIN_ACTION_LABEL}</span>
       </button>
       <button
         type="button"
@@ -54,7 +57,7 @@ export default function ConversationSessionActionMenu(
         className={`${menuItemClassName} text-[var(--chat-text-soft)] hover:bg-[var(--chat-surface-soft)] hover:text-[var(--destructive)]`}
       >
         <Trash2 className="h-3.5 w-3.5" />
-        <span>删除</span>
+        <span>{DELETE_ACTION_LABEL}</span>
       </button>
     </div>
   );

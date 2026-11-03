@@ -132,6 +132,9 @@ export default function WelcomeView(props: {
   const hasSuggestedQuestions = suggestedQuestions.length > 0;
   const hasFeaturedCards = props.featuredCards.length > 0;
   const { reduce } = useMotionConfig();
+  const softTransition = reduce
+    ? { duration: DURATION.reduced }
+    : { ...SPRING_SOFT };
 
   return (
     <div className="h-full w-full overflow-y-auto px-6 md:px-12 lg:px-16">
@@ -170,14 +173,10 @@ export default function WelcomeView(props: {
             initial={false}
             animate={{
               opacity: hasSuggestedQuestions ? 1 : 0,
-              y: reduce ? 0 : hasSuggestedQuestions ? 0 : -8,
+              y: reduce || hasSuggestedQuestions ? 0 : -8,
             }}
             // 切换分类时推荐问题整块「让位」：弹簧让收起/展开跟手且可中断。
-            transition={
-              reduce
-                ? { duration: DURATION.reduced }
-                : { ...SPRING_SOFT }
-            }
+            transition={softTransition}
             className={cn(
               "mx-auto w-full max-w-[960px] overflow-visible",
               hasSuggestedQuestions
@@ -209,11 +208,7 @@ export default function WelcomeView(props: {
                         <motion.span
                           layoutId="welcome-suggestion-category-thumb"
                           className="absolute inset-0 rounded-full bg-[var(--chat-surface)] shadow-[var(--shadow-sm)]"
-                          transition={
-                            reduce
-                              ? { duration: DURATION.reduced }
-                              : { ...SPRING_SOFT }
-                          }
+                          transition={softTransition}
                           aria-hidden="true"
                         />
                       ) : null}

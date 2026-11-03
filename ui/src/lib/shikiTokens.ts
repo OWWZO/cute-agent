@@ -147,7 +147,7 @@ function writeTokenCache(key: string, value: TokenizedCode): void {
 }
 
 /**
- * 逐行 tokenize（异步）。未知语言回退到 `text`，`text` 自身失败则抛错由调用方兜底。
+ * 逐行 tokenize（异步）。未知语言回退到 `text`。
  *
  * 与 `KimiCodeFence` / 内联 diff 共用，避免两处各写一份 shiki 调用与回退规则。
  */
@@ -194,7 +194,6 @@ export function tokenizeCode(
       // 未知值由下方 catch 统一回退到 text。
       return await tokenize(language as BundledLanguage);
     } catch {
-      if (language === TEXT_LANGUAGE) throw new Error("Shiki language unavailable");
       return await tokenize(TEXT_LANGUAGE);
     }
   })()

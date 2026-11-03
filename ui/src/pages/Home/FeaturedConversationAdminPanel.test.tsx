@@ -47,7 +47,7 @@ describe("FeaturedConversationAdminPanel", () => {
         onChange={() => {}}
         onClose={() => {}}
         onSaveDraft={() => {}}
-        onPublish={() => {}}
+        onToggleStatus={() => {}}
       />
     );
 
@@ -72,7 +72,7 @@ describe("FeaturedConversationAdminPanel", () => {
         onChange={() => {}}
         onClose={() => {}}
         onSaveDraft={() => {}}
-        onPublish={() => {}}
+        onToggleStatus={() => {}}
       />
     );
 
