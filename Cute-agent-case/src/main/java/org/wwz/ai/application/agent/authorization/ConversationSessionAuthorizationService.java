@@ -39,17 +39,19 @@ public class ConversationSessionAuthorizationService {
     /**
      * 交互入口：校验归属，且会话必须是可交互的用户会话。
      * <p>
-     * 子智能体隐藏会话（{@code session_kind=subagent}）为只读，禁止提交新 query / 继续对话 / 上传附件。
+     * {@link SessionKind#CONVERSATION} 与 {@link SessionKind#SUBAGENT} 均可交互；其他或未知类型
+     * 按只读会话拒绝。
      */
     public DialogueSession ensureSessionAccessible(String userId, String sessionId, String queryText) {
-        return ensureSessionAccessible(userId, sessionId, queryText, true);
+        return ensureSessionAccessibleAndBind(userId, sessionId, queryText);
     }
 
     /**
      * 续跑入口：校验归属，且会话必须是可交互的用户会话。
      * <p>
-     * 与 {@link #ensureExistingSessionAccessible} 的区别在于：本方法拒绝只读会话。
-     * resume（计划审批 / 追问 / 桌面控制）属于交互行为，子会话不可参与。
+     * 与 {@link #ensureExistingSessionAccessible} 的区别在于：本方法会校验会话类型。
+     * {@link SessionKind#CONVERSATION} 与 {@link SessionKind#SUBAGENT} 均可续跑，其他或未知类型
+     * 按只读会话拒绝。
      */
     public DialogueSession ensureInteractiveSessionAccessible(String userId, String sessionId) {
         if (StringUtils.isAnyBlank(userId, sessionId)) {
@@ -124,18 +126,14 @@ public class ConversationSessionAuthorizationService {
         return port.isOwner(session.getBindingId(), userId);
     }
 
-    private DialogueSession ensureSessionAccessible(String userId,
-                                                   String sessionId,
-                                                   String queryText,
-                                                   boolean allowBindWhenMissing) {
+    private DialogueSession ensureSessionAccessibleAndBind(String userId,
+                                                           String sessionId,
+                                                           String queryText) {
         if (StringUtils.isAnyBlank(userId, sessionId)) {
             throw new IllegalArgumentException("userId 和 sessionId 不能为空");
         }
         DialogueSession existing = executionLedgerReadRepository.querySessionEntity(sessionId);
         if (existing == null) {
-            if (!allowBindWhenMissing) {
-                throw new SessionOwnershipDeniedException("当前会话不存在");
-            }
             LocalDateTime now = LocalDateTime.now();
             executionLedgerWriteRepository.upsertSession(DialogueSessionUpsertRecord.builder()
                     .sessionId(sessionId)
@@ -203,10 +201,12 @@ public class ConversationSessionAuthorizationService {
     }
 
     /**
-     * 断言会话可交互。未知/缺失类型按 fail-closed 处理（见 {@link SessionKind#fromCode}）。
+     * 断言非 null 会话可交互。未知/缺失类型按 fail-closed 处理（见 {@link SessionKind#fromCode}）。
      * <p>
      * 子会话与主会话同构（独立 run / 记忆 / 观察流），用户可以从会话树点进去继续对话，
      * 因此 {@link SessionKind#SUBAGENT} 一并放行。
+     * <p>
+     * 调用方负责先确认会话存在；本方法对 null 直接返回，不能作为会话存在性的校验。
      */
     private static void assertInteractive(DialogueSession session) {
         if (session == null) {

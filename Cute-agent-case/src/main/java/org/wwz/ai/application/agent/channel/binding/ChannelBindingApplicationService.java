@@ -52,7 +52,10 @@ public class ChannelBindingApplicationService {
         }
     }
 
-    /** owner 校验 + 状态校验，供 retry / unbind / sessions 复用。 */
+    /**
+     * 校验绑定存在且属于 {@code ownerUserId}，供 retry / unbind / sessions 复用。
+     * <p>本方法不校验绑定状态；需要状态前置条件的调用方必须在返回后自行检查。</p>
+     */
     public ChannelBinding requireOwned(Long bindingId, String ownerUserId) {
         ChannelBinding binding = bindingRepository.findById(bindingId)
                 .orElseThrow(() -> new IllegalStateException("绑定不存在"));
