@@ -4,6 +4,7 @@ import java.util.Map;
 
 /**
  * 单条向量召回结果。
+ * <p>{@code payload} 只做浅拷贝：Map 结构不可变，但其中的可变值对象仍与调用方共享。</p>
  */
 public final class VectorSearchHit {
 

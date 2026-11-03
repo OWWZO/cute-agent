@@ -1,5 +1,8 @@
 package org.wwz.ai.domain.agent.rag.model.embedding;
 
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+
 import java.util.List;
 
 /**
@@ -7,6 +10,8 @@ import java.util.List;
  *
  * <p>只描述 RAG 需要的输入语义，不携带远端 embedding 服务的请求 DTO。</p>
  */
+@EqualsAndHashCode
+@ToString
 public final class TextEmbeddingRequest {
 
     private final List<String> texts;

@@ -285,6 +285,7 @@ public class Nl2SqlQueryService {
         DataQuerySchema schema = columnMap.getOrDefault(StringUtils.lowerCase(filter.getCol()),
                 columnMap.get(StringUtils.upperCase(filter.getCol())));
         filter.setName(schema == null ? filter.getCol() : schema.getColumnName());
+        filter.setDataType(schema == null ? null : schema.getDataType());
         return filter;
     }
 
