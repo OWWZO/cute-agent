@@ -128,6 +128,19 @@ public class SendMessageTool implements BaseTool {
                 .createdAtMs(System.currentTimeMillis())
                 .build();
         int queued = SessionAgentMailboxHub.offer(sessionId, target.agentId, inject);
+        if (queued == SessionAgentMailboxHub.MAILBOX_CLOSED) {
+            // isActive 检查后邮箱被并发关闭：仍在跑说明处于启动/收尾窗口，显式报错让模型稍后重试；
+            // 已结束则回退为后台唤醒，消息不会静默丢失。
+            if (isBackgroundRunning(agentContext, target)) {
+                return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, Map.of(
+                        "ok", false,
+                        "to", to,
+                        "agentId", target.agentId,
+                        "message", "目标子 Agent 正在启动或收尾，邮箱暂不可用，请稍后重试。"
+                ));
+            }
+            return resumeStopped(agentContext, to, target, message, summary);
+        }
         if (queued < 0) {
             return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, Map.of(
                     "ok", false,
