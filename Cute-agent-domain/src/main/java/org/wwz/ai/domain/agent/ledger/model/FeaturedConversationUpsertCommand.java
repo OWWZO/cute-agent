@@ -11,6 +11,11 @@ import java.util.List;
 
 /**
  * 精品对话新增或更新命令。
+ * <p>新增和更新共用同一个类型：{@code featuredId} 与 {@code sessionId} 均为必填，
+ * 任一为空白时仓储直接返回 {@code false} 且不写库。仓储先按 {@code featuredId} 查找已有记录，
+ * 找不到再按 {@code sessionId} 查找：命中则更新（保留已有 status / publishedBy / publishedAt），
+ * 未命中才插入（status 默认 {@code OFFLINE}）。因此更新已有记录时必须传对它的
+ * {@code featuredId}，不能依赖「不传即新增」。</p>
  */
 @Data
 @Builder

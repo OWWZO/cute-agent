@@ -55,6 +55,10 @@ public interface IExecutionLedgerReadRepository {
      */
     List<ToolInvocation> queryToolInvocationsByRunIds(List<Long> runIds);
 
+    /**
+     * 查询 run 自身产物，不折叠子 Agent 血缘；Agent 卡投影请用
+     * {@link #queryArtifactsByRunIdWithSubagentFold(Long)}。
+     */
     List<ArtifactRecord> queryArtifactsByRunId(Long runId);
 
     /**
@@ -123,7 +127,9 @@ public interface IExecutionLedgerReadRepository {
     List<DialogueSessionView> queryRecentSessions(String userId, ConversationSessionCursor after, int limit);
 
     /**
-     * 按 runId 批量查询产物。契约同 {@link #queryLlmInvocationsByRunIds(List)}。
+     * 按 runId 批量查询产物，只返回这些 run 自身的行，不折叠子 Agent 血缘；
+     * Agent 卡投影请用 {@link #queryArtifactsByRunIdsWithSubagentFold(List)}。
+     * <p>契约同 {@link #queryLlmInvocationsByRunIds(List)}。</p>
      */
     List<ArtifactRecord> queryArtifactsByRunIds(List<Long> runIds);
 

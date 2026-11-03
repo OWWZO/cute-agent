@@ -31,7 +31,15 @@ public class LlmInvocation {
     /** 当前步号 */
     private Integer stepNo;
 
-    /** ask / askTool */
+    /**
+     * 调用类型，取值见
+     * {@link org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants#CALL_KIND_ASK}、
+     * {@link org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants#CALL_KIND_ASK_TOOL}、
+     * {@link org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants#CALL_KIND_INTERNAL_DIGITAL_EMPLOYEE}、
+     * {@link org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants#CALL_KIND_INTERNAL_COMPACT}。
+     * <p>该列是自由文本，写入方必须使用上述常量；拼写错误不会报错，但会静默破坏
+     * 历史回放与 UI 过滤。</p>
+     */
     private String callKind;
 
     /** 是否流式：{@code 1}=是，{@code 0}=否，{@code null}=上游未记录（未知，不等同于 0）。 */

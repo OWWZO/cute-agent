@@ -29,15 +29,19 @@ public class FeaturedConversationAdminView {
 
     private List<String> tags;
 
+    /** 封面地址；{@code null} 表示未配置或历史行未记录。 */
     private String coverUrl;
 
+    /** 排序值，越大越靠前；写入时 {@code null} 归一化为 0，历史行可能为 {@code null}。 */
     private Integer sortOrder;
 
     /** 发布状态：{@code ONLINE} / {@code OFFLINE}。 */
     private String status;
 
+    /** 首次发布时间；草稿或从未发布的记录为 {@code null}。 */
     private LocalDateTime publishedAt;
 
+    /** 最近更新时间；新建/更新时写入，历史行可能为 {@code null}。 */
     private LocalDateTime updatedAt;
 
     /**

@@ -54,8 +54,14 @@ public class DialogueSessionView {
 
     private Integer failedRunCount;
 
+    /** 会话首次 run 的开始时间；{@code null} 表示尚未记录。 */
     private LocalDateTime startedAt;
 
+    /**
+     * 最近一次活动时间：run 开始与结束都会刷新。
+     * <p>会话列表分页排序与 {@link ConversationSessionCursor} 均以该字段为准；
+     * {@code null} 表示未记录。</p>
+     */
     private LocalDateTime lastActiveAt;
 
     /** 会话级模型标识；{@code null} 表示用户从未显式选择过。 */
@@ -67,8 +73,12 @@ public class DialogueSessionView {
     /** 思考强度（low/medium/high）；{@code null} 表示用默认。 */
     private String thinkingEffort;
 
-    /** Deep Think 开关；派生 {@code agentType}。 */
+    /**
+     * Deep Think 开关；派生 {@code agentType}（{@code 1} → plan_solve，{@code 0} → react）。
+     * <p>作为查询视图可能为 {@code null}（未记录），比较前必须判空，不能直接拆箱。</p>
+     */
     private Integer deepThink;
 
+    /** 会话行创建时间，仅审计用；活跃度排序请用 {@link #lastActiveAt}。 */
     private LocalDateTime createTime;
 }

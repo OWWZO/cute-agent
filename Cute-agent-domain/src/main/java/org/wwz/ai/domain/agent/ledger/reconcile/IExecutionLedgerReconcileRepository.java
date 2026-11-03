@@ -13,6 +13,10 @@ import java.util.List;
  * 刻意与 {@link org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository} 分开：
  * 对账只在启动跑一次，只用到「三类孤儿扫描 + 四个终态写入」，单独成口可以让对账器
  * 与健康路径解耦，也便于用很小的内存 stub 做单测。
+ * <p><b>扫描排序契约：</b>三个孤儿扫描方法都必须按稳定顺序返回——run / tool 按
+ * {@code started_at, id} 升序，后台任务按 {@code started_at_ms, id} 升序。调用方
+ * {@code BackgroundRunReconciler} 不带 cursor/offset 重复分页，依赖「已收敛的行退出结果集」
+ * 推进；排序不稳定会导致同一页被反复返回（直到页数上限）或漏扫。</p>
  */
 public interface IExecutionLedgerReconcileRepository {
 
@@ -23,6 +27,11 @@ public interface IExecutionLedgerReconcileRepository {
 
     /**
      * 扫「父 run 已终态、自身仍 RUNNING 且 finished_at 为空」的工具孤儿。
+     * <p>完整谓词：{@code tool_invocation.status = RUNNING}、{@code finished_at IS NULL}、
+     * {@code deleted = 0}、父 run 的 status 为终态，且<b>工具自身的
+     * {@code started_at < startedBefore}</b>。{@code startedBefore} 与 run 扫描共用同一个
+     * 宽限窗边界，同时约束工具自己的 {@code started_at}：晚于该边界的后台工具本轮不扫，
+     * 留待下一次启动。</p>
      */
     List<ToolInvocation> queryOrphanedRunningToolInvocations(LocalDateTime startedBefore, int limit);
 

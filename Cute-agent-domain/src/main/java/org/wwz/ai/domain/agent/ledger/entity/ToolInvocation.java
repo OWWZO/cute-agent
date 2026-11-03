@@ -60,10 +60,18 @@ public class ToolInvocation {
     /** 入参 JSON */
     private String inputJson;
 
-    /** 主智能体 observation（模型实际看到的紧凑文本，与 working_memory 一致） */
+    /**
+     * 主智能体 observation（模型实际看到的紧凑文本，与 working_memory 一致）。
+     * <p>可为 {@code null}；历史行可能只有该列，读取侧在 {@code toolResult} 为空时回落到它。</p>
+     */
     private String llmObservation;
 
-    /** 工具完整结果 JSON（历史回放 / 前端卡片 / 右侧预览用） */
+    /**
+     * 工具完整结果 JSON（历史回放 / 前端卡片 / 右侧预览用）。
+     * <p>可为 {@code null}（历史行通常为空），读取侧应回落到 {@code llmObservation}。
+     * 后台 ACK 判定必须以该列的完整 JSON 为准：{@code llmObservation} 是投影后的紧凑文本，
+     * 解析不出 {@code run_in_background} / {@code task_id}。</p>
+     */
     private String toolResult;
 
     /**

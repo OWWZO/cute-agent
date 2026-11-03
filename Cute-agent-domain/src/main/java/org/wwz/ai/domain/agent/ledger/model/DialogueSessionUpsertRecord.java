@@ -83,8 +83,10 @@ public class DialogueSessionUpsertRecord {
 
     /**
      * 会话级模型标识。
-     * <p>与 {@code session_kind} 相反，这四列<b>要</b>进 ON DUPLICATE 段——用户切换模型时
-     * 必须能更新。{@code null} 表示「本轮未显式选择」，SQL 用 COALESCE 保留库里已有的值。</p>
+     * <p>与 {@code session_kind} 相反，以下三列（{@code model} / {@code thinking} /
+     * {@code thinkingEffort}）<b>要</b>进 ON DUPLICATE 段——用户切换模型时必须能更新。
+     * {@code null} 表示「本轮未显式选择」，SQL 用 COALESCE 保留库里已有的值。
+     * 紧邻的 {@code deepThink} 不走 COALESCE，见其自身注释。</p>
      */
     private String model;
 
