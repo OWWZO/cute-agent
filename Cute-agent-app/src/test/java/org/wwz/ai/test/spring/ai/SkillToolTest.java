@@ -44,7 +44,8 @@ public class SkillToolTest {
                 skillRegistry,
                 new DefaultSkillLoader(skillRegistry, new SkillMarkdownParser(), skillPathGuard),
                 layout,
-                new SkillScriptDiscoverer(skillPathGuard));
+                new SkillScriptDiscoverer(skillPathGuard),
+                options);
     }
 
     @Test

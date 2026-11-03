@@ -35,7 +35,7 @@ public class SkillRuntimeLayout {
 
     public String render(String skillName, String content) {
         if (content == null || content.isEmpty()) {
-            return content == null ? "" : content;
+            return "";
         }
         return content
                 .replace(PLACEHOLDER_SKILL_DIR, dirOf(skillName))

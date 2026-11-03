@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.tool.skill;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
 
@@ -22,6 +23,7 @@ import java.util.Set;
 /**
  * 发现 skill 下注册脚本，支持 scripts/ 自动扫描与 scripts.yaml 增强配置。
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class SkillScriptDiscoverer {
@@ -46,7 +48,13 @@ public class SkillScriptDiscoverer {
         // 自动扫描结果先建立基础集合，再由 scripts.yaml 按名称覆盖或增强，兼容简单 skill 与显式配置。
         Map<String, SkillScriptDefinition> discoveredScripts = discoverFromScriptsDirectory(normalizedSkillDirectory);
         Map<String, SkillScriptDefinition> configuredScripts = discoverFromScriptsYaml(normalizedSkillDirectory);
-        configuredScripts.forEach(discoveredScripts::put);
+        configuredScripts.forEach((name, script) -> {
+            if (discoveredScripts.containsKey(name)) {
+                log.warn("scripts.yaml overrides auto-discovered script '{}' under {}",
+                        name, normalizedSkillDirectory);
+            }
+            discoveredScripts.put(name, script);
+        });
         return discoveredScripts;
     }
 

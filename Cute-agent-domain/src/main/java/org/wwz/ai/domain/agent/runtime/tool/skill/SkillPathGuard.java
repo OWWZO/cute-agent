@@ -16,9 +16,6 @@ import java.util.regex.Pattern;
 @Component
 public class SkillPathGuard {
 
-    /** Windows 盘符前缀，例如 {@code C:foo}、{@code C:\foo}。 */
-    private static final Pattern WINDOWS_DRIVE = Pattern.compile("^[A-Za-z]:.*");
-
     /** UNC 前缀，例如 {@code //server/share}。 */
     private static final Pattern UNC_PREFIX = Pattern.compile("^//[^/].*");
 
@@ -56,9 +53,7 @@ public class SkillPathGuard {
         if (UNC_PREFIX.matcher(normalized).matches()) {
             return true;
         }
-        if (WINDOWS_DRIVE.matcher(normalized).matches()) {
-            return true;
-        }
+        // 盘符（C:/...、C:...）都含冒号，由下面的检查统一覆盖。
         if (normalized.contains(":")) {
             return true;
         }

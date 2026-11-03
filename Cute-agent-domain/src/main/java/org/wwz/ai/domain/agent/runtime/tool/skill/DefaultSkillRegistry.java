@@ -243,12 +243,6 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
                         return Optional.of(descriptor);
                     }
                 }
-                String categorized = rest.replace(':', '/');
-                for (SkillDescriptor descriptor : descriptors) {
-                    if (categorized.equals(descriptor.getRef().relativePath())) {
-                        return Optional.of(descriptor);
-                    }
-                }
             }
         }
         List<SkillDescriptor> sameName = byName.get(trimmed);

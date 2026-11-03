@@ -130,7 +130,8 @@ public class SkillCatalogLoaderTest {
                 catalog,
                 new DefaultSkillLoader(catalog, new SkillMarkdownParser(), guard),
                 new SkillRuntimeLayout(SkillRuntimeOptions.builder().build()),
-                new SkillScriptDiscoverer(guard));
+                new SkillScriptDiscoverer(guard),
+                SkillRuntimeOptions.builder().build());
 
         String index = SkillPromptIndexBuilder.build(catalog.list());
         Assert.assertTrue(index.contains(SkillPromptIndexBuilder.AVAILABLE_SKILLS_OPEN));
@@ -177,7 +178,8 @@ public class SkillCatalogLoaderTest {
                 catalog,
                 new DefaultSkillLoader(catalog, new SkillMarkdownParser(), guard),
                 new SkillRuntimeLayout(SkillRuntimeOptions.builder().build()),
-                new SkillScriptDiscoverer(guard));
+                new SkillScriptDiscoverer(guard),
+                SkillRuntimeOptions.builder().build());
         SkillsSearchTool searchTool = new SkillsSearchTool(catalog);
 
         ToolResultPayload search = (ToolResultPayload) searchTool.execute(Map.of("query", "SQL 指标"), null);
