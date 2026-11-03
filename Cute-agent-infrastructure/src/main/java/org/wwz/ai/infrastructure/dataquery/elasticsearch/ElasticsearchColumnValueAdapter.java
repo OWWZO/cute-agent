@@ -34,6 +34,8 @@ import java.util.Map;
 @Component
 public class ElasticsearchColumnValueAdapter implements ColumnValueSearchPort, ColumnValueIndexAdminPort {
 
+    private static final int MAX_RESULT_SIZE = 1000;
+
     private final RestHighLevelClient client;
 
     @Autowired
@@ -83,7 +85,7 @@ public class ElasticsearchColumnValueAdapter implements ColumnValueSearchPort, C
                         .filter(QueryBuilders.termsQuery("modelCode", request.getModelCodes()))
                         .must(QueryBuilders.matchQuery("value", request.getQuery())))
                 .sort(SortBuilders.scoreSort().order(SortOrder.DESC))
-                .size(request.getLimit());
+                .size(Math.min(request.getLimit(), MAX_RESULT_SIZE));
         SearchResponse response = client.search(
                 new SearchRequest(ElasticsearchDataQueryDefaults.COLUMN_VALUE_INDEX_NAME).source(sourceBuilder), RequestOptions.DEFAULT);
         SearchHit[] hits = response.getHits().getHits();

@@ -14,6 +14,10 @@ public interface IWorkingMemoryTurnDao {
 
     WorkingMemoryTurn selectByRequestId(@Param("requestId") String requestId);
 
+    /**
+     * 查询指定会话与作用域内全部 READY turns，按 {@code turn_seq} 升序返回。
+     * 调用方依赖该顺序重建消息序列。
+     */
     java.util.List<WorkingMemoryTurn> selectReadyBySessionIdAndScope(@Param("sessionId") String sessionId,
                                                                      @Param("memoryScope") String memoryScope);
 

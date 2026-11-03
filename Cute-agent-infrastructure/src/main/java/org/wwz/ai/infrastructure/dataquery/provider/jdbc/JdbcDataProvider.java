@@ -77,13 +77,16 @@ public class JdbcDataProvider implements DataProvider<JdbcQueryRequest> {
                 List<Map<String, Object>> result = new ArrayList<>();
                 ResultSetMetaData metaData = rs.getMetaData();
                 List<String> columnList = getColumnList(metaData);
+                int[] columnTypes = new int[columnList.size()];
+                for (int i = 1; i <= columnList.size(); i++) {
+                    columnTypes[i - 1] = metaData.getColumnType(i);
+                }
                 queryResult.setColumnList(columnList);
                 // 结果按列标签建行，并按 JDBC 类型做最小转换，避免 BigDecimal/整数类型在后续 JSON 序列化时失真。
                 while (rs.next()) {
                     Map<String, Object> row = new HashMap<>();
                     for (int i = 1; i <= columnList.size(); i++) {
-                        int columnType = metaData.getColumnType(i);
-                        row.put(columnList.get(i - 1), parseValue(rs, columnType, i));
+                        row.put(columnList.get(i - 1), parseValue(rs, columnTypes[i - 1], i));
                     }
                     result.add(row);
                 }

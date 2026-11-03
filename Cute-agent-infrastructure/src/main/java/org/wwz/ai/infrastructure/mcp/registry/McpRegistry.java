@@ -83,6 +83,11 @@ public class McpRegistry implements McpToolExecutor {
     private volatile List<String> globalEnabledMcpIds = Collections.emptyList();
 
     /**
+     * 区分「尚未预热」和「已预热但没有启用项」。
+     */
+    private volatile boolean globalMcpsLoaded;
+
+    /**
      * 预热全局启用的 MCP。
      */
     @Override
@@ -102,6 +107,7 @@ public class McpRegistry implements McpToolExecutor {
         syncDisabledMcps(mcpMap.keySet());
         preloadMcps(new ArrayList<>(mcpMap.values()));
         globalEnabledMcpIds = List.copyOf(mcpMap.keySet());
+        globalMcpsLoaded = true;
 
         log.info("MCP 全局预热完成，启用数量：{}", globalEnabledMcpIds.size());
     }
@@ -535,7 +541,7 @@ public class McpRegistry implements McpToolExecutor {
      * 确保全局 MCP 已预热。
      */
     private void ensureGlobalMcpsLoaded() {
-        if (globalEnabledMcpIds.isEmpty()) {
+        if (!globalMcpsLoaded) {
             preloadAllEnabledMcps();
         }
     }
