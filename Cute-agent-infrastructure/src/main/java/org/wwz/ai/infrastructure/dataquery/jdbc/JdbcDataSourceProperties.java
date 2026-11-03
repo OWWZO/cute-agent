@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.dataquery.jdbc;
 
 import lombok.Data;
+import lombok.ToString;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ public class JdbcDataSourceProperties {
     private int port;
     private String schema;
     private String username;
+    @ToString.Exclude
     private String password;
     private String key = "cute-datasource";
 }

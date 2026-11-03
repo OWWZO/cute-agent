@@ -64,10 +64,10 @@ public class JdbcDataProvider implements DataProvider<JdbcQueryRequest> {
         long queryStartTime = System.currentTimeMillis();
         queryResult.setQueryStartTime(queryStartTime);
         try (ConnectionWrapper wrapper = JdbcConnectionFactory.getConnection(request.getJdbcConnectionConfig())) {
-            // 先由连接包装器按方言改写 SQL，再记录最终执行文本，日志和返回结果保持一致。
+            // 返回结果保留最终执行文本；日志只记录长度，避免 SQL 字面量进入日志。
             request.setSql(wrapper.getJdbcDialect().formatSql(request.getSql()));
             queryResult.setQuerySql(request.getSql());
-            log.info("jdbc执行sql:{}", request.getSql());
+            log.info("jdbc执行sql字符数:{}", request.getSql() == null ? 0 : request.getSql().length());
             try (Connection connection = wrapper.getConnection()) {
             long getConnectionTime = System.currentTimeMillis();
             queryResult.setCreateConnectionTime(getConnectionTime - queryStartTime);

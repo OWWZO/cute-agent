@@ -28,10 +28,19 @@ public final class JdbcDialectLoader {
                 foundFactories.stream().filter(f -> f.acceptsURL(url)).toList();
 
         if (matchingFactories.isEmpty()) {
-            throw new JdbcBizException(String.format("未找到支持%s的JdbcDialectFactory实现类", url));
+            throw new JdbcBizException(String.format(
+                    "未找到支持%s的JdbcDialectFactory实现类", sanitizeJdbcUrl(url)));
         }
 
         return matchingFactories.get(0).create();
+    }
+
+    private static String sanitizeJdbcUrl(String url) {
+        if (url == null) {
+            return "<redacted>";
+        }
+        int schemeEnd = url.indexOf("://");
+        return schemeEnd < 0 ? "<redacted>" : url.substring(0, schemeEnd + 3) + "<redacted>";
     }
 
     private static List<JdbcDialectFactory> discoverFactories(ClassLoader classLoader) {

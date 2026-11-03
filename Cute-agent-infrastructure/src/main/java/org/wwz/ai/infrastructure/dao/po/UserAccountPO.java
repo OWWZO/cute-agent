@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -21,6 +22,7 @@ public class UserAccountPO {
     /** 稳定业务用户 ID，供 JWT sub 与业务归属使用。 */
     private String userId;
 
+    @ToString.Exclude
     private String tokenDigest;
 
     private Integer status;
@@ -29,8 +31,10 @@ public class UserAccountPO {
 
     private LocalDateTime lastSeenAt;
 
+    @ToString.Exclude
     private String lastIp;
 
+    @ToString.Exclude
     private String lastUserAgent;
 
     /** 历史展示名/兼容字段，不作为当前登录或归属判定键。 */
@@ -47,6 +51,7 @@ public class UserAccountPO {
     /** 规范化登录名（trim + lower-case），当前登录查询使用的唯一业务键。 */
     private String loginName;
 
+    @ToString.Exclude
     private String passwordHash;
 
     private String nickname;

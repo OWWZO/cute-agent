@@ -7,6 +7,7 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
 
 /**
@@ -40,8 +41,10 @@ public final class QqBotCrypto {
         if (StringUtils.isAnyBlank(encryptedBase64, keyBase64)) {
             throw new IllegalArgumentException("密文与密钥不能为空");
         }
+        byte[] key = null;
+        byte[] plaintext = null;
         try {
-            byte[] key = Base64.getDecoder().decode(keyBase64);
+            key = Base64.getDecoder().decode(keyBase64);
             byte[] raw = Base64.getDecoder().decode(encryptedBase64);
             if (raw.length <= IV_LENGTH) {
                 throw new IllegalArgumentException("密文长度异常：" + raw.length);
@@ -55,13 +58,20 @@ public final class QqBotCrypto {
             cipher.init(Cipher.DECRYPT_MODE,
                     new SecretKeySpec(key, "AES"),
                     new GCMParameterSpec(TAG_LENGTH_BITS, iv));
-            byte[] plaintext = cipher.doFinal(ciphertextWithTag);
+            plaintext = cipher.doFinal(ciphertextWithTag);
             return new String(plaintext, StandardCharsets.UTF_8);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
             // 解密失败通常意味着 key 与 task 不匹配（例如任务被重建但复用了旧 key）。
             throw new IllegalStateException("AppSecret 解密失败", e);
+        } finally {
+            if (plaintext != null) {
+                Arrays.fill(plaintext, (byte) 0);
+            }
+            if (key != null) {
+                Arrays.fill(key, (byte) 0);
+            }
         }
     }
 }

@@ -2,6 +2,10 @@ import { Loader2, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { QrPhase } from "./useChannelBindings";
 
+const QR_RENDER_BASE_URL =
+  import.meta.env?.VITE_QR_RENDER_BASE_URL?.replace(/\/+$/, "") ||
+  "https://api.qrserver.com/v1/create-qr-code";
+
 interface QrBindDialogProps {
   open: boolean;
   qrUrl: string | null;
@@ -56,8 +60,8 @@ function renderQrContent(
 /**
  * 扫码弹层。
  *
- * 二维码用外部渲染服务生成——项目里没有 QR 编码库，为一个弹层引入新依赖不划算。
- * 生成的 SVG 只包含后端返回的 task_id，没有敏感信息。
+ * 项目里没有 QR 编码库，默认使用外部渲染服务；部署时可配置
+ * VITE_QR_RENDER_BASE_URL 指向自建渲染端点。
  */
 export default function QrBindDialog({
   open,
@@ -72,7 +76,7 @@ export default function QrBindDialog({
   }
 
   const qrImage = qrUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${encodeURIComponent(qrUrl)}`
+    ? `${QR_RENDER_BASE_URL}/?size=240x240&margin=8&data=${encodeURIComponent(qrUrl)}`
     : null;
 
   return (

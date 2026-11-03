@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -20,12 +21,15 @@ public class UserAuthSessionPO {
 
     private String userId;
 
+    @ToString.Exclude
     private String refreshTokenHash;
 
     private String deviceName;
 
+    @ToString.Exclude
     private String ip;
 
+    @ToString.Exclude
     private String userAgent;
 
     private LocalDateTime expiresAt;

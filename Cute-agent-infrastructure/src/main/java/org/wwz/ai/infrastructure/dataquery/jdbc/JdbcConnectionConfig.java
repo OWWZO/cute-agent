@@ -2,6 +2,7 @@ package org.wwz.ai.infrastructure.dataquery.jdbc;
 
 
 import lombok.Data;
+import lombok.ToString;
 import org.wwz.ai.infrastructure.dataquery.jdbc.dialect.DialectEnum;
 
 import java.io.Serializable;
@@ -26,6 +27,7 @@ public class JdbcConnectionConfig implements Serializable {
 
     private String userName;
 
+    @ToString.Exclude
     private String password;
 
     private boolean proxy = false;
@@ -52,6 +54,7 @@ public class JdbcConnectionConfig implements Serializable {
      */
     private int maxRetryTimes = 2;
 
+    @ToString.Exclude
     private Properties extConfig;
     /**
      * 是否缓存连接池

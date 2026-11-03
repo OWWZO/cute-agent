@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.dao.cute.po;
 
 import lombok.Data;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -14,11 +15,15 @@ public class BackgroundTaskPO {
     /** 任务状态：running / completed / stopped / failed / lost。 */
     private String status;
     private String description;
+    @ToString.Exclude
     private String command;
     private String agentId;
     private String agentType;
+    @ToString.Exclude
     private String prompt;
+    @ToString.Exclude
     private String output;
+    @ToString.Exclude
     private String errorMsg;
     private Integer totalToolUseCount;
     private Long totalDurationMs;

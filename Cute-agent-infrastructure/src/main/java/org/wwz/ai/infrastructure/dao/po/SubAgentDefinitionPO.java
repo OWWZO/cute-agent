@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -24,14 +25,18 @@ public class SubAgentDefinitionPO {
 
     private String whenToUse;
 
+    @ToString.Exclude
     private String systemPrompt;
 
+    @ToString.Exclude
     private String allowedToolsJson;
 
+    @ToString.Exclude
     private String disallowedToolsJson;
 
     private String toolPolicyMode;
 
+    @ToString.Exclude
     private String deferredToolsJson;
 
     private Integer maxSteps;

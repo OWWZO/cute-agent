@@ -5,6 +5,7 @@ package org.wwz.ai.infrastructure.dataquery.jdbc.connection;
 
 
 import lombok.Data;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.infrastructure.dataquery.jdbc.JdbcBizException;
 import org.wwz.ai.infrastructure.dataquery.jdbc.JdbcConnectionConfig;
@@ -27,7 +28,9 @@ import java.sql.Statement;
 public class ConnectionWrapper implements AutoCloseable {
     private JdbcDialect jdbcDialect;
     private JdbcCatalog catalog;
+    @ToString.Exclude
     private DatasourceWrapper datasourceWrapper;
+    @ToString.Exclude
     private JdbcConnectionConfig jdbcConnectionConfig;
     private boolean closed;
 
