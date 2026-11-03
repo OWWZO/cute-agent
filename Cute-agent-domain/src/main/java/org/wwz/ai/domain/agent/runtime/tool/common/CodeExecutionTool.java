@@ -50,6 +50,7 @@ public class CodeExecutionTool implements BaseTool {
                 "type", "string",
                 "description", "完整 Python 源码。cwd 为会话工作区；生成文件用相对路径，例如 Path('chart.png')、"
                         + "plt.savefig('chart.png')。禁止硬编码 skilloutput/盘符绝对路径。"
+                        + "与 workspaceFile 二选一：至少提供一个。"
         ));
         Map<String, Object> freeformObject = new LinkedHashMap<>();
         freeformObject.put("type", "object");
@@ -74,7 +75,7 @@ public class CodeExecutionTool implements BaseTool {
         properties.put("importTier", Map.of("type", "string", "enum", List.of("stdlib", "extended", "unrestricted")));
         properties.put("resetWorkspace", Map.of("type", "boolean"));
         properties.put("workspaceFile", Map.of("type", "string", "description", "工作区内已有 Python 源码文件，提供时优先执行它"));
-        return Map.of("type", "object", "properties", properties, "required", List.of("source"));
+        return Map.of("type", "object", "properties", properties, "required", List.of());
     }
 
     @Override @SuppressWarnings("unchecked")
@@ -82,7 +83,14 @@ public class CodeExecutionTool implements BaseTool {
         try {
             Map<String, Object> params = input instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
             String source = params.get("source") == null ? "" : StringUtils.trimToEmpty(String.valueOf(params.get("source")));
-            if (source.isBlank()) return ToolResultPayload.failure("source 不能为空", "source 不能为空", null, "missing source");
+            String workspaceFileArg = stringValue(params.get("workspaceFile"));
+            if (source.isBlank() && StringUtils.isBlank(workspaceFileArg)) {
+                return ToolResultPayload.failure(
+                        "source 与 workspaceFile 必须提供一个",
+                        "source 与 workspaceFile 必须提供一个",
+                        null,
+                        "missing source");
+            }
             ToolArtifactSource artifactSource = context.requireCurrentToolArtifactSource(getName());
             CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
             String ownerKey = resolveOwnerKey(context);
@@ -93,7 +101,7 @@ public class CodeExecutionTool implements BaseTool {
                     context.getWorkspaceRoot(), context.getSessionId());
             Map<String, Object> request = new LinkedHashMap<>(params);
             request.put("fileNames", validateFileNames(toStringList(params.get("fileNames")), workspaceRoot));
-            String workspaceFile = validateWorkspaceFile(stringValue(params.get("workspaceFile")));
+            String workspaceFile = validateWorkspaceFile(workspaceFileArg);
             if (workspaceFile != null) {
                 request.put("workspaceFile", workspaceFile);
             } else {
@@ -104,7 +112,12 @@ public class CodeExecutionTool implements BaseTool {
             request.put("ownerKey", ownerKey);
             request.put("workspaceRoot", workspaceRoot.toString());
             request.put("permissionProfile", "workspace");
-            request.put("source", source);
+            if (source.isBlank()) {
+                // workspaceFile 模式下不伪造空源码；远端按文件执行。
+                request.remove("source");
+            } else {
+                request.put("source", source);
+            }
             // 远端执行统一绑定当前会话工作区；返回文件再登记到当前 tool artifact source，形成可回放的产物链。
             String body = context.getRuntimeDependencies().requireRemoteHttpPort().execute(RemoteHttpRequest.builder()
                     .method("POST").url(config.getCodeInterpreterUrl() + "/v1/tool/code_execution")

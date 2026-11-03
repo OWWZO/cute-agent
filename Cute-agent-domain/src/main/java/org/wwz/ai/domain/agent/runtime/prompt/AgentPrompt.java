@@ -237,7 +237,7 @@ public class AgentPrompt {
 
             ```json
 
-             {''name'': ''deep_search'', ''description'': ''这是一个搜索工具，可以搜索各种互联网知识'', ''parameters'': {''type'': ''object'', ''properties'': {''query'': {''description'': ''需要搜索的全部内容及描述'', ''type'': ''string''}, ''reportFileName'': {''description'': ''最终研究报告文件名称，必填且不超过20个字符（含扩展名），例如：新能源汽车行业报告.md'', ''type'': ''string'', ''maxLength'': 20}}, ''required'': [''query'', ''reportFileName'']}}
+             {"name": "deep_search", "description": "这是一个搜索工具，可以搜索各种互联网知识", "parameters": {"type": "object", "properties": {"query": {"description": "需要搜索的全部内容及描述", "type": "string"}, "reportFileName": {"description": "最终研究报告文件名称，必填且不超过20个字符（含扩展名），例如：新能源汽车行业报告.md", "type": "string", "maxLength": 20}}, "required": ["query", "reportFileName"]}}
 
             ```
 

@@ -24,14 +24,18 @@ public enum LlmRetryBudget {
         return this == UNBOUNDED;
     }
 
-    /** 失败之后还允许再试一次吗。 */
+    /** 失败之后还允许再试一次吗。{@code retryBudgetAttempt} 为 0-based 的尝试序号。 */
     public boolean allows(int retryBudgetAttempt, int maxAttempts) {
         return isUnbounded() || retryBudgetAttempt < maxAttempts;
     }
 
-    /** attempt 循环的继续条件。 */
+    /**
+     * attempt 循环的继续条件。
+     * <p>{@code attempt} 为 0-based 的尝试序号，{@code loopMaxAttempts} 是总尝试次数；
+     * 与 {@link #allows(int, int)} 使用同一边界，避免多跑一轮。
+     */
     public boolean loopContinues(int attempt, int loopMaxAttempts) {
-        return isUnbounded() || attempt <= loopMaxAttempts;
+        return isUnbounded() || attempt < loopMaxAttempts;
     }
 
     /** 写进状态事件 / 日志的 maxAttempts：unbounded 下是哨兵 0。 */

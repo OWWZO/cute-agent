@@ -55,7 +55,7 @@ public class RequestDesktopControlTool implements BaseTool {
         if (context == null) {
             return fail("RequestDesktopControl 未正确装配");
         }
-        if (context.getRequestId() != null && context.getRequestId().contains(":sub:")) {
+        if (context.isSubAgent()) {
             return fail("RequestDesktopControl 不能在子 Agent 中使用");
         }
         try {

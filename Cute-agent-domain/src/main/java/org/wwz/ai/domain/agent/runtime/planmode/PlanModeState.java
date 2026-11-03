@@ -67,8 +67,14 @@ public class PlanModeState {
     }
 
     public synchronized String exitPlanMode() {
+        String current = StringUtils.defaultIfBlank(mode, MODE_DEFAULT);
+        // 批准恢复路径可能不在 plan mode；此时不能把当前模式降级成 prePlanMode。
+        if (!isPlanMode()) {
+            return current;
+        }
         String restored = StringUtils.defaultIfBlank(prePlanMode, MODE_DEFAULT);
-        if (!MODE_DEFAULT.equals(restored) && !MODE_ACCEPT_EDITS.equals(restored) && !MODE_PLAN.equals(restored)) {
+        // 恢复目标只能是 plan 之外的模式，否则会留下 hasExitedPlanMode=true 却仍在 plan 的矛盾状态。
+        if (!MODE_DEFAULT.equals(restored) && !MODE_ACCEPT_EDITS.equals(restored)) {
             restored = MODE_DEFAULT;
         }
         this.mode = restored;

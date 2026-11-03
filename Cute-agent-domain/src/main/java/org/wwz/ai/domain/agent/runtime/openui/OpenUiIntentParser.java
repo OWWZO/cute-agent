@@ -40,14 +40,23 @@ public final class OpenUiIntentParser {
                     // 块外内容（解释、代码围栏、废话）一律丢弃
                 }
                 case IN_SEARCH -> {
-                    if (isSeparator(line)) {
+                    if (isHeadMarker(line)) {
+                        // 上一块缺分隔符就遇到新头标记：丢弃残缺块，重新开块。
+                        search = new StringBuilder();
+                        replace = new StringBuilder();
+                    } else if (isSeparator(line)) {
                         phase = Phase.IN_REPLACE;
                     } else {
                         appendLine(search, line);
                     }
                 }
                 case IN_REPLACE -> {
-                    if (isTailMarker(line)) {
+                    if (isHeadMarker(line)) {
+                        // 已经进入 replace 后又出现头标记，说明上一个块结构损坏，重新开块。
+                        phase = Phase.IN_SEARCH;
+                        search = new StringBuilder();
+                        replace = new StringBuilder();
+                    } else if (isTailMarker(line)) {
                         addBlock(blocks, search, replace);
                         phase = Phase.OUTSIDE;
                         search = null;
@@ -85,10 +94,9 @@ public final class OpenUiIntentParser {
         return trimmed.startsWith("<<<<<") && trimmed.toUpperCase(Locale.ROOT).contains("SEARCH");
     }
 
-    /** `=======`：容忍 `=` 数量 ≥7，但不允许夹其他字符（区分于普通分隔线注释）。 */
+    /** `=======`：只接受经典形态的 7 个等号，避免源码注释分隔线被误判。 */
     private static boolean isSeparator(String line) {
-        String trimmed = line.trim();
-        return trimmed.length() >= 7 && trimmed.chars().allMatch(ch -> ch == '=');
+        return "=======".equals(line.trim());
     }
 
     /** `>>>>>>> REPLACE`：容忍 `>` 数量偏差（≥5）与两侧空白，但必须带 REPLACE 字样。 */

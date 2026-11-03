@@ -46,6 +46,26 @@ public class PlanSolvePromptOrchestrationTest {
     }
 
     @Test
+    public void legacyMarkerWithoutOwnHeadingDoesNotCutCurrentBlock() {
+        String current = PlanSolvePrompt.ensureOrchestration("");
+        String poisoned = current
+                + "\nimportant-keep-this PLAN_SOLVE_ORCHESTRATION_V3 mention\n"
+                + "# Appendix\nkeep\n";
+
+        String result = PlanSolvePrompt.ensureOrchestration(poisoned);
+
+        Assert.assertTrue("无关内容不得被 legacy 清理连带删除", result.contains("important-keep-this"));
+        Assert.assertFalse(result.contains("PLAN_SOLVE_ORCHESTRATION_V3"));
+        Assert.assertTrue(result.contains(PlanSolvePrompt.ORCHESTRATION_MARKER));
+    }
+
+    @Test
+    public void toolExampleUsesDoubleQuotedJson() {
+        Assert.assertFalse(AgentPrompt.STRUCT_PARSE_TOOL_SYSTEM_PROMPT.contains("''name''"));
+        Assert.assertTrue(AgentPrompt.STRUCT_PARSE_TOOL_SYSTEM_PROMPT.contains("\"name\": \"deep_search\""));
+    }
+
+    @Test
     public void planSolveBaseIsOrchestrationNotReact() {
         String plan = AgentPrompt.composePlanSolveSystemPrompt();
         Assert.assertTrue(plan.contains(PlanSolvePrompt.ORCHESTRATION_MARKER));

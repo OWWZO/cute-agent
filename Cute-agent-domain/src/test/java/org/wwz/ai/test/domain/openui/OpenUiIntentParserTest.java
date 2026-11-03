@@ -128,6 +128,45 @@ public class OpenUiIntentParserTest {
     }
 
     @Test
+    public void repeatedHeadMarkerRestartsBrokenBlock() {
+        String output = """
+                <<<<<<< SEARCH
+                stale = Card("broken")
+                <<<<<<< SEARCH
+                fresh = Card("target")
+                =======
+                fresh = Card("replacement")
+                >>>>>>> REPLACE
+                """;
+
+        List<OpenUiRepairIntent> blocks = OpenUiIntentParser.parse(output);
+
+        Assert.assertEquals(1, blocks.size());
+        Assert.assertEquals("fresh = Card(\"target\")", blocks.get(0).searchText());
+        Assert.assertEquals("fresh = Card(\"replacement\")", blocks.get(0).replaceText());
+    }
+
+    @Test
+    public void longEqualsLineIsNotSeparator() {
+        String output = """
+                <<<<<<< SEARCH
+                header = Caption("x")
+                ==========
+                body = Caption("y")
+                =======
+                body = Caption("z")
+                >>>>>>> REPLACE
+                """;
+
+        List<OpenUiRepairIntent> blocks = OpenUiIntentParser.parse(output);
+
+        Assert.assertEquals(1, blocks.size());
+        Assert.assertEquals("header = Caption(\"x\")\n==========\nbody = Caption(\"y\")",
+                blocks.get(0).searchText());
+        Assert.assertEquals("body = Caption(\"z\")", blocks.get(0).replaceText());
+    }
+
+    @Test
     public void shouldNotTreatOrdinaryEqualsLineAsSeparator() {
         // DSL 里的表达式赋值不能被误认成分隔标记。
         String output = """

@@ -45,7 +45,7 @@ public class EnterPlanModeTool implements BaseTool {
     @Override
     public Object execute(Object input, AgentContext agentContext) {
         try {
-            if (agentContext.getRequestId() != null && agentContext.getRequestId().contains(":sub:")) {
+            if (agentContext.isSubAgent()) {
                 return ToolResultPayload.failure(
                         "EnterPlanMode 不能在子 Agent 上下文中使用",
                         "EnterPlanMode tool cannot be used in agent contexts",

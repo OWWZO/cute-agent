@@ -45,13 +45,9 @@ public class ExitPlanModeTool implements BaseTool {
         plan.put("type", "string");
         plan.put("description", "可选，完整计划 Markdown 正文");
 
-        Map<String, Object> planFilePath = new LinkedHashMap<>();
-        planFilePath.put("type", "string");
-        planFilePath.put("description", "可选，计划文件路径");
-
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("plan", plan);
-        properties.put("planFilePath", planFilePath);
+        // 计划文件固定落盘到 .cute/plan.md；不再暴露会被忽略的 planFilePath 参数。
 
         Map<String, Object> parameters = new LinkedHashMap<>();
         parameters.put("type", "object");

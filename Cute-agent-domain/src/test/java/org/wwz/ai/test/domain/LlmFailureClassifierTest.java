@@ -231,6 +231,44 @@ public class LlmFailureClassifierTest {
     }
 
     @Test
+    public void contextDeadlineIsNotContextOverflow() {
+        LlmFailureClassification deadline = LlmFailureClassifier.classify(
+                new RuntimeException("context deadline exceeded"), false);
+        Assert.assertNotEquals(LlmFailureReason.CONTEXT_EXCEEDED, deadline.reason());
+
+        LlmFailureClassification budget = LlmFailureClassifier.classify(
+                new RuntimeException("request context exceeded the retry budget"), false);
+        Assert.assertNotEquals(LlmFailureReason.CONTEXT_EXCEEDED, budget.reason());
+
+        LlmFailureClassification window = LlmFailureClassifier.classify(
+                new RuntimeException("context window exceeded"), false);
+        Assert.assertEquals(LlmFailureReason.CONTEXT_EXCEEDED, window.reason());
+    }
+
+    @Test
+    public void retryAfterCannotBypassCappedBackoff() {
+        LlmRetryPolicy policy = new LlmRetryPolicy(20, 2_000L, 2d, 60_000L, false);
+        // attempt 10 的未封顶退避约 17 分钟；10 分钟的 Retry-After 仍必须被 maxDelay 压回 60s。
+        Assert.assertEquals(60_000L, LlmRetryDelay.calculate(policy, 10, 600_000L));
+    }
+
+    @Test
+    public void loopContinuesUsesSameBoundaryAsAllows() {
+        Assert.assertTrue(LlmRetryBudget.BOUNDED.loopContinues(0, 6));
+        Assert.assertTrue(LlmRetryBudget.BOUNDED.loopContinues(5, 6));
+        Assert.assertFalse(LlmRetryBudget.BOUNDED.loopContinues(6, 6));
+    }
+
+    @Test
+    public void workflowPolicyFallsBackToFailureProviderCode() {
+        LlmFailureClassification quota = LlmFailureClassifier.classify(business("insufficient_quota", 429));
+        LlmWorkflowFailurePolicy.Policy policy = LlmWorkflowFailurePolicy.resolve(quota, null);
+
+        Assert.assertEquals(LlmWorkflowFailurePolicy.Decision.STOP, policy.decision());
+        Assert.assertEquals(LlmWorkflowFailurePolicy.StopKind.QUOTA, policy.kind());
+    }
+
+    @Test
     public void shouldApplyJitterWithinHalfToFullRange() {
         LlmRetryPolicy policy = new LlmRetryPolicy(6, 1_000L, 2d, 4_000L, true);
         for (int i = 0; i < 50; i++) {

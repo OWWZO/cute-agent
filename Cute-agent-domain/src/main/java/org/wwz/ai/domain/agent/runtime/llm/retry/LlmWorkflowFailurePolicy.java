@@ -83,7 +83,11 @@ public final class LlmWorkflowFailurePolicy {
         if (failure.reason() == LlmFailureReason.CANCELLED) {
             return Policy.cancelled();
         }
-        String normalizedCode = LlmProviderBusinessCodes.normalizeCode(providerCode);
+        // 分类结果本身已带归一化 providerCode；调用方漏传时不能丢掉配额/鉴权信号。
+        String effectiveProviderCode = providerCode == null || providerCode.isBlank()
+                ? failure.providerCode()
+                : providerCode;
+        String normalizedCode = LlmProviderBusinessCodes.normalizeCode(effectiveProviderCode);
         if (normalizedCode != null && QUOTA_PROVIDER_CODES.contains(normalizedCode)) {
             return Policy.stop(StopKind.QUOTA);
         }

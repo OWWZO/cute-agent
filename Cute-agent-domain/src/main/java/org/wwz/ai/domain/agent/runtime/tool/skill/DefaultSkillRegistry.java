@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -58,6 +60,14 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
     private final AtomicLong catalogVersion = new AtomicLong(0);
     private volatile String lastScanSignature;
     private volatile long lastRefreshAtMillis;
+
+    /**
+     * 启动时加载一次预置 skill 目录；之后由安装/删除/管理端 reload 触发增量刷新。
+     */
+    @PostConstruct
+    public void init() {
+        refresh();
+    }
 
     /**
      * 强制全量重扫（管理端 reload / 安装后刷新走这里）。
