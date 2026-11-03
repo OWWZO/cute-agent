@@ -1,5 +1,6 @@
 package org.wwz.ai.infrastructure.imagegeneration;
 
+import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import org.springframework.stereotype.Component;
@@ -19,7 +20,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -84,13 +84,19 @@ public class CuteImageGenerationGateway implements ImageGenerationGatewayPort {
                 .data(summary)
                 .usedFallback(result.isUsedFallback())
                 .fileInfo(normalizeFileInfo(files))
-                .rawResponse(Map.of(
-                        "model", result.getModel(),
-                        "size", result.getSize(),
-                        "notes", result.getNotes() == null ? List.of() : result.getNotes(),
-                        "imageCount", files.size()
-                ))
+                .rawResponse(buildRawResponse(result, files))
                 .build();
+    }
+
+    /** 上游响应统一收敛为 JSON 对象，避免下游消费方再做无类型转换。 */
+    private JSONObject buildRawResponse(ImageGenerationClient.GenerationResult result,
+                                        List<ImageGenerationGatewayFile> files) {
+        JSONObject rawResponse = new JSONObject();
+        rawResponse.put("model", result.getModel());
+        rawResponse.put("size", result.getSize());
+        rawResponse.put("notes", result.getNotes() == null ? List.of() : result.getNotes());
+        rawResponse.put("imageCount", files.size());
+        return rawResponse;
     }
 
     private ImageGenerationClient buildClient(Integer timeoutSeconds) {

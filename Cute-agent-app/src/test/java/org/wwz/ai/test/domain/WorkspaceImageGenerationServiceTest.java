@@ -1,5 +1,6 @@
 package org.wwz.ai.test.domain;
 
+import com.alibaba.fastjson.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -39,6 +40,8 @@ public class WorkspaceImageGenerationServiceTest {
         Mockito.when(kernel.execute(Mockito.any())).thenAnswer(invocation -> {
             org.wwz.ai.domain.agent.image.model.ImageGenerationExecuteCommand command = invocation.getArgument(0);
             capturedCommand.set(command);
+            JSONObject rawResponse = new JSONObject();
+            rawResponse.put("requestId", command.getRequestId());
             return ImageGenerationExecutionResult.builder()
                     .requestId(command.getRequestId())
                     .prompt(command.getPrompt())
@@ -49,7 +52,7 @@ public class WorkspaceImageGenerationServiceTest {
                     .sourceImageCount(command.getFileNames().size())
                     .maskImageCount(1)
                     .usedFallback(true)
-                    .rawResponse(Map.of("requestId", command.getRequestId()))
+                    .rawResponse(rawResponse)
                     .files(List.of(
                             WorkspaceImageFile.builder()
                                     .fileName("result-1.png")

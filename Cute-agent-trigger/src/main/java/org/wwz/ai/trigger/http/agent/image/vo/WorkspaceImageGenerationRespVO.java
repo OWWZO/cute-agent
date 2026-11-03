@@ -1,5 +1,6 @@
 package org.wwz.ai.trigger.http.agent.image.vo;
 
+import com.alibaba.fastjson.JSONObject;
 import lombok.Builder;
 import lombok.Data;
 
@@ -16,5 +17,5 @@ public class WorkspaceImageGenerationRespVO {
     private String requestId;
     private String mode;
     private Boolean usedFallback;
-    private Object rawResponse;
+    private JSONObject rawResponse;
 }

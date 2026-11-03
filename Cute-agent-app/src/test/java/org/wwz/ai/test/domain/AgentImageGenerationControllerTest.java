@@ -1,5 +1,7 @@
 package org.wwz.ai.test.domain;
 
+import com.alibaba.fastjson.JSONObject;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -11,6 +13,7 @@ import org.wwz.ai.application.agent.image.result.WorkspaceImageGenerationView;
 import org.wwz.ai.application.agent.image.result.WorkspaceImageHistoryBatchView;
 import org.wwz.ai.application.agent.image.result.WorkspaceImageHistoryPageView;
 import org.wwz.ai.trigger.http.agent.image.AgentImageGenerationController;
+import org.wwz.ai.trigger.http.agent.image.mapper.WorkspaceImageVoMapper;
 import org.wwz.ai.trigger.http.agent.image.vo.WorkspaceImageGenerationReqVO;
 import org.wwz.ai.trigger.http.agent.image.vo.WorkspaceImageGenerationRespVO;
 import org.wwz.ai.trigger.http.agent.image.vo.WorkspaceImageHistoryBatchRespVO;
@@ -63,6 +66,20 @@ public class AgentImageGenerationControllerTest {
         Assert.assertEquals(1, response.getData().getFileInfo().size());
         Assert.assertEquals("https://file.example.com/result.png", response.getData().getFileInfo().get(0).getPreviewUrl());
         Assert.assertNotNull(capturedCommand.get());
+    }
+
+    @Test
+    public void test_rawResponseKeepsWireKeyAndJsonShape() throws Exception {
+        WorkspaceImageGenerationRespVO vo = WorkspaceImageVoMapper.toRespVO(
+                WorkspaceImageGenerationView.builder()
+                        .requestId("req-001")
+                        .rawResponse(JSONObject.parseObject("{\"model\":\"gpt-image-2\",\"imageCount\":1}"))
+                        .build());
+
+        JSONObject wire = JSONObject.parseObject(new ObjectMapper().writeValueAsString(vo));
+
+        Assert.assertEquals("gpt-image-2", wire.getJSONObject("rawResponse").getString("model"));
+        Assert.assertEquals(1, wire.getJSONObject("rawResponse").getIntValue("imageCount"));
     }
 
     @Test
