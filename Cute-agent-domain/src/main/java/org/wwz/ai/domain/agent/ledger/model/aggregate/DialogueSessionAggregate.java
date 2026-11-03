@@ -73,6 +73,7 @@ public final class DialogueSessionAggregate {
                 .sessionId(session.getSessionId())
                 .userId(session.getUserId())
                 .entryAgent(entryAgent)
+                .queryText(queryText)
                 .build();
         run.start(startedAt);
         runs.add(run);
@@ -89,12 +90,18 @@ public final class DialogueSessionAggregate {
         if (run == null) {
             throw new IllegalStateException("找不到对应的 run: requestId=" + requestId);
         }
-        if (status != null && status == ExecutionLedgerConstants.STATUS_FAILED) {
-            run.finishFailed(run.getErrorCode(), summary, finishedAt);
-        } else if (status != null && status == ExecutionLedgerConstants.STATUS_STOPPED) {
-            run.finishStopped(summary, finishedAt);
-        } else {
-            run.finishSuccess(summary, finishedAt);
+        // 显式枚举可结束 run 的终态：null 或未知状态必须报错，不能被默认分支写成 SUCCESS
+        // （尤其是 TIMEOUT，否则 run 与 session 的终态不一致）。
+        if (status == null) {
+            throw new IllegalArgumentException("status 不能为空");
+        }
+        switch (status) {
+            case ExecutionLedgerConstants.STATUS_SUCCESS -> run.finishSuccess(summary, finishedAt);
+            case ExecutionLedgerConstants.STATUS_FAILED ->
+                    run.finishFailed(run.getErrorCode(), summary, finishedAt);
+            case ExecutionLedgerConstants.STATUS_TIMEOUT -> run.finishTimeout(summary, finishedAt);
+            case ExecutionLedgerConstants.STATUS_STOPPED -> run.finishStopped(summary, finishedAt);
+            default -> throw new IllegalArgumentException("不支持的 run 终态: " + status);
         }
         session.finishRun(status, summary, finishedAt);
         if (status != null && status == ExecutionLedgerConstants.STATUS_FAILED) {

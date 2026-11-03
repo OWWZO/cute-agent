@@ -138,6 +138,14 @@ public class DialogueRun {
         finish(ExecutionLedgerConstants.STATUS_STOPPED, this.finalSummaryText, "USER_STOP", reason, now);
     }
 
+    public void finishTimeout(String reason) {
+        finishTimeout(reason, LocalDateTime.now());
+    }
+
+    public void finishTimeout(String reason, LocalDateTime now) {
+        finish(ExecutionLedgerConstants.STATUS_TIMEOUT, this.finalSummaryText, "TIMEOUT", reason, now);
+    }
+
     /**
      * 是否已经进入终态（成功 / 失败 / 超时 / 停止）。
      */

@@ -137,6 +137,38 @@ public class DialogueSessionBehaviorTest {
     }
 
     @Test
+    public void negativeFinishedCountShouldBeRejected() {
+        DialogueSession session = DialogueSession.builder()
+                .sessionId("s1")
+                .runCount(0)
+                .finishedRunCount(-1)
+                .failedRunCount(-1)
+                .build();
+        try {
+            session.assertInvariants();
+            Assert.fail("finishedRunCount 不得为负数");
+        } catch (IllegalStateException expected) {
+            // 预期
+        }
+    }
+
+    @Test
+    public void negativeFailedCountShouldBeRejected() {
+        DialogueSession session = DialogueSession.builder()
+                .sessionId("s1")
+                .runCount(1)
+                .finishedRunCount(1)
+                .failedRunCount(-1)
+                .build();
+        try {
+            session.assertInvariants();
+            Assert.fail("failedRunCount 不得为负数");
+        } catch (IllegalStateException expected) {
+            // 预期
+        }
+    }
+
+    @Test
     public void nullCountsShouldBeTreatedAsZero() {
         DialogueSession session = DialogueSession.builder().sessionId("s1").build();
         session.startRun("req-1", "问题", NOW);

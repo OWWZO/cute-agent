@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
+import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 import org.wwz.ai.domain.agent.ledger.model.replay.ProjectedReplayEvent;
@@ -147,6 +148,55 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
                 info.putIfAbsent("missing", Boolean.FALSE);
             }
         }
+    }
+
+    /**
+     * 调用是否已落在非成功终态（失败/超时/停止/等待输入）。
+     * <p>专用投影器必须先判它：结构化输出在成功和失败时可能是同一个类型，
+     * 只看 output != null 会把失败回放成成功卡片。</p>
+     */
+    protected boolean isFailedInvocation(ToolInvocationView invocation) {
+        return invocation != null
+                && invocation.getStatus() != null
+                && invocation.getStatus() != ExecutionLedgerConstants.STATUS_SUCCESS;
+    }
+
+    /**
+     * 回退为通用 tool_result 投影。
+     * <p>失败调用（或没有结构化输出的历史行）走这里，保证错误信息不会被专用卡片吞掉。</p>
+     */
+    protected List<ProjectedReplayEvent> projectAsToolResult(ToolInvocationView invocation,
+                                                             List<ArtifactView> artifacts,
+                                                             AgentStreamAccumulator state) {
+        Map<String, Object> toolResult = new LinkedHashMap<>();
+        toolResult.put("toolName", invocation == null ? null : invocation.getToolName());
+        toolResult.put("toolParam", invocation == null ? Map.of() : readMap(invocation.getInputJson()));
+        toolResult.put("toolResult", resolveProjectedResultText(invocation));
+        return List.of(buildTaskEvent(
+                state,
+                invocation,
+                "tool_result",
+                buildToolResultResponse(invocation, toolResult),
+                buildArtifactRefs(artifacts)
+        ));
+    }
+
+    /**
+     * 失败优先展示 errorMsg（结构化错误码比 Error 前缀文本更有诊断价值），
+     * 成功才取完整结果 JSON；历史行 toolResult 为 NULL 时回落到 llmObservation。
+     */
+    protected static String resolveProjectedResultText(ToolInvocationView invocation) {
+        if (invocation == null) {
+            return "";
+        }
+        if (isFailedStatus(invocation.getStatus())) {
+            return StringUtils.defaultIfBlank(invocation.getErrorMsg(), invocation.resolveResultText());
+        }
+        return invocation.resolveResultText();
+    }
+
+    private static boolean isFailedStatus(Integer status) {
+        return status != null && status != ExecutionLedgerConstants.STATUS_SUCCESS;
     }
 
     protected ProjectedReplayEvent buildTaskEvent(AgentStreamAccumulator state,

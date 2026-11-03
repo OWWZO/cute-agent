@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
  * 充血模型：所有者绑定、标题变更与 run 计数转移由实体自身承载，并强制以下不变量：
  * <ul>
  *     <li>已绑定会话不能被其他用户覆盖所有者；</li>
- *     <li>runCount 不得为负数；</li>
+ *     <li>runCount / finishedRunCount / failedRunCount 均不得为负数；</li>
  *     <li>finishedRunCount 不得超过 runCount；</li>
  *     <li>failedRunCount 不得超过 finishedRunCount。</li>
  * </ul>
@@ -190,6 +190,12 @@ public class DialogueSession {
     private void validateInvariants(int runs, int finished, int failed) {
         if (runs < 0) {
             throw new IllegalStateException("runCount 不得为负数: " + runs);
+        }
+        if (finished < 0) {
+            throw new IllegalStateException("finishedRunCount 不得为负数: " + finished);
+        }
+        if (failed < 0) {
+            throw new IllegalStateException("failedRunCount 不得为负数: " + failed);
         }
         if (finished > runs) {
             throw new IllegalStateException("finishedRunCount 不得超过 runCount: finished=" + finished + ", runs=" + runs);

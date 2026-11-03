@@ -23,12 +23,18 @@ public final class ChannelSessionKey {
             throw new IllegalArgumentException("chatType 不能为空");
         }
         String target = require(targetId, "targetId");
-        return switch (chatType) {
+        String key = switch (chatType) {
             case C2C -> "qq_c2c_" + target;
             case GROUP -> "qq_group_" + target + "_" + require(platformUserId, "platformUserId");
             case GUILD -> "qq_guild_" + target;
             case DM -> "qq_dm_" + target;
         };
+        // 单个字段不超限不代表拼接结果不超限：GROUP 键 = 前缀 + 两段标识 + 分隔符，
+        // 必须按最终写入 session_id 列的值校验，否则会被 DB 截断并与其它会话碰撞。
+        if (key.length() > MAX_LENGTH) {
+            throw new IllegalArgumentException("会话键过长：" + key.length() + " > " + MAX_LENGTH);
+        }
+        return key;
     }
 
     /**

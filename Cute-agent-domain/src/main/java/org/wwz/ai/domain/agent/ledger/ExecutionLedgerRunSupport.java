@@ -62,9 +62,12 @@ public final class ExecutionLedgerRunSupport {
         if (!hasActiveRun(agentContext)) {
             return;
         }
+        // 用激活 run 时捕获的 runUid 定位，而不是当前 context.requestId：
+        // 子 Agent 旧续跑路径会改写 requestId，改后查不到 run 会静默丢终态、把 run 永久留在 RUNNING。
+        String runUid = agentContext.getAgentRunState().getRunUid();
         agentContext.getExecutionRecorder().finishRun(DialogueRunFinishRecord.builder()
                 .runId(agentContext.getAgentRunState().getRunId())
-                .requestId(agentContext.getRequestId())
+                .requestId(StringUtils.defaultIfBlank(runUid, agentContext.getRequestId()))
                 .status(status)
                 .finalSummaryText(finalSummaryText)
                 .errorCode(errorCode)
