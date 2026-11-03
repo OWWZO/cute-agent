@@ -46,13 +46,12 @@ public class CliArtifactCaptureCoordinatorTest {
         List<String> args = List.of("node", "main.js", "xiaohongshu", "download", "<signed-note-url>");
 
         CliArtifactCapturePlan first = CliArtifactCaptureCoordinator.plan(
-                "browser", args, args, workspace.toString(), "call-1", "request-1");
+                "browser", args, workspace.toString(), "call-1", "request-1");
         CliArtifactCapturePlan second = CliArtifactCaptureCoordinator.plan(
-                "browser", args, args, workspace.toString(), "call-1", "request-1");
+                "browser", args, workspace.toString(), "call-1", "request-1");
 
         Assert.assertTrue(first.isArtifactCommand());
         Assert.assertTrue(first.isValid());
-        Assert.assertTrue(first.isOutputRootInjected());
         Assert.assertTrue(first.getCaptureRoot().matches("\\.cute-artifacts/browser/[A-Za-z0-9_-]+"));
         Assert.assertNotEquals(first.getCaptureRoot(), second.getCaptureRoot());
         Assert.assertEquals("--output", first.getRewrittenArgs().get(first.getRewrittenArgs().size() - 2));
@@ -80,7 +79,6 @@ public class CliArtifactCaptureCoordinatorTest {
             CliArtifactCapturePlan plan = CliArtifactCaptureCoordinator.plan(
                     "browser",
                     List.of("xiaohongshu", "download", "<signed-note-url>", "--output", unsafe),
-                    List.of("xiaohongshu", "download", "<signed-note-url>", "--output", unsafe),
                     workspace.toString(), "call-unsafe", "request-unsafe");
             Assert.assertFalse(unsafe, plan.isValid());
             Assert.assertEquals(CliArtifactCaptureCoordinator.OUTPUT_ROOT_INVALID, plan.getErrorCode());
@@ -91,12 +89,12 @@ public class CliArtifactCaptureCoordinatorTest {
     public void shouldSerializeSameRootButAllowDifferentRoots() throws Exception {
         List<String> sameArgs = List.of("xiaohongshu", "download", "<signed-note-url>", "--output", "./shared");
         CliArtifactCapturePlan firstPlan = CliArtifactCaptureCoordinator.plan(
-                "browser", sameArgs, sameArgs, workspace.toString(), "call-a", "request-a");
+                "browser", sameArgs, workspace.toString(), "call-a", "request-a");
         CliArtifactCapturePlan secondPlan = CliArtifactCaptureCoordinator.plan(
-                "browser", sameArgs, sameArgs, workspace.toString(), "call-b", "request-b");
+                "browser", sameArgs, workspace.toString(), "call-b", "request-b");
         List<String> otherArgs = List.of("xiaohongshu", "download", "<signed-note-url>", "--output", "./other");
         CliArtifactCapturePlan otherPlan = CliArtifactCaptureCoordinator.plan(
-                "browser", otherArgs, otherArgs, workspace.toString(), "call-c", "request-c");
+                "browser", otherArgs, workspace.toString(), "call-c", "request-c");
 
         CliArtifactCaptureLease first = CliArtifactCaptureCoordinator.acquire(firstPlan);
         CountDownLatch secondAcquired = new CountDownLatch(1);
@@ -121,7 +119,6 @@ public class CliArtifactCaptureCoordinatorTest {
     public void shouldNotClassifyBrowserPrimitivesAsDownloads() {
         CliArtifactCapturePlan plan = CliArtifactCaptureCoordinator.plan(
                 "agent_browser",
-                List.of("main.js", "browser", "state"),
                 List.of("main.js", "browser", "state"),
                 workspace.toString(), "call-read", "request-read");
 

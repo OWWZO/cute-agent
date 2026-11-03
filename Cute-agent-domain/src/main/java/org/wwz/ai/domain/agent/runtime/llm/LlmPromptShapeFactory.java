@@ -24,9 +24,7 @@ public final class LlmPromptShapeFactory {
     }
 
     public static LlmAskToolProtocol protocolOf(String functionCallType) {
-        return "struct_parse".equals(functionCallType)
-                ? LlmAskToolProtocol.STRUCT_PARSE
-                : LlmAskToolProtocol.FUNCTION_CALL;
+        return LlmAskToolProtocol.fromCode(functionCallType);
     }
 
     public static PromptShape forText(Message systemMessage, List<Message> messages) {

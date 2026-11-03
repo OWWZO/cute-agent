@@ -34,9 +34,11 @@ import java.util.concurrent.Future;
 @Slf4j
 public class DataAnalysisTool implements BaseTool {
 
+    public static final String TOOL_NAME = "data_analysis";
+
     @Override
     public String getName() {
-        return "data_analysis";
+        return TOOL_NAME;
     }
 
     @Override

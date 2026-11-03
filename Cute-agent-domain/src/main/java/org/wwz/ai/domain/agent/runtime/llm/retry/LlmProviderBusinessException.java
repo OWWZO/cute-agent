@@ -122,6 +122,11 @@ public class LlmProviderBusinessException extends RuntimeException {
         }
 
         public LlmProviderBusinessException build() {
+            // providerCode 是分类链路的唯一判别依据：缺失会让业务错误退回状态码/文案启发式，
+            // 把「HTTP 200 携带业务码」的失败静默归为 UNKNOWN。这里在构造点就拒绝。
+            if (providerCode == null || providerCode.isBlank()) {
+                throw new IllegalArgumentException("providerCode must not be blank");
+            }
             return new LlmProviderBusinessException(this);
         }
     }

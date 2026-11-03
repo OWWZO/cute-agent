@@ -172,7 +172,7 @@ public class AgentSessionPrinterSubAgentFinishTest {
         AgentStreamProjection projection = new AgentStreamProjection(
                 downstream,
                 request,
-                Map.of(AgentType.REACT, (req, agentResponse, agentRespList, eventResult) -> {
+                Map.of(AgentType.REACT, (req, agentResponse, eventResult) -> {
                     AgentStreamResult result = new AgentStreamResult();
                     result.setComplete(Boolean.TRUE.equals(agentResponse.getFinish()));
                     result.setStatus(Boolean.TRUE.equals(agentResponse.getFinish()) ? "success" : "running");
@@ -236,7 +236,7 @@ public class AgentSessionPrinterSubAgentFinishTest {
         AgentStreamProjection projection = new AgentStreamProjection(
                 downstream,
                 request,
-                Map.of(AgentType.REACT, (req, agentResponse, agentRespList, eventResult) -> {
+                Map.of(AgentType.REACT, (req, agentResponse, eventResult) -> {
                     int order = eventResult.getAndIncrOrder("tool_call");
                     AgentStreamResult result = new AgentStreamResult();
                     result.setComplete(false);

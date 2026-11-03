@@ -284,13 +284,13 @@ public final class BrowserCliSupport {
         if (StringUtils.isBlank(stderr)) {
             return null;
         }
-        for (String line : stderr.split("\\R")) {
-            if (line.startsWith(prefix)) {
-                String value = line.substring(prefix.length()).trim();
-                return value.isEmpty() ? null : value;
-            }
-        }
-        return null;
+        // 流式按行扫描，避免 split("\\R") 为整段 stderr 一次性建出完整数组。
+        return stderr.lines()
+                .filter(line -> line.startsWith(prefix))
+                .map(line -> line.substring(prefix.length()).trim())
+                .filter(value -> !value.isEmpty())
+                .findFirst()
+                .orElse(null);
     }
 
     public static void redactFields(Map<String, Object> fields, String cdpWsUrl) {

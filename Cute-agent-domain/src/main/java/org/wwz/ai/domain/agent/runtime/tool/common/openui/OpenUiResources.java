@@ -40,10 +40,16 @@ public final class OpenUiResources {
         return AUTOFIX_CONFIG_RESOURCE.get();
     }
 
-    /** 单一实现的 volatile 双检懒加载，避免三份拷贝各自演化。 */
+    /**
+     * 单一实现的 volatile 双检懒加载，避免三份拷贝各自演化。
+     * <p>失败结果同样被缓存：缺产物是构建/打包错误，重试不会自愈，每次请求重建
+     * {@link IllegalStateException} 只会把一次错误放大成每请求一次。首个调用方拿到原始异常，
+     * 后续调用方拿到同一错误（stack trace 指向首次失败点）。</p>
+     */
     private static final class LazyResource {
         private final String path;
         private volatile String value;
+        private volatile IllegalStateException failure;
 
         private LazyResource(String path) {
             this.path = path;
@@ -51,16 +57,24 @@ public final class OpenUiResources {
 
         private String get() {
             String cached = value;
-            if (cached == null) {
-                synchronized (this) {
-                    cached = value;
-                    if (cached == null) {
-                        cached = load(path);
-                        value = cached;
-                    }
+            if (cached != null) {
+                return cached;
+            }
+            synchronized (this) {
+                if (value != null) {
+                    return value;
+                }
+                if (failure != null) {
+                    throw new IllegalStateException(failure.getMessage(), failure);
+                }
+                try {
+                    value = load(path);
+                    return value;
+                } catch (IllegalStateException e) {
+                    failure = e;
+                    throw e;
                 }
             }
-            return cached;
         }
     }
 

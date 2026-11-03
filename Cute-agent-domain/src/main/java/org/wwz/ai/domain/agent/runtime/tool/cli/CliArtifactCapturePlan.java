@@ -16,13 +16,10 @@ import java.util.List;
 @Builder(access = AccessLevel.PACKAGE)
 public class CliArtifactCapturePlan {
 
-    List<String> originalArgs;
     List<String> rewrittenArgs;
     boolean artifactCommand;
-    String requestedOutputRoot;
     String captureRoot;
     String captureRootAbsolute;
-    boolean outputRootInjected;
     String captureId;
     boolean valid;
     String errorCode;
@@ -32,22 +29,19 @@ public class CliArtifactCapturePlan {
         return valid && artifactCommand && captureRootAbsolute != null;
     }
 
-    public static CliArtifactCapturePlan ordinary(List<String> originalArgs, List<String> rewrittenArgs) {
+    public static CliArtifactCapturePlan ordinary(List<String> rewrittenArgs) {
         return CliArtifactCapturePlan.builder()
-                .originalArgs(copy(originalArgs))
                 .rewrittenArgs(copy(rewrittenArgs))
                 .artifactCommand(false)
                 .valid(true)
                 .build();
     }
 
-    public static CliArtifactCapturePlan invalid(List<String> originalArgs,
-                                                 List<String> rewrittenArgs,
+    public static CliArtifactCapturePlan invalid(List<String> rewrittenArgs,
                                                  boolean artifactCommand,
                                                  String errorCode,
                                                  String errorMessage) {
         return CliArtifactCapturePlan.builder()
-                .originalArgs(copy(originalArgs))
                 .rewrittenArgs(copy(rewrittenArgs))
                 .artifactCommand(artifactCommand)
                 .valid(false)

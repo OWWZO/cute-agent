@@ -62,7 +62,7 @@ public class AgentDispatchService implements IAgentDispatchService {
         result.setComplete(true);
         result.setStatus("failed");
         result.setFrameType("result");
-        result.setContentType(ResponseTypeEnum.text.name());
+        result.setContentType(ResponseTypeEnum.TEXT.getValue());
         result.setErrorMessage(e != null && e.getMessage() != null
                 ? e.getMessage()
                 : "已有任务在进行中，请等待完成或先停止后再试");

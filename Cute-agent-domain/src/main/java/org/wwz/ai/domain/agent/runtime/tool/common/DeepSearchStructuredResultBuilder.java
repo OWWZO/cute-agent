@@ -292,7 +292,7 @@ public class DeepSearchStructuredResultBuilder {
 
     private DeepSearchResponse.SearchDoc copyDoc(DeepSearchResponse.SearchDoc doc) {
         return DeepSearchResponse.SearchDoc.builder()
-                .doc_type(doc.getDoc_type())
+                .docType(doc.getDocType())
                 .content(doc.getContent())
                 .title(doc.getTitle())
                 .link(doc.getLink())

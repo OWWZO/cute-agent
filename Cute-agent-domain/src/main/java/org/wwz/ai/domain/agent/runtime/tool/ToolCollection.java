@@ -89,16 +89,18 @@ public class ToolCollection {
      * 当前执行的任务标识
      * 业务说明：
      * - 非并发场景下，每个task执行时会更新该字段，关联当前任务与数字员工；
-     * - TODO：并发场景下需加锁/线程隔离处理，避免多任务覆盖该字段导致数据错乱。
+     * - 与 {@link #digitalEmployees} 成组更新，读写统一走本类的 synchronized 方法，
+     *   避免并发 child task 观察到「新任务 + 旧数字员工」的混合态。
      */
-    private String currentTask;
+    private volatile String currentTask;
 
     /**
      * 数字员工配置JSON对象
      * 结构示例：{"document_generate": "文档专家", "search_tool": "数据分析师"}
      * 用途：存储工具名称与数字员工的映射关系，实现「工具-数字员工」的动态绑定。
+     * 与 {@link #currentTask} 成组更新，见上。
      */
-    private JSONObject digitalEmployees;
+    private volatile JSONObject digitalEmployees;
 
     /**
      * 无参构造方法
@@ -276,19 +278,19 @@ public class ToolCollection {
         if (StringUtils.isEmpty(toolName)) {
             return null;
         }
-        // 空值校验：数字员工配置未初始化直接返回null
-        if (digitalEmployees == null) {
+        // 单次读入 volatile 字段：判空与取值之间若被并发 restore 置空，会 NPE。
+        JSONObject employees = digitalEmployees;
+        if (employees == null) {
             return null;
         }
-        // 从JSON对象中获取工具对应的数字员工名称
-        return (String) digitalEmployees.get(toolName);
+        return (String) employees.get(toolName);
     }
 
     /**
      * 复制当前任务态快照。
      * 并发 child task 只允许继承父 task 的初始视图，后续修改必须彼此隔离。
      */
-    public TaskScopedStateSnapshot snapshotTaskScopedState() {
+    public synchronized TaskScopedStateSnapshot snapshotTaskScopedState() {
         return new TaskScopedStateSnapshot(
                 currentTask,
                 digitalEmployees == null ? null : JSONFieldCopySupport.copyJsonObject(digitalEmployees)
@@ -297,8 +299,10 @@ public class ToolCollection {
 
     /**
      * 恢复一份任务态快照。
+     * <p>两个字段必须成组切换：只写其中一个会让并发读取方看到新任务配旧数字员工的混合态。
+     * synchronized 保证与 {@link #snapshotTaskScopedState()} 及并发 restore 之间互斥。</p>
      */
-    public void restoreTaskScopedState(TaskScopedStateSnapshot snapshot) {
+    public synchronized void restoreTaskScopedState(TaskScopedStateSnapshot snapshot) {
         if (snapshot == null) {
             currentTask = null;
             digitalEmployees = null;

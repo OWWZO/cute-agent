@@ -138,7 +138,7 @@ public abstract class BaseAgent {
     protected void appendAssistantMessage(LLM.ToolCallResponse response) {
         Message assistantMessage = response.getToolCalls() != null
                 && !response.getToolCalls().isEmpty()
-                && !"struct_parse".equals(llm.getFunctionCallType())
+                && LlmAskToolProtocol.fromCode(llm.getFunctionCallType()) != LlmAskToolProtocol.STRUCT_PARSE
                 ? Message.fromToolCalls(response.getContent(), response.getReasoningContent(), response.getToolCalls())
                 : Message.assistantMessage(response.getContent(), response.getReasoningContent(), null);
         getMemory().addMessage(assistantMessage);
@@ -618,7 +618,7 @@ public abstract class BaseAgent {
         if (command == null) {
             return observation;
         }
-        if ("struct_parse".equals(llm.getFunctionCallType())) {
+        if (LlmAskToolProtocol.fromCode(llm.getFunctionCallType()) == LlmAskToolProtocol.STRUCT_PARSE) {
             // struct_parse 没有 tool_use_id 绑定，observation 直接拼进 assistant content，
             // 投影后 JSON 里的 tool 字段已不存在，必须补回工具名，否则模型不知道结果归属。
             String toolName = command.getFunction() == null ? "tool" : command.getFunction().getName();

@@ -122,7 +122,6 @@ public class ReactExecutionLedgerIntegrationTest {
                         .finish(false)
                         .resultMap(Map.of("agentType", 5, "plannerRoundId", "9001"))
                         .build(),
-                List.of(),
                 new AgentStreamAccumulator()
         );
 

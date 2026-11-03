@@ -42,7 +42,6 @@ import java.util.regex.Pattern;
 @Data
 public class LLM {
 
-    private static final String STRUCT_PARSE = "struct_parse";
     private static final String FUNCTION = "function";
     private static final String STRUCT_PARSE_JSON_MARKER = "```json";
     private static final Pattern STRUCT_PARSE_JSON_PATTERN = Pattern.compile("```json\\s*([\\s\\S]*?)\\s*```");
@@ -608,7 +607,7 @@ public class LLM {
     }
 
     private boolean isStructParseMode() {
-        return STRUCT_PARSE.equals(functionCallType);
+        return LlmAskToolProtocol.fromCode(functionCallType) == LlmAskToolProtocol.STRUCT_PARSE;
     }
 
     private List<String> resolveFallbackModelNames() {

@@ -30,25 +30,23 @@ public final class CliArtifactCaptureCoordinator {
     private static final ConcurrentHashMap<String, LockEntry> LOCKS = new ConcurrentHashMap<>();
 
     public static CliArtifactCapturePlan plan(String toolName,
-                                              List<String> originalArgs,
                                               List<String> processArgs,
                                               String workspaceRoot,
                                               String toolCallId,
                                               String requestId) {
-        List<String> original = copy(originalArgs);
         List<String> actual = copy(processArgs);
         if (!OpenCliArgv.isDownloadCommand(actual)) {
-            return CliArtifactCapturePlan.ordinary(original, actual);
+            return CliArtifactCapturePlan.ordinary(actual);
         }
 
         OpenCliArgv.OutputOption option = OpenCliArgv.resolveOutputOption(actual);
         if (option.present() && !option.valid()) {
-            return CliArtifactCapturePlan.invalid(original, actual, true, OUTPUT_ROOT_INVALID,
+            return CliArtifactCapturePlan.invalid(actual, true, OUTPUT_ROOT_INVALID,
                     "下载命令的 output 目录无效");
         }
         Path workspace = resolveWorkspace(workspaceRoot);
         if (workspace == null || !Files.isDirectory(workspace)) {
-            return CliArtifactCapturePlan.invalid(original, actual, true, OUTPUT_ROOT_OUTSIDE_WORKSPACE,
+            return CliArtifactCapturePlan.invalid(actual, true, OUTPUT_ROOT_OUTSIDE_WORKSPACE,
                     "workspace 不可用");
         }
 
@@ -61,18 +59,18 @@ public final class CliArtifactCaptureCoordinator {
         } else {
             captureRoot = normalizeRoot(requestedRoot);
             if (captureRoot == null) {
-                return CliArtifactCapturePlan.invalid(original, actual, true, OUTPUT_ROOT_INVALID,
+                return CliArtifactCapturePlan.invalid(actual, true, OUTPUT_ROOT_INVALID,
                         "output 目录必须是 workspace 内的相对路径");
             }
         }
 
         Path absolute = workspace.resolve(captureRoot).normalize();
         if (!absolute.startsWith(workspace)) {
-            return CliArtifactCapturePlan.invalid(original, actual, true, OUTPUT_ROOT_OUTSIDE_WORKSPACE,
+            return CliArtifactCapturePlan.invalid(actual, true, OUTPUT_ROOT_OUTSIDE_WORKSPACE,
                     "output 目录必须位于 workspace 内");
         }
         if (!isExistingPathUnderWorkspace(absolute, workspace)) {
-            return CliArtifactCapturePlan.invalid(original, actual, true, OUTPUT_ROOT_OUTSIDE_WORKSPACE,
+            return CliArtifactCapturePlan.invalid(actual, true, OUTPUT_ROOT_OUTSIDE_WORKSPACE,
                     "output 目录不能通过符号链接逃出 workspace");
         }
 
@@ -80,17 +78,14 @@ public final class CliArtifactCaptureCoordinator {
         try {
             rewritten = OpenCliArgv.rewriteOutputRoot(actual, captureRoot);
         } catch (IllegalArgumentException e) {
-            return CliArtifactCapturePlan.invalid(original, actual, true, OUTPUT_ROOT_INVALID,
+            return CliArtifactCapturePlan.invalid(actual, true, OUTPUT_ROOT_INVALID,
                     "下载命令的 output 目录无效");
         }
         return CliArtifactCapturePlan.builder()
-                .originalArgs(original)
                 .rewrittenArgs(rewritten)
                 .artifactCommand(true)
-                .requestedOutputRoot(requestedRoot)
                 .captureRoot(captureRoot)
                 .captureRootAbsolute(absolute.toString())
-                .outputRootInjected(injected)
                 .captureId(captureId)
                 .valid(true)
                 .build();

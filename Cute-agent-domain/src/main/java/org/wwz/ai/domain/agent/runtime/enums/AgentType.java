@@ -7,12 +7,13 @@ public enum AgentType {
     PLAN_SOLVE(3),
     REACT(5);
 
-    private final Integer value;
+    private final int value;
 
-    AgentType(Integer value) {
+    AgentType(int value) {
         this.value = value;
     }
 
+    /** 外部契约里是装箱的 {@code Integer}（如 request.agentType），因此 getter 保持包装类型。 */
     public Integer getValue() {
         return value;
     }

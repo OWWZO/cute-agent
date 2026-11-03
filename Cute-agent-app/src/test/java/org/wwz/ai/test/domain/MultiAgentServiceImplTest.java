@@ -80,7 +80,7 @@ public class MultiAgentServiceImplTest {
         AtomicInteger completeCount = new AtomicInteger();
         stream.onCompleteCallback = completeCount::incrementAndGet;
 
-        AgentStreamEventHandler handler = (request, response, agentRespList, eventResult) -> AgentStreamResult.builder()
+        AgentStreamEventHandler handler = (request, response, eventResult) -> AgentStreamResult.builder()
                 .complete(true)
                 .status("success")
                 .eventData(Map.of())
@@ -144,7 +144,7 @@ public class MultiAgentServiceImplTest {
         request.setRequestId("req-rebind-1");
         request.setAgentType(AgentType.REACT.getValue());
 
-        AgentStreamEventHandler handler = (req, response, agentRespList, eventResult) -> AgentStreamResult.builder()
+        AgentStreamEventHandler handler = (req, response, eventResult) -> AgentStreamResult.builder()
                 .complete(false)
                 .status("success")
                 .frameType("result")
@@ -186,7 +186,7 @@ public class MultiAgentServiceImplTest {
         request.setAgentType(AgentType.REACT.getValue());
 
         AtomicInteger seq = new AtomicInteger();
-        AgentStreamEventHandler handler = (req, response, agentRespList, eventResult) -> AgentStreamResult.builder()
+        AgentStreamEventHandler handler = (req, response, eventResult) -> AgentStreamResult.builder()
                 .complete(false)
                 .status("success")
                 .frameType("result")
@@ -230,7 +230,7 @@ public class MultiAgentServiceImplTest {
         request.setRequestId("req-fanout-1");
         request.setAgentType(AgentType.REACT.getValue());
 
-        AgentStreamEventHandler handler = (req, response, agentRespList, eventResult) -> AgentStreamResult.builder()
+        AgentStreamEventHandler handler = (req, response, eventResult) -> AgentStreamResult.builder()
                 .complete(false)
                 .status("success")
                 .frameType("result")
@@ -266,7 +266,7 @@ public class MultiAgentServiceImplTest {
         request.setRequestId("req-keep-alive-1");
         request.setAgentType(AgentType.REACT.getValue());
 
-        AgentStreamEventHandler handler = (req, response, agentRespList, eventResult) -> AgentStreamResult.builder()
+        AgentStreamEventHandler handler = (req, response, eventResult) -> AgentStreamResult.builder()
                 .complete(false)
                 .status("success")
                 .frameType("result")
@@ -305,7 +305,7 @@ public class MultiAgentServiceImplTest {
         request.setSessionId("sess-bus-1");
         request.setAgentType(AgentType.REACT.getValue());
 
-        AgentStreamEventHandler handler = (req, response, agentRespList, eventResult) -> AgentStreamResult.builder()
+        AgentStreamEventHandler handler = (req, response, eventResult) -> AgentStreamResult.builder()
                 .complete(false)
                 .status("success")
                 .frameType("result")

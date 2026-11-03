@@ -87,7 +87,7 @@ public class SkillPackageService {
         }
         skillRegistry.refresh();
         log.info("skill installed from zip name={} file={} replace={}", parsed.name(), originalFilename, replace);
-        return withWarnings(skillRow(parsed.name()), report);
+        return withWarnings(skillRow(parsed.name(), trustLevel), report);
     }
 
     /**
@@ -130,7 +130,7 @@ public class SkillPackageService {
         }
         skillRegistry.refresh();
         log.info("skill installed from markdown name={}", resolvedName);
-        return withWarnings(skillRow(resolvedName), report);
+        return withWarnings(skillRow(resolvedName, trustLevel), report);
     }
 
     /**
@@ -365,12 +365,17 @@ public class SkillPackageService {
     }
 
     private Map<String, Object> skillRow(String name) {
+        return skillRow(name, null);
+    }
+
+    /** trustLevel 标明技能来源（upload/url/...）；无法判定时保持兼容值 {@code upload}。 */
+    private Map<String, Object> skillRow(String name, SkillTrustLevel trustLevel) {
         SkillDefinition def = skillRegistry.findSkill(name).orElse(null);
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", name);
         m.put("description", def == null ? null : def.getDescription());
         m.put("basePath", def == null || def.getBasePath() == null ? null : def.getBasePath().toString());
-        m.put("source", "upload");
+        m.put("source", trustLevel == SkillTrustLevel.URL ? "url" : "upload");
         return m;
     }
 

@@ -53,12 +53,12 @@ public class SkillPathGuard {
         }
         String normalized = relativePath.trim().replace('\\', '/');
         if (normalized.startsWith("/")) {
+            // 同时拦下 Windows（\\server\share → //server/share）与 Unix（//server/share）UNC 前缀。
             return true;
         }
         if (normalized.startsWith("~")) {
             return true;
         }
-        // UNC 路径（//server/share）已由上面的 startsWith("/") 拦截，无需重复判断。
         if (WINDOWS_DRIVE.matcher(normalized).matches()) {
             return true;
         }

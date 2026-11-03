@@ -9,8 +9,6 @@ import org.wwz.ai.domain.agent.runtime.stream.AgentStreamEvent;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
 import org.wwz.ai.domain.agent.ledger.replay.ReplayProjector;
 
-import java.util.List;
-
 /**
  * Agent 的增量响应处理器。
  * <p>
@@ -26,7 +24,7 @@ public class CanonicalAgentStreamEventHandler extends BaseAgentStreamEventHandle
     }
 
     @Override
-    public AgentStreamResult handle(AgentExecutionCommand request, AgentStreamEvent response, List<AgentStreamEvent> agentRespList, AgentStreamAccumulator eventResult) {
+    public AgentStreamResult handle(AgentExecutionCommand request, AgentStreamEvent response, AgentStreamAccumulator eventResult) {
         try {
             // 不在处理器内重新拼装工具结果，避免实时链路与账本回放出现字段差异。
             return buildCanonicalIncrResult(request, eventResult, response);

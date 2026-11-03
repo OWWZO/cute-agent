@@ -75,6 +75,15 @@ public final class AskUserQuestionObservationSupport {
         return map;
     }
 
+    /**
+     * 持久化状态 → 客户端卡片状态。
+     * <p>客户端只区分「还在等」与「已结束」：只有 {@code PENDING} 映射为 {@code pending}；
+     * 续跑中（{@code RESUMING}/{@code RESUME_PENDING}）与已答（{@code ANSWERED}）都是
+     * {@code answered}；超时为 {@code timeout}；用户取消与系统失败各自独立
+     * （{@code cancelled} / {@code failed}），不再把失败伪装成用户取消。
+     * 未知/空状态不当作开放问题，返回 {@code unknown}，避免陈旧记录渲染成可回答的卡片。
+     * 原始状态另见 {@code persistenceStatus}。</p>
+     */
     public static String toClientStatus(String status) {
         if (UserQuestionStatuses.ANSWERED.equals(status) || UserQuestionStatuses.RESUMING.equals(status)
                 || UserQuestionStatuses.RESUME_PENDING.equals(status)) {
@@ -83,9 +92,15 @@ public final class AskUserQuestionObservationSupport {
         if (UserQuestionStatuses.TIMEOUT.equals(status)) {
             return "timeout";
         }
-        if (UserQuestionStatuses.CANCELLED.equals(status) || UserQuestionStatuses.FAILED.equals(status)) {
+        if (UserQuestionStatuses.CANCELLED.equals(status)) {
             return "cancelled";
         }
-        return "pending";
+        if (UserQuestionStatuses.FAILED.equals(status)) {
+            return "failed";
+        }
+        if (UserQuestionStatuses.PENDING.equals(status)) {
+            return "pending";
+        }
+        return "unknown";
     }
 }

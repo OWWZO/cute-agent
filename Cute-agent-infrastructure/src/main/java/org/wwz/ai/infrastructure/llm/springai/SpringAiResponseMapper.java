@@ -134,17 +134,19 @@ public class SpringAiResponseMapper {
                 .totalTokens(usage == null ? null : usage.getTotalTokens())
                 .build();
         LlmUsageSnapshot snapshot = LlmUsageSnapshot.resolve(mapped);
-        mapped.setPromptTokens(snapshot.getPromptTokens());
-        mapped.setCompletionTokens(snapshot.getCompletionTokens());
-        mapped.setTotalTokens(snapshot.getTotalTokens());
-        mapped.setCachedPromptTokens(snapshot.getCachedPromptTokens());
-        mapped.setPromptTextTokens(snapshot.getPromptTextTokens());
-        mapped.setPromptAudioTokens(snapshot.getPromptAudioTokens());
-        mapped.setPromptImageTokens(snapshot.getPromptImageTokens());
-        mapped.setCompletionTextTokens(snapshot.getCompletionTextTokens());
-        mapped.setCompletionAudioTokens(snapshot.getCompletionAudioTokens());
-        mapped.setReasoningTokens(snapshot.getReasoningTokens());
-        return mapped;
+        // LlmUsage 不可变：回填快照字段必须派生新实例，不能就地 set。
+        return mapped.toBuilder()
+                .promptTokens(snapshot.getPromptTokens())
+                .completionTokens(snapshot.getCompletionTokens())
+                .totalTokens(snapshot.getTotalTokens())
+                .cachedPromptTokens(snapshot.getCachedPromptTokens())
+                .promptTextTokens(snapshot.getPromptTextTokens())
+                .promptAudioTokens(snapshot.getPromptAudioTokens())
+                .promptImageTokens(snapshot.getPromptImageTokens())
+                .completionTextTokens(snapshot.getCompletionTextTokens())
+                .completionAudioTokens(snapshot.getCompletionAudioTokens())
+                .reasoningTokens(snapshot.getReasoningTokens())
+                .build();
     }
 
     private String sanitize(String content) {
