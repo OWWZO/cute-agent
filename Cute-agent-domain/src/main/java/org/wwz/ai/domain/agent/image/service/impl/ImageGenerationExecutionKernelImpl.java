@@ -5,7 +5,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.wwz.ai.domain.agent.runtime.util.StringUtil;
-import org.wwz.ai.domain.agent.image.port.ICuteImageGenerationGateway;
+import org.wwz.ai.domain.agent.image.port.ImageGenerationGatewayPort;
 import org.wwz.ai.domain.agent.image.model.ImageGenerationExecuteCommand;
 import org.wwz.ai.domain.agent.image.model.ImageGenerationExecutionResult;
 import org.wwz.ai.domain.agent.image.model.ImageGenerationGatewayFile;
@@ -29,7 +29,7 @@ public class ImageGenerationExecutionKernelImpl implements IImageGenerationExecu
     private static final int DEFAULT_TIMEOUT_SECONDS = 900;
     private static final int DEFAULT_BATCH_SIZE = 1;
 
-    private final ICuteImageGenerationGateway imageGenerationGateway;
+    private final ImageGenerationGatewayPort imageGenerationGateway;
 
     @Override
     public ImageGenerationExecutionResult execute(ImageGenerationExecuteCommand command) {

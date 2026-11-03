@@ -22,10 +22,13 @@ public class ImageGenerationExecuteCommand {
 
     private String mode;
 
+    /** 输入图片文件名列表（图生图的参考图），不是产出物名。 */
     private List<String> fileNames;
 
+    /** 输入 mask 图片文件名列表，与 {@link #fileNames} 一一对应。 */
     private List<String> maskFileNames;
 
+    /** 产出物文件名（单数）；与上面的输入列表语义不同。 */
     private String fileName;
 
     private String fileDescription;
