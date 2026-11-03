@@ -3,6 +3,8 @@ package org.wwz.ai.domain.agent.adapter.port;
 import lombok.Builder;
 import lombok.Value;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -52,4 +54,27 @@ public class RemoteStreamRequest {
      * 整体调用超时时间，单位秒；为空时由适配器使用默认值。
      */
     Long callTimeoutSeconds;
+
+    /**
+     * 显式全参构造用于防御性复制请求头，避免调用方在异步流建立后继续修改原始 Map。
+     */
+    public RemoteStreamRequest(String method,
+                               String url,
+                               Map<String, String> headers,
+                               String body,
+                               Long connectTimeoutSeconds,
+                               Long readTimeoutSeconds,
+                               Long writeTimeoutSeconds,
+                               Long callTimeoutSeconds) {
+        this.method = method;
+        this.url = url;
+        this.headers = headers == null
+                ? null
+                : Collections.unmodifiableMap(new LinkedHashMap<>(headers));
+        this.body = body;
+        this.connectTimeoutSeconds = connectTimeoutSeconds;
+        this.readTimeoutSeconds = readTimeoutSeconds;
+        this.writeTimeoutSeconds = writeTimeoutSeconds;
+        this.callTimeoutSeconds = callTimeoutSeconds;
+    }
 }

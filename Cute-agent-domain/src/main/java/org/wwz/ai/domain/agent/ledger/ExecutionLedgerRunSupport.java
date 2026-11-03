@@ -59,7 +59,7 @@ public final class ExecutionLedgerRunSupport {
             // 先打内存终态，避免后台子 Agent 在 ledger 写回前误关父 SSE。
             agentContext.markTurnClosed();
         }
-        if (!hasActiveRun(agentContext) || agentContext.getExecutionRecorder() == null) {
+        if (!hasActiveRun(agentContext)) {
             return;
         }
         agentContext.getExecutionRecorder().finishRun(DialogueRunFinishRecord.builder()

@@ -25,6 +25,13 @@ public interface IFeaturedConversationRepository {
             FeaturedConversationQueryCondition condition
     );
 
+    /**
+     * 新建或更新精品对话。
+     *
+     * @return {@code true} 表示写入成功（新建或更新）；{@code false} 表示参数校验失败
+     *         （命令为 null，或 {@code featuredId}/{@code sessionId} 为空），此时未写库。
+     *         {@code featuredId} 是更新与查询的主键，必须非空。
+     */
     boolean upsert(FeaturedConversationUpsertCommand command);
 
     boolean updateStatus(String featuredId, String status, String operator);

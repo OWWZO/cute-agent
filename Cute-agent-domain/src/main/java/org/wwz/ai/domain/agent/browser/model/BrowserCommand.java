@@ -21,7 +21,6 @@ public record BrowserCommand(String userId,
     public BrowserCommand {
         userId = trimToNull(userId);
         rpcId = trimToNull(rpcId);
-        action = action == null ? null : action;
         parameters = parameters == null
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(parameters));

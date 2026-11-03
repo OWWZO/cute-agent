@@ -25,8 +25,8 @@ public final class BrowserRelayOwnershipPolicy {
                            String expectedConnectionId,
                            BrowserRelayInboundMessage message) {
         return hasIdentity(message)
-                && expectedUserId != null
-                && expectedConnectionId != null
+                && nonBlank(expectedUserId)
+                && nonBlank(expectedConnectionId)
                 && expectedUserId.equals(message.userId())
                 && expectedConnectionId.equals(message.connectionId());
     }
