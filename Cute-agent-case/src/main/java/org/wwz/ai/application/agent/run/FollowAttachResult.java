@@ -1,11 +1,23 @@
 package org.wwz.ai.application.agent.run;
 
 /**
- * /run/follow 一次尝试的结果。PENDING 表示 ledger 仍 RUNNING 但进程内索引尚未就绪，
- * 观察流应保持打开并短轮询续绑，而不是立即 complete。
+ * {@code /run/follow} 一次挂接尝试的结果。
+ * <p>该枚举描述“观察流现在能否绑定”，不直接等价于 ledger 状态。PENDING 表示可观察的
+ * 运行或回放链路尚未就绪，调用方应使用有上限的退避重试，避免永久轮询。</p>
  */
 public enum FollowAttachResult {
+    /** 观察者已绑定到活动投影，流应继续保持打开并接收后续帧。 */
     ATTACHED,
+
+    /**
+     * 当前没有可观察的活动 run，或会话为空、无权限而被统一归一为不可观察状态。
+     * 调用方可以发送终止提示并关闭流；出于权限语义，不应向客户端区分具体拒绝原因。
+     */
     IDLE,
+
+    /**
+     * 活动 run、投影、printer 或回放链路尚未就绪，也可能是一次暂时性的回放失败。
+     * 该状态不是终态，调用方应短轮询续绑，并设置最大重试次数或总等待时间。
+     */
     PENDING
 }
