@@ -15,7 +15,6 @@ import org.wwz.ai.domain.agent.runtime.subagent.SubAgentSessionToolScope;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentToolFilter;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner;
 import org.wwz.ai.domain.agent.runtime.tool.common.AgentDispatchTool;
-import org.wwz.ai.domain.agent.runtime.askuser.PendingUserQuestionRegistry;
 import org.wwz.ai.domain.agent.runtime.planmode.PendingPlanApprovalRegistry;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.AskUserQuestionTool;
@@ -127,7 +126,6 @@ public class AgentToolCollectionFactory {
     private final SkillVirtualPaths skillVirtualPaths;
     private final WorkspaceService workspaceService;
     private final WorkspaceRuntimeOptions workspaceRuntimeOptions;
-    private final PendingUserQuestionRegistry pendingUserQuestionRegistry;
     private final PendingPlanApprovalRegistry pendingPlanApprovalRegistry;
 
     /**
@@ -544,12 +542,10 @@ public class AgentToolCollectionFactory {
         ExitPlanModeTool exitPlanModeTool = new ExitPlanModeTool();
         toolCollection.addTool(exitPlanModeTool);
 
-        if (pendingUserQuestionRegistry != null) {
-            AskUserQuestionTool askUserQuestionTool = new AskUserQuestionTool();
-            toolCollection.addTool(askUserQuestionTool);
-            RequestDesktopControlTool requestDesktopControlTool = new RequestDesktopControlTool();
-            toolCollection.addTool(requestDesktopControlTool);
-        }
+        AskUserQuestionTool askUserQuestionTool = new AskUserQuestionTool();
+        toolCollection.addTool(askUserQuestionTool);
+        RequestDesktopControlTool requestDesktopControlTool = new RequestDesktopControlTool();
+        toolCollection.addTool(requestDesktopControlTool);
     }
 
     private void ensureWorkspaceRoot(AgentContext agentContext) {

@@ -211,7 +211,7 @@ public class AgentSessionPrinterSubAgentFinishTest {
         projection.send(root);
 
         // 根 result 的 finished 只收口业务态，不在投影层自动关流；
-        // 由 GptQuery / HITL resume 在 finishRun、markAnswered 后显式 complete。
+        // 由 GptQuery / HITL resume 在 finishRun、markStatus(ANSWERED) 后显式 complete。
         Assert.assertFalse(downstream.completed.get());
         Assert.assertEquals(2, downstream.payloads.size());
 

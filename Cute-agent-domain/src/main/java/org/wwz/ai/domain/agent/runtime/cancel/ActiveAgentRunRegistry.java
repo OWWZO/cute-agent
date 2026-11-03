@@ -5,7 +5,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import org.wwz.ai.domain.agent.adapter.port.AgentMessageStream;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
-import org.wwz.ai.domain.agent.runtime.askuser.PendingUserQuestionRegistry;
 import org.wwz.ai.domain.agent.runtime.planmode.PendingPlanApprovalRegistry;
 import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
 
@@ -89,9 +88,6 @@ public class ActiveAgentRunRegistry {
     private final Map<String, ActiveRun> byRequestId = new ConcurrentHashMap<>();
     /** sessionId → requestId，供 GET 旁观按会话挂流，并保证同一会话只有一个活跃 run。 */
     private final Map<String, String> bySessionId = new ConcurrentHashMap<>();
-
-    @Resource
-    private PendingUserQuestionRegistry pendingUserQuestionRegistry;
 
     @Resource
     private PendingPlanApprovalRegistry pendingPlanApprovalRegistry;
@@ -215,9 +211,6 @@ public class ActiveAgentRunRegistry {
             return false;
         }
         log.info("cancel agent run requestId={} reason={}", requestId, reason);
-        if (pendingUserQuestionRegistry != null) {
-            pendingUserQuestionRegistry.cancelByRequestId(requestId, reason);
-        }
         if (planApprovalRepository != null) {
             planApprovalRepository.cancelBySourceRequestId(requestId, reason);
         } else if (pendingPlanApprovalRegistry != null) {

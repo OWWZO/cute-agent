@@ -76,7 +76,10 @@ public class UserQuestionYieldService {
                 .resumeContextJson(UserQuestionResumeContext.toJson(resumeContext))
                 .build();
 
-        userQuestionRepository.insert(record);
+        if (!userQuestionRepository.insertIfAbsent(record)) {
+            // 并发提交同一 session 时，另一条问询已占用待回答位；此时不能发卡片，直接终止本轮。
+            throw new IllegalStateException("会话已有待回答的问题: " + agentContext.getSessionId());
+        }
         if (sessionWorkingMemoryService != null && executor != null) {
             sessionWorkingMemoryService.persistTurn(
                     agentContext.getSessionId(),
