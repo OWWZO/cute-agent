@@ -105,4 +105,10 @@ public class TextChunkerTest {
     public void absurdlySmallLimitIsRejected() {
         TextChunker.split("x".repeat(100), 10);
     }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void prefixReserveCannotConsumeWholeBudget() {
+        // 超长文本 + 极小上限：块数太多，序号预留最终会吃掉全部预算。
+        TextChunker.split("x".repeat(10_000), 21);
+    }
 }

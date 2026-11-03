@@ -50,6 +50,10 @@ public final class TextChunker {
         List<String> raw;
         while (true) {
             int budget = maxLength - reserve - FENCE_OVERHEAD;
+            if (budget <= 0) {
+                // 序号预留已占满上限，继续切只会产出越界块。
+                throw new IllegalArgumentException("maxLength 过小：" + maxLength);
+            }
             raw = splitRaw(normalized, budget);
             int prefixLength = prefix(raw.size()).length();
             if (prefixLength <= reserve) {
