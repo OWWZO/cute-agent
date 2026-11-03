@@ -1,5 +1,6 @@
 package org.wwz.ai.test.domain;
 
+import com.alibaba.fastjson.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -12,7 +13,6 @@ import org.wwz.ai.domain.agent.image.model.ImageGenerationGatewayResponse;
 import org.wwz.ai.domain.agent.image.service.impl.ImageGenerationExecutionKernelImpl;
 
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ImageGenerationExecutionKernelTest {
@@ -25,12 +25,14 @@ public class ImageGenerationExecutionKernelTest {
                 .thenAnswer(invocation -> {
                     ImageGenerationGatewayRequest request = invocation.getArgument(0);
                     captured.set(request);
+                    JSONObject rawResponse = new JSONObject();
+                    rawResponse.put("traceId", "raw-1");
                     return ImageGenerationGatewayResponse.builder()
                             .requestId(request.getRequestId())
                             .mode("images")
                             .data("生成完成")
                             .usedFallback(true)
-                            .rawResponse(Map.of("traceId", "raw-1"))
+                            .rawResponse(rawResponse)
                             .fileInfo(List.of(
                                     ImageGenerationGatewayFile.builder()
                                             .fileName("poster.png")

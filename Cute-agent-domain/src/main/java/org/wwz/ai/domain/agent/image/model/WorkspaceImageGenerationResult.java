@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.image.model;
 
+import com.alibaba.fastjson.JSONObject;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -30,5 +31,5 @@ public class WorkspaceImageGenerationResult {
      */
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private Object rawResponse;
+    private JSONObject rawResponse;
 }

@@ -16,6 +16,7 @@ import org.wwz.ai.domain.agent.adapter.port.RemoteStreamPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamRequest;
 import org.wwz.ai.domain.agent.rag.model.query.DataQueryColumn;
 import org.wwz.ai.domain.agent.rag.model.query.DataQueryFilter;
+import org.wwz.ai.domain.agent.rag.model.query.DataQueryEventType;
 import org.wwz.ai.domain.agent.rag.model.query.DataQueryResult;
 import org.wwz.ai.domain.agent.rag.model.query.DataQueryStreamEvent;
 import org.wwz.ai.domain.agent.rag.model.query.Nl2SqlQuery;
@@ -32,7 +33,6 @@ import org.wwz.ai.domain.agent.rag.model.sql.SqlModel;
 import org.wwz.ai.domain.agent.rag.model.sql.WhereCondition;
 import org.wwz.ai.domain.agent.rag.port.DataQueryExecutionPort;
 import org.wwz.ai.domain.agent.rag.sql.SqlParserUtils;
-import org.wwz.ai.domain.agent.cute.model.enums.EventTypeEnum;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -388,10 +388,11 @@ public class Nl2SqlQueryService {
                     return;
                 }
                 if (STATUS_THINK.equalsIgnoreCase(eventResult.getStatus())) {
-                    stream.send(new DataQueryStreamEvent(EventTypeEnum.THINK.name(), eventResult.getNl2sqlThink()));
+                    stream.send(DataQueryStreamEvent.text(DataQueryEventType.THINK, eventResult.getNl2sqlThink()));
                 }
                 if (STATUS_STREAM_FINISHED.equalsIgnoreCase(eventResult.getStatus())) {
-                    stream.send(new DataQueryStreamEvent(STATUS_STREAM_FINISHED, STATUS_STREAM_FINISHED));
+                    stream.send(DataQueryStreamEvent.text(
+                            DataQueryEventType.FINISHED_STREAM, STATUS_STREAM_FINISHED));
                 }
                 if (STATUS_DATA.equalsIgnoreCase(eventResult.getStatus())) {
                     log.info("{},{} SSE数据结果：{}", traceId, requestId, data);

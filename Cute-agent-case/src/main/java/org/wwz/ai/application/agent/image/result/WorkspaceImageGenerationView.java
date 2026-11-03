@@ -1,5 +1,6 @@
 package org.wwz.ai.application.agent.image.result;
 
+import com.alibaba.fastjson.JSONObject;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,5 +22,5 @@ public class WorkspaceImageGenerationView {
     private String requestId;
     private String mode;
     private Boolean usedFallback;
-    private Object rawResponse;
+    private JSONObject rawResponse;
 }

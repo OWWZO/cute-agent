@@ -60,49 +60,49 @@ public class MemoryFlushServiceImpl implements MemoryFlushService {
     }
 
     @Override
-    public int flushBeforeCompact(String sessionId,
-                                  String requestId,
-                                  LtmOwner owner,
-                                  List<Message> messagesAboutToCompact,
-                                  String parentSystemPrompt,
-                                  ToolCollection parentTools) {
+    public FlushResult flushBeforeCompact(String sessionId,
+                                          String requestId,
+                                          LtmOwner owner,
+                                          List<Message> messagesAboutToCompact,
+                                          String parentSystemPrompt,
+                                          ToolCollection parentTools) {
         if (!enabled || messagesAboutToCompact == null || messagesAboutToCompact.isEmpty()) {
             recordSkip(sessionId, requestId, owner, messagesAboutToCompact,
                     !enabled ? "disabled" : "empty-messages", 0);
-            return 0;
+            return FlushResult.ofSkipped();
         }
         if (StringUtils.isNotBlank(requestId)
                 && (requestId.contains("-flush") || requestId.contains("-bg-review"))) {
             recordSkip(sessionId, requestId, owner, messagesAboutToCompact, "nested-fork", 0);
-            return 0;
+            return FlushResult.ofSkipped();
         }
         LtmOwner resolvedOwner = owner != null ? owner : resolveOwner(sessionId);
         if (resolvedOwner == null) {
             recordSkip(sessionId, requestId, null, messagesAboutToCompact, "null-owner", 0);
-            return 0;
+            return FlushResult.ofSkipped();
         }
         String sessionKey = "s:" + StringUtils.defaultIfBlank(sessionId, "unknown");
         String reqKey = StringUtils.defaultIfBlank(requestId, sessionId);
         if (StringUtils.isNotBlank(reqKey) && !flushedRequests.add(reqKey)) {
             recordSkip(sessionId, requestId, resolvedOwner, messagesAboutToCompact, "duplicate-request", 0);
-            return 0;
+            return FlushResult.ofSkipped();
         }
         if (!flushedRequests.add(sessionKey)) {
             recordSkip(sessionId, requestId, resolvedOwner, messagesAboutToCompact, "session-in-flight", 0);
-            return 0;
+            return FlushResult.ofSkipped();
         }
         try {
             int userTurns = MemoryFlushPolicy.countUserTurns(messagesAboutToCompact);
             if (!MemoryFlushPolicy.shouldFlush(userTurns, flushMinTurns, true)) {
                 recordSkip(sessionId, requestId, resolvedOwner, messagesAboutToCompact, "min-turns", userTurns);
-                return 0;
+                return FlushResult.ofSkipped();
             }
             CuratedMemoryStore store = curatedMemoryStoreProvider.getIfAvailable();
             CuteRuntimeDependencies deps = runtimeDependenciesProvider.getIfAvailable();
             if (store == null || deps == null) {
                 recordSkip(sessionId, requestId, resolvedOwner, messagesAboutToCompact,
                         store == null ? "store-null" : "deps-null", userTurns);
-                return 0;
+                return FlushResult.ofSkipped();
             }
 
             // 同模型路径：保留完整窗口前缀；仅在极端超长时裁掉最早消息（不改写 content）
@@ -124,7 +124,14 @@ public class MemoryFlushServiceImpl implements MemoryFlushService {
             log.info("memory-flush fork done sessionId={} status={} appliedApprox={} durationMs={}",
                     sessionId, result.getStatus(), result.appliedOrZero(), result.getDurationMs());
             recordResult(sessionId, requestId, resolvedOwner, userTurns, snapshot.size(), result);
-            return result.appliedOrZero();
+            if (result.getStatus() == LtmForkRunResult.STATUS_FAILED
+                    || result.getStatus() == LtmForkRunResult.STATUS_TIMEOUT) {
+                return FlushResult.ofFailed(result.getErrorMessage());
+            }
+            if (result.getStatus() == LtmForkRunResult.STATUS_SKIPPED) {
+                return FlushResult.ofSkipped();
+            }
+            return FlushResult.ofApplied(result.appliedOrZero());
         } finally {
             flushedRequests.remove(sessionKey);
         }

@@ -18,8 +18,22 @@ public interface DataAgentQueryService {
     /** 构造一个挂载全部模型 schema 的基础查询上下文（不是返回 schema 列表）。 */
     Nl2SqlQuery buildQueryWithAllSchema();
 
+    /**
+     * 向量召回模型字段。
+     * <p>载荷结构由向量库 payload 决定，无法在编译期收窄，稳定键只有两个：
+     * {@code score}（Float，召回得分）与 {@code _id}（String，向量点 ID）；
+     * 其余键为 Qdrant payload 原样透传（当前适配器统一转为 String 值）。
+     * 失败时返回空列表，不抛异常。</p>
+     */
     List<Map<String, Object>> recallSchemaColumns(ColumnSchemaRecallQuery query);
 
+    /**
+     * ES 召回列值样例。
+     * <p>载荷结构由索引 {@code _source} 决定，无法在编译期收窄，稳定键只有
+     * {@code score}（Float，相关度；上游未返回时该键缺失）；
+     * 其余键为 {@code _source} 字段原样透传，保持 ES 返回的原始类型。
+     * 失败时返回空列表，不抛异常。</p>
+     */
     List<Map<String, Object>> recallColumnValues(ColumnValueSearchRequest query);
 
     void chatQuery(DataAgentChatQuery query, AgentMessageStream stream) throws Exception;

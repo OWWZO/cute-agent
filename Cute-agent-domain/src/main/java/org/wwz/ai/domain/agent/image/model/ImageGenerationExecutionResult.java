@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.image.model;
 
+import com.alibaba.fastjson.JSONObject;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -38,7 +39,7 @@ public class ImageGenerationExecutionResult {
 
     private Boolean usedFallback;
 
-    private Object rawResponse;
+    private JSONObject rawResponse;
 
     @Setter(AccessLevel.NONE)
     @Builder.Default

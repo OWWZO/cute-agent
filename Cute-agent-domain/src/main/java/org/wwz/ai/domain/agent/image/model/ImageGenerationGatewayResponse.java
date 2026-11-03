@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.image.model;
 
+import com.alibaba.fastjson.JSONObject;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,5 +21,6 @@ public class ImageGenerationGatewayResponse {
     private String requestId;
     private String mode;
     private Boolean usedFallback;
-    private Object rawResponse;
+    /** 下游原始响应摘要，固定为 JSON 对象，便于直接序列化与检视。 */
+    private JSONObject rawResponse;
 }
