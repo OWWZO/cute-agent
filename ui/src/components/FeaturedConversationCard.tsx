@@ -29,6 +29,19 @@ function formatDateTime(value?: string) {
 }
 
 /**
+ * 发布精品时摘要默认回填会话首句，标题也来自同一句，卡片上会出现两段相同文案。
+ * 摘要只有带来标题之外的信息时才值得占用版面。
+ */
+function hasDistinctSummary(title: string, summary: string) {
+  const normalize = (value: string) =>
+    value.replace(/\s+/g, "").replace(/[。.!！?？…]+$/, "");
+  const normalizedSummary = normalize(summary || "");
+  return (
+    normalizedSummary !== "" && normalizedSummary !== normalize(title || "")
+  );
+}
+
+/**
  * 无封面时的占位底。
  *
  * 以前按 featuredId 哈希出紫/橙/绿/粉四套渐变，结果 14 张卡像调色板——
@@ -119,6 +132,7 @@ export default function FeaturedConversationCard(
   const tags = Array.isArray(card.tags) ? card.tags : [];
   const publishedLabel = formatDateTime(card.publishedAt);
   const href = buildFeaturedConversationDetailPath(card.featuredId);
+  const showSummary = hasDistinctSummary(card.title, card.summary);
   // 统一在渲染前准备标签、日期和跳转地址，grid/row 两种布局共享同一数据语义。
   const handleSelect = onSelect
     ? () => onSelect(card.featuredId)
@@ -156,9 +170,11 @@ export default function FeaturedConversationCard(
             </h3>
             <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--chat-text-muted)] opacity-0 transition group-hover:opacity-100" />
           </div>
-          <p className="mt-1.5 line-clamp-2 text-ui-caption leading-6 text-[var(--chat-text-muted)]">
-            {card.summary}
-          </p>
+          {showSummary ? (
+            <p className="mt-1.5 line-clamp-2 text-ui-caption leading-6 text-[var(--chat-text-muted)]">
+              {card.summary}
+            </p>
+          ) : null}
           <CardMeta tags={tags} publishedLabel={publishedLabel} compact />
         </div>
       </CardShell>
@@ -195,9 +211,11 @@ export default function FeaturedConversationCard(
             </h3>
             <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--chat-text-muted)] opacity-0 transition group-hover:opacity-100" />
           </div>
-          <p className="line-clamp-3 text-ui-caption leading-6 text-[var(--chat-text-muted)]">
-            {card.summary}
-          </p>
+          {showSummary ? (
+            <p className="line-clamp-3 text-ui-caption leading-6 text-[var(--chat-text-muted)]">
+              {card.summary}
+            </p>
+          ) : null}
         </div>
 
         <CardMeta tags={tags} publishedLabel={publishedLabel} compact={false} />
