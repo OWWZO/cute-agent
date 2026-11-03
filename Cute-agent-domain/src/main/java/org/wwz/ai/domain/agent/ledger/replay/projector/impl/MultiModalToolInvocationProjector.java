@@ -13,9 +13,6 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * multimodalagent_tool projector。
- */
-/**
  * 多模态工具的历史回放投影器，恢复图像/文件输入与模型输出摘要。
  */
 public class MultiModalToolInvocationProjector extends AbstractToolInvocationProjector {

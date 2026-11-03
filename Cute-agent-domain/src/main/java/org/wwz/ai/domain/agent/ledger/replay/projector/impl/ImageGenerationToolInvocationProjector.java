@@ -13,10 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * image_generation_tool projector。
- */
-/**
- * 图片生成工具的历史回放投影器，恢复生成状态和图片 artifact 引用。
+ * {@code image_generation_tool} 的历史回放投影器，恢复生成状态和图片 artifact 引用。
  */
 public class ImageGenerationToolInvocationProjector extends AbstractToolInvocationProjector {
 
