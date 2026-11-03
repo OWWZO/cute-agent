@@ -48,7 +48,9 @@ public class McpToolInfo {
     private String transportType;
 
     /**
-     * 服务唯一标识，默认与 serverUrl 相同。
+     * MCP 服务标识，用于 {@code mcp__{server}__{tool}} 限定名与 ToolSearch 分组。
+     * <p>来自 MCP server 描述符的 serverKey；描述符未显式配置时会回退为 serverUrl
+     * （serverUrl 只存在于描述符，不在本模型上）。</p>
      */
     private String serverKey;
 
