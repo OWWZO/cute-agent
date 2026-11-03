@@ -267,15 +267,24 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
         // 正常路径一次多值 INSERT，避免 batch-start 的 DB 往返随工具扇出线性增长。
         try {
             int inserted = executionLedgerWriteRepository.batchInsertToolInvocations(entities);
-            if (inserted == entities.size() && allHaveId(entities)) {
+            if (inserted > 0) {
+                // 多值 INSERT 要么全写要么全不写：已写入时绝不能回退逐条重插（会撞唯一键）。
                 for (int i = 0; i < entities.size(); i++) {
-                    mapping.put(toolCallIds.get(i), entities.get(i).getId());
+                    if (entities.get(i).getId() != null) {
+                        mapping.put(toolCallIds.get(i), entities.get(i).getId());
+                    }
                 }
-                markSuccess("createToolInvocation");
+                if (inserted == entities.size() && mapping.size() == entities.size()) {
+                    markSuccess("createToolInvocation");
+                } else {
+                    log.error("batch createToolInvocations wrote rows but returned incomplete ids: "
+                                    + "runId={}, expected={}, inserted={}, mapped={}",
+                            record.getRunId(), entities.size(), inserted, mapping.size());
+                }
                 return mapping;
             }
-            log.warn("batch createToolInvocations returned unexpected rows, fallback to per-item write: runId={}, expected={}, inserted={}",
-                    record.getRunId(), entities.size(), inserted);
+            log.warn("batch createToolInvocations wrote no rows, fallback to per-item write: runId={}, size={}",
+                    record.getRunId(), entities.size());
         } catch (Exception e) {
             // 单条批量语句整体失败（如唯一键冲突）时回退逐条写入：
             // 单个工具失败不应阻止同批其他工具获得 invocationId。
@@ -295,15 +304,6 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
             }
         }
         return mapping;
-    }
-
-    private boolean allHaveId(List<ToolInvocation> entities) {
-        for (ToolInvocation entity : entities) {
-            if (entity.getId() == null) {
-                return false;
-            }
-        }
-        return true;
     }
 
     @Override
