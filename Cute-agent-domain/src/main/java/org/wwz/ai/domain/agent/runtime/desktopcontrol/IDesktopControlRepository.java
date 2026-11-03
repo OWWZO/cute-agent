@@ -15,12 +15,24 @@ public interface IDesktopControlRepository {
 
     boolean hasOpenBySessionId(String sessionId);
 
-    boolean casCompletePending(String controlId, String userId, String resumeRequestId);
+    /**
+     * CAS：把 {@code PENDING} 推进到 {@code RESUME_PENDING}，并记录发起的 resumeRequestId。
+     * <p>返回 {@code true} 仅表示 CAS 成功；记录不存在、已非 PENDING 或归属不匹配都返回 {@code false}。
+     * 终态完成走 {@link #markCompleted(String)}，不是本方法。</p>
+     */
+    boolean casResumePending(String controlId, String userId, String resumeRequestId);
 
     boolean casClaimResume(String resumeRequestId, String userId);
 
     boolean markCompleted(String controlId);
 
+    /**
+     * 直接改写状态列。
+     * <p>{@code status} 必须是 {@link DesktopControlStatuses} 中已登记的值；调用方应使用常量，
+     * 不要传任意字符串。该方法是低层逃生口：常规流转优先使用
+     * {@link #casResumePending} / {@link #casClaimResume} / {@link #markCompleted} / {@link #casCancel}，
+     * 它们带有状态守卫。</p>
+     */
     boolean markStatus(String controlId, String status);
 
     boolean casCancel(String controlId, String userId);

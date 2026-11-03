@@ -41,6 +41,11 @@ public class DataAnalysisRequest {
      * 使用的模型代码列表
      */
     private List<String> modelCodeList;
+
+    /** 返回不可变副本，避免调用方在请求交给其它层/线程后改写内部状态。 */
+    public List<String> getModelCodeList() {
+        return modelCodeList == null ? null : List.copyOf(modelCodeList);
+    }
     
     /**
      * 业务知识和规则

@@ -38,7 +38,7 @@ public class ReactImplAgent extends ReActAgent {
     /**
      * 工具结果最大截断长度
      * 用途：避免工具返回超长结果（如大文本、大数据集）导致Token超限或处理异常，仅保留前N个字符
-     * 取值：由外部配置/业务逻辑设置，null表示不截断
+     * 取值：由外部配置设置；{@code <= 0} 表示不截断（内部用 0 作哨兵，字段不会为 null）
      */
     private Integer maxObserve;
 
@@ -61,7 +61,11 @@ public class ReactImplAgent extends ReActAgent {
         ));
         // maxObserve 之前从未被赋值，yml 里的 max_observe 是死配置，实际只有 96k 序列化兜底生效。
         // 0 表示不截断（truncateForLlm 对 cap<=0 直接返回原文），与字段原本的 null 语义一致。
-        this.maxObserve = NumberUtils.toInt(cuteConfig.getMaxObserve(), 0);
+        String rawMaxObserve = cuteConfig.getMaxObserve();
+        this.maxObserve = NumberUtils.toInt(rawMaxObserve, 0);
+        if (StringUtils.isNotBlank(rawMaxObserve) && this.maxObserve <= 0) {
+            log.warn("invalid max_observe={}, observation truncation is disabled", rawMaxObserve);
+        }
     }
 
     /**

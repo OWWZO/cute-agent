@@ -31,7 +31,9 @@ public class CanonicalAgentStreamEventHandler extends BaseAgentStreamEventHandle
             // 不在处理器内重新拼装工具结果，避免实时链路与账本回放出现字段差异。
             return buildCanonicalIncrResult(request, eventResult, response);
         } catch (Exception e) {
-            log.error("{} AgentStreamEventHandler handle error", request.getRequestId(), e);
+            log.error("agentType={} requestId={} AgentStreamEventHandler handle error",
+                    request == null ? null : request.getAgentType(),
+                    request == null ? null : request.getRequestId(), e);
             return null;
         }
     }

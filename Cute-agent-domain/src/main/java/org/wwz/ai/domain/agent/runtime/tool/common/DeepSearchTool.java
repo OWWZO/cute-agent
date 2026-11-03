@@ -247,11 +247,11 @@ public class DeepSearchTool implements BaseTool {
                             }
                         }
 
-                        if ("extend".equals(searchResponse.getMessageType())) {
+                        if (DeepSearchrResponse.MESSAGE_TYPE_EXTEND.equals(searchResponse.getMessageType())) {
                             messageIdRef.set(StringUtil.getUUID());
                             searchResponse.setSearchFinish(false);
                             ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
-                        } else if ("search".equals(searchResponse.getMessageType())) {
+                        } else if (DeepSearchrResponse.MESSAGE_TYPE_SEARCH.equals(searchResponse.getMessageType())) {
                             searchResponse.setSearchFinish(true);
                             ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
                             FileRequest fileRequest = FileRequest.builder()
@@ -261,13 +261,13 @@ public class DeepSearchTool implements BaseTool {
                                     .content(JSON.toJSONString(contentMap))
                                     .build();
                              fileArtifactUploader.upload(fileRequest, true, artifactSource);
-                        } else if ("chapter_summary".equals(searchResponse.getMessageType())) {
+                        } else if (DeepSearchrResponse.MESSAGE_TYPE_CHAPTER_SUMMARY.equals(searchResponse.getMessageType())) {
                             if (messageIdRef.get().isEmpty()) {
                                 messageIdRef.set(StringUtil.getUUID());
                             }
                             searchResponse.setSearchFinish(true);
                             ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
-                        } else if ("report".equals(searchResponse.getMessageType())) {
+                        } else if (DeepSearchrResponse.MESSAGE_TYPE_REPORT.equals(searchResponse.getMessageType())) {
                             int currentReportIndex = reportIndex.get();
                             if (currentReportIndex == 1 && messageIdRef.get().isEmpty()) {
                                 messageIdRef.set(StringUtil.getUUID());

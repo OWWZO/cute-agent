@@ -78,7 +78,7 @@ public class RequestDesktopControlToolInvocationProjectorTest {
             }
 
             @Override
-            public boolean casCompletePending(String controlId, String userId, String resumeRequestId) {
+            public boolean casResumePending(String controlId, String userId, String resumeRequestId) {
                 return false;
             }
 
@@ -148,7 +148,7 @@ public class RequestDesktopControlToolInvocationProjectorTest {
             }
 
             @Override
-            public boolean casCompletePending(String controlId, String userId, String resumeRequestId) {
+            public boolean casResumePending(String controlId, String userId, String resumeRequestId) {
                 return false;
             }
 

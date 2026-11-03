@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchStage;
 
 import java.util.List;
 
@@ -15,13 +16,21 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DeepSearchrResponse {
+
+    /** {@link #messageType} 的允许取值，与回放阶段常量共用同一来源。 */
+    public static final String MESSAGE_TYPE_EXTEND = DeepSearchStage.STAGE_EXTEND;
+    public static final String MESSAGE_TYPE_SEARCH = DeepSearchStage.STAGE_SEARCH;
+    public static final String MESSAGE_TYPE_CHAPTER_SUMMARY = DeepSearchStage.STAGE_CHAPTER_SUMMARY;
+    public static final String MESSAGE_TYPE_REPORT = DeepSearchStage.STAGE_REPORT;
+
     private String requestId;
     private String query;
     private String answer;
     private SearchResult searchResult;
     private Boolean isFinal;
     private Boolean searchFinish; // 搜索结果是否结束
-    private String messageType; // extend、search、chapter_summary、report
+    /** 阶段类型，取值见 {@code MESSAGE_TYPE_*}。 */
+    private String messageType;
     private String toolCallId;
     private String chapterId;
     private String chapterTitle;

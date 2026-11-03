@@ -71,7 +71,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
 
     private Map<String, Object> buildExtendResult(DeepSearchToolOutput output, DeepSearchStage stage) {
         Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", "extend");
+        resultMap.put("messageType", DeepSearchStage.STAGE_EXTEND);
         resultMap.put("isFinal", true);
         resultMap.put("searchFinish", false);
         resultMap.put("query", output.getQuery());
@@ -85,7 +85,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
 
     private Map<String, Object> buildSearchResult(DeepSearchToolOutput output, DeepSearchStage stage) {
         Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", "search");
+        resultMap.put("messageType", DeepSearchStage.STAGE_SEARCH);
         resultMap.put("isFinal", true);
         resultMap.put("searchFinish", true);
         resultMap.put("query", output.getQuery());
@@ -144,7 +144,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
 
     private Map<String, Object> buildChapterSummaryResult(DeepSearchToolOutput output, DeepSearchStage stage) {
         Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", "chapter_summary");
+        resultMap.put("messageType", DeepSearchStage.STAGE_CHAPTER_SUMMARY);
         resultMap.put("isFinal", true);
         resultMap.put("searchFinish", true);
         resultMap.put("query", output.getQuery());
@@ -190,7 +190,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
 
     private Map<String, Object> buildReportResult(DeepSearchToolOutput output, DeepSearchStage stage) {
         Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", "report");
+        resultMap.put("messageType", DeepSearchStage.STAGE_REPORT);
         resultMap.put("isFinal", true);
         resultMap.put("query", output.getQuery());
         resultMap.put("answer", StringUtils.defaultString(stage.getAnswer()));

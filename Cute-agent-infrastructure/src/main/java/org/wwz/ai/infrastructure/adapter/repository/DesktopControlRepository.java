@@ -65,7 +65,7 @@ public class DesktopControlRepository implements IDesktopControlRepository {
     }
 
     @Override
-    public boolean casCompletePending(String controlId, String userId, String resumeRequestId) {
+    public boolean casResumePending(String controlId, String userId, String resumeRequestId) {
         if (StringUtils.isBlank(controlId) || StringUtils.isBlank(resumeRequestId)) {
             return false;
         }

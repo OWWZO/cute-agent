@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.enums.ResponseTypeEnum;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
+import org.wwz.ai.domain.agent.runtime.dto.DeepSearchrResponse;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamEvent;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
@@ -118,7 +119,7 @@ public class BaseAgentStreamEventHandler {
         boolean isFilterFinal = (Objects.nonNull(agentResponse.getResultMap())
                 && "deep_search".equals(agentResponse.getMessageType())
                 && agentResponse.getResultMap().containsKey("messageType")
-                && Objects.equals(agentResponse.getResultMap().get("messageType"), "extend"));
+                && Objects.equals(agentResponse.getResultMap().get("messageType"), DeepSearchrResponse.MESSAGE_TYPE_EXTEND));
         syncPlannerRoundId(eventResult, agentResponse);
         Map<String, Object> payload = buildAgentResponsePayload(agentResponse);
         if (payload == null) {
