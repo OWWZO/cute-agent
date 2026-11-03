@@ -8,7 +8,7 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.planmode.PendingPlanApprovalRegistry;
 import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;

@@ -60,7 +60,7 @@ public class DefaultSkillRegistrySnapshotTest {
                         .map(org.wwz.ai.domain.agent.runtime.tool.skill.SkillDefinition::getName)
                         .toList());
         Assert.assertNotNull("启动钩子必须存在",
-                DefaultSkillRegistry.class.getMethod("init").getAnnotation(javax.annotation.PostConstruct.class));
+                DefaultSkillRegistry.class.getMethod("init").getAnnotation(jakarta.annotation.PostConstruct.class));
     }
 
     @Test
