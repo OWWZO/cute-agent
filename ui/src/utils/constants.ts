@@ -459,9 +459,13 @@ const generalSuggestedQuestions: SuggestedQuestion[] = [
   ...otherSuggestedQuestions,
 ];
 
+const PRODUCT_TYPE_TASK = "task";
+const PRODUCT_TYPE_DATA_AGENT = "dataAgent";
+const PRODUCT_TYPE_CHAT = "chat";
+
 export const suggestedQuestionsByProductType: Record<string, SuggestedQuestion[]> = {
-  task: generalSuggestedQuestions,
-  dataAgent: [
+  [PRODUCT_TYPE_TASK]: generalSuggestedQuestions,
+  [PRODUCT_TYPE_DATA_AGENT]: [
     {
       id: "monthly-sales-trend",
       category: "数据分析",
@@ -496,7 +500,7 @@ export const suggestedQuestionsByProductType: Record<string, SuggestedQuestion[]
 export const GENERIC_TASK_PRODUCT: CHAT.Product = {
   name: "通用任务",
   img: "icon-aichat",
-  type: "task",
+  type: PRODUCT_TYPE_TASK,
   placeholder: "Cute 会先完成你的任务，再根据内容给出合适的回答",
   color: "text-[#4040FF]",
 };
@@ -505,7 +509,7 @@ export const productList = [
   {
     name: "数据分析",
     img: "icon-xinjianduihua",
-    type: "dataAgent",
+    type: PRODUCT_TYPE_DATA_AGENT,
     placeholder: "Cute 会完成你的数据分析任务",
     color: "text-[#4040FF]",
   },
@@ -514,7 +518,11 @@ export const productList = [
 export const defaultProduct = GENERIC_TASK_PRODUCT;
 
 export const getProductByType = (type?: string): CHAT.Product => {
-  if (!type || type === GENERIC_TASK_PRODUCT.type || type === "chat") {
+  if (
+    !type ||
+    type === GENERIC_TASK_PRODUCT.type ||
+    type === PRODUCT_TYPE_CHAT
+  ) {
     return GENERIC_TASK_PRODUCT;
   }
   return productList.find((item) => item.type === type) ?? defaultProduct;

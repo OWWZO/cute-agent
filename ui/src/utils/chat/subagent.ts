@@ -102,13 +102,6 @@ export function isAgentDispatchTask(task?: Partial<CHAT.Task> | Partial<MESSAGE.
   if (toolName === AGENT_DISPATCH_TOOL_NAME) {
     return true;
   }
-  // tool_call 阶段也可能只在 resultMap.toolName
-  if (
-    (task.messageType === "tool_call" || task.messageType === "tool_result") &&
-    toolName === AGENT_DISPATCH_TOOL_NAME
-  ) {
-    return true;
-  }
   return false;
 }
 

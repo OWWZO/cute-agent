@@ -24,6 +24,10 @@ import { resolveParentToolUseId } from "@/utils/chat/subagent";
 import { mergeRunReplayIntoConversation } from "@/utils/conversationHistory";
 import querySSE from "@/utils/querySSE";
 import { normalizeRunStatus } from "@/utils/runStatus";
+import {
+  AGENT_TYPE_DEEP_THINK,
+  AGENT_TYPE_PLAN_SOLVE,
+} from "@/utils/agentMode";
 import { parseAgentAnswer, type AgentAnswerEnvelope } from "@/utils/sseParsers";
 import {
   conversationHistoryApi,
@@ -521,7 +525,7 @@ function createRunningChat(
     responseType: "txt",
     sessionId,
     requestId,
-    agentType: deepThink ? 3 : 5,
+    agentType: deepThink ? AGENT_TYPE_DEEP_THINK : AGENT_TYPE_PLAN_SOLVE,
     loading: true,
     forceStop: false,
     tasks: [],

@@ -966,43 +966,22 @@ function handleToolThoughtMessage(
   taskIndex: number,
   toolIndex: number
 ) {
-  const { tasks } = currentChat.multiAgent;
-  const { taskId, resultMap } = eventData;
+  const { resultMap } = eventData;
   // 仅过程 content，不用 reasoningContent 冒充
   const thoughtText = resultMap?.toolThought || "";
-  const { isFinal } = resultMap;
 
   // 助手回复一开始有字，就把未完成的深度思考定格展示（剩余字等迟到包补齐）。
   if (thoughtText) {
     finalizeOpenNativeReasoning(currentChat);
   }
 
-  if (taskIndex === -1) {
-    tasks.push([
-      createNewTask(taskId, {
-        ...resultMap,
-        messageType: "tool_thought",
-        toolThought: thoughtText,
-      }),
-    ]);
-    return;
-  }
-
-  if (toolIndex === -1) {
-    tasks[taskIndex].push(
-      createNewTask(taskId, {
-        ...resultMap,
-        messageType: "tool_thought",
-        toolThought: thoughtText,
-      })
-    );
-    return;
-  }
-
-  tasks[taskIndex][toolIndex] = nextToolThought(
-    tasks[taskIndex][toolIndex],
-    thoughtText || "",
-    isFinal
+  upsertThoughtTask(
+    currentChat,
+    eventData,
+    taskIndex,
+    toolIndex,
+    thoughtText,
+    "tool_thought"
   );
 }
 
@@ -1034,18 +1013,37 @@ function handleLlmReasoningMessage(
   taskIndex: number,
   toolIndex: number
 ) {
-  const { tasks } = currentChat.multiAgent;
-  const { taskId, resultMap } = eventData;
+  const { resultMap } = eventData;
   const reasoningText = resultMap?.reasoningContent || "";
-  const { isFinal } = resultMap;
 
   // 字段统一落在 toolThought 仅作展示载体，messageType 必须是 llm_reasoning
+  upsertThoughtTask(
+    currentChat,
+    eventData,
+    taskIndex,
+    toolIndex,
+    reasoningText,
+    "llm_reasoning"
+  );
+}
+
+function upsertThoughtTask(
+  currentChat: CHAT.ChatItem,
+  eventData: MESSAGE.EventData,
+  taskIndex: number,
+  toolIndex: number,
+  thoughtText: string,
+  messageType: "tool_thought" | "llm_reasoning"
+) {
+  const { tasks } = currentChat.multiAgent;
+  const { taskId, resultMap } = eventData;
+
   if (taskIndex === -1) {
     tasks.push([
       createNewTask(taskId, {
         ...resultMap,
-        messageType: "llm_reasoning",
-        toolThought: reasoningText,
+        messageType,
+        toolThought: thoughtText,
       }),
     ]);
     return;
@@ -1055,8 +1053,8 @@ function handleLlmReasoningMessage(
     tasks[taskIndex].push(
       createNewTask(taskId, {
         ...resultMap,
-        messageType: "llm_reasoning",
-        toolThought: reasoningText,
+        messageType,
+        toolThought: thoughtText,
       })
     );
     return;
@@ -1064,8 +1062,8 @@ function handleLlmReasoningMessage(
 
   tasks[taskIndex][toolIndex] = nextToolThought(
     tasks[taskIndex][toolIndex],
-    reasoningText || "",
-    isFinal
+    thoughtText,
+    Boolean(resultMap.isFinal)
   );
 }
 

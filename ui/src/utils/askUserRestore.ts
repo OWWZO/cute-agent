@@ -15,14 +15,15 @@ import {
   resolveHitlResumeIntent,
 } from "@/utils/hitlResumeIntent";
 
-function chatHasQuestion(
+function findAskUserCards(
   chat: CHAT.ChatItem,
   questionId: string,
   toolCallId: string
-): boolean {
+): Array<CHAT.Task | MESSAGE.Task> {
   if (!questionId && !toolCallId) {
-    return false;
+    return [];
   }
+  const cards: Array<CHAT.Task | MESSAGE.Task> = [];
   const groups = chat.multiAgent?.tasks || chat.tasks || [];
   for (const group of groups) {
     for (const tool of group || []) {
@@ -41,11 +42,19 @@ function chatHasQuestion(
         (questionId && cardQuestionId === questionId) ||
         (toolCallId && cardToolCallId === toolCallId)
       ) {
-        return true;
+        cards.push(tool);
       }
     }
   }
-  return false;
+  return cards;
+}
+
+function chatHasQuestion(
+  chat: CHAT.ChatItem,
+  questionId: string,
+  toolCallId: string
+): boolean {
+  return findAskUserCards(chat, questionId, toolCallId).length > 0;
 }
 
 function buildAskUserEventData(payload: Record<string, unknown>): MESSAGE.EventData {
@@ -116,42 +125,22 @@ export function mergePendingAskUserQuestions(
       combineData(buildAskUserEventData(payload), chat);
     } else {
       // 已有卡片时同步 pending 状态，避免刷新后仍显示可点但服务端已结束
-      const groups = chat.multiAgent?.tasks || [];
-      for (const group of groups) {
-        for (const tool of group || []) {
-          if (tool?.messageType !== "ask_user_question") {
-            continue;
-          }
-          const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
-          const nested = (resultMap.resultMap || resultMap) as Record<
-            string,
-            unknown
-          >;
-          const cardQuestionId = String(
-            nested.questionId || resultMap.questionId || ""
-          );
-          const cardToolCallId = String(
-            nested.toolCallId || resultMap.toolCallId || ""
-          );
-          if (
-            !(
-              (questionId && cardQuestionId === questionId) ||
-              (toolCallId && cardToolCallId === toolCallId)
-            )
-          ) {
-            continue;
-          }
-          nested.status = clientStatus;
-          if (payload.answers && typeof payload.answers === "object") {
-            const answers = payload.answers as Record<string, string | true>;
-            nested.answers = answers;
-            resultMap.answers = answers;
-          }
-          resultMap.status = clientStatus;
-          resultMap.isFinal = clientStatus !== "pending";
-          tool.finish = clientStatus !== "pending";
-          tool.isFinal = clientStatus !== "pending";
+      for (const tool of findAskUserCards(chat, questionId, toolCallId)) {
+        const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
+        const nested = (resultMap.resultMap || resultMap) as Record<
+          string,
+          unknown
+        >;
+        nested.status = clientStatus;
+        if (payload.answers && typeof payload.answers === "object") {
+          const answers = payload.answers as Record<string, string | true>;
+          nested.answers = answers;
+          resultMap.answers = answers;
         }
+        resultMap.status = clientStatus;
+        resultMap.isFinal = clientStatus !== "pending";
+        tool.finish = clientStatus !== "pending";
+        tool.isFinal = clientStatus !== "pending";
       }
     }
 

@@ -1,9 +1,11 @@
 
+import type { ReactNode } from "react";
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace CuteType {
     type FCProps = {
-      children?: React.ReactNode;
+      children?: ReactNode;
       /** 类名 */
       className?: string;
     }
@@ -25,7 +27,7 @@ declare global {
     type StrictOmit<T extends object, K extends keyof T> = Omit<T, K>;
 
     type OptionsType<T = string | number> = {
-      label: React.ReactNode;
+      label: ReactNode;
       value: T;
     };
 

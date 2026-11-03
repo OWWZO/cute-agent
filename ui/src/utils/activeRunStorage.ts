@@ -12,6 +12,27 @@ function cursorKey(sessionId: string) {
   return `${SESSION_CURSOR_PREFIX}${sessionId}`;
 }
 
+function patchActiveRun(
+  sessionId: string,
+  update: (activeRun: ActiveRunCheckpoint) => Partial<ActiveRunCheckpoint>
+) {
+  const activeRun = readActiveRun();
+  if (!activeRun || activeRun.sessionId !== sessionId) {
+    return;
+  }
+  try {
+    window.sessionStorage.setItem(
+      ACTIVE_RUN_STORAGE_KEY,
+      JSON.stringify({
+        ...activeRun,
+        ...update(activeRun),
+      })
+    );
+  } catch {
+    // 存储不可用时不影响当前 SSE 对话。
+  }
+}
+
 export function readSessionCursor(sessionId: string): number {
   if (!sessionId || typeof window === "undefined") {
     return 0;
@@ -99,21 +120,9 @@ export function updateActiveRunSeq(sessionId: string, eventSeq: number) {
     return;
   }
   writeSessionCursor(sessionId, eventSeq);
-  const activeRun = readActiveRun();
-  if (!activeRun || activeRun.sessionId !== sessionId) {
-    return;
-  }
-  try {
-    window.sessionStorage.setItem(
-      ACTIVE_RUN_STORAGE_KEY,
-      JSON.stringify({
-        ...activeRun,
-        lastEventSeq: Math.max(activeRun.lastEventSeq, eventSeq),
-      })
-    );
-  } catch {
-    // 存储不可用时不影响当前 SSE 对话。
-  }
+  patchActiveRun(sessionId, (activeRun) => ({
+    lastEventSeq: Math.max(activeRun.lastEventSeq, eventSeq),
+  }));
 }
 
 export function updateActiveRunEvent(sessionId: string, eventId: string) {
@@ -124,24 +133,12 @@ export function updateActiveRunEvent(sessionId: string, eventId: string) {
   if (Number.isFinite(seq) && seq > 0) {
     writeSessionCursor(sessionId, seq);
   }
-  const activeRun = readActiveRun();
-  if (!activeRun || activeRun.sessionId !== sessionId) {
-    return;
-  }
-  try {
-    window.sessionStorage.setItem(
-      ACTIVE_RUN_STORAGE_KEY,
-      JSON.stringify({
-        ...activeRun,
-        lastEventId: eventId,
-        lastEventSeq: Number.isFinite(seq)
-          ? Math.max(activeRun.lastEventSeq, seq)
-          : activeRun.lastEventSeq,
-      })
-    );
-  } catch {
-    // 存储不可用时不影响当前 SSE 对话。
-  }
+  patchActiveRun(sessionId, (activeRun) => ({
+    lastEventId: eventId,
+    lastEventSeq: Number.isFinite(seq)
+      ? Math.max(activeRun.lastEventSeq, seq)
+      : activeRun.lastEventSeq,
+  }));
 }
 
 export function clearActiveRun(requestId?: string) {

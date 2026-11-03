@@ -4,6 +4,7 @@ import { processTaskForRender } from "./renderTasks";
 import { findBestAgentTask, identityKeys, readTaskIdentity } from "./taskIdentity";
 import { resolveTaskResultMap } from "./toolCalls";
 import { getTaskFiles } from "@/utils/taskArtifacts";
+import { stripArtifactSection } from "@/utils/artifactContent";
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -31,13 +32,6 @@ function collectTaskFiles(task: CHAT.Task): CHAT.TFile[] {
   };
   visit(task);
   return [...files.values()];
-}
-
-function stripArtifactSection(value: string): string {
-  const delimiterIndex = value.indexOf("$$$");
-  return delimiterIndex >= 0
-    ? value.slice(0, delimiterIndex).trim()
-    : value;
 }
 
 function isNativeReasoningTask(task: CHAT.Task): boolean {
@@ -94,17 +88,24 @@ function buildConclusionTask(
   const id = `${tool.id || tool.messageId || "subagent"}:conclusion`;
   const sourceRecord = source as unknown as Record<string, unknown> | undefined;
   const sourceMap = source ? resolveTaskResultMap(source) : {};
-  const sourceFileList = Array.isArray(sourceRecord?.fileList)
-    ? sourceRecord.fileList
-    : Array.isArray(sourceMap.fileList)
-      ? sourceMap.fileList
-      : undefined;
-  const artifactRefs =
-    source?.artifactRefs?.length
-      ? [...source.artifactRefs]
-      : Array.isArray(sourceMap.artifactRefs) && sourceMap.artifactRefs.length
-        ? [...sourceMap.artifactRefs]
-        : fallbackFiles.map(toArtifactRef);
+  let sourceFileList: MESSAGE.FileInfo[] | undefined;
+  if (Array.isArray(sourceRecord?.fileList)) {
+    sourceFileList = sourceRecord.fileList as MESSAGE.FileInfo[];
+  } else if (Array.isArray(sourceMap.fileList)) {
+    sourceFileList = sourceMap.fileList as MESSAGE.FileInfo[];
+  }
+
+  let artifactRefs: MESSAGE.ArtifactReference[];
+  if (source?.artifactRefs?.length) {
+    artifactRefs = [...source.artifactRefs];
+  } else if (
+    Array.isArray(sourceMap.artifactRefs) &&
+    sourceMap.artifactRefs.length
+  ) {
+    artifactRefs = [...(sourceMap.artifactRefs as MESSAGE.ArtifactReference[])];
+  } else {
+    artifactRefs = fallbackFiles.map(toArtifactRef);
+  }
   return {
     id,
     messageId: id,
@@ -264,9 +265,10 @@ export function chatItemFromSubAgent(
   const heartbeatText = Array.isArray(sub.progressLines)
     ? sub.progressLines.filter(Boolean).join("\n")
     : "";
-  const liveText =
-    asText(sub.liveText) ||
-    (processNested.length === 0 ? heartbeatText : "");
+  let liveText = asText(sub.liveText);
+  if (!liveText && processNested.length === 0) {
+    liveText = heartbeatText;
+  }
   const liveTask = liveText
     ? buildLiveTextTask(detailAgent, liveText, running)
     : null;

@@ -1,10 +1,11 @@
 import { basenameOfPath, getTaskFiles, normalizeRelativePath } from "@/utils/taskArtifacts";
 import { buildFilePreviewUrlForBrowser } from "@/utils/fileUrl";
+import {
+  ARTIFACT_SECTION_DELIMITER,
+  stripArtifactSection,
+} from "@/utils/artifactContent";
 
 const ARTIFACT_KEY_SPLIT_PATTERN = /[、,\r\n，]+/;
-
-/** 总结协议分隔符：`正文$$$ 产物路径`，正文与产物键由它切分。 */
-const PROTOCOL_DELIMITER = "$$$";
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -39,10 +40,7 @@ function resolveTaskSummarySourceText(task?: CHAT.Task) {
  */
 export function resolveTaskSummaryText(task?: CHAT.Task) {
   const rawText = resolveTaskSummarySourceText(task);
-  const delimiterIndex = rawText.indexOf(PROTOCOL_DELIMITER);
-  return delimiterIndex >= 0
-    ? rawText.slice(0, delimiterIndex).trim()
-    : rawText;
+  return stripArtifactSection(rawText);
 }
 
 function parseArtifactKeys(value: unknown): string[] {
@@ -79,7 +77,7 @@ function normalizeArtifactKey(raw: string) {
   }
   // 模型偶尔把分隔符重复输出（`正文$$$\n$$$ file.md`），残留的 $$$ 不是文件键，
   // 不清掉会合成出一张名为 "$$$" 的假文件卡。
-  text = text.replaceAll(PROTOCOL_DELIMITER, " ").trim();
+  text = text.replaceAll(ARTIFACT_SECTION_DELIMITER, " ").trim();
   text = text.replace(/^[-*+]\s+/, "").replace(/^\d+[.)]\s+/, "").trim();
   text = text.replace(/^[*`]+|[`*]+$/g, "").trim();
   const markdownLink = text.match(/^\[[^\]]*]\(([^)]+)\)$/);
@@ -91,12 +89,12 @@ function normalizeArtifactKey(raw: string) {
 }
 
 function parseProtocolArtifactKeys(text: string): string[] {
-  const delimiterIndex = text.indexOf(PROTOCOL_DELIMITER);
+  const delimiterIndex = text.indexOf(ARTIFACT_SECTION_DELIMITER);
   if (delimiterIndex < 0) {
     return [];
   }
   return text
-    .slice(delimiterIndex + PROTOCOL_DELIMITER.length)
+    .slice(delimiterIndex + ARTIFACT_SECTION_DELIMITER.length)
     .trim()
     .split(ARTIFACT_KEY_SPLIT_PATTERN)
     .map((item) => normalizeArtifactKey(item))
