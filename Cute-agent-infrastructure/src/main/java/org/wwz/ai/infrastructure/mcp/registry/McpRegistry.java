@@ -1,7 +1,6 @@
 package org.wwz.ai.infrastructure.mcp.registry;
 
 import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.TypeReference;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -824,10 +823,6 @@ public class McpRegistry implements McpToolExecutor {
         }
         if (args instanceof Map<?, ?> mapArgs) {
             return JSON.parseObject(JSON.toJSONString(mapArgs), new TypeReference<Map<String, Object>>() {
-            });
-        }
-        if (args instanceof JSONObject jsonObject) {
-            return JSON.parseObject(jsonObject.toJSONString(), new TypeReference<Map<String, Object>>() {
             });
         }
         if (args instanceof String str && JSON.isValidObject(str)) {

@@ -45,6 +45,7 @@ public class ImageGenerationClient {
     private static final String NONPRO_MODEL = "gpt-image-2.5-flare";
     private static final int HIGH_RES_EDGE = 1600;
     private static final int MAX_N = 10;
+    private static final int MAX_REFERENCE_IMAGES = 10;
     private static final int MIN_SIZE_EDGE = 256;
     private static final int MAX_SIZE_EDGE = 4096;
     private static final int SIZE_ALIGNMENT = 8;
@@ -115,7 +116,7 @@ public class ImageGenerationClient {
         }
         String mode = resolveMode(request);
         int n = request.getN() == null || request.getN() < 1 ? 1 : Math.min(request.getN(), MAX_N);
-        String size = resolveSize(request.getSize(), request.getPrompt(), mode);
+        String size = resolveSize(request.getSize(), request.getPrompt());
         String model = resolveModel();
         // 先确定模式、尺寸和模型，再选择文生图、单图编辑、多图参考或 Grok 路由。
         List<String> notes = new ArrayList<>();
@@ -273,8 +274,8 @@ public class ImageGenerationClient {
         if (sourceImages.size() < 2) {
             throw new IllegalArgumentException("多图参考至少需要 2 张参考图");
         }
-        if (sourceImages.size() > 10) {
-            throw new IllegalArgumentException("参考图最多 10 张");
+        if (sourceImages.size() > MAX_REFERENCE_IMAGES) {
+            throw new IllegalArgumentException("参考图最多 " + MAX_REFERENCE_IMAGES + " 张");
         }
         if ("4k".equals(sizeTier(size))) {
             throw new IllegalArgumentException(
@@ -805,10 +806,10 @@ public class ImageGenerationClient {
         return CollectionUtils.isEmpty(request.getFileNames()) ? "images" : "edits";
     }
 
-    private String resolveSize(String rawSize, String prompt, String mode) {
+    private String resolveSize(String rawSize, String prompt) {
         if (StringUtils.hasText(rawSize)) {
             // 显式尺寸优先；缺省时才从 prompt 的分辨率或横竖屏意图推断。
-            return validateSize(rawSize.trim().toLowerCase(Locale.ROOT), false);
+            return validateSize(rawSize.trim().toLowerCase(Locale.ROOT));
         }
         String inferred = inferSizeFromPrompt(prompt);
         if (StringUtils.hasText(inferred)) {
@@ -830,7 +831,7 @@ public class ImageGenerationClient {
         return lower.startsWith("grok-") || lower.contains("imagine-image");
     }
 
-    private String validateSize(String size, boolean grok) {
+    private String validateSize(String size) {
         Matcher matcher = SIZE_PATTERN.matcher(size);
         if (!matcher.matches()) {
             throw new IllegalArgumentException("size 格式错误，必须是 WxH，收到 " + size);
@@ -840,14 +841,12 @@ public class ImageGenerationClient {
         if (w <= 0 || h <= 0) {
             throw new IllegalArgumentException("size W/H 必须为正数");
         }
-        if (!grok) {
-            // OpenAI 兼容通道限制边长和 8 像素对齐；Grok 使用独立 resolution/aspect_ratio 契约。
-            if (w < MIN_SIZE_EDGE || h < MIN_SIZE_EDGE || w > MAX_SIZE_EDGE || h > MAX_SIZE_EDGE) {
-                throw new IllegalArgumentException("size 边长必须在 " + MIN_SIZE_EDGE + "-" + MAX_SIZE_EDGE);
-            }
-            if (w % SIZE_ALIGNMENT != 0 || h % SIZE_ALIGNMENT != 0) {
-                throw new IllegalArgumentException("size W/H 必须是 " + SIZE_ALIGNMENT + " 的倍数");
-            }
+        // OpenAI 兼容通道限制边长和 8 像素对齐。
+        if (w < MIN_SIZE_EDGE || h < MIN_SIZE_EDGE || w > MAX_SIZE_EDGE || h > MAX_SIZE_EDGE) {
+            throw new IllegalArgumentException("size 边长必须在 " + MIN_SIZE_EDGE + "-" + MAX_SIZE_EDGE);
+        }
+        if (w % SIZE_ALIGNMENT != 0 || h % SIZE_ALIGNMENT != 0) {
+            throw new IllegalArgumentException("size W/H 必须是 " + SIZE_ALIGNMENT + " 的倍数");
         }
         return w + "x" + h;
     }

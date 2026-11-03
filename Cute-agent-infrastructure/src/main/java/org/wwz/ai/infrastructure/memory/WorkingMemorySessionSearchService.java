@@ -397,8 +397,11 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         }
         try {
             Map<String, Object> row = workingMemoryMessageDao.selectSessionSummary(sessionId);
+            if (row == null || row.isEmpty()) {
+                return error("session_id " + sessionId + " not found");
+            }
             String owner = value(row, "userId", "user_id");
-            if (row == null || row.isEmpty() || !userId.equals(owner)) {
+            if (!userId.equals(owner)) {
                 return error("session_id " + sessionId + " not found");
             }
         } catch (Exception e) {

@@ -42,6 +42,8 @@ public class WorkspaceImageGenerationServiceImpl implements IWorkspaceImageGener
     private static final String DEFAULT_OUTPUT_NAME = "图片生成结果";
     private static final String DEFAULT_IMAGE_SIZE = "1024x1024";
     private static final int DEFAULT_TIMEOUT_SECONDS = 900;
+    private static final int MIN_GENERATION_BATCH_SIZE = 1;
+    private static final int MAX_GENERATION_BATCH_SIZE = 10;
     private static final int DEFAULT_BATCH_SIZE = 10;
     private static final int MAX_BATCH_SIZE = 50;
 
@@ -181,7 +183,7 @@ public class WorkspaceImageGenerationServiceImpl implements IWorkspaceImageGener
         if (rawBatchSize == null) {
             return 1;
         }
-        return Math.max(1, Math.min(rawBatchSize, 10));
+        return Math.max(MIN_GENERATION_BATCH_SIZE, Math.min(rawBatchSize, MAX_GENERATION_BATCH_SIZE));
     }
 
     private String resolveOutputFileName(String rawFileName) {
