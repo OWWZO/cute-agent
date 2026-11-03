@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
 /**
  * 读取系统「减弱动态效果」偏好。
  * SSR 或不支持 matchMedia 的环境返回 false。
@@ -8,7 +10,7 @@ function readPrefersReducedMotion(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return false;
   }
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
 }
 
 /**
@@ -20,7 +22,7 @@ export function usePrefersReducedMotion(): boolean {
     useState<boolean>(readPrefersReducedMotion);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const mediaQuery = window.matchMedia(REDUCED_MOTION_QUERY);
     const handleChange = () => setPrefersReducedMotion(mediaQuery.matches);
     handleChange();
     mediaQuery.addEventListener("change", handleChange);

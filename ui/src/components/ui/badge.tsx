@@ -34,7 +34,10 @@ function Badge({
   asChild = false,
   ...props
 }: React.ComponentProps<"span"> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+  VariantProps<typeof badgeVariants> & {
+    /** 为 true 时必须且只能有一个 React 元素子节点。 */
+    asChild?: boolean
+  }) {
   const Comp = asChild ? Slot.Root : "span"
   // VariantProps 允许 null，这里统一收敛到 cva 的默认值，保证样式与 data-variant 一致
   const resolvedVariant = variant ?? DEFAULT_VARIANT;

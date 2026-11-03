@@ -12,25 +12,25 @@ import type { BundledTheme } from "shiki";
  * 与 ZCode 的 `false` 不同；它同时是 `codePreviewWrap` store 的兜底默认值。
  */
 export interface CodePreviewSettings {
-  lightTheme: BundledTheme;
-  darkTheme: BundledTheme;
-  showLineNumbers: boolean;
-  wrapLongLines: boolean;
-  fontSizePx: number;
+  readonly lightTheme: BundledTheme;
+  readonly darkTheme: BundledTheme;
+  readonly showLineNumbers: boolean;
+  readonly wrapLongLines: boolean;
+  readonly fontSizePx: number;
 }
 
-export const DEFAULT_CODE_PREVIEW_SETTINGS: CodePreviewSettings = {
+export const DEFAULT_CODE_PREVIEW_SETTINGS = {
   lightTheme: "github-light",
   darkTheme: "github-dark",
   showLineNumbers: true,
   wrapLongLines: true,
   fontSizePx: 12,
-};
+} satisfies CodePreviewSettings;
 
 /** 按当前应用主题取代码主题。 */
 export function resolveCodePreviewTheme(
   isDark: boolean,
-  settings: CodePreviewSettings = DEFAULT_CODE_PREVIEW_SETTINGS
+  settings: Readonly<CodePreviewSettings> = DEFAULT_CODE_PREVIEW_SETTINGS
 ): BundledTheme {
   return isDark ? settings.darkTheme : settings.lightTheme;
 }

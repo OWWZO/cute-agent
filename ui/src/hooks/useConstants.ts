@@ -10,5 +10,3 @@ export type ConstantType = typeof constants;
 export const useConstants = () => {
   return useContext(ConstantContext);
 };
-
-export default ConstantContext;

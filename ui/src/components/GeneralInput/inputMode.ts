@@ -4,7 +4,7 @@ const DEFAULT_THINKING_EFFORT = "high";
 
 /**
  * 组装发送载荷。
- * 标准 Agent 只透传 deepThink；dataAgent 仍由独立问数入口处理。
+ * 标准 Agent 透传深度思考、文件、模型和计划模式等字段；dataAgent 仍由独立问数入口处理。
  */
 export function buildSubmitPayload(params: {
   question: string;

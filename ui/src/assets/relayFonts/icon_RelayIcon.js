@@ -152,7 +152,7 @@ export default {
   'icon-xinjianduihua': 61207,// 新建对话
   'icon-jia': 61049,// 加
   'icon-jingtiaoshujutianchong1': 59124,// 精调数据（填充）
-  'icon-fanhui': 58319,// 左
+  'icon-fanhui': 58319,// 返回
   'icon-zhengyan': 58745,// 睁眼
   'icon-shujukanban': 61427,// 数据看板
   'icon-shuaxin': 62324,// 刷新

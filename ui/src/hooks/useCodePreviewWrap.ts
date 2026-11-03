@@ -12,7 +12,11 @@ import {
  * 返回 `[wrap, setWrap, toggleWrap]`。所有调用方共享同一份模块级 store，
  * 所以任意一处切换都会同步到其它代码查看器。
  */
-export function useCodePreviewWrap(): [boolean, (next: boolean) => void, () => void] {
+export function useCodePreviewWrap(): readonly [
+  boolean,
+  (next: boolean) => void,
+  () => void,
+] {
   const wrap = useSyncExternalStore(
     subscribeCodePreviewWrap,
     readCodePreviewWrap,

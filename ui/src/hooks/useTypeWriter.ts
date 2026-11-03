@@ -7,7 +7,7 @@ interface UseWriterOptions {
 
 export const useTypeWriter = (
   {text, options}:{ text: string, options?: UseWriterOptions }
-) => {
+): readonly [string] => {
   const [typedText, setTypedText] = useState('');
 
   // 只依赖原始值：调用方传内联 options 对象时不会每次渲染都重建 core。

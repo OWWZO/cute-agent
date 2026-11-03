@@ -8,6 +8,10 @@ import type { CSSProperties, HTMLAttributes, ReactNode, Ref } from "react";
  * 底层同样是 `@pierre/diffs` 的 `File`。
  */
 
+/**
+ * 评论范围。行号从 1 开始，使用文件绝对行号（与 `firstLineNumber` 同坐标）；
+ * 起始行不得晚于结束行。
+ */
 export interface CodeCommentRange {
   startLine: number;
   endLine: number;
@@ -72,7 +76,14 @@ export interface CodeViewerProps extends HTMLAttributes<HTMLDivElement> {
    * 缺省时回退到内容缓存键（主题切换也会重建缓存键）。
    */
   commentResetKey?: string;
+  /**
+   * 要滚动到的评论范围。必须与 `focusRequestId` 同时传入；两者都缺失时不会聚焦。
+   */
   focusedRange?: CodeCommentRange | null;
+  /**
+   * 聚焦请求的一次性标识。每次新聚焦都应生成新值；仅修改 `focusedRange`
+   * 而沿用旧 id 不会再次触发滚动。
+   */
   focusRequestId?: string;
   /**
    * 需要点名的行号（1 起，与 `firstLineNumber` 同坐标）：只把这些行的**行号**染成警示色，

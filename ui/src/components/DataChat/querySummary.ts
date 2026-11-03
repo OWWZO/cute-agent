@@ -54,7 +54,7 @@ function resolveFormula(chartCfg: DataChatSourceConfig) {
 }
 
 export function buildQuerySummary(chartCfg: DataChatSourceConfig): DataChatQuerySummary {
-  // 摘要只投影当前图表配置，不重新请求数据；showTypeSwitch 表示可在同维度多指标间切换。
+  // 摘要只投影当前图表配置，不重新请求数据；showTypeSwitch 表示可切换图表类型。
   const dimCols = chartCfg.dimCols || [];
   const measureCols = chartCfg.measureCols || [];
   const dataList = chartCfg.dataList || [];
