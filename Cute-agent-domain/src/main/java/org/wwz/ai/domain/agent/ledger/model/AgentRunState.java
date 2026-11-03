@@ -1,9 +1,12 @@
 package org.wwz.ai.domain.agent.ledger.model;
 
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.ToString;
 
 import java.util.Map;
@@ -14,7 +17,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * run 级运行态上下文。
  */
-@Data
+@Getter
+@Setter
+@ToString
+@EqualsAndHashCode(of = {"runId", "runUid"})
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -26,22 +32,27 @@ public class AgentRunState {
 
     @Builder.Default
     @ToString.Exclude
+    @Setter(AccessLevel.NONE)
     private AtomicInteger nextLlmInvocationSeq = new AtomicInteger(1);
 
     @Builder.Default
     @ToString.Exclude
+    @Setter(AccessLevel.NONE)
     private ConcurrentMap<String, Long> toolInvocationIdByToolCallId = new ConcurrentHashMap<>();
 
     @Builder.Default
     @ToString.Exclude
+    @Setter(AccessLevel.NONE)
     private transient ThreadLocal<String> currentAgentNameHolder = new ThreadLocal<>();
 
     @Builder.Default
     @ToString.Exclude
+    @Setter(AccessLevel.NONE)
     private transient ThreadLocal<Integer> currentStepNoHolder = new ThreadLocal<>();
 
     @Builder.Default
     @ToString.Exclude
+    @Setter(AccessLevel.NONE)
     private transient ThreadLocal<Long> currentLlmInvocationIdHolder = new ThreadLocal<>();
 
     /**

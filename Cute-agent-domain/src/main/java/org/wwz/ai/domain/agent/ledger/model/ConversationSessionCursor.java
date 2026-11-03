@@ -1,27 +1,32 @@
 package org.wwz.ai.domain.agent.ledger.model;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
 /**
  * Keyset cursor for the recent-session ordering.
+ * <p>字段不可变，只能通过 {@link #from}、{@link #validated}、{@link #decode} 构造，
+ * 保证不变量（{@code id > 0}）在对象生命周期内始终成立。</p>
  */
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter
+@EqualsAndHashCode
+@ToString
 public class ConversationSessionCursor {
 
     private static final int VERSION = 1;
     private static final String INVALID_MESSAGE = "非法会话 cursor";
 
-    private LocalDateTime lastActiveAt;
+    private final LocalDateTime lastActiveAt;
 
-    private Long id;
+    private final Long id;
+
+    private ConversationSessionCursor(LocalDateTime lastActiveAt, Long id) {
+        this.lastActiveAt = lastActiveAt;
+        this.id = id;
+    }
 
     public static ConversationSessionCursor from(DialogueSessionView session) {
         if (session == null) {

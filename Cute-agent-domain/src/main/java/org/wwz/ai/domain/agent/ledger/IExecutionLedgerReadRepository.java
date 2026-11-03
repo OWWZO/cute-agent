@@ -19,16 +19,31 @@ import java.util.List;
  */
 public interface IExecutionLedgerReadRepository {
 
+    /**
+     * 批量按 runId 查询的最大 id 数量，与 {@link ExecutionLedgerQueryService#MAX_SESSION_RUN_PAGE_SIZE} 对齐，
+     * 保证一次分页查询的 run 集合可以用单条 {@code IN (...)} 下推。
+     */
+    int MAX_BATCH_RUN_IDS = 100;
+
     DialogueRun queryRunByRequestId(String requestId);
 
     DialogueRun queryRunSummaryByRequestId(String requestId);
 
     List<LlmInvocation> queryLlmInvocationsByRunId(Long runId);
 
+    /**
+     * 按 runId 批量查询 LLM 调用。
+     * <p>契约：{@code runIds} 为 {@code null} 或空时返回空列表，绝不返回 {@code null}；
+     * 调用方一次最多传入 {@link #MAX_BATCH_RUN_IDS} 个 id。实现必须用单条 {@code IN} 查询，
+     * 不得退化为按 id 逐个查询。</p>
+     */
     List<LlmInvocation> queryLlmInvocationsByRunIds(List<Long> runIds);
 
     List<ToolInvocation> queryToolInvocationsByRunId(Long runId);
 
+    /**
+     * 按 runId 批量查询工具调用。契约同 {@link #queryLlmInvocationsByRunIds(List)}。
+     */
     List<ToolInvocation> queryToolInvocationsByRunIds(List<Long> runIds);
 
     List<ArtifactRecord> queryArtifactsByRunId(Long runId);
@@ -94,10 +109,14 @@ public interface IExecutionLedgerReadRepository {
 
     List<DialogueSessionView> queryRecentSessions(String userId, ConversationSessionCursor after, int limit);
 
+    /**
+     * 按 runId 批量查询产物。契约同 {@link #queryLlmInvocationsByRunIds(List)}。
+     */
     List<ArtifactRecord> queryArtifactsByRunIds(List<Long> runIds);
 
     /**
      * 批量查询父 runs 的产物，并将跨 run 的子 Agent 产物按血缘重键到父 Agent 卡。
+     * <p>契约同 {@link #queryLlmInvocationsByRunIds(List)}。</p>
      */
     List<ArtifactRecord> queryArtifactsByRunIdsWithSubagentFold(List<Long> runIds);
 

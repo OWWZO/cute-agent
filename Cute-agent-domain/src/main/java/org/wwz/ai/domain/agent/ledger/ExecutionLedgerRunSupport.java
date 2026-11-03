@@ -127,7 +127,8 @@ public final class ExecutionLedgerRunSupport {
                     .artifactRole(ExecutionLedgerConstants.ARTIFACT_ROLE_INPUT)
                     .visibility(ExecutionLedgerConstants.VISIBILITY_VISIBLE)
                     .sourceType(ExecutionLedgerConstants.SOURCE_TYPE_USER_UPLOAD)
-                    .sourceName(ExecutionLedgerConstants.SOURCE_TYPE_USER_UPLOAD)
+                    .sourceName(StringUtils.defaultIfBlank(
+                            sessionFile.getOriginFileName(), sessionFile.getFileName()))
                     .fileName(sessionFile.getFileName())
                     .storageKey(resolveStorageKey(sessionFile))
                     .downloadUrl(sessionFile.getOssUrl())
