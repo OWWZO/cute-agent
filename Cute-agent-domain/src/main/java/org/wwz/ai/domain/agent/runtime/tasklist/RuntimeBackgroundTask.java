@@ -38,32 +38,36 @@ public class RuntimeBackgroundTask {
 
     private String id;
     private String type;
-    private String status;
+    /**
+     * 以下字段在对象发布进注册表后仍会被后台线程改写（complete/fail/stop、远端快照合并），
+     * 而 API/UI 线程通过普通 getter 读取，因此必须是 volatile 建立可见性。
+     */
+    private volatile String status;
     private String description;
     private String command;
     private long startedAtMs;
-    private Long endedAtMs;
+    private volatile Long endedAtMs;
 
     /** 子 Agent id（local_agent） */
-    private String agentId;
-    private String agentType;
+    private volatile String agentId;
+    private volatile String agentType;
     /** 子 Agent 对应的真实子会话 ID（{@code sub_{agentId}}）；前端据此打开只读详情 */
-    private String childSessionId;
+    private volatile String childSessionId;
     private String prompt;
 
     /** 终态输出 / 错误 */
-    private String output;
-    private String errorMsg;
-    private Integer totalToolUseCount;
-    private Long totalDurationMs;
+    private volatile String output;
+    private volatile String errorMsg;
+    private volatile Integer totalToolUseCount;
+    private volatile Long totalDurationMs;
 
     /** 任务级取消令牌（TaskStop / 父 run cancel） */
     @ToString.Exclude
     @JSONField(serialize = false)
-    private RunCancellation cancellation;
+    private volatile RunCancellation cancellation;
 
     /** 后台执行 Future，供 interrupt */
     @ToString.Exclude
     @JSONField(serialize = false)
-    private Future<?> future;
+    private volatile Future<?> future;
 }

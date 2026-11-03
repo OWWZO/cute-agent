@@ -110,9 +110,9 @@ public class WorkspaceBashExecutor {
 
             boolean finished = process.waitFor(effectiveTimeout, TimeUnit.MILLISECONDS);
             if (!finished) {
-                process.destroyForcibly();
-                outThread.join(2_000);
-                errThread.join(2_000);
+                // 只杀直接子进程会留下孙进程继续占文件/端口/管道写端，收集线程永远等不到 EOF。
+                destroyTree(process);
+                joinCollectors(outThread, errThread, stdout, stderr);
                 ExecResult timeoutResult = ExecResult.builder()
                         .exitCode(null)
                         .stdout(stdout.text())
@@ -125,8 +125,7 @@ public class WorkspaceBashExecutor {
                         cwd, timeoutResult.getDurationMs());
                 return timeoutResult;
             }
-            outThread.join(2_000);
-            errThread.join(2_000);
+            joinCollectors(outThread, errThread, stdout, stderr);
             int code = process.exitValue();
             ExecResult result = ExecResult.builder()
                     .exitCode(code)
@@ -141,12 +140,37 @@ public class WorkspaceBashExecutor {
             return result;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            if (process != null) {
-                process.destroyForcibly();
-            }
+            destroyTree(process);
             throw new IllegalStateException("bash interrupted", e);
         } catch (IOException e) {
             throw new IllegalStateException("bash start failed: " + e.getMessage(), e);
+        }
+    }
+
+    /** 先杀后代再杀直接子进程；顺序反了会因进程被回收而丢失 parent 关系。 */
+    private static void destroyTree(Process process) {
+        if (process == null) {
+            return;
+        }
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
+    }
+
+    /**
+     * 收集线程 join 超时说明管道写端仍未关闭（通常是孙进程存活）：
+     * 后续读取必须标记截断，不能把半截输出当成完整结果。
+     */
+    private static void joinCollectors(Thread outThread,
+                                       Thread errThread,
+                                       StreamCollector stdout,
+                                       StreamCollector stderr) throws InterruptedException {
+        outThread.join(2_000);
+        errThread.join(2_000);
+        if (outThread.isAlive()) {
+            stdout.markTruncated();
+        }
+        if (errThread.isAlive()) {
+            stderr.markTruncated();
         }
     }
 
@@ -257,7 +281,7 @@ public class WorkspaceBashExecutor {
             }
         }
 
-        String text() {
+        synchronized String text() {
             byte[] bytes = buffer.toByteArray();
             Charset charset = StandardCharsets.UTF_8;
             String raw = new String(bytes, charset);
@@ -269,6 +293,10 @@ public class WorkspaceBashExecutor {
             int head = maxChars / 2;
             int tail = maxChars - head - 32;
             return raw.substring(0, head) + "\n…[输出被截断]…\n" + raw.substring(raw.length() - tail);
+        }
+
+        synchronized void markTruncated() {
+            truncated = true;
         }
 
         boolean truncated() {

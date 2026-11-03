@@ -46,6 +46,13 @@ public class SkillPackageService {
     /** 静态威胁扫描器（无状态，直接 new；加初始化器后不进入 @RequiredArgsConstructor）。 */
     private final SkillThreatScanner threatScanner = new SkillThreatScanner();
 
+    /**
+     * 技能目录的所有变更串行执行：存在性检查、删目录、建目录、refresh 是分离步骤，
+     * 并发 install/delete 会互相踩目录（尤其 BLOCK 清理可能删掉另一个请求刚写入的文件）。
+     */
+    private final java.util.concurrent.locks.ReentrantLock mutationLock =
+            new java.util.concurrent.locks.ReentrantLock();
+
     public SkillPackageParser.ParsedSkillPackage previewZip(byte[] zipBytes) {
         return SkillPackageParser.parse(zipBytes);
     }
@@ -71,6 +78,16 @@ public class SkillPackageService {
 
     private Map<String, Object> installZip(byte[] zipBytes, String originalFilename, boolean replace,
                                            SkillTrustLevel trustLevel) {
+        mutationLock.lock();
+        try {
+            return installZipLocked(zipBytes, originalFilename, replace, trustLevel);
+        } finally {
+            mutationLock.unlock();
+        }
+    }
+
+    private Map<String, Object> installZipLocked(byte[] zipBytes, String originalFilename, boolean replace,
+                                                 SkillTrustLevel trustLevel) {
         SkillPackageParser.ParsedSkillPackage parsed = SkillPackageParser.parse(zipBytes);
         if (skillRegistry.findSkill(parsed.name()).isPresent() && !replace) {
             throw new SkillLoadException("技能「" + parsed.name() + "」已存在；若要覆盖请传 replace=true");
@@ -115,6 +132,16 @@ public class SkillPackageService {
 
     private Map<String, Object> installFromMarkdown(String name, String description, String rawContent,
                                                     boolean replace, SkillTrustLevel trustLevel) {
+        mutationLock.lock();
+        try {
+            return installFromMarkdownLocked(name, description, rawContent, replace, trustLevel);
+        } finally {
+            mutationLock.unlock();
+        }
+    }
+
+    private Map<String, Object> installFromMarkdownLocked(String name, String description, String rawContent,
+                                                          boolean replace, SkillTrustLevel trustLevel) {
         SkillPackageParser.FrontmatterSplit front = SkillPackageParser.splitFrontmatter(
                 StringUtils.defaultString(rawContent));
         String resolvedName = SkillPackageParser.sanitizeSkillName(
@@ -243,18 +270,23 @@ public class SkillPackageService {
     }
 
     public boolean deleteSkill(String name) {
-        String n = SkillPackageParser.sanitizeSkillName(name);
-        Path root = requireWritableRoot();
-        Path skillDir = root.resolve(n).toAbsolutePath().normalize();
-        if (!skillDir.startsWith(root.toAbsolutePath().normalize()) || !Files.isDirectory(skillDir)) {
-            return false;
-        }
+        mutationLock.lock();
         try {
-            deleteRecursive(skillDir);
-            skillRegistry.refresh();
-            return true;
-        } catch (IOException e) {
-            throw new SkillLoadException("删除技能失败：" + e.getMessage(), e);
+            String n = SkillPackageParser.sanitizeSkillName(name);
+            Path root = requireWritableRoot();
+            Path skillDir = root.resolve(n).toAbsolutePath().normalize();
+            if (!skillDir.startsWith(root.toAbsolutePath().normalize()) || !Files.isDirectory(skillDir)) {
+                return false;
+            }
+            try {
+                deleteRecursive(skillDir);
+                skillRegistry.refresh();
+                return true;
+            } catch (IOException e) {
+                throw new SkillLoadException("删除技能失败：" + e.getMessage(), e);
+            }
+        } finally {
+            mutationLock.unlock();
         }
     }
 
@@ -275,57 +307,67 @@ public class SkillPackageService {
      * 技能不存在时自动建最小 SKILL.md 骨架。
      */
     public Map<String, Object> writeRelativeFile(String skillName, String relativePath, String content) {
-        String name = SkillPackageParser.sanitizeSkillName(skillName);
-        String rel = normalizeRelativePath(relativePath);
-        Path skillDir = ensureSkillDir(name);
-        Path target = skillDir.resolve(rel).normalize();
-        if (!target.startsWith(skillDir)) {
-            throw new SkillLoadException("路径逃逸技能目录: " + relativePath);
-        }
-        if ("SKILL.md".equalsIgnoreCase(rel) || rel.endsWith("/SKILL.md")) {
-            throw new SkillLoadException("请用 upsert 写 SKILL.md，不要用 write_file 覆盖手册元数据");
-        }
+        mutationLock.lock();
         try {
-            Files.createDirectories(target.getParent());
-            Files.writeString(target, content == null ? "" : content, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new SkillLoadException("写入技能文件失败：" + e.getMessage(), e);
+            String name = SkillPackageParser.sanitizeSkillName(skillName);
+            String rel = normalizeRelativePath(relativePath);
+            Path skillDir = ensureSkillDir(name);
+            Path target = skillDir.resolve(rel).normalize();
+            if (!target.startsWith(skillDir)) {
+                throw new SkillLoadException("路径逃逸技能目录: " + relativePath);
+            }
+            if ("SKILL.md".equalsIgnoreCase(rel) || rel.endsWith("/SKILL.md")) {
+                throw new SkillLoadException("请用 upsert 写 SKILL.md，不要用 write_file 覆盖手册元数据");
+            }
+            try {
+                Files.createDirectories(target.getParent());
+                Files.writeString(target, content == null ? "" : content, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new SkillLoadException("写入技能文件失败：" + e.getMessage(), e);
+            }
+            skillRegistry.refresh();
+            log.info("skill file written name={} path={}", name, rel);
+            Map<String, Object> row = skillRow(name);
+            row.put("writtenPath", rel);
+            row.put("bytes", content == null ? 0 : content.getBytes(StandardCharsets.UTF_8).length);
+            return row;
+        } finally {
+            mutationLock.unlock();
         }
-        skillRegistry.refresh();
-        log.info("skill file written name={} path={}", name, rel);
-        Map<String, Object> row = skillRow(name);
-        row.put("writtenPath", rel);
-        row.put("bytes", content == null ? 0 : content.getBytes(StandardCharsets.UTF_8).length);
-        return row;
     }
 
     /**
      * 删除技能包内相对文件（不可删 SKILL.md；删技能请用 deleteSkill）。
      */
     public Map<String, Object> deleteRelativeFile(String skillName, String relativePath) {
-        String name = SkillPackageParser.sanitizeSkillName(skillName);
-        String rel = normalizeRelativePath(relativePath);
-        if ("SKILL.md".equalsIgnoreCase(rel) || rel.endsWith("/SKILL.md")) {
-            throw new SkillLoadException("不能删除 SKILL.md；删除整个技能请用管理端或 delete 动作");
-        }
-        Path root = requireWritableRoot();
-        Path skillDir = root.resolve(name).toAbsolutePath().normalize();
-        if (!Files.isDirectory(skillDir)) {
-            throw new SkillLoadException("技能不存在: " + name);
-        }
-        Path target = skillDir.resolve(rel).normalize();
-        if (!target.startsWith(skillDir)) {
-            throw new SkillLoadException("路径逃逸技能目录: " + relativePath);
-        }
+        mutationLock.lock();
         try {
-            boolean deleted = Files.deleteIfExists(target);
-            skillRegistry.refresh();
-            Map<String, Object> row = skillRow(name);
-            row.put("deletedPath", rel);
-            row.put("deleted", deleted);
-            return row;
-        } catch (IOException e) {
-            throw new SkillLoadException("删除技能文件失败：" + e.getMessage(), e);
+            String name = SkillPackageParser.sanitizeSkillName(skillName);
+            String rel = normalizeRelativePath(relativePath);
+            if ("SKILL.md".equalsIgnoreCase(rel) || rel.endsWith("/SKILL.md")) {
+                throw new SkillLoadException("不能删除 SKILL.md；删除整个技能请用管理端或 delete 动作");
+            }
+            Path root = requireWritableRoot();
+            Path skillDir = root.resolve(name).toAbsolutePath().normalize();
+            if (!Files.isDirectory(skillDir)) {
+                throw new SkillLoadException("技能不存在: " + name);
+            }
+            Path target = skillDir.resolve(rel).normalize();
+            if (!target.startsWith(skillDir)) {
+                throw new SkillLoadException("路径逃逸技能目录: " + relativePath);
+            }
+            try {
+                boolean deleted = Files.deleteIfExists(target);
+                skillRegistry.refresh();
+                Map<String, Object> row = skillRow(name);
+                row.put("deletedPath", rel);
+                row.put("deleted", deleted);
+                return row;
+            } catch (IOException e) {
+                throw new SkillLoadException("删除技能文件失败：" + e.getMessage(), e);
+            }
+        } finally {
+            mutationLock.unlock();
         }
     }
 

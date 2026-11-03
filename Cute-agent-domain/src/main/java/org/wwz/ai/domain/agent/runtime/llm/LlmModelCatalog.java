@@ -40,10 +40,15 @@ public class LlmModelCatalog {
     private final LlmChatModelResolver chatModelResolver;
     private final long cacheMs;
 
-    private volatile List<LlmModelBinding> cache = Collections.emptyList();
-    private volatile long fetchedAt;
-    /** 是否已成功加载过（空结果也算已加载），避免空目录时每次调用都打 DB。 */
-    private volatile boolean loaded;
+    /** 不可变快照：列表与时间戳必须成组发布，避免读者看到新时间配旧列表。 */
+    private record Snapshot(List<LlmModelBinding> bindings, long fetchedAt, boolean loaded) {
+        private static final Snapshot EMPTY = new Snapshot(List.of(), 0L, false);
+    }
+
+    private volatile Snapshot snapshot = Snapshot.EMPTY;
+    /** 失效代数：加载期间发生 invalidateAll 时，本次结果不得回填缓存。 */
+    private final java.util.concurrent.atomic.AtomicLong generation =
+            new java.util.concurrent.atomic.AtomicLong();
 
     public LlmModelCatalog(ILlmModelConfigRepository repository,
                            LlmChatModelResolver chatModelResolver,
@@ -152,31 +157,37 @@ public class LlmModelCatalog {
 
     /** 管理台写模型/API 后调用：清绑定缓存 + ChatModel 实例缓存。 */
     public void invalidateAll() {
-        cache = Collections.emptyList();
-        fetchedAt = 0L;
-        loaded = false;
+        // 与 loadUsable 的「检查代数 + 发布」使用同一把锁：先推进代数再清快照，
+        // 正在加载的旧结果回来时会被代数检查挡掉。
+        synchronized (this) {
+            generation.incrementAndGet();
+            snapshot = Snapshot.EMPTY;
+        }
         chatModelResolver.invalidateAll();
     }
 
     private List<LlmModelBinding> loadUsable(long nowMs) {
-        if (loaded && cacheMs > 0 && nowMs - fetchedAt < cacheMs) {
-            return cache;
+        Snapshot current = snapshot;
+        if (current.loaded() && cacheMs > 0 && nowMs - current.fetchedAt() < cacheMs) {
+            return current.bindings();
         }
+        long loadGeneration = generation.get();
         try {
             List<LlmModelBinding> loaded = repository.listUsable();
-            if (loaded == null) {
-                loaded = Collections.emptyList();
+            List<LlmModelBinding> copied = loaded == null ? List.of() : List.copyOf(loaded);
+            Snapshot next = new Snapshot(copied, nowMs, true);
+            synchronized (this) {
+                if (generation.get() == loadGeneration) {
+                    snapshot = next;
+                    return copied;
+                }
             }
-            cache = List.copyOf(loaded);
-            fetchedAt = nowMs;
-            this.loaded = true;
-            return cache;
+            // 加载期间管理台已失效：本次结果可能基于旧配置，不能发布；交给下一次调用重读。
+            return snapshot.bindings();
         } catch (Exception e) {
-            log.warn("加载可用模型目录失败，沿用缓存或空目录: cachedSize={}", cache.size(), e);
-            if (!cache.isEmpty()) {
-                return cache;
-            }
-            return Collections.emptyList();
+            List<LlmModelBinding> cached = current.bindings();
+            log.warn("加载可用模型目录失败，沿用缓存或空目录: cachedSize={}", cached.size(), e);
+            return cached.isEmpty() ? Collections.emptyList() : cached;
         }
     }
 

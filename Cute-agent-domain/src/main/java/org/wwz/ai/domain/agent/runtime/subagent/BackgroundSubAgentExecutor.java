@@ -74,16 +74,29 @@ public final class BackgroundSubAgentExecutor {
                                            String parentToolUseId,
                                            String parentToolName) {
         RuntimeBackgroundTaskRegistry registry = parent.requireBackgroundTasks();
-        RuntimeBackgroundTask task = registry.registerLocalAgent(description, subagentType, prompt);
+        final String toolName = StringUtils.defaultIfBlank(parentToolName, AgentDispatchTool.NAME);
+        boolean resume = StringUtils.isNotBlank(resumeAgentId);
+        final String preferredAgentId = resume
+                ? resumeAgentId.trim()
+                : SubAgentContextFactory.newAgentId();
+        // 先原子占位再登记任务：isActive / isBackgroundRunning 的检查与 submit 之间没有原子性，
+        // 两次并发的 SendMessage 会各自登记一条 run，并共享同一 childSessionId/working memory。
+        if (!registry.tryClaimAgentRun(preferredAgentId)) {
+            return ToolResultPayload.softFailData(toolName, softBusy(toolName, preferredAgentId));
+        }
+
+        RuntimeBackgroundTask task;
+        try {
+            task = registry.registerLocalAgent(description, subagentType, prompt);
+        } catch (RuntimeException e) {
+            registry.releaseAgentRun(preferredAgentId);
+            throw e;
+        }
         RunCancellation taskCancel = task.getCancellation() != null
                 ? task.getCancellation()
                 : new RunCancellation();
         task.setCancellation(taskCancel);
 
-        boolean resume = StringUtils.isNotBlank(resumeAgentId);
-        final String preferredAgentId = resume
-                ? resumeAgentId.trim()
-                : SubAgentContextFactory.newAgentId();
         task.setAgentId(preferredAgentId);
         // childSessionId 由 agentId 确定性派生，与 SubAgentRunner 落库使用的完全一致；
         // 先写入 task，运行中/终态投影即可带上它，无需等待子会话行真正落库。
@@ -97,7 +110,6 @@ public final class BackgroundSubAgentExecutor {
         final String resumeId = resume ? resumeAgentId.trim() : null;
         final String taskId = task.getId();
         final String sessionKey = StringUtils.defaultIfBlank(parent.getSessionId(), parent.getRequestId());
-        final String toolName = StringUtils.defaultIfBlank(parentToolName, AgentDispatchTool.NAME);
         SessionAgentMailboxHub.queue(sessionKey, preferredAgentId);
 
         Future<?> future;
@@ -140,6 +152,10 @@ public final class BackgroundSubAgentExecutor {
             } catch (Exception e) {
                 log.error("{} background subagent failed taskId={}", parent.getRequestId(), taskId, e);
                 if (taskCancel.isCancelled()) {
+                    // 与 try 内的 cancelled 分支保持一致：TaskStop 取消后父侧工具行必须落终态，
+                    // 否则会永远停在 status=running / finished_at=null。
+                    persistLedgerSettlement(parent, parentToolUseId, toolName,
+                            registry.get(taskId).orElse(task));
                     emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, null, false, runRegistry, childSessionId);
                     return;
                 }
@@ -156,6 +172,9 @@ public final class BackgroundSubAgentExecutor {
                 persistLedgerSettlement(parent, parentToolUseId, toolName,
                         registry.get(taskId).orElse(task));
                 emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, failed, false, runRegistry, childSessionId);
+            } finally {
+                // 无论正常结束、取消还是异常，都必须释放 agentId 占位，否则该子 Agent 永远无法再次唤醒。
+                registry.releaseAgentRun(preferredAgentId);
             }
             });
         } catch (RejectedExecutionException e) {
@@ -163,6 +182,7 @@ public final class BackgroundSubAgentExecutor {
             log.warn("{} background subagent rejected, taskId={}, agentId={}",
                     parent.getRequestId(), taskId, preferredAgentId);
             registry.fail(taskId, "background executor rejected");
+            registry.releaseAgentRun(preferredAgentId);
             SessionAgentMailboxHub.evict(sessionKey, preferredAgentId);
             return ToolResultPayload.fromData(rejectedData(toolName, preferredAgentId, childSessionId,
                     description, subagentType));
@@ -384,6 +404,17 @@ public final class BackgroundSubAgentExecutor {
         } catch (Exception e) {
             log.debug("background settlement emit skipped: {}", e.getMessage());
         }
+    }
+
+    /** 已有同 agentId 的后台 run 未收尾：返回可重试的业务失败，不再叠加第二条 run。 */
+    private static Map<String, Object> softBusy(String toolName, String agentId) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("tool", toolName);
+        data.put("ok", false);
+        data.put("status", RuntimeBackgroundTask.STATUS_RUNNING);
+        data.put("agentId", agentId);
+        data.put("message", "子 Agent 正在运行，请用 TaskOutput 等待后再操作。");
+        return data;
     }
 
     private static Map<String, Object> rejectedData(String toolName,

@@ -31,6 +31,8 @@ public class RuntimeBackgroundTaskRegistry {
      * 从持久化 hydrate 的任务没有序号（值为 null），回退按时间戳比较。
      */
     private final Map<String, Long> registrationOrder = new ConcurrentHashMap<>();
+    /** 后台 run 的 agentId 占位：提交前 CAS，防止两次 SendMessage 同时续跑同一子 Agent。 */
+    private final Map<String, Boolean> agentRunClaims = new ConcurrentHashMap<>();
     private final AtomicLong orderCounter = new AtomicLong();
     private final String sessionId;
     private final TasklistPersistencePort persistence;
@@ -107,6 +109,23 @@ public class RuntimeBackgroundTaskRegistry {
         task.setPrompt(prompt);
         persist(task);
         return task;
+    }
+
+    /**
+     * 原子占位一个 agentId 的后台执行权。
+     *
+     * @return false 表示该 agentId 已有未收尾的后台 run
+     */
+    public boolean tryClaimAgentRun(String agentId) {
+        String key = StringUtils.trimToNull(agentId);
+        return key != null && agentRunClaims.putIfAbsent(key, Boolean.TRUE) == null;
+    }
+
+    public void releaseAgentRun(String agentId) {
+        String key = StringUtils.trimToNull(agentId);
+        if (key != null) {
+            agentRunClaims.remove(key);
+        }
     }
 
     public void bindFuture(String taskId, Future<?> future) {
@@ -323,14 +342,24 @@ public class RuntimeBackgroundTaskRegistry {
                     if (remote.isPresent()
                             && !RuntimeBackgroundTask.STATUS_RUNNING.equals(remote.get().getStatus())) {
                         RuntimeBackgroundTask done = remote.get();
-                        task.setStatus(done.getStatus());
-                        task.setOutput(done.getOutput());
-                        task.setErrorMsg(done.getErrorMsg());
-                        task.setAgentId(done.getAgentId());
-                        task.setAgentType(done.getAgentType());
-                        task.setTotalToolUseCount(done.getTotalToolUseCount());
-                        task.setTotalDurationMs(done.getTotalDurationMs());
-                        task.setEndedAtMs(done.getEndedAtMs());
+                        // DB 读取在锁外完成，期间本地可能已经落终态：合并必须回到与
+                        // complete/fail/stop 相同的 registry 锁并重新判定，
+                        // 否则陈旧远端行会把 completed 降级成 failed 并清空本地 output/agentId。
+                        synchronized (this) {
+                            if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
+                                break;
+                            }
+                            if (done.getStatus() != null) {
+                                task.setStatus(done.getStatus());
+                            }
+                            applyIfNotNull(done.getOutput(), task::setOutput);
+                            applyIfNotNull(done.getErrorMsg(), task::setErrorMsg);
+                            applyIfNotNull(done.getAgentId(), task::setAgentId);
+                            applyIfNotNull(done.getAgentType(), task::setAgentType);
+                            applyIfNotNull(done.getTotalToolUseCount(), task::setTotalToolUseCount);
+                            applyIfNotNull(done.getTotalDurationMs(), task::setTotalDurationMs);
+                            applyIfNotNull(done.getEndedAtMs(), task::setEndedAtMs);
+                        }
                         notifyTask(task);
                         break;
                     }
@@ -368,6 +397,12 @@ public class RuntimeBackgroundTaskRegistry {
 
     private static boolean isAborted(BooleanSupplier abort) {
         return abort != null && abort.getAsBoolean();
+    }
+
+    private static <T> void applyIfNotNull(T value, java.util.function.Consumer<T> setter) {
+        if (value != null) {
+            setter.accept(value);
+        }
     }
 
     public List<RuntimeBackgroundTask> listRunning() {

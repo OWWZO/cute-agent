@@ -90,12 +90,8 @@ public final class AgentExecutorSupport {
         if (future.isDone()) {
             return future;
         }
-        future.whenComplete((value, error) -> {
-            if (error instanceof TimeoutException
-                    && future instanceof CancellableCompletableFuture<?> cancellable) {
-                cancellable.cancelDelegate(true);
-            }
-        });
+        // 中断由 CancellableCompletableFuture.completeExceptionally 在发布完成事件之前完成，
+        // 确保依赖阶段看到的永远是「worker 已被要求停止」之后的状态。
         return future.orTimeout(timeout, unit);
     }
 
@@ -173,6 +169,16 @@ public final class AgentExecutorSupport {
                 cancelDelegate(mayInterruptIfRunning);
             }
             return cancelled;
+        }
+
+        @Override
+        public boolean completeExceptionally(Throwable ex) {
+            // 超时先中断底层 FutureTask，再发布完成事件：completion 回调/依赖阶段是同步执行的，
+            // 先发布会让任务自己的 finally 与超时回调并发写同一份结果。
+            if (ex instanceof TimeoutException) {
+                cancelDelegate(true);
+            }
+            return super.completeExceptionally(ex);
         }
 
         private boolean cancelDelegate(boolean mayInterruptIfRunning) {

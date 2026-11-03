@@ -227,6 +227,33 @@ public class SubAgentRunner {
             log.warn("{} subagent spawn without parentToolUseId type={} id={} — nested tools will not attach to Agent card",
                     parentContext.getRequestId(), definition.getAgentType(), agentId);
         }
+        String sessionKey = StringUtils.defaultIfBlank(parentContext.getSessionId(), parentContext.getRequestId());
+        // 原子占位必须早于所有 child 启动副作用：并发 resume/spawn 同一 agentId 时只有一个能进入。
+        if (!SessionAgentMailboxHub.tryMarkActive(sessionKey, agentId)) {
+            return failed(agentId, childSessionId, definition, description, prompt, start,
+                    "子 Agent 仍在运行，请用 TaskOutput 等待后再 resume",
+                    null, false);
+        }
+        try {
+            return runClaimed(parentContext, description, prompt, definition, agentId, childSessionId,
+                    start, resume, cancellationOverride, parentToolUseId, childTools, sessionKey);
+        } finally {
+            SessionAgentMailboxHub.markActive(sessionKey, agentId, false);
+        }
+    }
+
+    private SubAgentResult runClaimed(AgentContext parentContext,
+                                      String description,
+                                      String prompt,
+                                      SubAgentDefinition definition,
+                                      String agentId,
+                                      String childSessionId,
+                                      long start,
+                                      boolean resume,
+                                      RunCancellation cancellationOverride,
+                                      String parentToolUseId,
+                                      ToolCollection childTools,
+                                      String sessionKey) {
         // 先落库后运行：子会话身份行必须在 child run 启动前写入（对齐 ZCode「持久化早于 Spawned 广播」）。
         // 落库失败即中止，避免无主运行与不可查询的孤儿会话；端口缺失时降级放行（仅告警）。
         if (!ensureChildSessionPersisted(parentContext, childSessionId, description, definition)) {
@@ -261,7 +288,6 @@ public class SubAgentRunner {
                 ExecutionLedgerConstants.ENTRY_AGENT_SUBAGENT,
                 prompt);
         // 主→子 inject 邮箱（SendMessage / 用户指导）；与父 run 的 inject 队列隔离
-        String sessionKey = StringUtils.defaultIfBlank(parentContext.getSessionId(), parentContext.getRequestId());
         childContext.bindPendingInjectQueue(SessionAgentMailboxHub.queue(sessionKey, agentId));
 
         // 记忆键统一为 (childSessionId, main)：子会话与主会话同构，用户从会话树点进来
@@ -270,7 +296,7 @@ public class SubAgentRunner {
 
         // resume：每次运行需要唯一 requestId，否则 working_memory persist 幂等跳过
         if (resume) {
-            if (isSubAgentStillRunning(parentContext, sessionKey, agentId)) {
+            if (isSubAgentStillRunning(parentContext, agentId)) {
                 return failed(agentId, childSessionId, definition, description, prompt, start,
                         "子 Agent 仍在运行，请用 TaskOutput 等待后再 resume",
                         null, false);
@@ -304,7 +330,6 @@ public class SubAgentRunner {
         // 只需把 collection 自身绑到子 context（MCP 执行器等由它转发）。
         childTools.setAgentContext(childContext);
 
-        SessionAgentMailboxHub.markActive(sessionKey, agentId, true);
         ReactImplAgent agent = null;
         // 子 run 终态收口：三条返回路径 + 异常路径都要收敛到同一个 finally，避免漏写导致 run 永挂 RUNNING。
         java.util.concurrent.atomic.AtomicInteger childRunStatus =
@@ -421,7 +446,7 @@ public class SubAgentRunner {
                         resolveEndSummary(childRunStatus, childRunSummary));
                 closeIsolatedChildStream(parentContext, childSessionId, isolatedChildPrinter);
             }
-            SessionAgentMailboxHub.markActive(sessionKey, agentId, false);
+            // mailbox 占位由 runUnlocked 的外层 finally 统一释放（异常路径也覆盖）。
         }
     }
 
@@ -655,14 +680,14 @@ public class SubAgentRunner {
         }
     }
 
-    private static boolean isSubAgentStillRunning(AgentContext parent,
-                                                 String sessionKey,
-                                                 String agentId) {
+    /**
+     * 是否仍有同 agentId 的后台任务在跑。
+     * <p>mailbox 占位由调用方 {@code tryMarkActive} 原子取得，这里不能再查 active——
+     * 那会把当前这次运行自己误判成「仍在运行」。</p>
+     */
+    private static boolean isSubAgentStillRunning(AgentContext parent, String agentId) {
         if (StringUtils.isBlank(agentId)) {
             return false;
-        }
-        if (SessionAgentMailboxHub.isActive(sessionKey, agentId)) {
-            return true;
         }
         RuntimeBackgroundTaskRegistry registry = parent == null ? null : parent.sessionControl().getBackgroundTasks();
         if (registry == null) {

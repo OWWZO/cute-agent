@@ -103,10 +103,12 @@ public class SessionTaskListStore {
                                                          String owner,
                                                          List<String> addBlocks,
                                                          List<String> addBlockedBy) {
-        SessionTaskItem item = tasks.get(StringUtils.trimToEmpty(taskId));
-        if (item == null) {
+        SessionTaskItem existing = tasks.get(StringUtils.trimToEmpty(taskId));
+        if (existing == null) {
             return Optional.empty();
         }
+        // 写时复制：读者可能正持有旧引用做 toDetailMap()，绝不能原地改 blocks/blockedBy。
+        SessionTaskItem item = copyOf(existing);
         if (StringUtils.isNotBlank(subject)) {
             item.setSubject(subject.trim());
         }
@@ -142,8 +144,26 @@ public class SessionTaskListStore {
                 }
             }
         }
+        tasks.put(item.getId(), item);
         persistUpsert(item);
         return Optional.of(item);
+    }
+
+    /** 复制一份可独立修改的条目；列表字段重建，避免与并发读者共享同一个 ArrayList。 */
+    private static SessionTaskItem copyOf(SessionTaskItem source) {
+        return SessionTaskItem.builder()
+                .id(source.getId())
+                .subject(source.getSubject())
+                .description(source.getDescription())
+                .activeForm(source.getActiveForm())
+                .owner(source.getOwner())
+                .status(source.getStatus())
+                .blocks(source.getBlocks() == null ? new ArrayList<>() : new ArrayList<>(source.getBlocks()))
+                .blockedBy(source.getBlockedBy() == null ? new ArrayList<>() : new ArrayList<>(source.getBlockedBy()))
+                .metadata(source.getMetadata() == null
+                        ? new LinkedHashMap<>()
+                        : new LinkedHashMap<>(source.getMetadata()))
+                .build();
     }
 
     public synchronized Optional<SessionTaskItem> update(String taskId,

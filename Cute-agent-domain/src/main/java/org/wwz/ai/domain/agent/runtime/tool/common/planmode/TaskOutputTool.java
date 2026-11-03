@@ -19,6 +19,12 @@ import java.util.Optional;
 @Slf4j
 public class TaskOutputTool implements BaseTool {
 
+    /**
+     * block=true 的最长阻塞时间。任务可能因进程重启/执行器丢任务而永远等不到终态，
+     * 无界等待会挂死整个 Agent run；到点返回 not_ready，让模型决定继续等待还是放弃。
+     */
+    private static final long MAX_BLOCK_WAIT_MILLIS = 600_000L;
+
     @Override
     public String getName() {
         return TaskToolNames.TASK_OUTPUT;
@@ -86,14 +92,22 @@ public class TaskOutputTool implements BaseTool {
             RuntimeBackgroundTask task = found.get();
             String taskId = task.getId();
             String retrieval = "success";
-            if (shouldBlock && RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
-                task = context.requireBackgroundTasks()
-                        .awaitUntilTerminal(taskId, context::isRunCancelled)
-                        .orElse(task);
-                if (RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
-                    retrieval = "not_ready";
+            String status = task.getStatus();
+            if (shouldBlock && RuntimeBackgroundTask.STATUS_RUNNING.equals(status)) {
+                Optional<RuntimeBackgroundTask> awaited = context.requireBackgroundTasks()
+                        .awaitTerminal(taskId, MAX_BLOCK_WAIT_MILLIS);
+                if (awaited.isEmpty()) {
+                    // 等待期间任务行消失：不能再把等待前的快照当成真实状态回报。
+                    retrieval = "not_found";
+                    status = RuntimeBackgroundTask.STATUS_LOST;
+                } else {
+                    task = awaited.get();
+                    status = task.getStatus();
+                    if (RuntimeBackgroundTask.STATUS_RUNNING.equals(status)) {
+                        retrieval = "not_ready";
+                    }
                 }
-            } else if (RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
+            } else if (RuntimeBackgroundTask.STATUS_RUNNING.equals(status)) {
                 retrieval = "not_ready";
             }
 
@@ -104,7 +118,7 @@ public class TaskOutputTool implements BaseTool {
             fields.put("retrieval_status", retrieval);
             fields.put("agent_id", task.getAgentId());
             fields.put("task_type", task.getType());
-            fields.put("status", task.getStatus());
+            fields.put("status", status);
             fields.put("description", task.getDescription());
             if (StringUtils.isNotBlank(task.getAgentType())) {
                 fields.put("agentType", task.getAgentType());
@@ -124,7 +138,7 @@ public class TaskOutputTool implements BaseTool {
             if (task.getEndedAtMs() != null) {
                 fields.put("endedAtMs", task.getEndedAtMs());
             }
-            fields.put("message", buildMessage(retrieval, task));
+            fields.put("message", buildMessage(retrieval, status, task));
             return ToolResultPayload.okData(TaskToolNames.TASK_OUTPUT, fields);
         } catch (Exception e) {
             log.warn("TaskOutput failed", e);
@@ -133,20 +147,23 @@ public class TaskOutputTool implements BaseTool {
         }
     }
 
-    private static String buildMessage(String retrieval, RuntimeBackgroundTask task) {
+    private static String buildMessage(String retrieval, String status, RuntimeBackgroundTask task) {
         if ("not_ready".equals(retrieval)) {
             return "任务仍在运行。block=false 可再次查看；block=true 将等到终态。";
         }
-        if (RuntimeBackgroundTask.STATUS_COMPLETED.equals(task.getStatus())) {
+        if ("not_found".equals(retrieval)) {
+            return "任务已丢失：等待期间无法再找到该任务。";
+        }
+        if (RuntimeBackgroundTask.STATUS_COMPLETED.equals(status)) {
             return "任务已完成。";
         }
-        if (RuntimeBackgroundTask.STATUS_STOPPED.equals(task.getStatus())) {
+        if (RuntimeBackgroundTask.STATUS_STOPPED.equals(status)) {
             return "任务已停止。";
         }
-        if (RuntimeBackgroundTask.STATUS_FAILED.equals(task.getStatus())) {
+        if (RuntimeBackgroundTask.STATUS_FAILED.equals(status)) {
             return "任务失败：" + StringUtils.defaultString(task.getErrorMsg());
         }
-        if (RuntimeBackgroundTask.STATUS_LOST.equals(task.getStatus())) {
+        if (RuntimeBackgroundTask.STATUS_LOST.equals(status)) {
             return "任务已丢失：" + StringUtils.defaultString(task.getErrorMsg(), "服务端重启");
         }
         return "ok";
