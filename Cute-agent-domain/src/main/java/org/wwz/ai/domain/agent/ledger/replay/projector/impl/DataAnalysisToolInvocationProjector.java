@@ -29,6 +29,11 @@ public class DataAnalysisToolInvocationProjector extends AbstractToolInvocationP
     public List<ProjectedReplayEvent> project(ToolInvocationView invocation,
                                               List<ArtifactView> artifacts,
                                               AgentStreamAccumulator state) {
+        // failure() 也会产出 DataAnalysisToolOutput（content 为空、summary 是错误文案），
+        // 只看 output != null 会把失败的分析回放成 isFinal=true 的成功结果。
+        if (isFailedInvocation(invocation)) {
+            return projectAsToolResult(invocation, artifacts, state);
+        }
         DataAnalysisToolOutput output = invocation != null && invocation.getStructuredOutput() instanceof DataAnalysisToolOutput structuredOutput
                 ? structuredOutput
                 : null;

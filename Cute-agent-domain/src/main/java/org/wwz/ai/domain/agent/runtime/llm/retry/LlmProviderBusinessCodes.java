@@ -95,7 +95,13 @@ public final class LlmProviderBusinessCodes {
         return normalized == null ? null : MAPPINGS.get(normalized);
     }
 
-    /** 数字码统一成去尾零的字符串；包装码 PROVIDER_BUSINESS_ERROR 不算真实业务码。 */
+    private static final java.util.regex.Pattern NUMERIC_CODE =
+            java.util.regex.Pattern.compile("[+-]?\\d+(\\.\\d+)?([eE][+-]?\\d+)?");
+
+    /**
+     * 业务码归一：数字码去尾零（JSON number 反序列化常得到 {@code 1302.0}），文本码转小写
+     * （映射表键全为小写，上游大小写不固定）；包装码 PROVIDER_BUSINESS_ERROR 不算真实业务码。
+     */
     public static String normalizeCode(String providerCode) {
         if (providerCode == null) {
             return null;
@@ -107,7 +113,14 @@ public final class LlmProviderBusinessCodes {
         if (LlmProviderBusinessException.CODE.equalsIgnoreCase(trimmed)) {
             return null;
         }
-        return trimmed;
+        if (NUMERIC_CODE.matcher(trimmed).matches()) {
+            try {
+                return new java.math.BigDecimal(trimmed).stripTrailingZeros().toPlainString();
+            } catch (NumberFormatException ignored) {
+                // 超出 BigDecimal 范围时保留原文，交由映射表 miss 处理。
+            }
+        }
+        return trimmed.toLowerCase(Locale.ROOT);
     }
 
     /**

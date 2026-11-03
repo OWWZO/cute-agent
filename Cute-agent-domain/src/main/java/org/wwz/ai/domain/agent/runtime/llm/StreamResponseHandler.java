@@ -522,7 +522,7 @@ public class StreamResponseHandler {
      * 追加 reasoning 增量。用 CharSequence 前缀比较代替 {@code all.toString()}，
      * 避免每个 chunk 都复制已累积的完整推理正文。
      */
-    private static String appendReasoningChunk(StringBuilder all, String chunk) {
+    static String appendReasoningChunk(StringBuilder all, String chunk) {
         if (chunk == null || chunk.isEmpty()) {
             return "";
         }
@@ -531,14 +531,14 @@ public class StreamResponseHandler {
             return chunk;
         }
         if (startsWith(chunk, all)) {
+            // 累计快照：只把新增后缀当 delta。
             String delta = chunk.substring(all.length());
             all.setLength(0);
             all.append(chunk);
             return delta;
         }
-        if (startsWith(all, chunk)) {
-            return "";
-        }
+        // 其余一律按增量追加。此前「chunk 是已累积文本前缀」会被当成重复快照丢弃，
+        // 但合法的增量片段同样可能是前缀，丢弃会静默丢失推理内容。
         all.append(chunk);
         return chunk;
     }
@@ -611,23 +611,19 @@ public class StreamResponseHandler {
         return markerIndex >= 0 ? content.substring(0, markerIndex) : content;
     }
 
-    private void mergeToolCalls(List<LlmToolCall> toolCalls,
-                                Map<String, ToolCallAccumulator> toolCallAccumulators) {
+    static void mergeToolCalls(List<LlmToolCall> toolCalls,
+                               Map<String, ToolCallAccumulator> toolCallAccumulators) {
+        // 始终按该 chunk 内的位置归并：供应商只在首个 delta 带 id，后续 delta 没有 id；
+        // 以 id 为键会让后续 delta 另起累加器，最终丢掉 name/arguments。
+        // id 作为累加器的一个属性合并，顺序天然稳定。
         int index = 0;
         for (LlmToolCall toolCall : toolCalls) {
             if (toolCall == null) {
                 index++;
                 continue;
             }
-            String key = StringUtils.isNotBlank(toolCall.getId()) ? toolCall.getId() : "idx#" + index;
-            if (StringUtils.isNotBlank(toolCall.getId())
-                    && toolCallAccumulators.containsKey("idx#" + index)) {
-                ToolCallAccumulator existing = toolCallAccumulators.remove("idx#" + index);
-                toolCallAccumulators.put(toolCall.getId(), existing);
-                key = toolCall.getId();
-            }
-            ToolCallAccumulator accumulator = toolCallAccumulators.computeIfAbsent(key,
-                    ignored -> new ToolCallAccumulator());
+            ToolCallAccumulator accumulator = toolCallAccumulators.computeIfAbsent(
+                    "idx#" + index, ignored -> new ToolCallAccumulator());
             accumulator.merge(toolCall);
             index++;
         }
@@ -648,7 +644,7 @@ public class StreamResponseHandler {
         LlmUsageSnapshot.applyTo(response, usage);
     }
 
-    private static class ToolCallAccumulator {
+    static class ToolCallAccumulator {
         private String id;
         private String type;
         private String name;
@@ -670,12 +666,12 @@ public class StreamResponseHandler {
             }
             if (StringUtils.isBlank(arguments)) {
                 arguments = incoming;
-            } else if (!incoming.equals(arguments) && !arguments.startsWith(incoming)) {
-                if (incoming.startsWith(arguments)) {
-                    arguments = incoming;
-                } else {
-                    arguments = arguments + incoming;
-                }
+            } else if (incoming.startsWith(arguments)) {
+                // 累计快照：直接替换。
+                arguments = incoming;
+            } else {
+                // 其余按增量追加。合法 delta 可能是已累积文本的前缀，不能当成重复快照丢弃。
+                arguments = arguments + incoming;
             }
         }
 

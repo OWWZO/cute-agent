@@ -58,15 +58,16 @@ public class RuntimeBackgroundTaskRegistry {
                 if (task == null || StringUtils.isBlank(task.getId())) {
                     continue;
                 }
-            // Hub 首次创建时 hydrate：无 Future 的 running 视为重启孤儿（本进程无法 await）
+            // Hub 首次创建时 hydrate：本进程没有对应 Future，无法 await，只修内存视图；
+            // 不写回 DB——该 running 行可能属于共享同一会话的另一个 JVM，且终态收敛
+            // （按 cutoff 标 lost）由 BackgroundRunReconciler 统一负责。
             if (RuntimeBackgroundTask.STATUS_RUNNING.equals(task.getStatus())) {
-                task.setStatus(RuntimeBackgroundTask.STATUS_FAILED);
+                task.setStatus(RuntimeBackgroundTask.STATUS_LOST);
                 task.setErrorMsg(StringUtils.defaultIfBlank(
                         task.getErrorMsg(), "interrupted by process restart"));
                 if (task.getEndedAtMs() == null) {
                     task.setEndedAtMs(System.currentTimeMillis());
                 }
-                persist(task);
             }
             if (task.getCancellation() == null) {
                 task.setCancellation(new RunCancellation());

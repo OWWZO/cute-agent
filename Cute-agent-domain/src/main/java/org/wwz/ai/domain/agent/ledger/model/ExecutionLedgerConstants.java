@@ -65,7 +65,9 @@ public final class ExecutionLedgerConstants {
             Throwable next = current.getCause();
             current = next == current ? null : next;
         }
-        if (cancelled && !timeout) {
+        // 用户取消必须无条件优先：底层的 socket 超时等 TimeoutException 可能只是取消的副产物，
+        // 不能把用户主动停止改写成超时。
+        if (cancelled) {
             return STATUS_STOPPED;
         }
         return timeout ? STATUS_TIMEOUT : STATUS_FAILED;

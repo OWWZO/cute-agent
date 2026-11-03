@@ -26,6 +26,11 @@ public class CanvasPublishToolInvocationProjector extends AbstractToolInvocation
     public List<ProjectedReplayEvent> project(ToolInvocationView invocation,
                                               List<ArtifactView> artifacts,
                                               AgentStreamAccumulator state) {
+        // CanvasPublishTool.failure() 也会带一个只有 title/mode 的结构化输出，
+        // 因此必须先看调用状态：失败调用回放成 tool_result/错误信息，而不是「发布成功」。
+        if (isFailedInvocation(invocation)) {
+            return projectAsToolResult(invocation, artifacts, state);
+        }
         CanvasPublishToolOutput output = invocation != null
                 && invocation.getStructuredOutput() instanceof CanvasPublishToolOutput structured
                 ? structured

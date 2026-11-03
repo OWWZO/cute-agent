@@ -84,6 +84,19 @@ public class ChannelSessionKeyTest {
         assertThrows(() -> ChannelSessionKey.of(ChannelChatType.C2C, "x".repeat(200), "u"));
     }
 
+    @Test
+    public void composedGroupKeyLongerThanColumnIsRejected() {
+        // 两段标识各自合法（<=128），拼接后超过 session_id 列宽，必须在生成 key 时拒绝，
+        // 否则会被 DB 截断并与其它会话静默碰撞。
+        assertThrows(() -> ChannelSessionKey.of(
+                ChannelChatType.GROUP, "g".repeat(128), "u".repeat(128)));
+    }
+
+    @Test
+    public void composedSingleTargetKeyLongerThanColumnIsRejected() {
+        assertThrows(() -> ChannelSessionKey.of(ChannelChatType.C2C, "x".repeat(128), null));
+    }
+
     private static void assertThrows(Runnable action) {
         try {
             action.run();

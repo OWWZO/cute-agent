@@ -3,9 +3,11 @@ package org.wwz.ai.test.domain.tool.browser;
 import org.junit.Assert;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.adapter.port.cli.CliResult;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.browser.BrowserCliSupport;
 import org.wwz.ai.types.agent.config.OpenCliProperties;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -128,6 +130,21 @@ public class BrowserCliSupportTest {
         Assert.assertTrue(String.valueOf(fields.get("error_hint")).contains("[redacted]"));
         Assert.assertFalse(String.valueOf(fields.get("error_hint")).contains(cdpWsUrl));
         Assert.assertFalse(String.valueOf(fields.get("retry")).contains(cdpWsUrl));
+    }
+
+    @Test
+    public void viewportUploadFailureIsReportedInsteadOfFakeAttachment() {
+        // runtimeDependencies 缺失时 uploadPng 必然返回 null：模拟截图上传失败。
+        AgentContext context = AgentContext.builder().requestId("req-viewport").build();
+        Map<String, Object> fields = new LinkedHashMap<>();
+
+        BrowserCliSupport.publishViewport(context, "{\"imageBase64\":\"aGVsbG8=\"}", fields);
+
+        Assert.assertFalse("base64 仍从观察里移除", fields.containsKey("imageBase64"));
+        Assert.assertFalse("没有成果物就不能写 artifactRef", fields.containsKey("artifactRef"));
+        Assert.assertEquals(Boolean.TRUE, fields.get("image_upload_failed"));
+        Assert.assertFalse("不能宣称已附加图片",
+                String.valueOf(fields.get("message")).contains("attached as image media"));
     }
 
     @Test

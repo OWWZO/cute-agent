@@ -100,6 +100,59 @@ public class DialogueSessionAggregateTest {
     }
 
     @Test
+    public void startRunShouldCarryQueryTextOntoRun() {
+        DialogueSession session = DialogueSession.builder().sessionId("s1").build();
+        DialogueSessionAggregate aggregate = DialogueSessionAggregate.of(session, null);
+
+        DialogueRun run = aggregate.startRun("req-1", "用户原始问题", "react", NOW);
+
+        Assert.assertEquals("用户原始问题", run.getQueryText());
+    }
+
+    @Test
+    public void finishRunTimeoutShouldMarkRunTimedOutNotSuccess() {
+        DialogueSession session = DialogueSession.builder().sessionId("s1").build();
+        DialogueSessionAggregate aggregate = DialogueSessionAggregate.of(session, null);
+        aggregate.startRun("req-1", "问题", NOW);
+
+        DialogueRun run = aggregate.finishRun(
+                "req-1", ExecutionLedgerConstants.STATUS_TIMEOUT, "超时", NOW.plusSeconds(30));
+
+        Assert.assertEquals(Integer.valueOf(ExecutionLedgerConstants.STATUS_TIMEOUT), run.getStatus());
+        Assert.assertTrue(run.isTerminal());
+        Assert.assertEquals(Integer.valueOf(ExecutionLedgerConstants.STATUS_TIMEOUT), session.getStatus());
+        Assert.assertEquals(Integer.valueOf(1), session.getFinishedRunCount());
+    }
+
+    @Test
+    public void finishRunShouldRejectNullStatus() {
+        DialogueSessionAggregate aggregate = DialogueSessionAggregate.of(
+                DialogueSession.builder().sessionId("s1").build(), null);
+        aggregate.startRun("req-1", "问题", NOW);
+
+        try {
+            aggregate.finishRun("req-1", null, "总结", NOW.plusSeconds(1));
+            Assert.fail("null 状态不能被当成成功");
+        } catch (IllegalArgumentException expected) {
+            // 预期
+        }
+    }
+
+    @Test
+    public void finishRunShouldRejectUnknownStatus() {
+        DialogueSessionAggregate aggregate = DialogueSessionAggregate.of(
+                DialogueSession.builder().sessionId("s1").build(), null);
+        aggregate.startRun("req-1", "问题", NOW);
+
+        try {
+            aggregate.finishRun("req-1", 99, "总结", NOW.plusSeconds(1));
+            Assert.fail("未知状态必须报错");
+        } catch (IllegalArgumentException expected) {
+            // 预期
+        }
+    }
+
+    @Test
     public void multipleRunsShouldKeepCountersConsistent() {
         DialogueSession session = DialogueSession.builder().sessionId("s1").build();
         DialogueSessionAggregate aggregate = DialogueSessionAggregate.of(session, null);

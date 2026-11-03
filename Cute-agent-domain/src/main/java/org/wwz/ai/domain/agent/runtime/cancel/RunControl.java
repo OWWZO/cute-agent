@@ -3,6 +3,7 @@ package org.wwz.ai.domain.agent.runtime.cancel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -25,8 +26,12 @@ public final class RunControl {
      */
     private volatile RunCancellation ownCancellation;
 
-    /** 父 run 透传的取消令牌（只读引用）：父侧 /stop 置位后子 Agent 立即可见。 */
-    private volatile RunCancellation parentCancellation;
+    /**
+     * 父 run 透传的取消令牌链（只读引用）：可能包含父自己的任务级令牌与更上层的用户 stop 令牌。
+     * <p>必须保留整条链，单字段会在 {@link #bindParentCancellation} 多次调用时互相覆盖，
+     * 导致最上层用户 stop 杀不到孙 Agent。</p>
+     */
+    private final List<RunCancellation> parentCancellations = new CopyOnWriteArrayList<>();
 
     /** 父 run 是否已 finishRun（SUCCESS/FAILED/STOPPED/WAITING_INPUT）。 */
     private final AtomicBoolean turnClosed = new AtomicBoolean(false);
@@ -47,8 +52,10 @@ public final class RunControl {
         if (isOwnCancelled()) {
             return ownCancellation.getReason();
         }
-        if (isParentCancelled()) {
-            return parentCancellation.getReason();
+        for (RunCancellation cancellation : parentCancellations) {
+            if (cancellation.isCancelled()) {
+                return cancellation.getReason();
+            }
         }
         return null;
     }
@@ -58,11 +65,17 @@ public final class RunControl {
      * 任一侧 cancel 都能中止在途工作。返回的注销句柄同时从两者移除。
      */
     public Runnable registerAbort(Runnable hook) {
-        Runnable removeFromOwn = ownCancellation == null ? () -> { } : ownCancellation.registerAbort(hook);
-        Runnable removeFromParent = parentCancellation == null ? () -> { } : parentCancellation.registerAbort(hook);
+        RunCancellation own = ownCancellation;
+        Runnable removeFromOwn = own == null ? () -> { } : own.registerAbort(hook);
+        List<Runnable> parentRemovers = new ArrayList<>(parentCancellations.size());
+        for (RunCancellation cancellation : parentCancellations) {
+            parentRemovers.add(cancellation.registerAbort(hook));
+        }
         return () -> {
             removeFromOwn.run();
-            removeFromParent.run();
+            for (Runnable removeFromParent : parentRemovers) {
+                removeFromParent.run();
+            }
         };
     }
 
@@ -73,10 +86,11 @@ public final class RunControl {
         }
     }
 
-    /** 注入父 run 透传的用户 stop 令牌（只读引用，不覆盖 own）。 */
+    /** 追加上游取消令牌（只读引用，不覆盖 own，也不覆盖链上其它父令牌）。 */
     public void bindParentCancellation(RunCancellation cancellation) {
-        if (cancellation != null) {
-            this.parentCancellation = cancellation;
+        if (cancellation != null && cancellation != ownCancellation
+                && !parentCancellations.contains(cancellation)) {
+            parentCancellations.add(cancellation);
         }
     }
 
@@ -101,19 +115,23 @@ public final class RunControl {
      * 与 {@link #registerAbort(Runnable)} 的双令牌模式一致。</p>
      */
     public List<RunCancellation> cancellationChain() {
-        List<RunCancellation> chain = new ArrayList<>(2);
+        List<RunCancellation> chain = new ArrayList<>(parentCancellations.size() + 1);
         if (ownCancellation != null) {
             chain.add(ownCancellation);
         }
-        if (parentCancellation != null && parentCancellation != ownCancellation) {
-            chain.add(parentCancellation);
+        for (RunCancellation cancellation : parentCancellations) {
+            if (cancellation != ownCancellation && !chain.contains(cancellation)) {
+                chain.add(cancellation);
+            }
         }
         return chain;
     }
 
     /** own 优先：后台任务覆盖令牌后，取消原因以任务级为准。 */
     public RunCancellation getCancellation() {
-        return ownCancellation != null ? ownCancellation : parentCancellation;
+        return ownCancellation != null
+                ? ownCancellation
+                : parentCancellations.isEmpty() ? null : parentCancellations.get(0);
     }
 
     private boolean isOwnCancelled() {
@@ -122,8 +140,12 @@ public final class RunControl {
     }
 
     private boolean isParentCancelled() {
-        RunCancellation cancellation = this.parentCancellation;
-        return cancellation != null && cancellation.isCancelled();
+        for (RunCancellation cancellation : parentCancellations) {
+            if (cancellation.isCancelled()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---- 协作式关闭 ----

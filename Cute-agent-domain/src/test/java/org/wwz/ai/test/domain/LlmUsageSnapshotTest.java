@@ -74,6 +74,22 @@ public class LlmUsageSnapshotTest {
     }
 
     @Test
+    public void test_mapPayloadWithJacksonNodesKeepsDetailTokens() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Map<String, Object> usage = new LinkedHashMap<>();
+        usage.put("prompt_tokens", mapper.getNodeFactory().numberNode(100));
+        usage.put("prompt_tokens_details", mapper.readTree("{\"cached_tokens\":7,\"text_tokens\":90}"));
+        usage.put("completion_tokens_details", mapper.readTree("{\"reasoning_tokens\":5}"));
+
+        LlmUsageSnapshot snapshot = LlmUsageSnapshot.fromObject(usage);
+
+        Assert.assertEquals("顶层 JsonNode 数值也必须可读", Integer.valueOf(100), snapshot.getPromptTokens());
+        Assert.assertEquals(Integer.valueOf(7), snapshot.getCachedPromptTokens());
+        Assert.assertEquals(Integer.valueOf(90), snapshot.getPromptTextTokens());
+        Assert.assertEquals(Integer.valueOf(5), snapshot.getReasoningTokens());
+    }
+
+    @Test
     public void test_mergeLatestPrefersIncomingNonNull() {
         LlmUsageSnapshot base = LlmUsageSnapshot.builder()
                 .promptTokens(1)

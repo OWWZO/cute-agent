@@ -39,8 +39,21 @@ public final class ArtifactRelativePath {
         if (StringUtils.isBlank(relativePath)) {
             return;
         }
-        target.putIfAbsent("relativePath", relativePath);
-        target.putIfAbsent("originFileName", relativePath);
+        // 元数据路径比工具输出合并阶段的退化值更可信：只有已存在的路径至少同样具体
+        // （含目录分隔符）时才保留，否则用元数据路径覆盖，避免嵌套产物被渲染到错误层级。
+        if (!isSpecificPath(target.get("relativePath"))) {
+            target.put("relativePath", relativePath);
+        }
+        if (!isSpecificPath(target.get("originFileName"))) {
+            target.put("originFileName", relativePath);
+        }
+    }
+
+    private static boolean isSpecificPath(Object value) {
+        if (!(value instanceof String text)) {
+            return false;
+        }
+        return text.indexOf('/') >= 0 || text.indexOf('\\') >= 0;
     }
 
     private static String readMetadataPath(String metadataJson) {

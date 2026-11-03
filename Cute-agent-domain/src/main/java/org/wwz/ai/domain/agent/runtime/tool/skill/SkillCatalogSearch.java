@@ -3,6 +3,7 @@ package org.wwz.ai.domain.agent.runtime.tool.skill;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -20,8 +21,8 @@ final class SkillCatalogSearch {
         String text = safeQuery.getText() == null ? "" : safeQuery.getText().trim();
         String category = safeQuery.getCategory() == null ? "" : safeQuery.getCategory().trim();
         String source = safeQuery.getSource() == null ? "" : safeQuery.getSource().trim();
-        Set<String> tags = safeQuery.getTags() == null ? Set.of() : safeQuery.getTags();
-        Set<String> disabled = safeQuery.getDisabledNames() == null ? Set.of() : safeQuery.getDisabledNames();
+        Set<String> tags = lowerCaseSet(safeQuery.getTags());
+        Set<String> disabled = lowerCaseSet(safeQuery.getDisabledNames());
         List<String> tokens = tokenize(text);
 
         List<SkillSearchHit> hits = new ArrayList<>();
@@ -29,7 +30,7 @@ final class SkillCatalogSearch {
             if (descriptor == null || descriptor.getName() == null) {
                 continue;
             }
-            if (disabled.contains(descriptor.getName())) {
+            if (disabled.contains(descriptor.getName().toLowerCase(Locale.ROOT))) {
                 continue;
             }
             if (!category.isEmpty() && !category.equalsIgnoreCase(nullToEmpty(descriptor.getCategory()))) {
@@ -39,10 +40,10 @@ final class SkillCatalogSearch {
                 continue;
             }
             if (!tags.isEmpty()) {
-                Set<String> skillTags = descriptor.getTags() == null ? Set.of() : descriptor.getTags();
+                Set<String> skillTags = lowerCaseSet(descriptor.getTags());
                 boolean matchedTag = false;
                 for (String tag : tags) {
-                    if (tag != null && skillTags.contains(tag)) {
+                    if (skillTags.contains(tag)) {
                         matchedTag = true;
                         break;
                     }
@@ -139,5 +140,19 @@ final class SkillCatalogSearch {
 
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    /** 过滤条件统一按小写比较：disabled / tags 与 category / source 的大小写语义保持一致。 */
+    private static Set<String> lowerCaseSet(Set<String> values) {
+        if (values == null || values.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> result = new HashSet<>(values.size());
+        for (String value : values) {
+            if (value != null) {
+                result.add(value.toLowerCase(Locale.ROOT));
+            }
+        }
+        return result;
     }
 }

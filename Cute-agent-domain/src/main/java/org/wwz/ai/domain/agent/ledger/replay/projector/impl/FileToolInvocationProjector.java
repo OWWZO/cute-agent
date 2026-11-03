@@ -32,16 +32,21 @@ public class FileToolInvocationProjector extends AbstractToolInvocationProjector
         FileToolOutput output = invocation != null && invocation.getStructuredOutput() instanceof FileToolOutput structuredOutput
                 ? structuredOutput
                 : null;
+        if (output == null) {
+            // file_tool 不在 PERSISTED_TOOL_NAMES，旧账本行通常没有结构化输出；
+            // 此时空文件气泡会丢掉 toolResult/llmObservation，回退通用 tool_result 保住文本。
+            return projectAsToolResult(invocation, artifacts, state);
+        }
         Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("command", translateCommand(output == null ? null : output.getCommand()));
-        resultMap.put("fileInfo", mergeFileRefs(output == null ? null : output.getFileRefs(), artifacts));
-        if (StringUtils.isNotBlank(output == null ? null : output.getPrimaryFileName())) {
+        resultMap.put("command", translateCommand(output.getCommand()));
+        resultMap.put("fileInfo", mergeFileRefs(output.getFileRefs(), artifacts));
+        if (StringUtils.isNotBlank(output.getPrimaryFileName())) {
             resultMap.put("primaryFileName", output.getPrimaryFileName());
         }
-        if (StringUtils.isNotBlank(output == null ? null : output.getPreviewUrl())) {
+        if (StringUtils.isNotBlank(output.getPreviewUrl())) {
             resultMap.put("previewUrl", output.getPreviewUrl());
         }
-        if (StringUtils.isNotBlank(output == null ? null : output.getDownloadUrl())) {
+        if (StringUtils.isNotBlank(output.getDownloadUrl())) {
             resultMap.put("downloadUrl", output.getDownloadUrl());
         }
         return List.of(buildTaskEvent(

@@ -47,16 +47,20 @@ public final class ToolFileRefMapper {
             if (item == null || item.isEmpty()) {
                 continue;
             }
+            String ossUrl = valueAsString(item.get("ossUrl"));
+            String domainUrl = valueAsString(item.get("domainUrl"));
+            // 调用方（MultiModalAgent 等）通常只提供 ossUrl/domainUrl：
+            // 与 code-interpreter 映射保持一致，把下载/预览地址补齐，避免回放文件全是空链接。
             result.add(ToolFileRef.builder()
                     .fileName(valueAsString(item.get("fileName")))
                     .relativePath(firstPath(
                             valueAsString(item.get("relativePath")),
                             valueAsString(item.get("originFileName")),
                             valueAsString(item.get("fileName"))))
-                    .ossUrl(valueAsString(item.get("ossUrl")))
-                    .domainUrl(valueAsString(item.get("domainUrl")))
-                    .downloadUrl(valueAsString(item.get("downloadUrl")))
-                    .previewUrl(valueAsString(item.get("previewUrl")))
+                    .ossUrl(ossUrl)
+                    .domainUrl(domainUrl)
+                    .downloadUrl(firstNonBlank(valueAsString(item.get("downloadUrl")), ossUrl, domainUrl))
+                    .previewUrl(firstNonBlank(valueAsString(item.get("previewUrl")), domainUrl, ossUrl))
                     .fileSize(valueAsLong(item.get("fileSize")))
                     .mimeType(valueAsString(item.get("mimeType")))
                     .build());
@@ -86,6 +90,15 @@ public final class ToolFileRefMapper {
 
     private static String valueAsString(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private static Long valueAsLong(Object value) {

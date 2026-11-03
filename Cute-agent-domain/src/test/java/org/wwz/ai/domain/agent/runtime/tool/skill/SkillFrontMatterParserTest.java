@@ -105,6 +105,31 @@ public class SkillFrontMatterParserTest {
         Assert.assertTrue(description.contains("line two"));
     }
 
+    /**
+     * 块标量里的缩进 "---" 是正文，不是 frontmatter 结束栅栏；trim() 判定会截断数据。
+     */
+    @Test
+    public void indentedFenceInsideBlockScalarDoesNotEndFrontMatter() {
+        SkillFrontMatter frontMatter = SkillFrontMatterParser.parse("""
+                ---
+                name: demo
+                description: |
+                  line one
+                  ---
+                  line two
+                ---
+
+                body
+                """);
+
+        Assert.assertTrue(frontMatter.hasFrontMatter());
+        String description = String.valueOf(frontMatter.fields().get("description"));
+        Assert.assertTrue(description.contains("line one"));
+        Assert.assertTrue("缩进的 --- 必须保留在块标量正文里", description.contains("---"));
+        Assert.assertTrue(description.contains("line two"));
+        Assert.assertEquals("body", frontMatter.body().strip());
+    }
+
     @Test
     public void shouldParseListField() {
         SkillFrontMatter frontMatter = SkillFrontMatterParser.parse("""

@@ -52,10 +52,21 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
 
     @Override
     public Long createRun(DialogueRunStartRecord record) {
-        if (record == null || StringUtils.isBlank(record.getRequestId())) {
+        // sessionId 是会话汇总行的主键：为空时写会话会生成 key=null 的脏行，直接拒绝初始化。
+        if (record == null
+                || StringUtils.isBlank(record.getRequestId())
+                || StringUtils.isBlank(record.getSessionId())) {
             return null;
         }
         LocalDateTime startedAt = defaultNow(record.getStartedAt());
+        SessionHeadValues sessionHead;
+        try {
+            // 先完成只读的会话头解析再落 run：读失败时不应留下永久 RUNNING 的孤儿 run。
+            sessionHead = resolveSessionHead(record.getSessionId(), record.getQueryText());
+        } catch (Exception e) {
+            markFailure("createRun", record.getRequestId(), null, null, e);
+            return null;
+        }
         DialogueRun entity = DialogueRun.builder()
                 .runUid(StringUtils.defaultIfBlank(record.getRunUid(), record.getRequestId()))
                 .requestId(record.getRequestId())
@@ -75,7 +86,6 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
         try {
             // run 是整条执行账本的根事实，必须先落库，后续 LLM、tool 和 artifact 才能挂载到 runId。
             executionLedgerWriteRepository.insertRun(entity);
-            SessionHeadValues sessionHead = resolveSessionHead(record.getSessionId(), record.getQueryText());
             // 会话主表由数据库原子累加 run_count：并发 run 不会互相覆盖，started_at 保留首次值。
             executionLedgerWriteRepository.upsertSessionOnRunStart(DialogueSessionUpsertRecord.builder()
                     .sessionId(record.getSessionId())
@@ -94,8 +104,26 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
             markSuccess("createRun");
             return entity.getId();
         } catch (Exception e) {
-            markFailure("createRun", record.getRequestId(), null, null, e);
+            markFailure("createRun", record.getRequestId(), entity.getId(), null, e);
+            // run 行可能已落库：调用方拿到 null 会当作「账本未启用」而永不结算，
+            // 因此这里必须补偿成失败终态，避免留下永久 RUNNING 的孤儿 run。
+            compensateFailedRunCreate(entity, e);
             return null;
+        }
+    }
+
+    private void compensateFailedRunCreate(DialogueRun run, Exception cause) {
+        if (run == null || run.getId() == null) {
+            return;
+        }
+        try {
+            run.setStatus(ExecutionLedgerConstants.STATUS_FAILED);
+            run.setErrorCode("LEDGER_INIT_FAILED");
+            run.setErrorMsg(trimText("ledger 初始化失败: " + cause.getMessage(), 2000));
+            run.setFinishedAt(LocalDateTime.now());
+            executionLedgerWriteRepository.updateRunFinish(run);
+        } catch (Exception compensationError) {
+            log.error("createRun compensation failed, runId={}", run.getId(), compensationError);
         }
     }
 

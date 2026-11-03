@@ -13,18 +13,28 @@ public class SkillRuntimeLayoutSecurityTest {
 
     @Test
     public void traversalNamesCollapseIntoSingleSafeSegment() {
-        Assert.assertEquals("etc-passwd", layout.segmentOf("../../etc/passwd"));
-        Assert.assertEquals("skills/etc-passwd", layout.relativeDirOf("../../etc/passwd"));
-        Assert.assertEquals("a-b", layout.segmentOf("a/b"));
-        Assert.assertEquals("a-b", layout.segmentOf("a\\b"));
+        String traversal = layout.segmentOf("../../etc/passwd");
+        Assert.assertTrue(traversal, traversal.startsWith("etc-passwd-"));
+        Assert.assertFalse(traversal.contains("/"));
+        Assert.assertFalse(traversal.contains("\\"));
+        Assert.assertEquals("skills/" + traversal, layout.relativeDirOf("../../etc/passwd"));
+
+        // 不同原始名不再因为清洗成同一个 "a-b" 而共享目录
+        String slash = layout.segmentOf("a/b");
+        String backslash = layout.segmentOf("a\\b");
+        Assert.assertTrue(slash, slash.startsWith("a-b-"));
+        Assert.assertTrue(backslash, backslash.startsWith("a-b-"));
+        Assert.assertNotEquals(slash, backslash);
     }
 
     @Test
-    public void pureDotsFallBackToConstant() {
-        Assert.assertEquals("skill", layout.segmentOf(".."));
-        Assert.assertEquals("skill", layout.segmentOf("."));
-        Assert.assertEquals("skill", layout.segmentOf("..."));
-        Assert.assertEquals("skills/skill", layout.relativeDirOf(".."));
+    public void pureDotsFallBackToHashedConstant() {
+        String dotDot = layout.segmentOf("..");
+        Assert.assertTrue(dotDot, dotDot.startsWith("skill-"));
+        Assert.assertTrue(dotDot, dotDot.matches("[A-Za-z0-9._-]+"));
+        Assert.assertNotEquals(dotDot, layout.segmentOf("."));
+        Assert.assertNotEquals(dotDot, layout.segmentOf("..."));
+        Assert.assertEquals("skills/" + dotDot, layout.relativeDirOf(".."));
     }
 
     @Test

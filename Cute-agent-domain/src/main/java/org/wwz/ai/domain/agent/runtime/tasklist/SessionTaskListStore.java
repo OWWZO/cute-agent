@@ -177,14 +177,14 @@ public class SessionTaskListStore {
 
     public synchronized List<SessionTaskItem> replaceAll(List<Map<String, Object>> todoMaps) {
         List<SessionTaskItem> oldSnapshot = list();
-        tasks.clear();
-        highWaterMark.set(0);
-        if (todoMaps == null || todoMaps.isEmpty()) {
-            persistReplace(List.of());
-            return oldSnapshot;
-        }
+        List<Map<String, Object>> rawItems = todoMaps == null ? List.of() : todoMaps;
+
+        // 先校验并构造完整的新列表，任何非法 status 都在清空旧状态之前抛出；
+        // 否则一次被拒绝的写入会先清空内存列表，而持久化列表仍保留旧值。
+        List<SessionTaskItem> newItems = new ArrayList<>();
         boolean allDone = true;
-        for (Map<String, Object> raw : todoMaps) {
+        int nextId = 0;
+        for (Map<String, Object> raw : rawItems) {
             if (raw == null) {
                 continue;
             }
@@ -193,15 +193,6 @@ public class SessionTaskListStore {
             if (!SessionTaskItem.STATUS_COMPLETED.equals(status)) {
                 allDone = false;
             }
-        }
-        if (allDone) {
-            persistReplace(List.of());
-            return oldSnapshot;
-        }
-        for (Map<String, Object> raw : todoMaps) {
-            if (raw == null) {
-                continue;
-            }
             String content = firstNonBlank(
                     str(raw.get("content")),
                     str(raw.get("subject")),
@@ -209,35 +200,33 @@ public class SessionTaskListStore {
             if (StringUtils.isBlank(content)) {
                 continue;
             }
-            String status = normalizeStatus(String.valueOf(
-                    firstNonNull(raw.get("status"), SessionTaskItem.STATUS_PENDING)));
             String activeForm = StringUtils.trimToNull(str(raw.get("activeForm")));
             String description = firstNonBlank(str(raw.get("description")), content);
             String subject = firstNonBlank(str(raw.get("subject")), content);
-            SessionTaskItem item = createWithoutPersist(subject, description, activeForm, null);
-            item.setStatus(status);
+            newItems.add(SessionTaskItem.builder()
+                    .id(String.valueOf(++nextId))
+                    .subject(subject.trim())
+                    .description(description.trim())
+                    .activeForm(activeForm)
+                    .status(status)
+                    .blocks(new ArrayList<>())
+                    .blockedBy(new ArrayList<>())
+                    .metadata(new ConcurrentHashMap<>())
+                    .build());
         }
+
+        tasks.clear();
+        highWaterMark.set(0);
+        if (allDone) {
+            persistReplace(List.of());
+            return oldSnapshot;
+        }
+        for (SessionTaskItem item : newItems) {
+            tasks.put(item.getId(), item);
+        }
+        highWaterMark.set(nextId);
         persistReplace(list());
         return oldSnapshot;
-    }
-
-    private SessionTaskItem createWithoutPersist(String subject,
-                                                 String description,
-                                                 String activeForm,
-                                                 Map<String, Object> metadata) {
-        String id = String.valueOf(highWaterMark.incrementAndGet());
-        SessionTaskItem item = SessionTaskItem.builder()
-                .id(id)
-                .subject(subject.trim())
-                .description(description.trim())
-                .activeForm(StringUtils.trimToNull(activeForm))
-                .status(SessionTaskItem.STATUS_PENDING)
-                .blocks(new ArrayList<>())
-                .blockedBy(new ArrayList<>())
-                .metadata(metadata == null ? new ConcurrentHashMap<>() : new ConcurrentHashMap<>(metadata))
-                .build();
-        tasks.put(id, item);
-        return item;
     }
 
     public List<Map<String, Object>> toClientTaskList() {
@@ -305,6 +294,22 @@ public class SessionTaskListStore {
             persistence.replaceTodos(listId, items == null ? List.of() : items);
         } catch (Exception ignored) {
             // best-effort
+        }
+    }
+
+    /**
+     * replaceAll 之前的状态预校验：非法值必须在清空旧列表前被拒绝。
+     * <p>与 {@link #normalizeStatus(String)} 共用同一套别名规则，避免工具侧和存储侧判断漂移。</p>
+     */
+    public static boolean isSupportedStatus(String status) {
+        if (StringUtils.isBlank(status)) {
+            return false;
+        }
+        try {
+            normalizeStatus(status);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 

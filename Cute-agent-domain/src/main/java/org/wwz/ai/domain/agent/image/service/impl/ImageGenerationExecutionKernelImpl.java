@@ -49,6 +49,7 @@ public class ImageGenerationExecutionKernelImpl implements IImageGenerationExecu
                 .maskFileNames(defaultList(command.getMaskFileNames()))
                 .fileName(StringUtils.trimToNull(command.getFileName()))
                 .fileDescription(StringUtils.trimToNull(command.getFileDescription()))
+                .model(StringUtils.trimToNull(command.getModel()))
                 .size(StringUtils.defaultIfBlank(StringUtils.trim(command.getSize()), DEFAULT_IMAGE_SIZE))
                 .n(command.getN() == null ? DEFAULT_BATCH_SIZE : command.getN())
                 .timeoutSeconds(command.getTimeoutSeconds() == null ? DEFAULT_TIMEOUT_SECONDS : command.getTimeoutSeconds())

@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,6 +44,15 @@ public class WorkspaceBashExecutor {
             Pattern.compile("(?i)\\bformat\\s+[a-z]:"),
             Pattern.compile(":\\(\\)\\s*\\{")
     );
+
+    /**
+     * Windows PowerShell 5.1 重定向输出默认按 OEM 代码页（中文系统为 GBK），
+     * 直接按 UTF-8 解码会全是乱码。执行前把控制台与管道输出统一改成 UTF-8。
+     */
+    private static final String POWERSHELL_UTF8_PREFIX =
+            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+                    + "$OutputEncoding = [System.Text.Encoding]::UTF8; ";
+    private static final String TRUNCATION_MARKER = "\n…[输出被截断]…\n";
 
     private final SkillRuntimeOptions options;
 
@@ -94,6 +102,8 @@ public class WorkspaceBashExecutor {
         Map<String, String> env = pb.environment();
         env.put("SKILL_WORKSPACE", cwd.toString());
         env.put("PYTHON", options.getRuntimePython() == null ? "python" : options.getRuntimePython());
+        // Python 在 Windows 重定向输出时默认跟随区域代码页（GBK）；统一强制 UTF-8 才能与 text() 的解码一致。
+        env.put("PYTHONIOENCODING", "utf-8");
 
         long started = System.currentTimeMillis();
         Process process = null;
@@ -181,8 +191,13 @@ public class WorkspaceBashExecutor {
         return command.length() <= 1_000 ? command : command.substring(0, 1_000) + "…";
     }
 
-    private static List<String> buildShellArgv(String command) {
-        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+    static List<String> buildShellArgv(String command) {
+        return buildShellArgv(command, System.getProperty("os.name", ""));
+    }
+
+    /** 便于跨平台单测：显式传入 os.name 判定分支。 */
+    static List<String> buildShellArgv(String command, String osName) {
+        String os = osName == null ? "" : osName.toLowerCase(Locale.ROOT);
         List<String> argv = new ArrayList<>();
         if (os.contains("win")) {
             // Windows：优先 PowerShell（系统自带）；命令字符串按 bash 语义交给模型，脚本侧多用 python/node
@@ -190,13 +205,35 @@ public class WorkspaceBashExecutor {
             argv.add("-NoProfile");
             argv.add("-NonInteractive");
             argv.add("-Command");
-            argv.add(command);
+            argv.add(POWERSHELL_UTF8_PREFIX + command);
         } else {
             argv.add("bash");
             argv.add("-lc");
             argv.add(command);
         }
         return argv;
+    }
+
+    /**
+     * 保留头尾并插入截断标记。
+     * <p>不能在 UTF-16 代理对中间切分，否则会留下孤立代理字符，JSON 序列化与前端渲染都会出错。</p>
+     */
+    static String truncateMiddle(String raw, int maxChars) {
+        if (raw == null) {
+            return "";
+        }
+        if (raw.length() <= maxChars) {
+            return raw;
+        }
+        int headEnd = maxChars / 2;
+        if (headEnd > 0 && Character.isHighSurrogate(raw.charAt(headEnd - 1))) {
+            headEnd--;
+        }
+        int tailStart = raw.length() - (maxChars - headEnd - TRUNCATION_MARKER.length());
+        if (tailStart > 0 && tailStart < raw.length() && Character.isLowSurrogate(raw.charAt(tailStart))) {
+            tailStart++;
+        }
+        return raw.substring(0, headEnd) + TRUNCATION_MARKER + raw.substring(tailStart);
     }
 
     private static String merge(String a, String b) {
@@ -258,17 +295,12 @@ public class WorkspaceBashExecutor {
         }
 
         String text() {
-            byte[] bytes = buffer.toByteArray();
-            Charset charset = StandardCharsets.UTF_8;
-            String raw = new String(bytes, charset);
+            String raw = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
             if (raw.length() <= maxChars) {
                 return raw;
             }
             truncated = true;
-            // 构造器已把 maxChars 抬到 4_096 下限，head/tail 必为正值。
-            int head = maxChars / 2;
-            int tail = maxChars - head - 32;
-            return raw.substring(0, head) + "\n…[输出被截断]…\n" + raw.substring(raw.length() - tail);
+            return truncateMiddle(raw, maxChars);
         }
 
         boolean truncated() {

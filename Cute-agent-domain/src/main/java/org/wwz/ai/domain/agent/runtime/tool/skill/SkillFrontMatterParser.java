@@ -57,7 +57,9 @@ public final class SkillFrontMatterParser {
         while (cursor <= text.length()) {
             int lineBreak = indexOfLineBreak(text, cursor);
             int lineEnd = lineBreak < 0 ? text.length() : lineBreak;
-            if (FENCE.equals(text.substring(cursor, lineEnd).trim())) {
+            // 结束栅栏必须在行首：缩进的 "---" 是 YAML 块标量（如 description: |）的正文，
+            // 用 trim() 判定会把标量内容当成 frontmatter 结束而截断数据。
+            if (FENCE.equals(text.substring(cursor, lineEnd).stripTrailing())) {
                 blockEnd = cursor;
                 bodyStart = lineBreak < 0 ? text.length() : lineBreak + lineBreakLength(text, lineBreak);
                 break;

@@ -98,13 +98,14 @@ public class TaskUpdateTool implements BaseTool {
             if (!hasUpdatableField) {
                 return fail("TaskUpdate 失败：未提供任何可更新字段");
             }
+            // 显式 JSON null 必须按「清空该字段」处理；String.valueOf(null) 会写成字面量 "null"。
             Optional<SessionTaskItem> updated = context.requireSessionTaskList().update(
                     taskId,
                     emptyToNull(ToolArgs.str(params.get("subject"))),
-                    params.containsKey("description") ? String.valueOf(params.get("description")) : null,
+                    params.containsKey("description") ? ToolArgs.str(params.get("description")) : null,
                     StringUtils.isBlank(status) ? null : status,
-                    params.containsKey("activeForm") ? String.valueOf(params.get("activeForm")) : null,
-                    params.containsKey("owner") ? String.valueOf(params.get("owner")) : null,
+                    params.containsKey("activeForm") ? ToolArgs.str(params.get("activeForm")) : null,
+                    params.containsKey("owner") ? ToolArgs.str(params.get("owner")) : null,
                     addBlocks,
                     addBlockedBy);
             if (updated.isEmpty()) {

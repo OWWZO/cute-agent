@@ -352,12 +352,21 @@ final class ToolExecutionPipeline {
             msg = "AskUserQuestion 必须是本轮唯一 tool call，不能与其他工具并行";
         }
         Map<String, Integer> dispatchIndexMapping = buildDispatchIndexMapping(commands);
+        // 拒绝也要走正常的预登记 + running 事件：否则前端只收到 finished 而没有对应 running，
+        // 账本里也查不到这些被拒绝的调用。
+        Map<String, ToolDispatch> dispatches = resolveAll(commands);
+        Map<String, Long> toolInvocationIds = ensureToolInvocationIds(dispatches, commands);
+        AgentContext context = agent.getContext();
+        if (context != null && context.getAgentRunState() != null) {
+            context.getAgentRunState().bindToolInvocationIds(toolInvocationIds);
+        }
+        events.emitRunning(commands, dispatches, dispatchIndexMapping);
         Map<String, ToolExecutionOutcome> collected = new ConcurrentHashMap<>();
         for (ToolCall command : commands) {
             if (command == null || StringUtils.isBlank(command.getId())) {
                 continue;
             }
-            completeToolOutcome(collected, command, Map.of(),
+            completeToolOutcome(collected, command, dispatches,
                     toolFailureOutcome(msg, code), dispatchIndexMapping, true);
         }
         return orderedOutcomes(commands, collected);
@@ -441,6 +450,8 @@ final class ToolExecutionPipeline {
             context.getAgentRunState().bindToolInvocationIds(toolInvocationIds);
         }
         Map<String, Integer> dispatchIndexMapping = buildDispatchIndexMapping(commands);
+        // 与被取消工具对应的 running 事件必须补齐，前端才能把后续 cancelled 终态挂到同一张卡片上。
+        events.emitRunning(commands, dispatches, dispatchIndexMapping);
         Map<String, ToolExecutionOutcome> result = new LinkedHashMap<>();
         ToolExecutionOutcome cancelled = userStopOutcome("工具未执行：用户已停止本轮对话");
         for (ToolCall command : commands) {

@@ -69,12 +69,14 @@ public class ToolArtifactRegistry {
 
     // ========== 私有工具方法 ==========
 
-    /** 绑定去重键：工具调用ID、工具名、文件名、文件URL、是否内部文件。 */
+    /** 绑定去重键：工具调用ID、工具名、文件名、工作区相对路径、文件URL、是否内部文件。 */
     private String dedupeKey(ToolArtifactBinding binding) {
         return String.join("\u0001",
             String.valueOf(readToolCallId(binding)),
             String.valueOf(readToolName(binding)),
             String.valueOf(readFileName(binding)),
+            // 同名文件（如不同目录下的 index.html）且都没有 URL 时，relativePath 才是真正身份。
+            String.valueOf(readRelativePath(binding)),
             String.valueOf(readFileUrl(binding)),
             String.valueOf(readInternalFlag(binding)));
     }
@@ -95,6 +97,10 @@ public class ToolArtifactRegistry {
 
     private String readFileUrl(ToolArtifactBinding binding) {
         return binding.getFile() == null ? null : resolveFileUrl(binding.getFile());
+    }
+
+    private String readRelativePath(ToolArtifactBinding binding) {
+        return binding.getFile() == null ? null : binding.getFile().getRelativePath();
     }
 
     private Boolean readInternalFlag(ToolArtifactBinding binding) {

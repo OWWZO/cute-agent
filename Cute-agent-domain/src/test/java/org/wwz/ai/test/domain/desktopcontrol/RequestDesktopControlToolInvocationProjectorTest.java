@@ -184,6 +184,57 @@ public class RequestDesktopControlToolInvocationProjectorTest {
         Assert.assertFalse(payload.containsKey("persistenceStatus"));
     }
 
+    @Test
+    public void failedInvocationWithoutObservationStatusReplaysAsCancelled() {
+        ToolInvocationView invocation = ToolInvocationView.builder()
+                .toolCallId("tool-call-desk-fail")
+                .toolName("RequestDesktopControl")
+                .inputJson("{\"reason\":\"请登录\"}")
+                .toolResult("Error: 打开桌面失败")
+                .status(org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants.STATUS_FAILED)
+                .build();
+
+        List<ProjectedReplayEvent> events = new RequestDesktopControlToolInvocationProjector()
+                .project(invocation, List.of(), new AgentStreamAccumulator());
+
+        Map<String, Object> payload = castMap(castMap(events.get(0).getResultMap()).get("resultMap"));
+        Assert.assertEquals("cancelled", payload.get("status"));
+    }
+
+    @Test
+    public void failedObservationStatusReplaysAsCancelledEvenWhenInvocationSucceeded() {
+        ToolInvocationView invocation = ToolInvocationView.builder()
+                .toolCallId("tool-call-desk-fail-2")
+                .toolName("RequestDesktopControl")
+                .inputJson("{\"reason\":\"请登录\"}")
+                .llmObservation("{\"status\":\"failed\",\"reason\":\"请登录\",\"controlId\":\"dc_x\"}")
+                .status(org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants.STATUS_SUCCESS)
+                .build();
+
+        List<ProjectedReplayEvent> events = new RequestDesktopControlToolInvocationProjector()
+                .project(invocation, List.of(), new AgentStreamAccumulator());
+
+        Map<String, Object> payload = castMap(castMap(events.get(0).getResultMap()).get("resultMap"));
+        Assert.assertEquals("cancelled", payload.get("status"));
+    }
+
+    @Test
+    public void waitingObservationWithWaitingInputStatusStaysPending() {
+        ToolInvocationView invocation = ToolInvocationView.builder()
+                .toolCallId("tool-call-desk-wait")
+                .toolName("RequestDesktopControl")
+                .inputJson("{\"reason\":\"请登录\"}")
+                .llmObservation("{\"status\":\"waiting_user_input\",\"reason\":\"请登录\",\"controlId\":\"dc_w\"}")
+                .status(org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants.STATUS_WAITING_INPUT)
+                .build();
+
+        List<ProjectedReplayEvent> events = new RequestDesktopControlToolInvocationProjector()
+                .project(invocation, List.of(), new AgentStreamAccumulator());
+
+        Map<String, Object> payload = castMap(castMap(events.get(0).getResultMap()).get("resultMap"));
+        Assert.assertEquals("pending", payload.get("status"));
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> castMap(Object value) {
         return (Map<String, Object>) value;

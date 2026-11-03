@@ -38,6 +38,12 @@ public class ImageGenerationBatchPersistenceServiceImpl implements IImageGenerat
             throw new IllegalArgumentException("工作台生图批次持久化参数不完整");
         }
         String toolCallId = buildWorkspaceToolCallId(requestId);
+        // 一次过滤（null + 空文件名），保证 structuredOutput.fileRefs 与 artifact 行覆盖同一批文件；
+        // 过滤后为空说明没有任何可回溯的产物，直接失败而不是写一条「成功但零产物」的批次。
+        List<WorkspaceImageFile> files = filterValidFiles(result.getFiles());
+        if (files.isEmpty()) {
+            throw new IllegalArgumentException("工作台生图批次没有有效文件名");
+        }
         // 工具输出承载结构化批次，artifact 记录承载文件索引；两者共用稳定 toolCallId 才能被历史投影重新关联。
         toolOutputWriter.writeOrThrow(ToolOutputPersistCommand.builder()
                 .requestId(requestId)
@@ -54,21 +60,28 @@ public class ImageGenerationBatchPersistenceServiceImpl implements IImageGenerat
                         .sourceImageCount(result.getSourceImageCount())
                         .maskImageCount(result.getMaskImageCount())
                         .usedFallback(result.getUsedFallback())
-                        .fileRefs(toToolFileRefs(result.getFiles()))
+                        .fileRefs(toToolFileRefs(files))
                         .build())
                 .build());
-        agentExecutionRecorder.recordArtifactsOrThrow(buildArtifactRecords(requestId, toolCallId, result.getFiles()));
+        agentExecutionRecorder.recordArtifactsOrThrow(buildArtifactRecords(requestId, toolCallId, files));
+    }
+
+    private List<WorkspaceImageFile> filterValidFiles(List<WorkspaceImageFile> files) {
+        List<WorkspaceImageFile> valid = new ArrayList<>();
+        if (CollectionUtils.isEmpty(files)) {
+            return valid;
+        }
+        for (WorkspaceImageFile file : files) {
+            if (file != null && StringUtils.isNotBlank(file.getFileName())) {
+                valid.add(file);
+            }
+        }
+        return valid;
     }
 
     private List<ToolFileRef> toToolFileRefs(List<WorkspaceImageFile> files) {
-        List<ToolFileRef> fileRefs = new ArrayList<>();
-        if (CollectionUtils.isEmpty(files)) {
-            return fileRefs;
-        }
+        List<ToolFileRef> fileRefs = new ArrayList<>(files.size());
         for (WorkspaceImageFile file : files) {
-            if (file == null) {
-                continue;
-            }
             fileRefs.add(ToolFileRef.builder()
                     .fileName(file.getFileName())
                     .downloadUrl(file.getDownloadUrl())
@@ -85,14 +98,8 @@ public class ImageGenerationBatchPersistenceServiceImpl implements IImageGenerat
     private List<ArtifactRecordCommand> buildArtifactRecords(String requestId,
                                                              String toolCallId,
                                                              List<WorkspaceImageFile> files) {
-        List<ArtifactRecordCommand> records = new ArrayList<>();
-        if (CollectionUtils.isEmpty(files)) {
-            return records;
-        }
+        List<ArtifactRecordCommand> records = new ArrayList<>(files.size());
         for (WorkspaceImageFile file : files) {
-            if (file == null || StringUtils.isBlank(file.getFileName())) {
-                continue;
-            }
             records.add(ArtifactRecordCommand.builder()
                     .requestId(requestId)
                     .toolCallId(toolCallId)

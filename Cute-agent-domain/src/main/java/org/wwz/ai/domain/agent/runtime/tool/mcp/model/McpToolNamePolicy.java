@@ -12,6 +12,8 @@ public final class McpToolNamePolicy {
     public static final String SEPARATOR = "__";
     /** 每次构建工具列表都会对 server/tool 片段归一化，正则必须预编译。 */
     private static final Pattern INVALID_SEGMENT_CHARS = Pattern.compile("[^a-zA-Z0-9_-]");
+    /** 片段内不允许出现 "__"，否则 FQ 名无法再按首个分隔符还原 server。 */
+    private static final Pattern UNDERSCORE_RUN = Pattern.compile("_{2,}");
 
     private McpToolNamePolicy() {
     }
@@ -24,6 +26,7 @@ public final class McpToolNamePolicy {
             return "unknown";
         }
         String normalized = INVALID_SEGMENT_CHARS.matcher(raw.trim()).replaceAll("_");
+        normalized = UNDERSCORE_RUN.matcher(normalized).replaceAll("_");
         if (normalized.isEmpty()) {
             return "unknown";
         }
