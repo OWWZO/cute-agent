@@ -39,6 +39,7 @@ public final class ToolOutputNames {
     }
 
     public static boolean isPersistedTool(String toolName) {
-        return PERSISTED_TOOL_NAMES.contains(toolName);
+        // 账本/DB 的 tool_name 可能为空；Set.of(...).contains(null) 会直接抛 NPE。
+        return toolName != null && PERSISTED_TOOL_NAMES.contains(toolName);
     }
 }

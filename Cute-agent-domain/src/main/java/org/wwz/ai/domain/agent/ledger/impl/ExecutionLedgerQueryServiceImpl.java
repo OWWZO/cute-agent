@@ -488,6 +488,8 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
         // 避免 controller / UI 再额外扫 artifact 表做第二次拼装。
         Map<Long, List<ArtifactView>> artifactViewsByRunId = executionLedgerReadRepository
                 .queryArtifactsByRunIdsWithSubagentFold(runIds).stream()
+                // ArtifactRecord.runId 可空（直接请求产物挂在 requestId 上）；groupingBy 不接受 null key。
+                .filter(artifact -> artifact != null && artifact.getRunId() != null)
                 .collect(Collectors.groupingBy(
                         ArtifactRecord::getRunId,
                         LinkedHashMap::new,

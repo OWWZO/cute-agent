@@ -101,7 +101,10 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
 
     @Override
     public void finishRun(DialogueRunFinishRecord record) {
-        if (record == null || record.getRunId() == null || StringUtils.isBlank(record.getRequestId())) {
+        // status 会在写会话计数时拆箱成 int：null 若留到 updateRunFinish 之后才炸，
+        // run 已进入终态、计数却永久丢失，因此必须在任何写入前拒绝。
+        if (record == null || record.getRunId() == null || StringUtils.isBlank(record.getRequestId())
+                || record.getStatus() == null) {
             return;
         }
         try {
@@ -134,6 +137,11 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
             // 此时既不能用陈旧状态覆盖 run，也不能重复累加会话计数。
             int updated = executionLedgerWriteRepository.updateRunFinish(updateEntity);
             if (updated == 0) {
+                return;
+            }
+            if (StringUtils.isBlank(existing.getSessionId())) {
+                // 没有会话归属就没有可累加的对象；与 BackgroundRunReconciler 保持同一口径。
+                markSuccess("finishRun");
                 return;
             }
             // 会话计数由数据库原子累加，只在首次进入终态时下发 delta=1。

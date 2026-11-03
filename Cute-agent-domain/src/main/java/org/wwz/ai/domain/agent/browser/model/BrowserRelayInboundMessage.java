@@ -19,9 +19,36 @@ public record BrowserRelayInboundMessage(String userId,
     }
 
     public BrowserRelayInboundMessage {
-        userId = Objects.requireNonNull(userId, "userId").trim();
-        connectionId = Objects.requireNonNull(connectionId, "connectionId").trim();
+        userId = requireNonBlank(userId, "userId");
+        connectionId = requireNonBlank(connectionId, "connectionId");
         kind = Objects.requireNonNull(kind, "kind");
+        // kind 与 payload 必须自洽：消费者按 kind 分派后直接解引用对应 payload。
+        switch (kind) {
+            case HEARTBEAT -> {
+                if (commandResult != null || tabMetadata != null) {
+                    throw new IllegalArgumentException("heartbeat must not carry payloads");
+                }
+            }
+            case TAB_CHANGED -> {
+                if (tabMetadata == null || commandResult != null) {
+                    throw new IllegalArgumentException("tab-changed requires tabMetadata and no commandResult");
+                }
+            }
+            case COMMAND_RESULT -> {
+                if (commandResult == null) {
+                    throw new IllegalArgumentException("command-result requires commandResult");
+                }
+            }
+        }
+    }
+
+    private static String requireNonBlank(String value, String field) {
+        Objects.requireNonNull(value, field);
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return trimmed;
     }
 
     public static BrowserRelayInboundMessage heartbeat(String userId, String connectionId) {

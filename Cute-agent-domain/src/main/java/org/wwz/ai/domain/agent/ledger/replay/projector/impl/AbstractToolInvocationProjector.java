@@ -138,8 +138,9 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
 
     private void markMissingLinks(List<Map<String, Object>> merged) {
         for (Map<String, Object> info : merged) {
-            boolean hasPreview = StringUtils.isNotBlank(String.valueOf(info.getOrDefault("previewUrl", "")));
-            boolean hasDownload = StringUtils.isNotBlank(String.valueOf(info.getOrDefault("downloadUrl", "")));
+            // String.valueOf(null) 会得到字面量 "null"，把「没有链接」误判成有链接。
+            boolean hasPreview = hasTextValue(info.get("previewUrl"));
+            boolean hasDownload = hasTextValue(info.get("downloadUrl"));
             if (!hasPreview && !hasDownload) {
                 info.put("missing", Boolean.TRUE);
                 info.putIfAbsent("missingReason", "artifact_not_found");
@@ -147,6 +148,10 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
                 info.putIfAbsent("missing", Boolean.FALSE);
             }
         }
+    }
+
+    private boolean hasTextValue(Object value) {
+        return value != null && StringUtils.isNotBlank(String.valueOf(value));
     }
 
     protected ProjectedReplayEvent buildTaskEvent(AgentStreamAccumulator state,

@@ -49,9 +49,17 @@ public final class BrowserRelayCommandPolicy {
         return command != null && command.action() != null && command.action().isLeaseRelease();
     }
 
+    /**
+     * 计算本次命令的实际超时。
+     * <p>命令或 action 为空时原样返回：这类输入应由 {@link #rejection(BrowserCommand)}
+     * 判为非法并直接拒绝，本方法不替调用方抛错，也不构造无效超时。</p>
+     */
     public BrowserCommand withEffectiveTimeout(BrowserCommand command,
                                                 Duration defaultTimeout,
                                                 long nowMillis) {
+        if (command == null || command.action() == null) {
+            return command;
+        }
         Duration requested = command.timeout() == null
                 ? timeoutFromParameters(command, defaultTimeout)
                 : command.timeout();
