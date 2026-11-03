@@ -259,17 +259,15 @@ public final class WorkspaceCodeCapability {
         if (StringUtils.isBlank(expected) || !Files.isRegularFile(file)) {
             return;
         }
-        byte[] current;
         try {
-            current = Files.readAllBytes(file);
+            String actual = version(file);
+            if (!expected.equals(actual)) {
+                throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_FILE_CONFLICT,
+                        "文件已被修改：expectedVersion=" + expected + "，实际=" + actual);
+            }
         } catch (IOException e) {
             throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_RUNTIME_ERROR,
                     "读取现有文件失败：" + e.getMessage(), e);
-        }
-        String actual = version(current);
-        if (!expected.equals(actual)) {
-            throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_FILE_CONFLICT,
-                    "文件已被修改：expectedVersion=" + expected + "，实际=" + actual);
         }
     }
 
@@ -365,6 +363,27 @@ public final class WorkspaceCodeCapability {
             byte[] hash = digest.digest(bytes == null ? new byte[0] : bytes);
             StringBuilder builder = new StringBuilder("sha256:");
             for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_RUNTIME_ERROR,
+                    "SHA-256 不可用：" + e.getMessage(), e);
+        }
+    }
+
+    private static String version(Path file) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (java.io.InputStream input = Files.newInputStream(file)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            StringBuilder builder = new StringBuilder("sha256:");
+            for (byte b : digest.digest()) {
                 builder.append(String.format("%02x", b));
             }
             return builder.toString();

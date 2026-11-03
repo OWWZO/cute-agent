@@ -320,11 +320,15 @@ public class SessionContextMemoryServiceImpl implements SessionContextMemoryServ
             return "";
         }
         LinkedList<String> keptRunBlocks = new LinkedList<>();
+        int currentChars = HISTORY_DIALOGUE_HEADER.length();
         for (int index = sessionHistoryMemory.getRuns().size() - 1; index >= 0; index--) {
             String runBlock = formatRunHistory(sessionHistoryMemory.getRuns().get(index));
             keptRunBlocks.addFirst(runBlock);
-            String candidateHistoryDialogue = buildHistoryDialogueText(keptRunBlocks);
-            if (tokenCounter.countText(candidateHistoryDialogue) <= maxHistoryDialogueTokens) {
+            currentChars += runBlock.length()
+                    + (keptRunBlocks.size() == 1
+                    ? HISTORY_DIALOGUE_HEADER_WITH_SEPARATOR.length() - HISTORY_DIALOGUE_HEADER.length()
+                    : "\n\n".length());
+            if (currentChars <= maxHistoryDialogueTokens) {
                 continue;
             }
 

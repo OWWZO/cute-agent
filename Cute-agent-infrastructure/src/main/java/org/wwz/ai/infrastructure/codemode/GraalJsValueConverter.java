@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * JS 值 ⇄ Java 值的双向转换。
@@ -83,7 +84,7 @@ public final class GraalJsValueConverter {
             return list;
         }
         if (value.hasMembers()) {
-            List<String> keys = new ArrayList<>(value.getMemberKeys());
+            Set<String> keys = value.getMemberKeys();
             if (keys.size() > MAX_ITEMS) {
                 throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_OUTPUT_TOO_LARGE,
                         "返回对象成员数超过 " + MAX_ITEMS);

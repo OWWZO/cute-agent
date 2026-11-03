@@ -22,6 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class QqBotTokenService {
 
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
+    private static final int LOCK_STRIPES = 64;
+    private static final Object[] TOKEN_LOCKS = createLocks();
 
     private final OkHttpClient httpClient;
     private final ConcurrentHashMap<String, CachedToken> cache = new ConcurrentHashMap<>();
@@ -88,8 +90,16 @@ public class QqBotTokenService {
     }
 
     private Object lockFor(String appId) {
-        // 用 appId 的字符串常量池做分段锁即可：并发只发生在同一 appId 的首次获取。
-        return ("qqbot-token-lock-" + appId).intern();
+        // 固定分段锁避免字符串常量池随 appId 无限增长；同一 appId 始终命中同一把锁。
+        return TOKEN_LOCKS[appId.hashCode() & (LOCK_STRIPES - 1)];
+    }
+
+    private static Object[] createLocks() {
+        Object[] locks = new Object[LOCK_STRIPES];
+        for (int i = 0; i < locks.length; i++) {
+            locks[i] = new Object();
+        }
+        return locks;
     }
 
     private static String maskAppId(String appId) {

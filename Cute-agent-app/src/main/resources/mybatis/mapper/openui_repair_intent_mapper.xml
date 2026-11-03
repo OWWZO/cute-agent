@@ -36,6 +36,19 @@
         )
     </insert>
 
+    <insert id="insertBatch">
+        INSERT INTO ai_agent_openui_repair_intent (
+            session_id, message_id, program_hash, intent_index,
+            search_text, replace_text, model, created_at
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.sessionId}, #{item.messageId}, #{item.programHash}, #{item.intentIndex},
+                #{item.searchText}, #{item.replaceText}, #{item.model}, #{item.createdAt}
+            )
+        </foreach>
+    </insert>
+
     <select id="listByProgram" resultMap="OpenuiRepairIntentMap">
         SELECT <include refid="BaseColumns"/>
         FROM ai_agent_openui_repair_intent

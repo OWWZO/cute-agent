@@ -14,6 +14,7 @@ import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceAccessException;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceService;
 import org.wwz.ai.types.agent.config.CodeModeProperties;
 
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -206,13 +207,21 @@ public class GraalJsCodeModeExecutor implements CodeModeExecutorPort {
         Object result = bindings.result() == null
                 ? null
                 : GraalJsValueConverter.toJavaObject(bindings.result());
-        int serialized = JSON.toJSONString(result).length();
-        if (serialized > maxOutputChars()) {
+        if (exceedsMaxOutputChars(result)) {
             return failure(CodeModeErrorCode.CODE_MODE_OUTPUT_TOO_LARGE,
-                    "返回值序列化后 " + serialized + " 字符，超过上限 " + maxOutputChars(), budget, sourceHash);
+                    "返回值序列化后超过上限 " + maxOutputChars(), budget, sourceHash);
         }
         return CodeModeResult.success(result, budget.snapshotLogs(), budget.elapsedMs(),
                 budget.snapshotProducedFiles(), budget.toolCallCount(), sourceHash);
+    }
+
+    private boolean exceedsMaxOutputChars(Object result) {
+        try {
+            JSON.writeJSONString(new BoundedCharWriter(maxOutputChars()), result);
+            return false;
+        } catch (OutputLimitExceededException e) {
+            return true;
+        }
     }
 
     /**
@@ -336,5 +345,44 @@ public class GraalJsCodeModeExecutor implements CodeModeExecutorPort {
         } catch (NoSuchAlgorithmException e) {
             return "sha256:unavailable";
         }
+    }
+
+    private static final class BoundedCharWriter extends Writer {
+
+        private final int maxChars;
+        private int writtenChars;
+
+        private BoundedCharWriter(int maxChars) {
+            this.maxChars = maxChars;
+        }
+
+        @Override
+        public void write(char[] chars, int offset, int length) {
+            int nextSize = writtenChars + length;
+            if (nextSize > maxChars) {
+                throw new OutputLimitExceededException();
+            }
+            writtenChars = nextSize;
+        }
+
+        @Override
+        public void write(String text, int offset, int length) {
+            int nextSize = writtenChars + length;
+            if (nextSize > maxChars) {
+                throw new OutputLimitExceededException();
+            }
+            writtenChars = nextSize;
+        }
+
+        @Override
+        public void flush() {
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    private static final class OutputLimitExceededException extends RuntimeException {
     }
 }
