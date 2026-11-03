@@ -59,18 +59,8 @@ public final class ToolObservationSerializer {
 
     public static String serializeFailure(String error, Object detail, int cap) {
         String errorText = StringUtils.defaultIfBlank(error, "Unknown error");
-        if (detail instanceof java.util.Map<?, ?> map && !map.isEmpty()) {
-            java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
-            payload.put("tool_ok", Boolean.FALSE);
-            payload.put("error", errorText);
-            payload.put("detail", detail);
-            try {
-                return truncateForLlm(JSON.toJSONString(payload), cap);
-            } catch (Exception ignore) {
-                return truncateForLlm("Error: " + errorText, cap);
-            }
-        }
-        if (detail != null && !(detail instanceof String)) {
+        boolean emptyMap = detail instanceof java.util.Map<?, ?> map && map.isEmpty();
+        if (detail != null && !(detail instanceof String) && !emptyMap) {
             java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
             payload.put("tool_ok", Boolean.FALSE);
             payload.put("error", errorText);

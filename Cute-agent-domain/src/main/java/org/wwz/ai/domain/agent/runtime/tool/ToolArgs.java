@@ -24,7 +24,6 @@ public final class ToolArgs {
      * <p>
      * 返回的 map 键统一为 String；调用方不应修改它。
      */
-    @SuppressWarnings("unchecked")
     public static Map<String, Object> map(Object input) {
         if (input instanceof Map<?, ?> map) {
             return stringKeyed(map);
@@ -56,7 +55,6 @@ public final class ToolArgs {
      * <p>
      * 适用于入参本来就必须是结构化对象的工具，避免把字符串误当参数表。
      */
-    @SuppressWarnings("unchecked")
     public static Map<String, Object> mapStrict(Object input) {
         if (input instanceof Map<?, ?> map) {
             return stringKeyed(map);
@@ -67,15 +65,6 @@ public final class ToolArgs {
     /** 取值并 trim；缺失或空白返回空串。 */
     public static String str(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
-    }
-
-    /** 取值并 trim；缺失或空白返回 null。 */
-    public static String strOrNull(Object value) {
-        if (value == null) {
-            return null;
-        }
-        String text = String.valueOf(value).trim();
-        return text.isEmpty() ? null : text;
     }
 
     private static Map<String, Object> stringKeyed(Map<?, ?> map) {

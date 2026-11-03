@@ -9,6 +9,7 @@ import java.util.Optional;
  */
 public interface TasklistPersistencePort {
 
+    /** 可能返回 {@code null}；调用方需做空值兜底。 */
     List<SessionTaskItem> loadTodos(String sessionId);
 
     int loadTodoHighWaterMark(String sessionId);
@@ -22,6 +23,7 @@ public interface TasklistPersistencePort {
      */
     void replaceTodos(String sessionId, List<SessionTaskItem> items);
 
+    /** 可能返回 {@code null}；调用方需做空值兜底。 */
     List<RuntimeBackgroundTask> loadBackgroundTasks(String sessionId);
 
     Optional<RuntimeBackgroundTask> findBackgroundTask(String sessionId, String taskId);

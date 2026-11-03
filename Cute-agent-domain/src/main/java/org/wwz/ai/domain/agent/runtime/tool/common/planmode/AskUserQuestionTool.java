@@ -107,7 +107,6 @@ public class AskUserQuestionTool implements BaseTool {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Object execute(Object input, AgentContext context) {
         if (context == null) {
             return fail("AskUserQuestion 未正确装配");

@@ -13,6 +13,7 @@ import java.util.Map;
 public class ThemeDesignerTool extends AbstractDocGenTool {
 
     public static final String TOOL_NAME = "theme_designer";
+    private static final String ACTIONS = "create | save | list | get | delete";
 
     @Override
     public String getName() {
@@ -27,7 +28,7 @@ public class ThemeDesignerTool extends AbstractDocGenTool {
     @Override
     protected String defaultDescription() {
         return "Design custom themes for document_generate / slides_generate. "
-                + "action=create|save|list|get|delete. create derives a contrast-checked theme "
+                + "action=" + ACTIONS + ". create derives a contrast-checked theme "
                 + "from primary brand color; saved themes are selectable via the theme parameter.";
     }
 
@@ -35,7 +36,7 @@ public class ThemeDesignerTool extends AbstractDocGenTool {
     protected Map<String, Object> defaultParams() {
         // action 决定后端所需字段；其余字段按 create/save/list 等操作按需解释。
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("action", stringProp("create | save | list | get | delete"));
+        properties.put("action", stringProp(ACTIONS));
         properties.put("name", stringProp("Theme name (required except list)"));
         properties.put("kind", stringProp("document | deck"));
         properties.put("primary", stringProp("create: brand primary color #RRGGBB"));

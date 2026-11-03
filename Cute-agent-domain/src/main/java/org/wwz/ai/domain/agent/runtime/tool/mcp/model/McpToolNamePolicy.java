@@ -47,6 +47,8 @@ public final class McpToolNamePolicy {
 
     /**
      * 从 FQ 名解析 server 段；非 FQ 返回 null。
+     * <p>返回的是规范化后的片段（非字母数字字符已替换、截断到 64），不是原始 serverKey；
+     * 原始工具名同样无法从 FQ 名还原，调用方需自行维护 FQ 名到原始名的映射。</p>
      */
     public static String parseServerKey(String qualifiedName) {
         if (!isQualifiedName(qualifiedName)) {
