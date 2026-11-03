@@ -3,8 +3,9 @@ import { resolveServiceBaseUrl } from "@/utils/origin";
 import { submitAcceptedCommand } from "./agentRun";
 
 const customHost = resolveServiceBaseUrl(SERVICE_BASE_URL);
+const PLAN_APPROVAL_BASE_PATH = "/api/agent/plan-approval";
 
-export const PLAN_APPROVAL_RESUME_URL = `${customHost}/api/agent/plan-approval/resume`;
+export const PLAN_APPROVAL_RESUME_URL = `${customHost}${PLAN_APPROVAL_BASE_PATH}/resume`;
 
 export const PLAN_APPROVAL_RESUME_EVENT = "cute-plan-approval-resume";
 
@@ -39,18 +40,18 @@ export type PlanApprovalResumeEventDetail = {
 
 export const planApprovalApi = {
   approve: (payload: PlanApprovePayload) =>
-    api.post<PlanApprovalDecideResult>("/api/agent/plan-approval/approve", payload) as unknown as Promise<PlanApprovalDecideResult>,
+    api.post<PlanApprovalDecideResult>(`${PLAN_APPROVAL_BASE_PATH}/approve`, payload) as unknown as Promise<PlanApprovalDecideResult>,
 
   reject: (payload: PlanRejectPayload) =>
-    api.post<PlanApprovalDecideResult>("/api/agent/plan-approval/reject", payload) as unknown as Promise<PlanApprovalDecideResult>,
+    api.post<PlanApprovalDecideResult>(`${PLAN_APPROVAL_BASE_PATH}/reject`, payload) as unknown as Promise<PlanApprovalDecideResult>,
 
   pending: (sessionId: string) =>
-    api.get<Record<string, unknown>[]>("/api/agent/plan-approval/pending", {
+    api.get<Record<string, unknown>[]>(`${PLAN_APPROVAL_BASE_PATH}/pending`, {
       sessionId,
     }) as unknown as Promise<Record<string, unknown>[]>,
 
   cancel: (approvalId: string) =>
-    api.post<Record<string, unknown>>("/api/agent/plan-approval/cancel", {
+    api.post<Record<string, unknown>>(`${PLAN_APPROVAL_BASE_PATH}/cancel`, {
       approvalId,
     }) as unknown as Promise<Record<string, unknown>>,
 };

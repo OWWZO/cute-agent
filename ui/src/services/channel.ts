@@ -41,29 +41,31 @@ export interface UnbindResp {
   notice: string;
 }
 
+const CHANNEL_BINDING_BASE = "/api/channel/binding";
+
 export const channelApi = {
   mine: () =>
     api.get<ChannelBindingMineResp>(
-      "/api/channel/binding/mine"
+      `${CHANNEL_BINDING_BASE}/mine`
     ) as unknown as Promise<ChannelBindingMineResp>,
 
   createQr: () =>
     api.post<QrCreateResp>(
-      "/api/channel/binding/qr"
+      `${CHANNEL_BINDING_BASE}/qr`
     ) as unknown as Promise<QrCreateResp>,
 
   pollQr: (taskId: string) =>
     api.get<QrPollResp>(
-      `/api/channel/binding/qr/${encodeURIComponent(taskId)}`
+      `${CHANNEL_BINDING_BASE}/qr/${encodeURIComponent(taskId)}`
     ) as unknown as Promise<QrPollResp>,
 
   retry: (bindingId: number) =>
     api.post<boolean>(
-      `/api/channel/binding/${bindingId}/retry`
+      `${CHANNEL_BINDING_BASE}/${bindingId}/retry`
     ) as unknown as Promise<boolean>,
 
   unbind: (bindingId: number) =>
     api.delete<UnbindResp>(
-      `/api/channel/binding/${bindingId}`
+      `${CHANNEL_BINDING_BASE}/${bindingId}`
     ) as unknown as Promise<UnbindResp>,
 };

@@ -14,55 +14,47 @@ export interface SubAgentDefinitionRecord {
   status?: number;
 }
 
-export interface SubAgentDefinitionUpsertPayload {
-  agentKey: string;
-  displayName?: string;
-  whenToUse: string;
-  systemPrompt: string;
-  allowedTools?: string[];
-  disallowedTools?: string[];
-  toolPolicyMode?: "inherit" | "custom";
-  deferredTools?: string[];
-  maxSteps?: number | null;
-  status?: number;
-}
+export type SubAgentDefinitionUpsertPayload =
+  Omit<SubAgentDefinitionRecord, "systemPrompt"> & { systemPrompt: string };
+
+const SUB_AGENT_DEFINITION_BASE = "/api/v1/admin/sub-agent-definitions";
 
 export const subAgentDefinitionAdminApi = {
   queryList: () =>
     api.get<SubAgentDefinitionRecord[]>(
-      "/api/v1/admin/sub-agent-definitions/query-list"
+      `${SUB_AGENT_DEFINITION_BASE}/query-list`
     ) as unknown as Promise<SubAgentDefinitionRecord[]>,
 
   get: (agentKey: string) =>
     api.get<SubAgentDefinitionRecord>(
-      `/api/v1/admin/sub-agent-definitions/${encodeURIComponent(agentKey)}`
+      `${SUB_AGENT_DEFINITION_BASE}/${encodeURIComponent(agentKey)}`
     ) as unknown as Promise<SubAgentDefinitionRecord>,
 
   toolCatalog: () =>
     api.get<string[]>(
-      "/api/v1/admin/sub-agent-definitions/tool-catalog"
+      `${SUB_AGENT_DEFINITION_BASE}/tool-catalog`
     ) as unknown as Promise<string[]>,
 
   create: (payload: SubAgentDefinitionUpsertPayload) =>
     api.post<boolean>(
-      "/api/v1/admin/sub-agent-definitions/create",
+      `${SUB_AGENT_DEFINITION_BASE}/create`,
       payload
     ) as unknown as Promise<boolean>,
 
   update: (payload: SubAgentDefinitionUpsertPayload) =>
     api.put<boolean>(
-      "/api/v1/admin/sub-agent-definitions/update",
+      `${SUB_AGENT_DEFINITION_BASE}/update`,
       payload
     ) as unknown as Promise<boolean>,
 
   remove: (agentKey: string) =>
     api.delete<boolean>(
-      "/api/v1/admin/sub-agent-definitions/delete",
+      `${SUB_AGENT_DEFINITION_BASE}/delete`,
       { agentKey }
     ) as unknown as Promise<boolean>,
 
   reload: () =>
     api.post<number>(
-      "/api/v1/admin/sub-agent-definitions/reload"
+      `${SUB_AGENT_DEFINITION_BASE}/reload`
     ) as unknown as Promise<number>,
 };

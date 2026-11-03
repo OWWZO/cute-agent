@@ -28,15 +28,17 @@ export interface FeaturedConversationPage {
   list: FeaturedConversationCard[];
 }
 
+const FEATURED_CONVERSATION_BASE = "/api/agent/featured-conversations";
+
 export const featuredConversationApi = {
   listHome: (limit = 6) =>
-    api.get<FeaturedConversationCard[]>("/api/agent/featured-conversations/home", {limit,}) as unknown as Promise<FeaturedConversationCard[]>,
+    api.get<FeaturedConversationCard[]>(`${FEATURED_CONVERSATION_BASE}/home`, {limit,}) as unknown as Promise<FeaturedConversationCard[]>,
   list: (params: { pageNo: number; pageSize: number }) =>
-    api.get<FeaturedConversationPage>("/api/agent/featured-conversations", params) as unknown as Promise<FeaturedConversationPage>,
+    api.get<FeaturedConversationPage>(FEATURED_CONVERSATION_BASE, params) as unknown as Promise<FeaturedConversationPage>,
   detail: (featuredId: string) =>
-    api.get<FeaturedConversationDetail>(`/api/agent/featured-conversations/${featuredId}`) as unknown as Promise<FeaturedConversationDetail>,
+    api.get<FeaturedConversationDetail>(`${FEATURED_CONVERSATION_BASE}/${featuredId}`) as unknown as Promise<FeaturedConversationDetail>,
   getFeaturedRunReplay: (featuredId: string, requestId: string) =>
     api.get<ConversationRunReplay>(
-      `/api/agent/featured-conversations/${encodeURIComponent(featuredId)}/runs/${encodeURIComponent(requestId)}/replay`
+      `${FEATURED_CONVERSATION_BASE}/${encodeURIComponent(featuredId)}/runs/${encodeURIComponent(requestId)}/replay`
     ) as unknown as Promise<ConversationRunReplay>,
 };

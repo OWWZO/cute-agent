@@ -1,4 +1,5 @@
 import api from "./index";
+import type { AxiosRequestConfig } from "axios";
 import { refreshAccessToken, type AuthSessionResponse } from "./authTransport";
 import {
   clearAuthSession,
@@ -23,15 +24,33 @@ export interface ChangePasswordPayload {
   newPassword: string;
 }
 
-const post = <T>(url: string, data?: unknown, config?: object) =>
+const AUTH_BASE = "/api/auth";
+const AUTH_ENDPOINTS = {
+  register: `${AUTH_BASE}/register`,
+  login: `${AUTH_BASE}/login`,
+  logout: `${AUTH_BASE}/logout`,
+  logoutAll: `${AUTH_BASE}/logout-all`,
+  me: `${AUTH_BASE}/me`,
+  password: `${AUTH_BASE}/password`,
+} as const;
+
+const post = <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
   api.post<T>(url, data, config) as unknown as Promise<T>;
+
+const endSession = async (url: string) => {
+  try {
+    await post<void>(url);
+  } finally {
+    clearAuthSession();
+  }
+};
 
 export const authApi = {
   register: (payload: RegisterPayload) =>
-    post<AuthSessionResponse>("/api/auth/register", payload),
+    post<AuthSessionResponse>(AUTH_ENDPOINTS.register, payload),
 
   login: async (payload: LoginPayload) => {
-    const session = await post<AuthSessionResponse>("/api/auth/login", payload);
+    const session = await post<AuthSessionResponse>(AUTH_ENDPOINTS.login, payload);
     if (!session?.accessToken) {
       throw new Error("登录响应缺少访问令牌");
     }
@@ -47,27 +66,15 @@ export const authApi = {
     };
   },
 
-  logout: async () => {
-    try {
-      await post<void>("/api/auth/logout");
-    } finally {
-      clearAuthSession();
-    }
-  },
+  logout: () => endSession(AUTH_ENDPOINTS.logout),
 
-  logoutAll: async () => {
-    try {
-      await post<void>("/api/auth/logout-all");
-    } finally {
-      clearAuthSession();
-    }
-  },
+  logoutAll: () => endSession(AUTH_ENDPOINTS.logoutAll),
 
   me: () =>
-    api.get<AuthUser>("/api/auth/me") as unknown as Promise<AuthUser>,
+    api.get<AuthUser>(AUTH_ENDPOINTS.me) as unknown as Promise<AuthUser>,
 
   password: (payload: ChangePasswordPayload) =>
-    api.put<void>("/api/auth/password", payload) as unknown as Promise<void>,
+    api.put<void>(AUTH_ENDPOINTS.password, payload) as unknown as Promise<void>,
 };
 
 export async function loadCurrentUser() {

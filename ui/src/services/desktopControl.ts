@@ -3,8 +3,9 @@ import { resolveServiceBaseUrl } from "@/utils/origin";
 import { submitAcceptedCommand } from "./agentRun";
 
 const customHost = resolveServiceBaseUrl(SERVICE_BASE_URL);
+const DESKTOP_CONTROL_BASE = "/api/agent/desktop-control";
 
-export const DESKTOP_CONTROL_RESUME_URL = `${customHost}/api/agent/desktop-control/resume`;
+export const DESKTOP_CONTROL_RESUME_URL = `${customHost}${DESKTOP_CONTROL_BASE}/resume`;
 
 export type DesktopControlCompletePayload = {
   controlId: string;
@@ -32,13 +33,13 @@ export type DesktopControlResumeEventDetail = {
 export const desktopControlApi = {
   complete: (payload: DesktopControlCompletePayload) =>
     api.post<DesktopControlCompleteResult>(
-      "/api/agent/desktop-control/complete",
+      `${DESKTOP_CONTROL_BASE}/complete`,
       payload
     ) as unknown as Promise<DesktopControlCompleteResult>,
 
   pending: (sessionId: string) =>
     api.get<Record<string, unknown>[]>(
-      "/api/agent/desktop-control/pending",
+      `${DESKTOP_CONTROL_BASE}/pending`,
       { sessionId }
     ) as unknown as Promise<Record<string, unknown>[]>,
 };

@@ -1,11 +1,14 @@
-import { trimTrailingSlash } from "@/pages/WorkspaceImageGeneration/utils";
 import type {
   SopItem,
   SopRecallTestResult,
   SopStatus,
   SopStep,
 } from "@/pages/WorkspaceSop/types";
-import { normalizeStatus } from "@/pages/WorkspaceSop/utils";
+import {
+  DEFAULT_SOP_PAGE_SIZE,
+  DEFAULT_SOP_TYPE,
+  normalizeStatus,
+} from "@/pages/WorkspaceSop/utils";
 import { normalizeToolBaseUrlForBrowser } from "@/utils/fileUrl";
 
 type WrappedResponse<T> = {
@@ -51,6 +54,15 @@ type RawRecallTest = {
   hits?: RawRecallHit[];
 };
 
+const SOP_ENDPOINTS = {
+  list: "/v1/sop/list",
+  get: "/v1/sop/get",
+  upsert: "/v1/sop/upsert",
+  delete: "/v1/sop/delete",
+  status: "/v1/sop/status",
+  recallTest: "/v1/sop/recall_test",
+} as const;
+
 export class SopWorkspaceRequestError extends Error {
   status?: number;
   rawResponse?: unknown;
@@ -64,7 +76,7 @@ export class SopWorkspaceRequestError extends Error {
 }
 
 function normalizeToolBaseUrl(toolBaseUrl: string): string {
-  return normalizeToolBaseUrlForBrowser(trimTrailingSlash(toolBaseUrl || ""));
+  return normalizeToolBaseUrlForBrowser(toolBaseUrl || "");
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -113,7 +125,7 @@ function mapSopItem(raw: RawSopItem | null | undefined): SopItem {
     sopId: String(raw?.sop_id || raw?.sopId || ""),
     sopName: String(raw?.sop_name || raw?.sopName || ""),
     sopDesc: String(raw?.sop_desc || raw?.sopDesc || ""),
-    sopType: String(raw?.sop_type || raw?.sopType || "list"),
+    sopType: String(raw?.sop_type || raw?.sopType || DEFAULT_SOP_TYPE),
     sopSteps: Array.isArray(steps) ? steps.map(mapStep) : [],
     status: normalizeStatus(raw?.status),
     sopString: raw?.sop_string ? String(raw.sop_string) : undefined,
@@ -161,19 +173,19 @@ export async function listSops(
 ): Promise<SopItem[]> {
   const data = await requestWrappedData<{ list?: RawSopItem[] }>(
     toolBaseUrl,
-    "/v1/sop/list",
+    SOP_ENDPOINTS.list,
     {
       requestId: `sop-list-${Date.now()}`,
       keyword: payload?.keyword || "",
       status: payload?.status || null,
-      limit: payload?.limit || 200,
+      limit: payload?.limit || DEFAULT_SOP_PAGE_SIZE,
     }
   );
   return (data?.list || []).map(mapSopItem).filter((item) => item.sopId);
 }
 
 export async function getSop(toolBaseUrl: string, sopId: string): Promise<SopItem> {
-  const data = await requestWrappedData<RawSopItem>(toolBaseUrl, "/v1/sop/get", {
+  const data = await requestWrappedData<RawSopItem>(toolBaseUrl, SOP_ENDPOINTS.get, {
     requestId: `sop-get-${Date.now()}`,
     sopId,
   });
@@ -192,12 +204,12 @@ export async function upsertSop(
   }
 ): Promise<SopItem> {
   // 保存请求保留 sopId 以区分更新和新建，步骤结构在接口边界保持可回放的嵌套形态。
-  const data = await requestWrappedData<RawSopItem>(toolBaseUrl, "/v1/sop/upsert", {
+  const data = await requestWrappedData<RawSopItem>(toolBaseUrl, SOP_ENDPOINTS.upsert, {
     requestId: `sop-upsert-${Date.now()}`,
     sopId: payload.sopId || null,
     sopName: payload.sopName,
     sopDesc: payload.sopDesc,
-    sopType: payload.sopType || "list",
+    sopType: payload.sopType || DEFAULT_SOP_TYPE,
     sopSteps: payload.sopSteps,
     status: payload.status,
   });
@@ -205,7 +217,7 @@ export async function upsertSop(
 }
 
 export async function deleteSop(toolBaseUrl: string, sopId: string): Promise<void> {
-  await requestWrappedData(toolBaseUrl, "/v1/sop/delete", {
+  await requestWrappedData(toolBaseUrl, SOP_ENDPOINTS.delete, {
     requestId: `sop-delete-${Date.now()}`,
     sopId,
   });
@@ -216,7 +228,7 @@ export async function setSopStatus(
   sopId: string,
   status: SopStatus
 ): Promise<SopItem> {
-  const data = await requestWrappedData<RawSopItem>(toolBaseUrl, "/v1/sop/status", {
+  const data = await requestWrappedData<RawSopItem>(toolBaseUrl, SOP_ENDPOINTS.status, {
     requestId: `sop-status-${Date.now()}`,
     sopId,
     status,
@@ -230,7 +242,7 @@ export async function recallTestSop(
 ): Promise<SopRecallTestResult> {
   const data = await requestWrappedData<RawRecallTest>(
     toolBaseUrl,
-    "/v1/sop/recall_test",
+    SOP_ENDPOINTS.recallTest,
     {
       requestId: `sop-recall-${Date.now()}`,
       query,

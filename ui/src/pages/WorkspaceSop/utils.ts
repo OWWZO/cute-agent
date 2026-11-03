@@ -3,6 +3,8 @@ import { buildDefaultToolBaseUrl } from "@/pages/WorkspaceImageGeneration/utils"
 import type { SopEditorDraft, SopItem, SopStatus, SopStep } from "./types";
 
 export const SOP_WORKSPACE_STORAGE_KEY = "workspace-sop:state";
+export const DEFAULT_SOP_TYPE = "list";
+export const DEFAULT_SOP_PAGE_SIZE = 200;
 
 export function resolveToolBaseUrl(): string {
   return buildDefaultToolBaseUrl();
@@ -17,7 +19,7 @@ export function createEmptyDraft(): SopEditorDraft {
     sopId: null,
     sopName: "",
     sopDesc: "",
-    sopType: "list",
+    sopType: DEFAULT_SOP_TYPE,
     sopSteps: [createEmptyStep()],
     status: "online",
   };
@@ -29,7 +31,7 @@ export function sopItemToDraft(item: SopItem): SopEditorDraft {
     sopId: item.sopId,
     sopName: item.sopName,
     sopDesc: item.sopDesc,
-    sopType: item.sopType || "list",
+    sopType: item.sopType || DEFAULT_SOP_TYPE,
     sopSteps:
       item.sopSteps && item.sopSteps.length > 0
         ? item.sopSteps.map((step) => ({

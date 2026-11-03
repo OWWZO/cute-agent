@@ -17,13 +17,18 @@ export type SkillPackagePreview = {
 
 const BASE = "/api/v1/admin/skills";
 
+function buildFileForm(file: File): FormData {
+  const form = new FormData();
+  form.append("file", file);
+  return form;
+}
+
 export const skillAdminApi = {
   list: () =>
     api.get<SkillRow[]>(`${BASE}/list`) as unknown as Promise<SkillRow[]>,
 
   parsePackage: async (file: File) => {
-    const form = new FormData();
-    form.append("file", file);
+    const form = buildFileForm(file);
     // 不手动设 Content-Type，交给浏览器带 boundary
     return api.post<SkillPackagePreview>(
       `${BASE}/parse-package`,
@@ -32,8 +37,7 @@ export const skillAdminApi = {
   },
 
   upload: async (file: File, replace = false) => {
-    const form = new FormData();
-    form.append("file", file);
+    const form = buildFileForm(file);
     return api.post<SkillRow>(
       `${BASE}/upload?replace=${replace ? "true" : "false"}`,
       form

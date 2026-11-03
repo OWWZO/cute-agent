@@ -13,11 +13,12 @@ export type SessionCapabilities = {
   mcpServers: CapabilityItem[];
 };
 
+const sessionCapabilitiesPath = (sessionId: string) =>
+  `/api/agent/session/${encodeURIComponent(sessionId)}/capabilities`;
+
 export const sessionCapabilityApi = {
   get: (sessionId: string) =>
-    api.get<SessionCapabilities>(
-      `/api/agent/session/${encodeURIComponent(sessionId)}/capabilities`
-    ) as unknown as Promise<SessionCapabilities>,
+    api.get<SessionCapabilities>(sessionCapabilitiesPath(sessionId)) as unknown as Promise<SessionCapabilities>,
 
   setEnabled: (
     sessionId: string,
@@ -26,7 +27,7 @@ export const sessionCapabilityApi = {
     enabled: boolean
   ) =>
     api.put<boolean>(
-      `/api/agent/session/${encodeURIComponent(sessionId)}/capabilities`,
+      sessionCapabilitiesPath(sessionId),
       { kind, refId, enabled }
     ) as unknown as Promise<boolean>,
 };

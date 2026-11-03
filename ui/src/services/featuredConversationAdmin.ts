@@ -39,25 +39,27 @@ export interface FeaturedConversationAdminPage {
   list: FeaturedConversationAdminRecord[];
 }
 
+const FEATURED_CONVERSATION_ADMIN_BASE = "/api/v1/admin/featured-conversations";
+
 export const featuredConversationAdminApi = {
   queryList: (payload: FeaturedConversationAdminQuery) =>
     api.post<FeaturedConversationAdminPage>(
-      "/api/v1/admin/featured-conversations/query-list",
+      `${FEATURED_CONVERSATION_ADMIN_BASE}/query-list`,
       payload
     ) as unknown as Promise<FeaturedConversationAdminPage>,
   create: (payload: FeaturedConversationAdminUpsertPayload) =>
-    api.post<boolean>("/api/v1/admin/featured-conversations/create", payload) as unknown as Promise<boolean>,
+    api.post<boolean>(`${FEATURED_CONVERSATION_ADMIN_BASE}/create`, payload) as unknown as Promise<boolean>,
   update: (payload: FeaturedConversationAdminUpsertPayload) =>
-    api.put<boolean>("/api/v1/admin/featured-conversations/update", payload) as unknown as Promise<boolean>,
+    api.put<boolean>(`${FEATURED_CONVERSATION_ADMIN_BASE}/update`, payload) as unknown as Promise<boolean>,
   online: (featuredId: string, operator: string) =>
     api.post<boolean>(
-      `/api/v1/admin/featured-conversations/online/${featuredId}`,
+      `${FEATURED_CONVERSATION_ADMIN_BASE}/online/${featuredId}`,
       undefined,
       { params: { operator } }
     ) as unknown as Promise<boolean>,
   offline: (featuredId: string, operator: string) =>
     api.post<boolean>(
-      `/api/v1/admin/featured-conversations/offline/${featuredId}`,
+      `${FEATURED_CONVERSATION_ADMIN_BASE}/offline/${featuredId}`,
       undefined,
       { params: { operator } }
     ) as unknown as Promise<boolean>,
