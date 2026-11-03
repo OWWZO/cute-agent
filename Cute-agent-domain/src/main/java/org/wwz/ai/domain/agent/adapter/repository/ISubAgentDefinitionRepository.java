@@ -35,6 +35,13 @@ public interface ISubAgentDefinitionRepository {
      */
     List<SubAgentDefinitionRecord> listAll(int offset, int limit);
 
+    /**
+     * 按 {@code agentKey} 查询定义（管理端编辑/详情）。
+     *
+     * <p>语义：只返回未删除（{@code deleted = 0}）的行——软删除的定义视为不存在；
+     * 禁用（{@code status != 1}）的行仍会返回。{@code agentKey} 为空白时返回
+     * {@link Optional#empty()}，查询前会 trim。</p>
+     */
     Optional<SubAgentDefinitionRecord> findByAgentKey(String agentKey);
 
     /**
