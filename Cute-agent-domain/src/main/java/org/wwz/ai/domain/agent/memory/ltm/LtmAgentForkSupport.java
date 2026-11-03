@@ -2,6 +2,7 @@ package org.wwz.ai.domain.agent.memory.ltm;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
@@ -37,6 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>历史 messages 前缀重放；review/flush 指令仅作为尾部 user</li>
  * </ul>
  */
+@Slf4j
 public final class LtmAgentForkSupport {
 
     private static final int FORK_THREADS = 4;
@@ -57,7 +59,15 @@ public final class LtmAgentForkSupport {
             return t;
         }
     },
-            new ThreadPoolExecutor.AbortPolicy());
+            new ThreadPoolExecutor.AbortPolicy() {
+                @Override
+                public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+                    // 有界队列饱和时必须留下可观测信号，否则调用方只能看到泛化的 rejected 失败。
+                    log.warn("ltm fork rejected: poolSize={}, activeCount={}, queueSize={}",
+                            executor.getPoolSize(), executor.getActiveCount(), executor.getQueue().size());
+                    throw new java.util.concurrent.RejectedExecutionException("ltm fork pool saturated");
+                }
+            });
 
     private LtmAgentForkSupport() {
     }

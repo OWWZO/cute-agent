@@ -46,7 +46,7 @@ public class AskUserQuestionToolInvocationProjector extends AbstractToolInvocati
         payload.put("messageType", "ask_user_question");
 
         String questionId = stringValue(observation.get("questionId"));
-        UserQuestionRecord persisted = findPersistedQuestion(questionId, invocation);
+        UserQuestionRecord persisted = findPersistedQuestion(questionId, invocation, state);
         String resolvedQuestionId = StringUtils.defaultIfBlank(
                 questionId,
                 persisted == null ? null : persisted.getQuestionId()
@@ -92,7 +92,9 @@ public class AskUserQuestionToolInvocationProjector extends AbstractToolInvocati
         ));
     }
 
-    private UserQuestionRecord findPersistedQuestion(String questionId, ToolInvocationView invocation) {
+    private UserQuestionRecord findPersistedQuestion(String questionId,
+                                                     ToolInvocationView invocation,
+                                                     AgentStreamAccumulator state) {
         if (userQuestionRepository == null) {
             return null;
         }
@@ -102,7 +104,8 @@ public class AskUserQuestionToolInvocationProjector extends AbstractToolInvocati
                 id -> userQuestionRepository.findByQuestionId(id).orElse(null),
                 userQuestionRepository::listOpenBySessionId,
                 UserQuestionRecord::getToolInvocationId,
-                UserQuestionRecord::getToolCallId
+                UserQuestionRecord::getToolCallId,
+                state
         );
     }
 }

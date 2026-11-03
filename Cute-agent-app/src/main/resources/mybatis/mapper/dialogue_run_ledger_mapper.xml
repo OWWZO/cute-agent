@@ -162,6 +162,23 @@
         LIMIT #{limit}
     </select>
 
+    <select id="queryFirstNonBlankQueriesBySessionIds" resultMap="DialogueRunViewMap">
+        SELECT r.session_id, r.query_text
+        FROM ai_agent_dialogue_run r
+        INNER JOIN (
+            SELECT session_id, MIN(id) AS first_id
+            FROM ai_agent_dialogue_run
+            WHERE deleted = 0
+              AND query_text IS NOT NULL
+              AND TRIM(query_text) &lt;&gt; ''
+              AND session_id IN
+              <foreach collection="sessionIds" item="sessionId" open="(" separator="," close=")">
+                  #{sessionId}
+              </foreach>
+            GROUP BY session_id
+        ) first_run ON first_run.first_id = r.id
+    </select>
+
     <select id="queryBySessionIdAfter" resultMap="DialogueRunViewMap">
         SELECT <include refid="dialogueRunSummaryViewColumns"/>
         FROM ai_agent_dialogue_run

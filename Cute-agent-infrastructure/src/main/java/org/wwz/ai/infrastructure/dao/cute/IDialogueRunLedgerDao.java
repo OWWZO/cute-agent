@@ -34,6 +34,12 @@ public interface IDialogueRunLedgerDao {
                                                 @Param("limit") int limit);
 
     /**
+     * 批量读取每个 session 最早一条非空 query，只填 {@code sessionId/queryText}，
+     * 供会话列表恢复标题时避免逐 session 分页扫描。
+     */
+    List<DialogueRunView> queryFirstNonBlankQueriesBySessionIds(@Param("sessionIds") List<String> sessionIds);
+
+    /**
      * 启动对账：扫「仍处于运行态且早于宽限窗之前启动」的 run 孤儿。
      * <p>
      * 执行态全在 JVM 内存，进程被 kill -9 / OOM / 滚动发布后账本会留下永不落终态的行。

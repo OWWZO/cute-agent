@@ -46,7 +46,7 @@ public final class LtmForkParity {
         this.parentTools = parentTools;
         this.conversationSnapshot = conversationSnapshot == null
                 ? List.of()
-                : List.copyOf(new ArrayList<>(conversationSnapshot));
+                : List.copyOf(conversationSnapshot);
         this.dispatchWhitelist = dispatchWhitelist == null || dispatchWhitelist.isEmpty()
                 ? MEMORY_ONLY_WHITELIST
                 : Set.copyOf(dispatchWhitelist);

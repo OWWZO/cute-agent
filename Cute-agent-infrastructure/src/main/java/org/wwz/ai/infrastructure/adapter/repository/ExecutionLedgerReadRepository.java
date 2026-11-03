@@ -2,6 +2,7 @@ package org.wwz.ai.infrastructure.adapter.repository;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
+import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.entity.ArtifactRecord;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
@@ -19,7 +20,9 @@ import org.wwz.ai.infrastructure.dao.cute.IDialogueSessionLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.ILlmInvocationLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.IToolInvocationLedgerDao;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Phase 1 执行账本读仓储适配器。
@@ -175,7 +178,38 @@ public class ExecutionLedgerReadRepository implements IExecutionLedgerReadReposi
     }
 
     @Override
+    public Map<String, String> queryFirstNonBlankQueriesBySessionIds(List<String> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return Map.of();
+        }
+        // 一次 IN 查询即可覆盖一个分页的 session；去重并收敛到批量上限，避免 SQL 参数无界。
+        List<String> ids = sessionIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .limit(MAX_BATCH_RUN_IDS)
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> firstQueries = new LinkedHashMap<>();
+        for (DialogueRunView run : dialogueRunLedgerDao.queryFirstNonBlankQueriesBySessionIds(ids)) {
+            if (run != null && run.getSessionId() != null && run.getQueryText() != null) {
+                firstQueries.putIfAbsent(run.getSessionId(), run.getQueryText());
+            }
+        }
+        return firstQueries;
+    }
+
+    @Override
     public List<ArtifactRecord> queryArtifactsBySessionId(String sessionId) {
         return artifactLedgerDao.queryBySessionId(sessionId);
+    }
+
+    @Override
+    public List<ArtifactRecord> queryArtifactsBySessionId(String sessionId, int limit) {
+        int normalizedLimit = limit <= 0
+                ? ExecutionLedgerQueryService.MAX_SESSION_ARTIFACTS
+                : Math.min(limit, ExecutionLedgerQueryService.MAX_SESSION_ARTIFACTS);
+        return artifactLedgerDao.queryBySessionIdWithLimit(sessionId, normalizedLimit);
     }
 }

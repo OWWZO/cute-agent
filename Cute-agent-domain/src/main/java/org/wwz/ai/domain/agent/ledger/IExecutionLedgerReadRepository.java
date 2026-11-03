@@ -12,6 +12,7 @@ import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Phase 1 执行账本读仓储端口。
@@ -120,5 +121,20 @@ public interface IExecutionLedgerReadRepository {
      */
     List<ArtifactRecord> queryArtifactsByRunIdsWithSubagentFold(List<Long> runIds);
 
+    /**
+     * 批量读取每个 session 的首个非空 run query，用于恢复会话展示标题。
+     * <p>契约同 {@link #queryLlmInvocationsByRunIds(List)}：{@code null}/空入参返回空 Map，
+     * 返回值 key 为 sessionId，value 为最早一条非空 query；实现必须用单条查询完成，
+     * 不得按 session 逐个查询。</p>
+     */
+    Map<String, String> queryFirstNonBlankQueriesBySessionIds(List<String> sessionIds);
+
     List<ArtifactRecord> queryArtifactsBySessionId(String sessionId);
+
+    /**
+     * 按 session 读取可见 artifact，并强制截断到 {@code limit} 行。
+     * <p>契约：{@code limit <= 0} 取默认值，任何情况下不超过
+     * {@link ExecutionLedgerQueryService#MAX_SESSION_ARTIFACTS}。</p>
+     */
+    List<ArtifactRecord> queryArtifactsBySessionId(String sessionId, int limit);
 }

@@ -24,11 +24,26 @@ public interface ExecutionLedgerQueryService {
     int MAX_RECENT_SESSION_PAGE_SIZE = 100;
     /** 会话树查询返回节点数的硬上限。 */
     int MAX_SESSION_TREE_SIZE = 100;
+    /** 单次会话 artifact 查询的硬上限，避免长会话把整张产物表读进内存。 */
+    int MAX_SESSION_ARTIFACTS = 500;
 
     ExecutionRunDetail queryRunDetail(String requestId);
 
-    /** 只读取当前会话可见的输入/输出 artifact，不展开 run 回放明细。 */
-    List<ArtifactView> querySessionArtifacts(String sessionId);
+    /**
+     * 只读取当前会话可见的输入/输出 artifact，不展开 run 回放明细。
+     * <p>等价于 {@link #querySessionArtifacts(String, int)} 并取默认上限
+     * {@link #MAX_SESSION_ARTIFACTS}。</p>
+     */
+    default List<ArtifactView> querySessionArtifacts(String sessionId) {
+        return querySessionArtifacts(sessionId, MAX_SESSION_ARTIFACTS);
+    }
+
+    /**
+     * 只读取当前会话可见的输入/输出 artifact，并强制截断到 {@code limit} 行。
+     * <p>{@code limit <= 0} 取默认值，任何情况下不超过 {@link #MAX_SESSION_ARTIFACTS}；
+     * “可见”指 {@code visibility=visible}，实现层负责过滤。</p>
+     */
+    List<ArtifactView> querySessionArtifacts(String sessionId, int limit);
 
     /** 只读取 run 主表字段，用于 ownership 校验和轻量摘要。 */
     DialogueRunView queryRunSummary(String requestId);

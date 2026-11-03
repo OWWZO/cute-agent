@@ -15,6 +15,13 @@ public interface IToolInvocationLedgerDao {
 
     int insertToolInvocation(ToolInvocation invocation);
 
+    /**
+     * 单条多值 INSERT；生成的主键按顺序回填到每个参数对象的 id。
+     * <p>参数刻意不加 {@code @Param}：MyBatis 只有在集合作为根参数时才保证
+     * {@code useGeneratedKeys} 的 keyProperty 逐个回填到列表元素。</p>
+     */
+    int batchInsertToolInvocations(List<ToolInvocation> invocations);
+
     int updateToolInvocationFinish(ToolInvocation invocation);
 
     List<ToolInvocation> queryByRunId(@Param("runId") Long runId);

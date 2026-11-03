@@ -71,11 +71,15 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     }
 
     @Override
-    public List<ArtifactView> querySessionArtifacts(String sessionId) {
+    public List<ArtifactView> querySessionArtifacts(String sessionId, int limit) {
         if (StringUtils.isBlank(sessionId)) {
             return List.of();
         }
-        return toArtifactViews(executionLedgerReadRepository.queryArtifactsBySessionId(sessionId));
+        int normalizedLimit = limit <= 0
+                ? MAX_SESSION_ARTIFACTS
+                : Math.min(limit, MAX_SESSION_ARTIFACTS);
+        return toArtifactViews(executionLedgerReadRepository.queryArtifactsBySessionId(
+                sessionId, normalizedLimit));
     }
 
     @Override
@@ -286,7 +290,35 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
         if (session == null || isMeaningfulSessionTitle(session.getTitle())) {
             return session;
         }
-        String firstQuery = resolveFirstNonBlankQuery(session.getSessionId());
+        return applyRestoredTitle(session, resolveFirstNonBlankQuery(session.getSessionId()));
+    }
+
+    private List<DialogueSessionView> restoreSessionTitles(List<DialogueSessionView> sessions) {
+        if (CollectionUtils.isEmpty(sessions)) {
+            return sessions == null ? List.of() : sessions;
+        }
+        // 标题恢复按整页批量取首个非空 query，避免一页 N 个会话触发 N 次分页扫描。
+        List<String> sessionIdsToRestore = new ArrayList<>();
+        for (DialogueSessionView session : sessions) {
+            if (session != null
+                    && !isMeaningfulSessionTitle(session.getTitle())
+                    && StringUtils.isNotBlank(session.getSessionId())) {
+                sessionIdsToRestore.add(session.getSessionId());
+            }
+        }
+        Map<String, String> firstQueries = sessionIdsToRestore.isEmpty()
+                ? Map.of()
+                : executionLedgerReadRepository.queryFirstNonBlankQueriesBySessionIds(sessionIdsToRestore);
+        for (DialogueSessionView session : sessions) {
+            if (session == null || isMeaningfulSessionTitle(session.getTitle())) {
+                continue;
+            }
+            applyRestoredTitle(session, firstQueries.get(session.getSessionId()));
+        }
+        return sessions;
+    }
+
+    private DialogueSessionView applyRestoredTitle(DialogueSessionView session, String firstQuery) {
         if (StringUtils.isNotBlank(firstQuery)) {
             session.setTitle(abbreviateSessionTitle(firstQuery));
             if (StringUtils.isBlank(session.getLatestQueryText())) {
@@ -294,16 +326,6 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
             }
         }
         return session;
-    }
-
-    private List<DialogueSessionView> restoreSessionTitles(List<DialogueSessionView> sessions) {
-        if (CollectionUtils.isEmpty(sessions)) {
-            return sessions == null ? List.of() : sessions;
-        }
-        for (DialogueSessionView session : sessions) {
-            restoreSessionTitle(session);
-        }
-        return sessions;
     }
 
     private String resolveFirstNonBlankQuery(String sessionId) {

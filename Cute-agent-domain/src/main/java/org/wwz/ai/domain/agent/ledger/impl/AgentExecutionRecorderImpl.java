@@ -49,7 +49,6 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
 
     private final Map<String, LongAdder> successCounters = new ConcurrentHashMap<>();
     private final Map<String, LongAdder> failureCounters = new ConcurrentHashMap<>();
-    private final Map<String, LongAdder> durationTotals = new ConcurrentHashMap<>();
 
     @Override
     public Long createRun(DialogueRunStartRecord record) {
@@ -92,7 +91,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                     .startedAt(startedAt)
                     .lastActiveAt(startedAt)
                     .build());
-            markSuccess("createRun", null);
+            markSuccess("createRun");
             return entity.getId();
         } catch (Exception e) {
             markFailure("createRun", record.getRequestId(), null, null, e);
@@ -145,7 +144,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                     isSuccessStatus(record.getStatus()) ? 1 : 0,
                     isFailedStatus(record.getStatus()) ? 1 : 0,
                     finishedAt);
-            markSuccess("finishRun", updateEntity.getDurationMs());
+            markSuccess("finishRun");
         } catch (Exception e) {
             markFailure("finishRun", record.getRequestId(), record.getRunId(), null, e);
         }
@@ -187,7 +186,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                 .build();
         try {
             executionLedgerWriteRepository.insertLlmInvocation(entity);
-            markSuccess("createLlmInvocation", null);
+            markSuccess("createLlmInvocation");
             return entity.getId();
         } catch (Exception e) {
             markFailure("createLlmInvocation", record.getRequestId(), record.getRunId(), null, e);
@@ -224,7 +223,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                     .errorMsg(trimText(record.getErrorMsg(), 2000))
                     .finishedAt(finishedAt)
                     .build());
-            markSuccess("finishLlmInvocation", null);
+            markSuccess("finishLlmInvocation");
         } catch (Exception e) {
             markFailure("finishLlmInvocation", record.getRequestId(), null, null, e);
         }
@@ -236,11 +235,13 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
         if (record == null || record.getRunId() == null || CollectionUtils.isEmpty(record.getItems())) {
             return mapping;
         }
+        List<ToolInvocation> entities = new ArrayList<>(record.getItems().size());
+        List<String> toolCallIds = new ArrayList<>(record.getItems().size());
         for (ToolInvocationBatchStartRecord.Item item : record.getItems()) {
             if (item == null || StringUtils.isBlank(item.getToolCallId())) {
                 continue;
             }
-            ToolInvocation entity = ToolInvocation.builder()
+            entities.add(ToolInvocation.builder()
                     .runId(record.getRunId())
                     .llmInvocationId(record.getLlmInvocationId())
                     .toolCallId(item.getToolCallId())
@@ -256,17 +257,53 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                     .inputJson(item.getInputJson())
                     .status(ExecutionLedgerConstants.STATUS_RUNNING)
                     .startedAt(defaultNow(item.getStartedAt()))
-                    .build();
+                    .build());
+            toolCallIds.add(item.getToolCallId());
+        }
+        if (entities.isEmpty()) {
+            return mapping;
+        }
+
+        // 正常路径一次多值 INSERT，避免 batch-start 的 DB 往返随工具扇出线性增长。
+        try {
+            int inserted = executionLedgerWriteRepository.batchInsertToolInvocations(entities);
+            if (inserted == entities.size() && allHaveId(entities)) {
+                for (int i = 0; i < entities.size(); i++) {
+                    mapping.put(toolCallIds.get(i), entities.get(i).getId());
+                }
+                markSuccess("createToolInvocation");
+                return mapping;
+            }
+            log.warn("batch createToolInvocations returned unexpected rows, fallback to per-item write: runId={}, expected={}, inserted={}",
+                    record.getRunId(), entities.size(), inserted);
+        } catch (Exception e) {
+            // 单条批量语句整体失败（如唯一键冲突）时回退逐条写入：
+            // 单个工具失败不应阻止同批其他工具获得 invocationId。
+            log.warn("batch createToolInvocations failed, fallback to per-item write: runId={}, size={}",
+                    record.getRunId(), entities.size(), e);
+        }
+
+        for (int i = 0; i < entities.size(); i++) {
+            ToolInvocation entity = entities.get(i);
+            String toolCallId = toolCallIds.get(i);
             try {
-                // 每个 toolCall 独立写入，单个工具失败不应阻止同批其他工具获得 invocationId。
                 executionLedgerWriteRepository.insertToolInvocation(entity);
-                mapping.put(item.getToolCallId(), entity.getId());
-                markSuccess("createToolInvocation", null);
+                mapping.put(toolCallId, entity.getId());
+                markSuccess("createToolInvocation");
             } catch (Exception e) {
-                markFailure("createToolInvocation", record.getRequestId(), record.getRunId(), item.getToolCallId(), e);
+                markFailure("createToolInvocation", record.getRequestId(), record.getRunId(), toolCallId, e);
             }
         }
         return mapping;
+    }
+
+    private boolean allHaveId(List<ToolInvocation> entities) {
+        for (ToolInvocation entity : entities) {
+            if (entity.getId() == null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -287,7 +324,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                     .finishedAt(record.getFinishedAt())
                     .build());
             persistStructuredOutput(record);
-            markSuccess("finishToolInvocation", null);
+            markSuccess("finishToolInvocation");
         } catch (Exception e) {
             markFailure("finishToolInvocation", record.getRequestId(), null, record.getToolCallId(), e);
         }
@@ -377,7 +414,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
             throw new IllegalStateException(String.format(
                     "artifact duplicate or ignored, expected=%d, inserted=%d", entities.size(), inserted));
         }
-        markSuccess("recordArtifacts", null);
+        markSuccess("recordArtifacts");
     }
 
     private int sumPromptTokens(List<LlmInvocation> invocations) {
@@ -443,17 +480,17 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
         return text.substring(0, maxLength);
     }
 
-    private void markSuccess(String scene, Long durationMs) {
+    private void markSuccess(String scene) {
         successCounters.computeIfAbsent(scene, key -> new LongAdder()).increment();
-        if (durationMs != null) {
-            durationTotals.computeIfAbsent(scene, key -> new LongAdder()).add(durationMs);
-        }
     }
 
     private void markFailure(String scene, String requestId, Long runId, String toolCallId, Exception e) {
-        failureCounters.computeIfAbsent(scene, key -> new LongAdder()).increment();
-        long success = successCounters.getOrDefault(scene, new LongAdder()).sum();
-        long failure = failureCounters.get(scene).sum();
+        // 复用 computeIfAbsent 返回的 adder，避免 getOrDefault 每次分配一次性 LongAdder 再做第二次查表。
+        LongAdder failureCounter = failureCounters.computeIfAbsent(scene, key -> new LongAdder());
+        failureCounter.increment();
+        LongAdder successCounter = successCounters.get(scene);
+        long success = successCounter == null ? 0L : successCounter.sum();
+        long failure = failureCounter.sum();
         double successRate = (success + failure) == 0 ? 1D : (double) success / (success + failure);
         log.error("Execution ledger {} failed, requestId={}, runId={}, toolCallId={}, successRate={}",
                 scene, requestId, runId, toolCallId, String.format("%.4f", successRate), e);

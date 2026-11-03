@@ -37,6 +37,12 @@ public class ConversationHistoryReplayService {
     public static final int DEFAULT_HISTORY_PAGE_SIZE = 20;
     public static final int MAX_HISTORY_PAGE_SIZE = 100;
     private static final int SUMMARY_PREVIEW_LENGTH = 240;
+    /**
+     * 单 run 在整会话历史聚合里最多保留的投影帧数。
+     * 长会话的 replayFrames 无界增长会拖垮整包响应；超出部分仍可从
+     * {@link #queryRunReplay(String)} 单 run 端点按需补拉。
+     */
+    private static final int MAX_REPLAY_FRAMES_PER_RUN = 500;
 
     private final ExecutionLedgerQueryService executionLedgerQueryService;
     private final ReplayProjector replayProjector;
@@ -181,9 +187,9 @@ public class ConversationHistoryReplayService {
                         .toolInvocations(runDetail == null ? List.of() : runDetail.getToolInvocations())
                         .artifacts(runDetail == null ? List.of() : runDetail.getArtifacts())
                         .build();
-                List<AgentStreamResult> replayFrames = replayProjector == null
+                List<AgentStreamResult> replayFrames = capReplayFrames(replayProjector == null
                         ? List.of()
-                        : replayProjector.projectHistoryFrames(bundle);
+                        : replayProjector.projectHistoryFrames(bundle));
                 historyModeSnapshot = resolveHistoryModeSnapshot(run);
                 runDetails.add(ConversationHistoryDetail.ConversationRunDetail.builder()
                         .requestId(run.getRequestId())
@@ -223,8 +229,17 @@ public class ConversationHistoryReplayService {
 
     private DialogueRunView resolveLatestRun(DialogueSessionView session,
                                              List<DialogueRunView> pageRuns) {
-        if (session != null && StringUtils.isNotBlank(session.getLatestRequestId())) {
-            DialogueRunView latest = executionLedgerQueryService.queryRunSummary(session.getLatestRequestId());
+        String latestRequestId = session == null ? null : session.getLatestRequestId();
+        if (StringUtils.isNotBlank(latestRequestId)) {
+            // 首页通常已经包含最新 run；先复用页面内对象，只有跨页时才补一次摘要查询。
+            if (CollectionUtils.isNotEmpty(pageRuns)) {
+                for (DialogueRunView run : pageRuns) {
+                    if (run != null && latestRequestId.equals(run.getRequestId())) {
+                        return run;
+                    }
+                }
+            }
+            DialogueRunView latest = executionLedgerQueryService.queryRunSummary(latestRequestId);
             if (latest != null) {
                 return latest;
             }
@@ -251,6 +266,17 @@ public class ConversationHistoryReplayService {
                 .durationMs(run.getDurationMs())
                 .hasReplay(StringUtils.isNotBlank(run.getRequestId()))
                 .build();
+    }
+
+    private List<AgentStreamResult> capReplayFrames(List<AgentStreamResult> frames) {
+        if (frames == null) {
+            return List.of();
+        }
+        if (frames.size() <= MAX_REPLAY_FRAMES_PER_RUN) {
+            return frames;
+        }
+        // 保留时间线前段；结论帧由 ensureReadableConclusion 在截断后补齐，不会被砍掉。
+        return new ArrayList<>(frames.subList(0, MAX_REPLAY_FRAMES_PER_RUN));
     }
 
     private String preview(String value) {

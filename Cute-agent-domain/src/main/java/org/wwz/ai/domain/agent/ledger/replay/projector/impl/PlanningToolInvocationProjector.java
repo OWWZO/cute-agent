@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * planning 旧账本行的历史回放投影。
@@ -24,6 +25,8 @@ import java.util.Map;
 public class PlanningToolInvocationProjector extends AbstractToolInvocationProjector {
 
     private static final String PLAN_STATE_KEY = "__history_planning_tool_plan";
+    /** 旧账本 task 文本的“执行顺序N.”前缀；每步都 replaceAll 会重复编译，提成常量。 */
+    private static final Pattern EXECUTION_ORDER_PREFIX = Pattern.compile("^执行顺序(\\d+)\\.\\s?");
     private final PlanReplayLifecycle lifecycle = new PlanReplayLifecycle();
 
     @Override
@@ -196,7 +199,7 @@ public class PlanningToolInvocationProjector extends AbstractToolInvocationProje
         payload.put("messageType", "task");
         payload.put("isFinal", true);
         payload.put("finish", false);
-        payload.put("task", rawStep.replaceAll("^执行顺序(\\d+)\\.\\s?", ""));
+        payload.put("task", EXECUTION_ORDER_PREFIX.matcher(rawStep).replaceFirst("").trim());
         if (StringUtils.isNotBlank(plannerRoundId)) {
             payload.put(AgentStreamAccumulator.PLANNER_ROUND_ID_KEY, plannerRoundId);
         }

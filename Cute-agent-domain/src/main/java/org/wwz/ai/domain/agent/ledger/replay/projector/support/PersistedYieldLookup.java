@@ -3,6 +3,7 @@ package org.wwz.ai.domain.agent.ledger.replay.projector.support;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
+import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 
 import java.util.List;
 import java.util.function.Function;
@@ -35,6 +36,22 @@ public final class PersistedYieldLookup {
                              Function<String, List<T>> openBySession,
                              Function<T, Long> toolInvocationIdOf,
                              Function<T, String> toolCallIdOf) {
+        return find(businessId, invocation, byId, openBySession, toolInvocationIdOf, toolCallIdOf, null);
+    }
+
+    /**
+     * 带回放级缓存的版本：同一 session 的开放记录在一次 replay 内只查一次。
+     * <p>回放循环会为每个 tool invocation 调一次本方法；未命中 {@code byId} 时若每次都
+     * 扫 session 开放记录，历史越长查询越多。缓存挂在 {@link AgentStreamAccumulator} 上，
+     * 生命周期与单次 projectHistory 对齐，不会跨请求串数据。</p>
+     */
+    public static <T> T find(String businessId,
+                             ToolInvocationView invocation,
+                             Function<String, T> byId,
+                             Function<String, List<T>> openBySession,
+                             Function<T, Long> toolInvocationIdOf,
+                             Function<T, String> toolCallIdOf,
+                             AgentStreamAccumulator state) {
         if (StringUtils.isNotBlank(businessId)) {
             try {
                 T byBusinessId = byId.apply(businessId);
@@ -50,7 +67,7 @@ public final class PersistedYieldLookup {
             return null;
         }
         try {
-            for (T record : openBySession.apply(invocation.getSessionId())) {
+            for (T record : loadOpenBySession(openBySession, invocation.getSessionId(), state)) {
                 if (record == null) {
                     continue;
                 }
@@ -69,5 +86,26 @@ public final class PersistedYieldLookup {
                     invocation.getSessionId(), invocation.getToolCallId(), e);
             return null;
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> List<T> loadOpenBySession(Function<String, List<T>> openBySession,
+                                                  String sessionId,
+                                                  AgentStreamAccumulator state) {
+        if (state == null) {
+            return openBySession.apply(sessionId);
+        }
+        // 用 loader 的 lambda 类区分记录类型（问询 vs 桌面控制），再叠加 sessionId 作为缓存键。
+        String cacheKey = "persistedYield:" + openBySession.getClass().getName() + ":" + sessionId;
+        Object cached = state.getReplayLookup(cacheKey);
+        if (cached instanceof List<?> cachedRecords) {
+            return (List<T>) cachedRecords;
+        }
+        List<T> loaded = openBySession.apply(sessionId);
+        if (loaded == null) {
+            loaded = List.of();
+        }
+        state.putReplayLookup(cacheKey, loaded);
+        return loaded;
     }
 }

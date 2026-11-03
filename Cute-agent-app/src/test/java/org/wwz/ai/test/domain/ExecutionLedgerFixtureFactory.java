@@ -499,6 +499,23 @@ public final class ExecutionLedgerFixtureFactory {
         }
 
         @Override
+        public List<DialogueRunView> queryFirstNonBlankQueriesBySessionIds(List<String> sessionIds) {
+            if (sessionIds == null || sessionIds.isEmpty()) {
+                return List.of();
+            }
+            Map<String, DialogueRunView> firstQueries = new LinkedHashMap<>();
+            store.runs.values().stream()
+                    .filter(item -> item.getDeleted() == 0 && sessionIds.contains(item.getSessionId()))
+                    .filter(item -> item.getQueryText() != null && !item.getQueryText().trim().isEmpty())
+                    .sorted(Comparator.comparing(DialogueRun::getId))
+                    .forEach(item -> firstQueries.putIfAbsent(item.getSessionId(), DialogueRunView.builder()
+                            .sessionId(item.getSessionId())
+                            .queryText(item.getQueryText())
+                            .build()));
+            return new ArrayList<>(firstQueries.values());
+        }
+
+        @Override
         public List<DialogueRunView> queryBySessionIdAfter(String sessionId,
                                                             LocalDateTime afterCreateTime,
                                                             Long afterId,
@@ -934,6 +951,43 @@ public final class ExecutionLedgerFixtureFactory {
         }
 
         @Override
+        public int batchInsertToolInvocations(List<ToolInvocation> invocations) {
+            if (invocations == null || invocations.isEmpty()) {
+                return 0;
+            }
+            // 与生产单条多值 INSERT 保持一致：整批判重，任一冲突则整批不写。
+            List<ToolInvocation> accepted = new ArrayList<>(invocations.size());
+            for (ToolInvocation invocation : invocations) {
+                for (ToolInvocation existing : store.toolInvocations.values()) {
+                    if (existing.getDeleted() == 0 && isDuplicateInvocation(existing, invocation)) {
+                        throw new IllegalStateException("duplicate tool invocation");
+                    }
+                }
+                for (ToolInvocation existing : accepted) {
+                    if (isDuplicateInvocation(existing, invocation)) {
+                        throw new IllegalStateException("duplicate tool invocation in batch");
+                    }
+                }
+                accepted.add(invocation);
+            }
+            for (ToolInvocation invocation : accepted) {
+                invocation.setId(store.nextToolId++);
+                invocation.setCreateTime(LocalDateTime.now());
+                invocation.setUpdateTime(invocation.getCreateTime());
+                invocation.setDeleted(0);
+                store.toolInvocations.put(invocation.getId(), cloneTool(invocation));
+            }
+            return accepted.size();
+        }
+
+        private boolean isDuplicateInvocation(ToolInvocation left, ToolInvocation right) {
+            return (left.getRunId().equals(right.getRunId())
+                    && left.getToolCallId().equals(right.getToolCallId()))
+                    || (left.getLlmInvocationId().equals(right.getLlmInvocationId())
+                    && left.getDispatchIndex().equals(right.getDispatchIndex()));
+        }
+
+        @Override
         public int updateToolInvocationFinish(ToolInvocation invocation) {
             ToolInvocation existing = store.toolInvocations.get(invocation.getId());
             if (existing == null) {
@@ -1132,6 +1186,15 @@ public final class ExecutionLedgerFixtureFactory {
                             .thenComparing(ArtifactRecord::getCreateTime)
                             .thenComparing(ArtifactRecord::getId))
                     .toList();
+        }
+
+        @Override
+        public List<ArtifactRecord> queryBySessionIdWithLimit(String sessionId, int limit) {
+            List<ArtifactRecord> all = queryBySessionId(sessionId);
+            if (limit <= 0 || all.size() <= limit) {
+                return all;
+            }
+            return new ArrayList<>(all.subList(0, limit));
         }
 
         @Override
