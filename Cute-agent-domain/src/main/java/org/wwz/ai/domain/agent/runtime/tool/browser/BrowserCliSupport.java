@@ -224,9 +224,6 @@ public final class BrowserCliSupport {
     }
 
     public static String resolveCacheDir(OpenCliProperties properties, String userId) {
-        if (StringUtils.isBlank(userId)) {
-            throw new IllegalArgumentException("userId 不能为空");
-        }
         String root = StringUtils.trimToNull(properties.getCacheDir());
         if (root == null) {
             root = Path.of(System.getProperty("java.io.tmpdir"), "cute-opencli").toString();
