@@ -14,6 +14,10 @@ import org.wwz.ai.domain.agent.runtime.printer.Printer;
  *       SessionProjectionRegistry，使 SSE 端点按 sessionId 自然可达；</li>
  *   <li>{@link #closeChildSessionStream} 在 run 终态/异常时调用，注销投影；不得关闭父流；</li>
  *   <li>返回 null 表示无法隔离（实现缺资源），调用方应回退到旧的透传父流行为。</li>
+ *   <li>同一 {@code childSessionId} 允许重复 open（retry/并发子 run）：实现每次 open 都返回独立的
+ *       Printer，注册表中同时存在多个投影；close 必须传入与本次 open 配对的 Printer，只关闭该投影。
+ *       传入 null 或非本实现产生的 Printer 时按 sessionId 兜底清理该会话的全部活动投影，
+ *       因此调用方不得用旧 Printer 去关闭新一次 open。</li>
  * </ul>
  */
 public interface SubAgentSessionStreamPort {

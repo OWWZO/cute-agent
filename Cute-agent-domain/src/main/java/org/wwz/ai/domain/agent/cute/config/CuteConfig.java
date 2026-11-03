@@ -45,6 +45,7 @@ public class CuteConfig {
     @Value("${autobots.autoagent.deep_search_page_count:3}")
     private String deepSearchPageCount;
 
+    /** 调用方必须只读；该 Map 由配置绑定整体替换，直接修改会绕过配置刷新语义。 */
     private Map<String, String> multiAgentToolListMap = new HashMap<>();
     @Value("${autobots.autoagent.tool_list:{}}")
     public void setMultiAgentToolList(String list) {
@@ -100,6 +101,7 @@ public class CuteConfig {
     /**
      * LLM Settings
      */
+    /** 调用方必须只读；该 Map 由配置绑定整体替换，直接修改会绕过配置刷新语义。 */
     private Map<String, LLMSettings> llmSettingsMap;
     @Value("${llm.settings:{}}")
     public void setLLMSettingsMap(String jsonStr) {
@@ -193,12 +195,14 @@ public class CuteConfig {
     @Value("${autobots.autoagent.summary.message_size_limit:1000}")
     private Integer messageSizeLimit;
 
+    /** 调用方必须只读；该 Map 由配置绑定整体替换，直接修改会绕过配置刷新语义。 */
     private Map<String, String> sensitivePatterns = new HashMap<>();
     @Value("${autobots.autoagent.sensitive_patterns:{}}")
     public void setSensitivePatterns(String jsonStr) {
         this.sensitivePatterns = parseStringMap(jsonStr);
     }
 
+    /** 调用方必须只读；该 Map 由配置绑定整体替换，直接修改会绕过配置刷新语义。 */
     private Map<String, String> messageInterval = new HashMap<>();
     @Value("${autobots.autoagent.message_interval:{}}")
     public void setMessageInterval(String jsonStr) {

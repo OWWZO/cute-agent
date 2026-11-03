@@ -17,6 +17,11 @@ public interface ChannelConnectionPort {
     /** 优雅关闭（带超时）。幂等。 */
     void stopConnection(Long bindingId);
 
-    /** 该绑定当前是否有活连接。 */
+    /**
+     * 该绑定当前是否有活连接（点位快照，仅作提示）。
+     * <p>返回值不能作为发送前的授权依据：查询与发送之间连接可能断开。
+     * 调用方应先发送，再按发送结果处理连接丢失/重连，不要写成
+     * {@code if (isConnected(id)) send(...)} 的 check-then-act。</p>
+     */
     boolean isConnected(Long bindingId);
 }
