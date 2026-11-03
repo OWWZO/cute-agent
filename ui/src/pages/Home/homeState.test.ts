@@ -216,6 +216,47 @@ describe("homeState", () => {
     expect(merged[0].title).toBe("本地新标题");
   });
 
+  it("本地会话覆盖时保留服务端的渠道身份字段", () => {
+    const merged = mergeRecentSessions(
+      [
+        {
+          sessionId: "qq-session",
+          title: "QQ 会话",
+          status: "SUCCESS",
+          latestQueryText: "",
+          runCount: 1,
+          finishedRunCount: 1,
+          failedRunCount: 0,
+          startedAt: "2026-05-08T09:00:00.000Z",
+          lastActiveAt: "2026-05-08T09:10:00.000Z",
+          bindingId: 12,
+          channelChatType: "C2C",
+          visitorLabel: "访客 a1b2",
+        },
+      ],
+      [
+        {
+          sessionId: "qq-session",
+          title: "本地标题",
+          status: "RUNNING",
+          latestQueryText: "",
+          runCount: 0,
+          finishedRunCount: 0,
+          failedRunCount: 0,
+          startedAt: "2026-05-08T09:00:00.000Z",
+          lastActiveAt: "2026-05-08T09:20:00.000Z",
+        },
+      ]
+    );
+
+    expect(merged[0]).toMatchObject({
+      title: "本地标题",
+      bindingId: 12,
+      channelChatType: "C2C",
+      visitorLabel: "访客 a1b2",
+    });
+  });
+
   it("分页加载的服务端会话超过二十条后仍全部保留", () => {
     const sessions = Array.from({ length: 25 }, (_, index) => ({
       sessionId: `session-${index + 1}`,

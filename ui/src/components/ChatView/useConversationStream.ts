@@ -2639,6 +2639,7 @@ export function useConversationStream(
     if (parentLoopLive) {
       void injectActiveRun(message).then((outcome) => {
         if (outcome === true) {
+          toast.success("已作为指导发送");
           return;
         }
         if (outcome === "new_run") {
@@ -3135,6 +3136,27 @@ export function useConversationStream(
     };
 
     let streamOpened = false;
+    /**
+     * 409 兜底改成指导后，撤回本地乐观壳：注入内容不进入时间线（与本地 inject 一致）。
+     */
+    const rollbackBeforeStreamOpened = () => {
+      const streamStillActive = isActiveStream();
+      clearActiveRun(requestId);
+      followReconnectContextsRef.current.delete(requestId);
+      clearFollowReconnectTimer(requestId);
+      unbindLiveStream(conversationId, abortController);
+      if (streamStillActive) {
+        setLoading(false);
+      }
+      const latest =
+        conversationSnapshotsRef.current.get(conversationId) ||
+        conversationRef.current;
+      draftController.commit({
+        ...latest,
+        chatList: latest.chatList.filter((chat) => chat.requestId !== requestId),
+      });
+    };
+
     const failBeforeStreamOpened = (messageText?: string) => {
       const streamStillActive = isActiveStream();
       clearActiveRun(requestId);
@@ -3260,9 +3282,45 @@ export function useConversationStream(
       try {
         await submitAgentQuery(params);
       } catch (error) {
-        const concurrent =
-          error instanceof AgentQuerySubmitError && error.concurrent;
+        const submitError = error instanceof AgentQuerySubmitError ? error : null;
+        const concurrent = submitError?.concurrent === true;
         const messageText = error instanceof Error ? error.message : CONCURRENT_RUN_HINT;
+        const activeRequestId = submitError?.activeRequestId ?? null;
+        // 轮询还没追上 QQ 侧 run 时，服务端会以 409 + activeRequestId 拒绝；
+        // 把这条消息改投成指导，而不是让用户手动重发。重试过的提交不再二次注入。
+        const canInjectFallback =
+          concurrent &&
+          injectRetryDepth === 0 &&
+          !!activeRequestId &&
+          (!submitError?.activeSessionId ||
+            submitError.activeSessionId === baseConversation.sessionId);
+        if (canInjectFallback && activeRequestId) {
+          try {
+            const { agentRunApi } = await import("@/services/agentRun");
+            const data = await agentRunApi.inject({
+              sessionId: baseConversation.sessionId,
+              requestId: activeRequestId,
+              text: message,
+            });
+            if (data?.mode === "new_run") {
+              // 旧 run 已结束：撤回乐观壳，有界重试一次正常提交。
+              rollbackBeforeStreamOpened();
+              skipInjectRef.current = true;
+              sendMessage(inputInfo, injectRetryDepth + 1);
+              return;
+            }
+            if (data && data.accepted === true) {
+              rollbackBeforeStreamOpened();
+              toast.success("已作为指导发送");
+              return;
+            }
+          } catch (injectError) {
+            console.warn("concurrent run inject fallback failed", injectError);
+          }
+          rollbackBeforeStreamOpened();
+          toast.warning(messageText || CONCURRENT_RUN_HINT);
+          return;
+        }
         if (concurrent) {
           toast.warning(messageText || CONCURRENT_RUN_HINT);
         }

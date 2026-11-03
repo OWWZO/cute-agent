@@ -82,11 +82,12 @@ export function toFeaturedConversationUpsertPayload(
 
 /**
  * 精品会话依赖已存在的 session 持久化记录，空草稿会被后端拒绝，因此前端先做一次显式拦截。
+ * 渠道会话（QQ）属于访客对话，不允许发布到公开精品区。
  */
 export function canFeatureConversationSession(
   session: ConversationSessionItem
 ) {
-  return Boolean(session.sessionId && session.runCount > 0);
+  return Boolean(session.sessionId && session.runCount > 0) && !session.bindingId;
 }
 
 export function getFeaturedConversationStatusLabel(status?: string) {

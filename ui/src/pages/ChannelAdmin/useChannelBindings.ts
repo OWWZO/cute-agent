@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import {
   channelApi,
   type ChannelBindingMineResp,
-  type ChannelSessionItem,
   type QrCreateResp,
 } from "@/services/channel";
 
@@ -19,14 +18,11 @@ export interface UseChannelBindingsResult {
   qr: QrCreateResp | null;
   qrPhase: QrPhase;
   qrError: string | null;
-  sessions: ChannelSessionItem[];
-  sessionsLoading: boolean;
   reload: () => Promise<void>;
   startBind: () => Promise<void>;
   closeQr: () => void;
   retry: () => Promise<void>;
   unbind: () => Promise<void>;
-  loadSessions: () => Promise<void>;
 }
 
 /**
@@ -41,8 +37,6 @@ export function useChannelBindings(): UseChannelBindingsResult {
   const [qr, setQr] = useState<QrCreateResp | null>(null);
   const [qrPhase, setQrPhase] = useState<QrPhase>("idle");
   const [qrError, setQrError] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<ChannelSessionItem[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   const pollTimer = useRef<number | null>(null);
   const pollDeadline = useRef(0);
@@ -155,7 +149,6 @@ export function useChannelBindings(): UseChannelBindingsResult {
     if (!bindingId) return;
     try {
       const result = await channelApi.unbind(bindingId);
-      setSessions([]);
       toast.success(result.notice);
       await reload();
     } catch (error) {
@@ -163,33 +156,16 @@ export function useChannelBindings(): UseChannelBindingsResult {
     }
   }, [mine, reload]);
 
-  const loadSessions = useCallback(async () => {
-    const bindingId = mine?.binding?.bindingId;
-    if (!bindingId) return;
-    setSessionsLoading(true);
-    try {
-      const result = await channelApi.sessions(bindingId);
-      setSessions(result.sessions || []);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "加载会话失败");
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, [mine]);
-
   return {
     loading,
     mine,
     qr,
     qrPhase,
     qrError,
-    sessions,
-    sessionsLoading,
     reload,
     startBind,
     closeQr,
     retry,
     unbind,
-    loadSessions,
   };
 }

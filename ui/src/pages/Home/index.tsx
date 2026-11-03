@@ -72,13 +72,13 @@ import {
   toRecentSessionItem,
 } from "./homeState";
 import FeaturedConversationAdminPanel from "./FeaturedConversationAdminPanel";
-import { SessionSwitchSkeleton } from "./SessionSwitchSkeleton";
 import {
   applyInlineReplays,
   hydrateSessionWithRunningReplay,
   resolveInitialSession,
 } from "./sessionBootstrap";
 import { useRecentSessions } from "./useRecentSessions";
+import { useChannelSessionWatcher } from "./useChannelSessionWatcher";
 import { loadCachedSessionFiles } from "./sessionWorkspaceFiles";
 import {
   readViewFromSearch,
@@ -270,8 +270,11 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
   const [conversationBootstrapLoading, setConversationBootstrapLoading] =
     useState(false);
   const [historyPageLoading, setHistoryPageLoading] = useState(false);
-  /** 正在切换的远端会话 ID；非空时消息区显示骨架屏，避免先渲染旧会话再整体替换。 */
-  const [switchingSessionId, setSwitchingSessionId] = useState("");
+  /** 当前打开会话所属的渠道绑定；非空时启动 QQ 侧新轮次监听。 */
+  const [activeChannelSession, setActiveChannelSession] = useState<{
+    sessionId: string;
+    bindingId: number;
+  } | null>(null);
   const historyPageRequestsRef = useRef<Map<string, Promise<void>>>(new Map());
   const runReplayRequestsRef = useRef<
     Map<string, Promise<ConversationRunReplay>>
@@ -509,6 +512,17 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
             );
             return;
           }
+          const initialSession = sessions.find(
+            (item) => item.sessionId === initialSessionId
+          );
+          setActiveChannelSession(
+            initialSession?.bindingId
+              ? {
+                  sessionId: initialSessionId,
+                  bindingId: initialSession.bindingId,
+                }
+              : null
+          );
 
           void loadSessionWorkspaceFiles(initialSessionId);
 
@@ -630,7 +644,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       const nextSessionId = override?.sessionId || createSessionId();
       const nextProductType = override?.productType || product.type;
       setActiveView("chat");
-      setSwitchingSessionId("");
+      setActiveChannelSession(null);
       const nextConversation = createConversation({
         sessionId: nextSessionId,
         productType: nextProductType,
@@ -669,6 +683,11 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       setSelectedTaskFileKey("");
       setHistoryPageLoading(false);
       setActiveView("chat");
+      setActiveChannelSession(
+        session.bindingId
+          ? { sessionId: session.sessionId, bindingId: session.bindingId }
+          : null
+      );
 
       const localSelection = resolveLocalSessionSelection(
         localRecentConversationsRef.current,
@@ -676,14 +695,10 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       );
       if (!localSelection.shouldLoadRemote && localSelection.localConversation) {
         // 新建但尚未发送过消息的会话只存在前端，不能向后端请求不存在的详情。
-        setSwitchingSessionId("");
         setCurrentConversation(localSelection.localConversation);
         resetInput();
         return;
       }
-
-      // 骨架屏即刻生效：否则 bootstrap 返回前消息区仍是上一个会话的内容。
-      setSwitchingSessionId(session.sessionId);
 
       // 切换已有会话始终从后端读取最新详情，避免用前端流式缓存覆盖已完成状态。
       conversationHistoryApi
@@ -704,7 +719,6 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           });
           const detail = bootstrap?.detail;
           if (!detail || isHistoryDetailEmpty(detail)) {
-            setSwitchingSessionId("");
             if (localSelection.localConversation) {
               setCurrentConversation(localSelection.localConversation);
             }
@@ -727,7 +741,6 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
             if (selectionVersion !== sessionSelectionVersionRef.current) {
               return;
             }
-            setSwitchingSessionId("");
             setCurrentConversation(applySessionHitlPending(withReplay, hitlPending));
             resetInput();
             return;
@@ -738,7 +751,6 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           // 工具卡稍后浮现，而不是整页冻结等 N 个 RTT。
           // 这一步只合 HITL、不补回放，所以卡片会落在摘要壳上；
           // 回放到达后整块替换 chat，再由下面那次 HITL 合并把卡片补回。
-          setSwitchingSessionId("");
           setCurrentConversation(hydrateConversationFromSummaryPage(detail));
           resetInput();
 
@@ -758,7 +770,6 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
         })
         .catch((error) => {
           if (selectionVersion === sessionSelectionVersionRef.current) {
-            setSwitchingSessionId("");
             if (localSelection.localConversation) {
               setCurrentConversation(localSelection.localConversation);
               return;
@@ -769,6 +780,76 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     },
     [loadRunReplay, loadSessionWorkspaceFiles, reportRunningReplayError, resetInput, setActiveView]
   );
+
+  /**
+   * QQ 侧新起一轮时，把当前会话从后端重新拉一遍并合并：
+   * 不显示切换骨架、不重置输入，已有 chat 原样保留，只追加 Web 还不知道的 run。
+   * 追加出的 RUNNING 壳会触发 useConversationStream 的 runningFollowKey 自动续绑 SSE。
+   */
+  const refreshActiveSessionForExternalRun = useCallback(async (requestId: string) => {
+    const sessionId = currentConversationRef.current.sessionId;
+    if (!sessionId) {
+      return;
+    }
+    if (
+      currentConversationRef.current.chatList.some(
+        (chat) => chat.requestId === requestId
+      )
+    ) {
+      return;
+    }
+    try {
+      const bootstrap = await conversationHistoryApi.getSessionBootstrap(sessionId, {
+        limit: HISTORY_PAGE_SIZE,
+      });
+      const detail = bootstrap?.detail;
+      if (!detail || isHistoryDetailEmpty(detail)) {
+        return;
+      }
+      const bootstrapFiles = normalizeSessionArtifactFiles(
+        bootstrap.files || [],
+        sessionId
+      );
+      sessionWorkspaceFilesCacheRef.current.set(sessionId, bootstrapFiles);
+      if (currentConversationRef.current.sessionId === sessionId) {
+        setSessionWorkspaceFilesState({ sessionId, files: bootstrapFiles });
+      }
+      setCurrentConversation((previous) => {
+        if (previous.sessionId !== sessionId) {
+          return previous;
+        }
+        const merged = mergeConversationHistoryPage(previous, detail);
+        const withReplay = bootstrap.replaysIncluded
+          ? applyInlineReplays(merged, bootstrap.replays)
+          : merged;
+        const withHitl = applySessionHitlPending(withReplay, {
+          askUser: bootstrap.askUser || [],
+          desktopControl: bootstrap.desktopControl || [],
+          planApproval: bootstrap.planApproval || [],
+        });
+        // 保留已加载的历史分页游标，外部 run 刷新不应回退分页进度。
+        return {
+          ...withHitl,
+          historyNextCursor: previous.historyNextCursor,
+          historyHasMore: previous.historyHasMore,
+        };
+      });
+    } catch (error) {
+      console.error("刷新渠道会话失败", error);
+    }
+  }, []);
+
+  useChannelSessionWatcher({
+    sessionId: currentConversation.sessionId,
+    bindingId:
+      activeView === "chat" &&
+      activeChannelSession?.sessionId === currentConversation.sessionId
+        ? activeChannelSession.bindingId
+        : null,
+    onRunDetected: (requestId) => {
+      void refreshActiveSessionForExternalRun(requestId);
+    },
+  });
 
   const requestRunReplay = useCallback(
     (requestId: string) => {
@@ -1146,8 +1227,6 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       setWorkspaceImmersive(false);
       closeMobileSidebar();
       setActiveView(view);
-      // 递增版本会让进行中的 bootstrap 直接 return，骨架屏需要在这里一起清掉。
-      setSwitchingSessionId("");
     },
     [auth.status, closeMobileSidebar, navigate, setActiveView]
   );
@@ -1163,7 +1242,6 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
 
   const handleSidebarOpenTaskFiles = useCallback(() => {
     sessionSelectionVersionRef.current += 1;
-    setSwitchingSessionId("");
     ensureCurrentSessionWorkspaceFiles();
     setActiveView("chat");
     setWorkspaceImmersive(false);
@@ -1371,11 +1449,6 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
                       }}
                       onFocusModeChange={setWorkspaceImmersive}
                     />
-                    {false && switchingSessionId ? (
-                      <div className="absolute inset-0 z-10">
-                        <SessionSwitchSkeleton />
-                      </div>
-                    ) : null}
                   </motion.div>
                 ) : (
                   <motion.div

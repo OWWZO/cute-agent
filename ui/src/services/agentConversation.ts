@@ -31,6 +31,14 @@ export interface ConversationSessionItem {
   rootSessionId?: string | null;
   /** 子智能体类型；为空表示未记录 */
   subAgentType?: string | null;
+  /** 该会话下的子会话数量；列表用它决定是否显示展开入口 */
+  subSessionCount?: number | null;
+  /** 所属 IM 渠道绑定；非空表示来自 QQ 等渠道 */
+  bindingId?: number | null;
+  /** 渠道会话形态：C2C / GROUP；非渠道会话为空 */
+  channelChatType?: string | null;
+  /** 匿名访客短码（如「访客 a1b2」）；非渠道会话为空 */
+  visitorLabel?: string | null;
   latestQueryText: string;
   runCount: number;
   finishedRunCount: number;
@@ -43,6 +51,14 @@ export interface ConversationSessionPage {
   sessions: ConversationSessionItem[];
   nextCursor?: string | null;
   hasMore: boolean;
+}
+
+/** 会话运行状态：Web 端轮询它来发现 QQ 侧新起的轮次。 */
+export interface ConversationSessionStatus {
+  sessionId: string;
+  status: string;
+  latestRequestId?: string | null;
+  bindingId?: number | null;
 }
 
 export interface ConversationReplayFrame {
@@ -197,6 +213,10 @@ export const conversationHistoryApi = {
       sessionId: string;
       requestId: string;
     }>,
+  getSessionStatus: (sessionId: string) =>
+    api.get<ConversationSessionStatus>(
+      `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/status`
+    ) as unknown as Promise<ConversationSessionStatus>,
   getSessionBootstrap: (sessionId: string, params: ConversationHistoryQuery = {}) =>
     api.get<ConversationSessionBootstrap>(
       `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/bootstrap`,

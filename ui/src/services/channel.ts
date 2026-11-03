@@ -41,17 +41,6 @@ export interface UnbindResp {
   notice: string;
 }
 
-export interface ChannelSessionItem {
-  sessionId: string;
-  title: string;
-  runCount: number;
-  lastActiveAt?: string | null;
-}
-
-export interface ChannelSessionListResp {
-  sessions: ChannelSessionItem[];
-}
-
 export const channelApi = {
   mine: () =>
     api.get<ChannelBindingMineResp>(
@@ -77,9 +66,4 @@ export const channelApi = {
     api.delete<UnbindResp>(
       `/api/channel/binding/${bindingId}`
     ) as unknown as Promise<UnbindResp>,
-
-  sessions: (bindingId: number, limit = 20) =>
-    api.get<ChannelSessionListResp>(
-      `/api/channel/binding/${bindingId}/sessions?limit=${limit}`
-    ) as unknown as Promise<ChannelSessionListResp>,
 };

@@ -207,8 +207,22 @@ export function mergeRecentSessions(
     }
   });
   remoteSessions.forEach((session) => {
-    if (session.sessionId && !merged.has(session.sessionId)) {
+    if (!session.sessionId) {
+      return;
+    }
+    const local = merged.get(session.sessionId);
+    if (!local) {
       merged.set(session.sessionId, session);
+      return;
+    }
+    // 本地会话对象不携带渠道身份；用服务端的 QQ 字段补全，否则流式更新一次徽标就丢了。
+    if (session.bindingId != null) {
+      merged.set(session.sessionId, {
+        ...local,
+        bindingId: session.bindingId,
+        channelChatType: session.channelChatType,
+        visitorLabel: session.visitorLabel,
+      });
     }
   });
 

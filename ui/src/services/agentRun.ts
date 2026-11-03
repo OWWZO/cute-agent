@@ -27,12 +27,25 @@ export type AgentQuerySubmitResult = {
 export class AgentQuerySubmitError extends Error {
   status: number;
   concurrent: boolean;
+  /** 409 时服务端正在执行的 run；用于把 Web 消息改投成指导。 */
+  activeRequestId: string | null;
+  activeSessionId: string | null;
 
-  constructor(message: string, status: number, concurrent = false) {
+  constructor(
+    message: string,
+    status: number,
+    concurrent = false,
+    details: {
+      activeRequestId?: string | null;
+      activeSessionId?: string | null;
+    } = {}
+  ) {
     super(message);
     this.name = "AgentQuerySubmitError";
     this.status = status;
     this.concurrent = concurrent;
+    this.activeRequestId = details.activeRequestId ?? null;
+    this.activeSessionId = details.activeSessionId ?? null;
   }
 }
 
@@ -78,13 +91,20 @@ export async function submitAcceptedCommand(
   const payload = (await response.json().catch(() => null)) as {
     code?: string;
     info?: string;
-    data?: AgentQuerySubmitResult;
+    data?: AgentQuerySubmitResult & {
+      activeRequestId?: string | null;
+      activeSessionId?: string | null;
+    };
   } | null;
   if (response.status === 409) {
     throw new AgentQuerySubmitError(
       payload?.info || "已有任务在进行中，请等待完成或先停止后再试",
       409,
-      true
+      true,
+      {
+        activeRequestId: payload?.data?.activeRequestId,
+        activeSessionId: payload?.data?.activeSessionId,
+      }
     );
   }
   if (!response.ok) {

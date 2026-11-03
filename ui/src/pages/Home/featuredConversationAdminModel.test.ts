@@ -104,4 +104,14 @@ describe("featuredConversationAdminModel", () => {
     ).toBe(false);
     expect(canFeatureConversationSession(session)).toBe(true);
   });
+
+  it("blocks channel sessions from being marked as featured", () => {
+    expect(
+      canFeatureConversationSession({
+        ...session,
+        bindingId: 12,
+        channelChatType: "C2C",
+      })
+    ).toBe(false);
+  });
 });

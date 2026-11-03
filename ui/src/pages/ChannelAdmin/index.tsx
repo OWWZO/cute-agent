@@ -1,12 +1,4 @@
-import { useState } from "react";
-import {
-  Bot,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  RefreshCw,
-  Unlink,
-} from "lucide-react";
+import { Bot, Loader2, RefreshCw, Unlink } from "lucide-react";
 import WorkspaceAdminHeader from "@/components/WorkspaceAdminHeader";
 import { Button } from "@/components/ui/button";
 import { confirm } from "@/components/ui/confirm-dialog";
@@ -34,21 +26,8 @@ interface ChannelAdminProps {
 }
 
 export default function ChannelAdmin({ embedded }: ChannelAdminProps) {
-  const {
-    loading,
-    mine,
-    qr,
-    qrPhase,
-    qrError,
-    sessions,
-    sessionsLoading,
-    startBind,
-    closeQr,
-    retry,
-    unbind,
-    loadSessions,
-  } = useChannelBindings();
-  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const { loading, mine, qr, qrPhase, qrError, startBind, closeQr, retry, unbind } =
+    useChannelBindings();
 
   const binding = mine?.binding ?? null;
 
@@ -61,14 +40,6 @@ export default function ChannelAdmin({ embedded }: ChannelAdminProps) {
       danger: true,
       onOk: unbind,
     });
-  };
-
-  const toggleSessions = async () => {
-    const next = !sessionsOpen;
-    setSessionsOpen(next);
-    if (next) {
-      await loadSessions();
-    }
   };
 
   return (
@@ -132,49 +103,6 @@ export default function ChannelAdmin({ embedded }: ChannelAdminProps) {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => void toggleSessions()}
-                className="mt-4 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                {sessionsOpen ? (
-                  <ChevronDown className="size-3.5" />
-                ) : (
-                  <ChevronRight className="size-3.5" />
-                )}
-                查看会话
-              </button>
-
-              {sessionsOpen ? (
-                <div className="mt-2 rounded-lg border bg-muted/30">
-                  {sessionsLoading ? (
-                    <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
-                      <Loader2 className="size-3.5 animate-spin" />
-                      加载中…
-                    </div>
-                  ) : sessions.length === 0 ? (
-                    <p className="p-3 text-xs text-muted-foreground">
-                      还没有人跟这个机器人对话
-                    </p>
-                  ) : (
-                    <ul className="divide-y">
-                      {sessions.map((item) => (
-                        <li
-                          key={item.sessionId}
-                          className="flex items-center justify-between gap-3 px-3 py-2"
-                        >
-                          <span className="min-w-0 truncate text-xs">
-                            {item.title || "新对话"}
-                          </span>
-                          <span className="shrink-0 text-[11px] text-muted-foreground">
-                            {item.runCount} 轮 · {item.lastActiveAt || "-"}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : null}
             </div>
           ) : (
             <div className="rounded-xl border p-6 text-center">

@@ -38,6 +38,17 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
+function channelBadgeLabel(session: ConversationSessionItem) {
+  switch ((session.channelChatType || "").toUpperCase()) {
+    case "C2C":
+      return "QQ · 私聊";
+    case "GROUP":
+      return "QQ · 群聊";
+    default:
+      return "QQ";
+  }
+}
+
 const navItems: NavItem[] = [
   {
     key: "chat",
@@ -451,6 +462,10 @@ const ConversationSidebar = memo(function ConversationSidebar(
                     const treeOpen = sessionTree.isExpanded(session.sessionId);
                     const treeLoading = sessionTree.isLoading(session.sessionId);
                     const children = sessionTree.childrenOf(session.sessionId);
+                    // null/undefined 视为「未知」，保持旧行为；明确为 0 时才收起展开入口。
+                    const canExpand =
+                      session.subSessionCount == null ||
+                      session.subSessionCount > 0;
 
                     return (
                       <div
@@ -479,32 +494,37 @@ const ConversationSidebar = memo(function ConversationSidebar(
                               : "text-[var(--chat-text)] hover:bg-black/[0.04] active:bg-black/[0.07]"
                           )}
                         >
-                          {/* 展开箭头：点它拉子会话，点行本身仍是切换会话 */}
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            aria-label={treeOpen ? "收起子会话" : "展开子会话"}
-                            aria-expanded={treeOpen}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              sessionTree.toggle(session.sessionId);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
+                          {/* 展开箭头：点它拉子会话，点行本身仍是切换会话。
+                              没有子会话时只留等宽占位，保证标题左对齐不跳动。 */}
+                          {canExpand || treeOpen ? (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              aria-label={treeOpen ? "收起子会话" : "展开子会话"}
+                              aria-expanded={treeOpen}
+                              onClick={(e) => {
                                 e.stopPropagation();
-                                e.preventDefault();
                                 sessionTree.toggle(session.sessionId);
-                              }
-                            }}
-                            className="flex size-4 shrink-0 items-center justify-center rounded text-[var(--chat-text-muted)] transition-colors hover:text-[var(--chat-text)]"
-                          >
-                            <ChevronRight
-                              className={cn(
-                                "h-3.5 w-3.5 transition-transform duration-150",
-                                treeOpen && "rotate-90"
-                              )}
-                            />
-                          </span>
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  sessionTree.toggle(session.sessionId);
+                                }
+                              }}
+                              className="flex size-4 shrink-0 items-center justify-center rounded text-[var(--chat-text-muted)] transition-colors hover:text-[var(--chat-text)]"
+                            >
+                              <ChevronRight
+                                className={cn(
+                                  "h-3.5 w-3.5 transition-transform duration-150",
+                                  treeOpen && "rotate-90"
+                                )}
+                              />
+                            </span>
+                          ) : (
+                            <span className="size-4 shrink-0" aria-hidden />
+                          )}
                           <span
                             className={cn(
                               "size-3.5 shrink-0 rounded-full border-[1.5px]",
@@ -514,9 +534,19 @@ const ConversationSidebar = memo(function ConversationSidebar(
                             )}
                             aria-hidden
                           />
+                          {session.bindingId ? (
+                            <span className="shrink-0 rounded bg-[var(--chat-surface-muted)] px-1.5 py-0.5 text-ui-xs font-medium text-[var(--chat-text-muted)]">
+                              {channelBadgeLabel(session)}
+                            </span>
+                          ) : null}
                           <span className="min-w-0 flex-1 truncate text-ui-base font-medium">
                             {session.title || "未命名会话"}
                           </span>
+                          {session.bindingId && session.visitorLabel ? (
+                            <span className="shrink-0 text-ui-xs text-[var(--chat-text-muted)]">
+                              {session.visitorLabel}
+                            </span>
+                          ) : null}
                           <span
                             className={cn(
                               "shrink-0 transition-opacity",
@@ -539,7 +569,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
 
                         {/* 子会话分支：一条竖线 + 每个子节点一根横线连到父行，
                             与「主会话延伸出子会话」的树形直觉一致。 */}
-                        {treeOpen ? (
+                        {treeOpen && canExpand ? (
                           <div className="relative ml-[18px] border-l border-[var(--chat-border)] pl-2">
                             {treeLoading ? (
                               <div className="px-2 py-1.5 text-ui-sm text-[var(--chat-text-muted)]">

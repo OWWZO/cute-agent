@@ -19,15 +19,16 @@ export default function ConversationSessionActionMenu(
 ) {
   const { session, canManageFeatured, onManageFeatured, onPin, onDelete } =
     props;
+  const featuredDisabledReason = session.bindingId
+    ? "QQ 会话不能设为精品"
+    : "请先让该会话至少产生一轮内容，再设为精品";
 
   return (
     <div className="absolute right-2 top-full z-10 mt-1 w-36 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] py-1 shadow-[var(--shadow-md)]">
       <button
         type="button"
         disabled={!canManageFeatured}
-        title={
-          canManageFeatured ? undefined : "请先让该会话至少产生一轮内容，再设为精品"
-        }
+        title={canManageFeatured ? undefined : featuredDisabledReason}
         onClick={() => onManageFeatured(session)}
         className={cn(
           menuItemClassName,
