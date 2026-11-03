@@ -142,6 +142,12 @@ public class LlmUsageSnapshot {
                 snapshot.setPromptTextTokens(firstNumber(details, "text_tokens", "textTokens"));
                 snapshot.setPromptAudioTokens(firstNumber(details, "audio_tokens", "audioTokens"));
                 snapshot.setPromptImageTokens(firstNumber(details, "image_tokens", "imageTokens"));
+            } else if (promptDetails instanceof JsonNode details) {
+                // Jackson 反序列化出的 payload 可能把嵌套对象保留为 JsonNode，不能只认 Map。
+                snapshot.setCachedPromptTokens(firstInt(details, "cached_tokens", "cachedTokens"));
+                snapshot.setPromptTextTokens(firstInt(details, "text_tokens", "textTokens"));
+                snapshot.setPromptAudioTokens(firstInt(details, "audio_tokens", "audioTokens"));
+                snapshot.setPromptImageTokens(firstInt(details, "image_tokens", "imageTokens"));
             }
             if (snapshot.getCachedPromptTokens() == null) {
                 snapshot.setCachedPromptTokens(firstNumber(map,
@@ -154,6 +160,10 @@ public class LlmUsageSnapshot {
                 snapshot.setCompletionTextTokens(firstNumber(details, "text_tokens", "textTokens"));
                 snapshot.setCompletionAudioTokens(firstNumber(details, "audio_tokens", "audioTokens"));
                 snapshot.setReasoningTokens(firstNumber(details, "reasoning_tokens", "reasoningTokens"));
+            } else if (completionDetails instanceof JsonNode details) {
+                snapshot.setCompletionTextTokens(firstInt(details, "text_tokens", "textTokens"));
+                snapshot.setCompletionAudioTokens(firstInt(details, "audio_tokens", "audioTokens"));
+                snapshot.setReasoningTokens(firstInt(details, "reasoning_tokens", "reasoningTokens"));
             }
             if (snapshot.getReasoningTokens() == null) {
                 snapshot.setReasoningTokens(firstNumber(map, "reasoning_tokens", "reasoningTokens"));
@@ -299,6 +309,19 @@ public class LlmUsageSnapshot {
         Object value = firstValue(map, keys);
         if (value instanceof Number n) {
             return n.intValue();
+        }
+        if (value instanceof JsonNode node) {
+            if (node.isNumber()) {
+                return node.asInt();
+            }
+            if (node.isTextual()) {
+                try {
+                    return Integer.parseInt(node.asText().trim());
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+            return null;
         }
         if (value instanceof String s && !s.isBlank()) {
             try {

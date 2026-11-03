@@ -60,16 +60,28 @@ public class UserQuestionResumeContext {
                     .needsPlanModeExitAttachment(state.isNeedsPlanModeExitAttachment())
                     .build();
         }
+        // 逐字段回退：续跑命令可能只填了部分字段，request 中为 null 时必须沿用
+        // AgentContext 实际运行时的 agentType/model/thinking，否则续跑会换一个模型或 Agent 类型。
         return UserQuestionResumeContext.builder()
                 .entryAgent(entryAgent)
-                .agentType(request == null ? (context == null ? null : context.getAgentType()) : request.getAgentType())
-                .model(request == null ? (context == null ? null : context.getModel()) : request.getModel())
-                .thinking(request == null ? (context == null ? null : context.getThinking()) : request.getThinking())
-                .thinkingEffort(request == null
-                        ? (context == null ? null : context.getThinkingEffort())
-                        : request.getThinkingEffort())
+                .agentType(firstNonNull(
+                        request == null ? null : request.getAgentType(),
+                        context == null ? null : context.getAgentType()))
+                .model(firstNonNull(
+                        request == null ? null : request.getModel(),
+                        context == null ? null : context.getModel()))
+                .thinking(firstNonNull(
+                        request == null ? null : request.getThinking(),
+                        context == null ? null : context.getThinking()))
+                .thinkingEffort(firstNonNull(
+                        request == null ? null : request.getThinkingEffort(),
+                        context == null ? null : context.getThinkingEffort()))
                 .planMode(snapshot)
                 .build();
+    }
+
+    private static <T> T firstNonNull(T preferred, T fallback) {
+        return preferred != null ? preferred : fallback;
     }
 
     public static String toJson(UserQuestionResumeContext context) {

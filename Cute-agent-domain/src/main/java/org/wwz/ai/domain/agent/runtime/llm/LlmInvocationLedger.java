@@ -149,46 +149,51 @@ final class LlmInvocationLedger {
                String finishReason,
                String errorMsg) {
         completeTiming(handle);
-        if (context == null || handle == null || !handle.enabled()) {
-            return;
-        }
-        // 完成时重新取回 invocation 创建阶段的观测快照，合并最终 token/cache 信息后一次性落账本。
-        // 清理当前线程观测是必要的，否则复用线程会把本次模型调用的数据带进下一请求。
-        restoreObservation(handle);
-        LlmUsageSnapshot snapshot = usage == null ? LlmUsageSnapshot.empty() : usage;
-        LlmPromptObservability.ObservationBundle obs = LlmPromptObservability.current();
-        if (obs == null || obs.getUsage() == null || obs.getUsage().isEmpty()) {
-            if (!snapshot.isEmpty()) {
-                LlmPromptObservability.logResponse(context, model, "ask", snapshot, 0L);
-                obs = LlmPromptObservability.current();
+        try {
+            if (context == null || handle == null || !handle.enabled()) {
+                return;
             }
+            // 完成时重新取回 invocation 创建阶段的观测快照，合并最终 token/cache 信息后一次性落账本。
+            // 清理当前线程观测是必要的，否则复用线程会把本次模型调用的数据带进下一请求。
+            restoreObservation(handle);
+            LlmUsageSnapshot snapshot = usage == null ? LlmUsageSnapshot.empty() : usage;
+            LlmPromptObservability.ObservationBundle obs = LlmPromptObservability.current();
+            if (obs == null || obs.getUsage() == null || obs.getUsage().isEmpty()) {
+                if (!snapshot.isEmpty()) {
+                    LlmPromptObservability.logResponse(context, model, "ask", snapshot, 0L);
+                    obs = LlmPromptObservability.current();
+                }
+            }
+            context.getExecutionRecorder().finishLlmInvocation(LlmInvocationFinishRecord.builder()
+                    .llmInvocationId(handle.invocationId())
+                    .requestId(context.getRequestId())
+                    .status(status)
+                    .responseText(responseText)
+                    .reasoningContent(reasoningContent)
+                    .toolCallCount(toolCallCount)
+                    .promptTokens(snapshot.getPromptTokens())
+                    .completionTokens(snapshot.getCompletionTokens())
+                    .totalTokens(snapshot.getTotalTokens())
+                    .cachedPromptTokens(snapshot.getCachedPromptTokens())
+                    .promptTextTokens(snapshot.getPromptTextTokens())
+                    .promptAudioTokens(snapshot.getPromptAudioTokens())
+                    .promptImageTokens(snapshot.getPromptImageTokens())
+                    .completionTextTokens(snapshot.getCompletionTextTokens())
+                    .completionAudioTokens(snapshot.getCompletionAudioTokens())
+                    .reasoningTokens(snapshot.getReasoningTokens())
+                    .cacheStatus(obs == null ? null : obs.getCacheStatus())
+                    .cacheRiskFlags(obs == null ? null : obs.getCacheRiskFlags())
+                    .finishReason(finishReason)
+                    .errorMsg(errorMsg)
+                    .finishedAt(handle.runtimeTiming() == null || handle.runtimeTiming().getFinishedAt() == null
+                            ? LocalDateTime.now()
+                            : handle.runtimeTiming().getFinishedAt())
+                    .build());
+        } finally {
+            // fail-open（无 run / 空 agentName / 无 context）同样要清理：否则线程复用时
+            // 下一次调用会把本次的 cacheStatus/usage 当成自己的观测快照。
+            LlmPromptObservability.clear();
         }
-        context.getExecutionRecorder().finishLlmInvocation(LlmInvocationFinishRecord.builder()
-                .llmInvocationId(handle.invocationId())
-                .requestId(context.getRequestId())
-                .status(status)
-                .responseText(responseText)
-                .reasoningContent(reasoningContent)
-                .toolCallCount(toolCallCount)
-                .promptTokens(snapshot.getPromptTokens())
-                .completionTokens(snapshot.getCompletionTokens())
-                .totalTokens(snapshot.getTotalTokens())
-                .cachedPromptTokens(snapshot.getCachedPromptTokens())
-                .promptTextTokens(snapshot.getPromptTextTokens())
-                .promptAudioTokens(snapshot.getPromptAudioTokens())
-                .promptImageTokens(snapshot.getPromptImageTokens())
-                .completionTextTokens(snapshot.getCompletionTextTokens())
-                .completionAudioTokens(snapshot.getCompletionAudioTokens())
-                .reasoningTokens(snapshot.getReasoningTokens())
-                .cacheStatus(obs == null ? null : obs.getCacheStatus())
-                .cacheRiskFlags(obs == null ? null : obs.getCacheRiskFlags())
-                .finishReason(finishReason)
-                .errorMsg(errorMsg)
-                .finishedAt(handle.runtimeTiming() == null || handle.runtimeTiming().getFinishedAt() == null
-                        ? LocalDateTime.now()
-                        : handle.runtimeTiming().getFinishedAt())
-                .build());
-        LlmPromptObservability.clear();
     }
 
     /** 用户停止优先于异常类型，避免停止被记成 FAILED。 */

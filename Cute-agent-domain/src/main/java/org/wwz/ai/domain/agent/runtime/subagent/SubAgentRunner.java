@@ -262,56 +262,59 @@ public class SubAgentRunner {
                 prompt);
         // 主→子 inject 邮箱（SendMessage / 用户指导）；与父 run 的 inject 队列隔离
         String sessionKey = StringUtils.defaultIfBlank(parentContext.getSessionId(), parentContext.getRequestId());
-        childContext.bindPendingInjectQueue(SessionAgentMailboxHub.queue(sessionKey, agentId));
-
-        // 记忆键统一为 (childSessionId, main)：子会话与主会话同构，用户从会话树点进来
-        // 续聊时读到的是同一份记忆（见 D11/D15）。
-        childContext.setMemoryScope(WorkingMemoryScopes.MAIN);
-
-        // resume：每次运行需要唯一 requestId，否则 working_memory persist 幂等跳过
-        if (resume) {
-            if (isSubAgentStillRunning(parentContext, sessionKey, agentId)) {
-                return failed(agentId, childSessionId, definition, description, prompt, start,
-                        "子 Agent 仍在运行，请用 TaskOutput 等待后再 resume",
-                        null, false);
-            }
-            // 与首跑统一短 requestId；父 requestId 仅用于日志
-            // 隔离流路径下 requestId 已在建流时定死，不能重新分配，否则投影与 ledger run 对不上；
-            // 仅旧透传路径仍按原逻辑换新 requestId，保证 working_memory persist 不被幂等跳过。
-            if (isolatedChildPrinter == null) {
-                childContext.setRequestId(SubAgentContextFactory.newChildRequestId(agentId));
-            }
-            String resumeRequestId = childContext.getRequestId();
-            List<Message> prior = sessionWorkingMemoryService.loadReadyMessages(
-                    childContext.getSessionId(), WorkingMemoryScopes.MAIN, resumeRequestId);
-            if (prior == null || prior.isEmpty()) {
-                return failed(agentId, childSessionId, definition, description, prompt, start,
-                        "无法唤醒子 Agent：未找到 agentId=" + agentId + " 的工作记忆（可能已过期或从未成功结束）",
-                        null, false);
-            }
-            childContext.setWorkingMemoryMessages(new ArrayList<>(prior));
-            log.info("{} resume subagent type={} id={} priorMsgs={} childRequestId={} parentRequestId={}",
-                    parentContext.getRequestId(), definition.getAgentType(), agentId, prior.size(),
-                    resumeRequestId, parentContext.getRequestId());
-        } else {
-            childContext.setWorkingMemoryMessages(null);
-            log.info("{} spawn subagent type={} id={} childRequestId={} parentRequestId={}",
-                    parentContext.getRequestId(), definition.getAgentType(), agentId,
-                    childContext.getRequestId(), parentContext.getRequestId());
-        }
-
-        // 工具全部无状态：context 由 execute(input, context) 传入，实例可跨子 Agent 共享，
-        // 只需把 collection 自身绑到子 context（MCP 执行器等由它转发）。
-        childTools.setAgentContext(childContext);
-
-        SessionAgentMailboxHub.markActive(sessionKey, agentId, true);
         ReactImplAgent agent = null;
-        // 子 run 终态收口：三条返回路径 + 异常路径都要收敛到同一个 finally，避免漏写导致 run 永挂 RUNNING。
+        // 子 run 终态收口：resume 早退、异常与正常路径都要收敛到同一个 finally，
+        // 避免漏写导致 run 永挂 RUNNING、子会话投影流泄漏。
         java.util.concurrent.atomic.AtomicInteger childRunStatus =
                 new java.util.concurrent.atomic.AtomicInteger(ExecutionLedgerConstants.STATUS_FAILED);
         java.util.concurrent.atomic.AtomicReference<String> childRunSummary =
                 new java.util.concurrent.atomic.AtomicReference<>("");
+        boolean mailboxActivated = false;
         try {
+            childContext.bindPendingInjectQueue(SessionAgentMailboxHub.queue(sessionKey, agentId));
+
+            // 记忆键统一为 (childSessionId, main)：子会话与主会话同构，用户从会话树点进来
+            // 续聊时读到的是同一份记忆（见 D11/D15）。
+            childContext.setMemoryScope(WorkingMemoryScopes.MAIN);
+
+            // resume：每次运行需要唯一 requestId，否则 working_memory persist 幂等跳过
+            if (resume) {
+                if (isSubAgentStillRunning(parentContext, sessionKey, agentId)) {
+                    return failed(agentId, childSessionId, definition, description, prompt, start,
+                            "子 Agent 仍在运行，请用 TaskOutput 等待后再 resume",
+                            null, false);
+                }
+                // 与首跑统一短 requestId；父 requestId 仅用于日志
+                // 隔离流路径下 requestId 已在建流时定死，不能重新分配，否则投影与 ledger run 对不上；
+                // 仅旧透传路径仍按原逻辑换新 requestId，保证 working_memory persist 不被幂等跳过。
+                if (isolatedChildPrinter == null) {
+                    childContext.setRequestId(SubAgentContextFactory.newChildRequestId(agentId));
+                }
+                String resumeRequestId = childContext.getRequestId();
+                List<Message> prior = sessionWorkingMemoryService.loadReadyMessages(
+                        childContext.getSessionId(), WorkingMemoryScopes.MAIN, resumeRequestId);
+                if (prior == null || prior.isEmpty()) {
+                    return failed(agentId, childSessionId, definition, description, prompt, start,
+                            "无法唤醒子 Agent：未找到 agentId=" + agentId + " 的工作记忆（可能已过期或从未成功结束）",
+                            null, false);
+                }
+                childContext.setWorkingMemoryMessages(new ArrayList<>(prior));
+                log.info("{} resume subagent type={} id={} priorMsgs={} childRequestId={} parentRequestId={}",
+                        parentContext.getRequestId(), definition.getAgentType(), agentId, prior.size(),
+                        resumeRequestId, parentContext.getRequestId());
+            } else {
+                childContext.setWorkingMemoryMessages(null);
+                log.info("{} spawn subagent type={} id={} childRequestId={} parentRequestId={}",
+                        parentContext.getRequestId(), definition.getAgentType(), agentId,
+                        childContext.getRequestId(), parentContext.getRequestId());
+            }
+
+            // 工具全部无状态：context 由 execute(input, context) 传入，实例可跨子 Agent 共享，
+            // 只需把 collection 自身绑到子 context（MCP 执行器等由它转发）。
+            childTools.setAgentContext(childContext);
+
+            SessionAgentMailboxHub.markActive(sessionKey, agentId, true);
+            mailboxActivated = true;
             agent = new ReactImplAgent(childContext);
             agent.setName("subagent:" + definition.getAgentType());
             agent.setDescription(StringUtils.defaultIfBlank(description, definition.getAgentType()));
@@ -338,6 +341,18 @@ public class SubAgentRunner {
             try {
                 String runResult = agent.run(prompt);
                 finished.set(true);
+                if (childContext.isRunCancelled()) {
+                    // 取消后即使模型正常返回，也不能把本轮记成 COMPLETED/SUCCESS；
+                    // 否则 finally 会把账本改写成 STOPPED，而返回给父 Agent 的结果仍是成功。
+                    int toolUseCount = countToolUses(agent);
+                    boolean memoryPersisted = persistSubWorkingMemory(childContext, parentContext, agent, definition);
+                    String content = emitSubAgentFinalReply(childContext, agent, buildResumeHintContent(
+                            "Terminated: 用户已停止本轮执行", agentId, memoryPersisted));
+                    childRunStatus.set(ExecutionLedgerConstants.STATUS_STOPPED);
+                    childRunSummary.set(content);
+                    return failed(agentId, childSessionId, definition, description, prompt, start,
+                            "用户已停止本轮执行", content, memoryPersisted);
+                }
                 boolean thinkFailed = isThinkFailed(agent, runResult);
                 int toolUseCount = countToolUses(agent);
                 // 成功/think 失败都落库，便于主 Agent resume
@@ -421,7 +436,11 @@ public class SubAgentRunner {
                         resolveEndSummary(childRunStatus, childRunSummary));
                 closeIsolatedChildStream(parentContext, childSessionId, isolatedChildPrinter);
             }
-            SessionAgentMailboxHub.markActive(sessionKey, agentId, false);
+            // 只有本次调用真正 markActive(true) 过才允许关闭邮箱：
+            // resume 早退时邮箱属于另一个仍在运行的实例，清掉会让 SendMessage 静默丢消息。
+            if (mailboxActivated) {
+                SessionAgentMailboxHub.markActive(sessionKey, agentId, false);
+            }
         }
     }
 

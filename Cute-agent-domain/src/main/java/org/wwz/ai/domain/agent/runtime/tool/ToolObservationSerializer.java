@@ -71,7 +71,8 @@ public final class ToolObservationSerializer {
     public static String serializeFailure(String error, Object detail, int cap) {
         String errorText = StringUtils.defaultIfBlank(error, "Unknown error");
         boolean emptyMap = detail instanceof java.util.Map<?, ?> map && map.isEmpty();
-        if (detail != null && !(detail instanceof String) && !emptyMap) {
+        // String detail（堆栈/原始诊断）同样要保留：丢弃后模型只剩 Error 前缀，无法诊断。
+        if (detail != null && !emptyMap) {
             java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
             payload.put("tool_ok", Boolean.FALSE);
             payload.put("error", errorText);

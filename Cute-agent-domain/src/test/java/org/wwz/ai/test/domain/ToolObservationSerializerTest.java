@@ -34,6 +34,17 @@ public class ToolObservationSerializerTest {
     }
 
     @Test
+    public void failureWithStringDetailKeepsDiagnostics() {
+        String serialized = ToolObservationSerializer.serializeFailure(
+                "boom", "java.lang.IllegalStateException: bad state\n\tat x.y", 4000);
+
+        Map<String, Object> parsed = JSON.parseObject(serialized);
+        Assert.assertEquals(Boolean.FALSE, parsed.get("tool_ok"));
+        Assert.assertEquals("boom", parsed.get("error"));
+        Assert.assertTrue(String.valueOf(parsed.get("detail")).contains("IllegalStateException"));
+    }
+
+    @Test
     public void failureWithDetailBecomesToolOkJson() {
         Map<String, Object> detail = Map.of("code", 400, "reason", "bad input");
         String serialized = ToolObservationSerializer.serializeFailure("boom", detail);

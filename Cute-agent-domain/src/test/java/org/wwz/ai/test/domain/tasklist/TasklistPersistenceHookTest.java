@@ -76,7 +76,7 @@ public class TasklistPersistenceHookTest {
     }
 
     @Test
-    public void hydrateMarksOrphanRunningAsFailed() {
+    public void hydrateMarksOrphanRunningAsLostWithoutPersisting() {
         InMemoryPort port = new InMemoryPort();
         RuntimeBackgroundTask orphan = RuntimeBackgroundTask.builder()
                 .id("orphan1")
@@ -89,8 +89,11 @@ public class TasklistPersistenceHookTest {
 
         RuntimeBackgroundTaskRegistry reg = new RuntimeBackgroundTaskRegistry("sess-x", port);
         RuntimeBackgroundTask loaded = reg.get("orphan1").orElseThrow();
-        Assert.assertEquals(RuntimeBackgroundTask.STATUS_FAILED, loaded.getStatus());
+        // 重启孤儿标 lost（"没人知道结果"），不是任务级 failed。
+        Assert.assertEquals(RuntimeBackgroundTask.STATUS_LOST, loaded.getStatus());
         Assert.assertTrue(loaded.getErrorMsg().contains("restart"));
+        // 只修内存视图：DB 行可能属于另一个 JVM，终态收敛交给 BackgroundRunReconciler。
+        Assert.assertEquals(0, port.bgUpserts.get());
     }
 
     private static final class InMemoryPort implements TasklistPersistencePort {
