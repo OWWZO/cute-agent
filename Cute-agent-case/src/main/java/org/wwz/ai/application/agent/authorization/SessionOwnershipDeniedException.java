@@ -5,7 +5,13 @@ package org.wwz.ai.application.agent.authorization;
  */
 public class SessionOwnershipDeniedException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     public SessionOwnershipDeniedException(String message) {
         super(message);
+    }
+
+    public SessionOwnershipDeniedException(String message, Throwable cause) {
+        super(message, cause);
     }
 }

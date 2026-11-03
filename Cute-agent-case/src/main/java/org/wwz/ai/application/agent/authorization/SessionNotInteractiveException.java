@@ -9,7 +9,13 @@ package org.wwz.ai.application.agent.authorization;
  */
 public class SessionNotInteractiveException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     public SessionNotInteractiveException(String message) {
         super(message);
+    }
+
+    public SessionNotInteractiveException(String message, Throwable cause) {
+        super(message, cause);
     }
 }

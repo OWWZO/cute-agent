@@ -44,7 +44,6 @@ public class AgentExecutionCommandMapper {
                 .thinking(command.getThinking())
                 .thinkingEffort(StringUtils.trimToNull(command.getThinkingEffort()))
                 .forcePlanMode(Boolean.TRUE.equals(command.getForcePlanMode()))
-                .erp(null)
                 .basePrompt(planSolve ? "" : cuteConfig.getCuteBasePrompt())
                 .isStream(true)
                 .build();

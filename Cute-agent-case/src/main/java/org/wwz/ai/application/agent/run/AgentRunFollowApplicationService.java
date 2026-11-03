@@ -68,9 +68,7 @@ public class AgentRunFollowApplicationService {
             return FollowAttachResult.IDLE;
         }
         agentRunLaunchGate.launchBySession(sessionId);
-        List<AgentStreamProjection> live = sessionProjectionRegistry == null
-                ? List.of()
-                : sessionProjectionRegistry.listLive(sessionId);
+        List<AgentStreamProjection> live = sessionProjectionRegistry.listLive(sessionId);
         if (!live.isEmpty()) {
             if (!replayLiveProjections(sessionId, lastEventSeq, replay, live)) {
                 return FollowAttachResult.PENDING;

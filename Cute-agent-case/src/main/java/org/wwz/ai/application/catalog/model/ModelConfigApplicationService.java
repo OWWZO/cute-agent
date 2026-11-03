@@ -5,8 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.application.catalog.ApplicationResult;
-import org.wwz.ai.application.catalog.model.ModelConfigCommand;
-import org.wwz.ai.application.catalog.model.ModelConfigQueryCommand;
 import org.wwz.ai.domain.agent.catalog.model.AiClientModelConfig;
 import org.wwz.ai.domain.agent.catalog.model.ModelConnectionTestResult;
 import org.wwz.ai.domain.agent.catalog.port.IAiClientModelConfigRepository;
@@ -16,6 +14,7 @@ import org.wwz.ai.types.enums.ResponseCode;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * 模型配置管理用例。
@@ -192,7 +191,7 @@ public class ModelConfigApplicationService {
     }
 
     private ApplicationResult<List<AiClientModelConfig>> queryList(
-            java.util.function.Supplier<List<AiClientModelConfig>> query,
+            Supplier<List<AiClientModelConfig>> query,
             String errorMessage) {
         try {
             return ApplicationResult.success(query.get());

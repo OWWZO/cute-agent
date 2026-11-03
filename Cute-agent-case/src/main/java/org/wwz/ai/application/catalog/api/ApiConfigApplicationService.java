@@ -65,7 +65,7 @@ public class ApiConfigApplicationService {
     }
 
     public ApplicationResult<Boolean> updateByApiId(ApiConfigCommand command) {
-        if (command == null || !StringUtils.isNotBlank(command.apiId())) {
+        if (command == null || StringUtils.isBlank(command.apiId())) {
             return ApplicationResult.failure(ResponseCode.ILLEGAL_PARAMETER, "API ID不能为空", false);
         }
         try {
@@ -145,8 +145,8 @@ public class ApiConfigApplicationService {
         try {
             List<AiClientApiConfig> all = repository.findAll();
             List<AiClientApiConfig> filtered = all.stream()
-                    .filter(api -> !StringUtils.isNotBlank(command.apiId()) || api.getApiId().contains(command.apiId()))
-                    .filter(api -> !StringUtils.isNotBlank(command.baseUrl()) || api.getBaseUrl().contains(command.baseUrl()))
+                    .filter(api -> StringUtils.isBlank(command.apiId()) || api.getApiId().contains(command.apiId()))
+                    .filter(api -> StringUtils.isBlank(command.baseUrl()) || api.getBaseUrl().contains(command.baseUrl()))
                     .filter(api -> command.status() == null || api.getStatus().equals(command.status()))
                     .toList();
 

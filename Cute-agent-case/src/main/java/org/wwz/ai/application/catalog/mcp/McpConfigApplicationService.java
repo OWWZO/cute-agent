@@ -60,7 +60,7 @@ public class McpConfigApplicationService {
     }
 
     public ApplicationResult<Boolean> updateByMcpId(McpConfigCommand command) {
-        if (command == null || !StringUtils.isNotBlank(command.mcpId())) {
+        if (command == null || StringUtils.isBlank(command.mcpId())) {
             return ApplicationResult.failure(ResponseCode.ILLEGAL_PARAMETER, "MCP ID不能为空", false);
         }
         try {
