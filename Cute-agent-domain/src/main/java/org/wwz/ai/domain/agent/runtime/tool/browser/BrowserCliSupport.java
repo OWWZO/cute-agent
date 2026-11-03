@@ -223,7 +223,14 @@ public final class BrowserCliSupport {
         if (root == null) {
             root = Path.of(System.getProperty("java.io.tmpdir"), "cute-opencli").toString();
         }
-        return Path.of(root, userId).toString();
+        Path rootPath = Path.of(root).toAbsolutePath().normalize();
+        // userId 来自运行时上下文：归一化后必须严格落在 root 之内，否则拒绝，避免 .. 穿越。
+        String safeUserId = StringUtils.defaultIfBlank(StringUtils.trimToNull(userId), "unknown");
+        Path userPath = rootPath.resolve(safeUserId).normalize();
+        if (!userPath.startsWith(rootPath) || userPath.equals(rootPath)) {
+            throw new IllegalArgumentException("invalid userId for opencli cache dir: " + userId);
+        }
+        return userPath.toString();
     }
 
     public static List<String> stringList(Object raw) {
@@ -243,21 +250,23 @@ public final class BrowserCliSupport {
     /** CLI 结果转观察字段；cdpWsUrl 非空时对全文脱敏。 */
     public static Map<String, Object> toFields(CliResult result, String cdpWsUrl) {
         Map<String, Object> fields = new LinkedHashMap<>();
+        String redactedStderr = redactText(result.getStderr(), cdpWsUrl);
         fields.put("ok", result.isOk());
         fields.put("tool", result.getTool());
         fields.put("exit_code", result.getExitCode());
         fields.put("stdout", redactText(result.getStdout(), cdpWsUrl));
-        fields.put("stderr", redactText(result.getStderr(), cdpWsUrl));
+        fields.put("stderr", redactedStderr);
         fields.put("duration_ms", result.getDurationMs());
         fields.put("timed_out", result.isTimedOut());
         fields.put("truncated", result.isTruncated());
         // bsk CLI 失败时在 stderr 追加 `Hint:` / `Retry:` 两行，提升成结构化字段。
+        // 必须从脱敏后的 stderr 提取，否则 CDP WebSocket URL 会绕过 toFields 的脱敏泄漏给模型。
         if (!result.isOk()) {
-            String hint = stderrLine(result.getStderr(), "Hint: ");
+            String hint = stderrLine(redactedStderr, "Hint: ");
             if (hint != null) {
                 fields.put("error_hint", hint);
             }
-            String retry = stderrLine(result.getStderr(), "Retry: ");
+            String retry = stderrLine(redactedStderr, "Retry: ");
             if (retry != null) {
                 fields.put("retry", retry);
             }
