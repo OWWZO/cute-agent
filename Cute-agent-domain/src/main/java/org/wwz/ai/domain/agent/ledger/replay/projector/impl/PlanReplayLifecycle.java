@@ -144,8 +144,17 @@ final class PlanReplayLifecycle {
         if (plan == null || plan.getSteps() == null || plan.getSteps().isEmpty()) {
             return true;
         }
-        normalizePlan(plan);
-        return plan.getStepStatus().stream().allMatch(STATUS_COMPLETED::equals);
+        // 只读判断，避免谓词顺手改写调用方持有的计划；缺失状态按未完成处理，与旧 normalize 语义一致。
+        List<String> stepStatus = plan.getStepStatus();
+        if (stepStatus == null || stepStatus.size() < plan.getSteps().size()) {
+            return false;
+        }
+        for (int index = 0; index < plan.getSteps().size(); index++) {
+            if (!STATUS_COMPLETED.equals(stepStatus.get(index))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void validatePlanExists(Plan plan) {

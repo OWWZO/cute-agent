@@ -21,7 +21,6 @@ public class ReplayTiming implements Serializable {
 
     public static final String SOURCE_LEDGER = "ledger";
     public static final String SOURCE_RUNTIME = "runtime";
-    public static final String SOURCE_PAYLOAD = "payload";
     public static final String SOURCE_INFERRED = "inferred";
 
     private LocalDateTime startedAt;

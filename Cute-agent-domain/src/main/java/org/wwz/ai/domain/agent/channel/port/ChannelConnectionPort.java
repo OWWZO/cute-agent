@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.channel.port;
 
-import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.channel.model.ChannelBinding;
 
 /**

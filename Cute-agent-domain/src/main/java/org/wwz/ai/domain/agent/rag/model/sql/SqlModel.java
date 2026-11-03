@@ -1,12 +1,10 @@
 package org.wwz.ai.domain.agent.rag.model.sql;
 
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Map;
 
-@Slf4j
 @Data
 /**
  * SQL 查询抽象模型，承载选择列、来源表、过滤、分组和排序结构。
@@ -38,8 +36,6 @@ public class SqlModel {
 
     private String dialect;
 
-    private String sqlComment;
-
     private String fetch;
 
     private String having;
@@ -47,10 +43,6 @@ public class SqlModel {
      * sql模型having条件
      */
     private List<WhereCondition> havingConditionList;
-
-    private String selectType;
-
-    private String hint;
 
     Map<String, ModelColumn> modelColumnMap;
 

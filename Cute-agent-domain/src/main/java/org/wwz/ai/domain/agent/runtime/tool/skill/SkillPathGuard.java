@@ -23,9 +23,6 @@ public class SkillPathGuard {
     /** Windows 盘符前缀，例如 {@code C:foo}、{@code C:\foo}。 */
     private static final Pattern WINDOWS_DRIVE = Pattern.compile("^[A-Za-z]:.*");
 
-    /** UNC 前缀，例如 {@code //server/share}。 */
-    private static final Pattern UNC_PREFIX = Pattern.compile("^//[^/].*");
-
     public Path ensureUnderRoot(Path rootPath, Path candidatePath) {
         Path normalizedRoot = rootPath.toAbsolutePath().normalize();
         Path normalizedCandidate = candidatePath.toAbsolutePath().normalize();
@@ -47,6 +44,8 @@ public class SkillPathGuard {
     /**
      * 判断相对路径是否包含穿越/绝对路径/特殊前缀。
      * 无法解析的路径（{@link InvalidPathException}）一律视为非法。
+     * <p>返回 {@code true} 的含义是「输入不安全、调用方应拒绝」，不限于出现 {@code ..}；
+     * null/空白/UNC/盘符/波浪号等都会返回 true。</p>
      */
     public boolean hasTraversal(String relativePath) {
         if (relativePath == null || relativePath.isBlank()) {
@@ -59,9 +58,7 @@ public class SkillPathGuard {
         if (normalized.startsWith("~")) {
             return true;
         }
-        if (UNC_PREFIX.matcher(normalized).matches()) {
-            return true;
-        }
+        // UNC 路径（//server/share）已由上面的 startsWith("/") 拦截，无需重复判断。
         if (WINDOWS_DRIVE.matcher(normalized).matches()) {
             return true;
         }

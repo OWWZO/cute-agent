@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -40,9 +41,11 @@ public class LlmInvocation {
     private String modelName;
 
     /** 完整响应文本（content，面向用户/过程文） */
+    @ToString.Exclude
     private String responseText;
 
     /** 模型原生 CoT / reasoning_content（与 content 独立） */
+    @ToString.Exclude
     private String reasoningContent;
 
     /** 工具调用数量 */

@@ -30,7 +30,7 @@ public class SubAgentSessionToolScope {
      *         或类型已下架时返回 {@code null}，调用方据此保留全量工具池
      */
     public SubAgentDefinition resolve(String sessionId) {
-        if (StringUtils.isBlank(sessionId) || executionLedgerReadRepository == null) {
+        if (StringUtils.isBlank(sessionId)) {
             return null;
         }
         DialogueSession session = executionLedgerReadRepository.querySessionEntity(sessionId);

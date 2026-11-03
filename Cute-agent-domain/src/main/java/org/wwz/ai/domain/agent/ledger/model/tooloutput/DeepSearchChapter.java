@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -30,6 +31,16 @@ public class DeepSearchChapter {
     private String summary;
 
     private String status;
+
+    /** 只读视图，避免调用方通过 getter 改动章节内部的查询列表。 */
+    public List<String> getQueries() {
+        return queries == null ? List.of() : Collections.unmodifiableList(queries);
+    }
+
+    /** 只读视图，避免调用方通过 getter 改动章节内部的文档列表。 */
+    public List<DeepSearchDoc> getDocs() {
+        return docs == null ? List.of() : Collections.unmodifiableList(docs);
+    }
 
     public static DeepSearchChapter of(String chapterId,
                                        String title,

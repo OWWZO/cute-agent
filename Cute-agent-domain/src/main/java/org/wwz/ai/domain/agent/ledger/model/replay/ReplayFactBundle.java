@@ -11,6 +11,7 @@ import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -33,4 +34,16 @@ public class ReplayFactBundle implements Serializable {
 
     @Builder.Default
     private List<ArtifactView> artifacts = new ArrayList<>();
+
+    public List<LlmInvocationView> getLlmInvocations() {
+        return llmInvocations == null ? List.of() : Collections.unmodifiableList(llmInvocations);
+    }
+
+    public List<ToolInvocationView> getToolInvocations() {
+        return toolInvocations == null ? List.of() : Collections.unmodifiableList(toolInvocations);
+    }
+
+    public List<ArtifactView> getArtifacts() {
+        return artifacts == null ? List.of() : Collections.unmodifiableList(artifacts);
+    }
 }

@@ -48,7 +48,7 @@ public final class PlanApprovalObservationSupport {
         boolean approved = decision != null && decision.isApproved();
         String planContent = record.getPlanContent();
         String planFilePath = record.getPlanFilePath();
-        if (approved && decision != null && StringUtils.isNotBlank(decision.getEditedPlanContent())) {
+        if (approved && StringUtils.isNotBlank(decision.getEditedPlanContent())) {
             planContent = decision.getEditedPlanContent();
         }
 

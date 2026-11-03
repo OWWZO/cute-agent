@@ -6,6 +6,8 @@ import java.util.Locale;
 
 /**
  * 策展记忆主身份键。
+ * <p>id 只做 trim、区分大小写；调用方必须先把用户标识规范化到同一形态，
+ * 否则 {@code user("Alice")} 与 {@code user("alice")} 会分裂成两个 owner。</p>
  */
 @Value
 public class LtmOwner {

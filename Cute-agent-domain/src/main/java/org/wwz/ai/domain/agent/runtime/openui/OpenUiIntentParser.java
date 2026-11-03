@@ -56,7 +56,6 @@ public final class OpenUiIntentParser {
                         appendLine(replace, line);
                     }
                 }
-                default -> throw new IllegalStateException("未知解析阶段: " + phase);
             }
         }
         // EOF 时块还没闭合（缺结尾标记）→ 结构残缺，整块丢弃。

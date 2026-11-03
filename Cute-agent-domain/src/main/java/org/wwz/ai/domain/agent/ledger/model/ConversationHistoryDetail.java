@@ -28,10 +28,16 @@ public class ConversationHistoryDetail {
 
     private Boolean deepThink;
 
+    /**
+     * 会话累计 run 数。注意 {@link #runs} 可能因缺少 requestId 被过滤，
+     * 因此 {@code runs.size()} 不保证等于本字段，计数与明细是两套口径。
+     */
     private Integer runCount;
 
+    /** 会话累计完成 run 数；同样可能大于 {@link #runs} 的条数。 */
     private Integer finishedRunCount;
 
+    /** 会话累计失败 run 数；同样可能大于 {@link #runs} 的条数。 */
     private Integer failedRunCount;
 
     private LocalDateTime startedAt;
@@ -40,6 +46,13 @@ public class ConversationHistoryDetail {
 
     @Builder.Default
     private List<ConversationRunDetail> runs = new ArrayList<>();
+
+    /**
+     * setter 路径（Jackson/反序列化）同样保证非 null。
+     */
+    public void setRuns(List<ConversationRunDetail> runs) {
+        this.runs = runs == null ? new ArrayList<>() : runs;
+    }
 
     @Data
     @Builder

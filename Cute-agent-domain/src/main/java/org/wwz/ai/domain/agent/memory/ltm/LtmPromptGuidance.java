@@ -105,10 +105,6 @@ public final class LtmPromptGuidance {
                     + "skill_view, skills_search, and bash (Skill Creator / skill scripts). "
                     + "Other tools remain listed for request parity but will be denied — do not attempt them.";
 
-    /** @deprecated 使用 {@link #FORK_RUNTIME_TOOL_NOTE_MEMORY} / {@link #FORK_RUNTIME_TOOL_NOTE_CURATOR} */
-    @Deprecated
-    public static final String FORK_RUNTIME_TOOL_NOTE = FORK_RUNTIME_TOOL_NOTE_CURATOR;
-
     public static final String REVIEW_SKILL_GUIDANCE =
             "Also update the skill library when warranted. Be ACTIVE — reusable workflows belong in "
                     + "skills, not memory.\n"

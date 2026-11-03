@@ -180,7 +180,7 @@ public class SkillViewTool implements BaseTool {
         }
         List<String> lines = new ArrayList<>();
         String python = skillRuntimeLayout == null ? "python" : skillRuntimeLayout.getPython();
-        String dir = skillDir == null ? "skills" : skillDir;
+        String dir = skillDir;
         for (SkillScriptDefinition script : scripts.values()) {
             if (script == null) {
                 continue;

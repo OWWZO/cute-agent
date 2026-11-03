@@ -80,13 +80,13 @@ public class AgentStreamAccumulator {
     }
 
     @SuppressWarnings("unchecked")
-    public synchronized List<Object> getResulMapTask() {
+    public synchronized List<Object> getResultMapTask() {
         Object tasks = resultMap.get("tasks");
         return tasks instanceof List<?> ? (List<Object>) tasks : null;
     }
 
     public synchronized void setResultMapTask(List<Object> task) {
-        List<Object> tasks = getResulMapTask();
+        List<Object> tasks = getResultMapTask();
         if (tasks == null) {
             tasks = new ArrayList<>();
             resultMap.put("tasks", tasks);
@@ -96,7 +96,7 @@ public class AgentStreamAccumulator {
 
     @SuppressWarnings("unchecked")
     public synchronized void setResultMapSubTask(Object subTask) {
-        List<Object> tasks = getResulMapTask();
+        List<Object> tasks = getResultMapTask();
         if (tasks == null) {
             tasks = new ArrayList<>();
             tasks.add(new ArrayList<>());

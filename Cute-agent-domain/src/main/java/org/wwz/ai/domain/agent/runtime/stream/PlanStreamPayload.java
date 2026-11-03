@@ -59,6 +59,8 @@ public class PlanStreamPayload {
     }
 
     private static void addAt(List<String> target, List<String> source, int index) {
-        target.add(source != null && index < source.size() ? source.get(index) : null);
+        target.add(source != null && index < source.size() && source.get(index) != null
+                ? source.get(index)
+                : "");
     }
 }

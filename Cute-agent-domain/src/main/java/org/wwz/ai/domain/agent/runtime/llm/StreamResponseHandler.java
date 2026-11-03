@@ -494,18 +494,22 @@ public class StreamResponseHandler {
     }
 
     private int[] resolveIntervals() {
-        int firstInterval = 1;
-        int sendInterval = 3;
-        try {
-            String rawConfig = cuteConfig == null || cuteConfig.getMessageInterval() == null
-                    ? "1,3"
-                    : cuteConfig.getMessageInterval().getOrDefault("llm", "1,3");
-            String[] intervalConfig = rawConfig.split(",");
-            firstInterval = Math.max(1, Integer.parseInt(intervalConfig[0]));
-            sendInterval = Math.max(1, Integer.parseInt(intervalConfig[1]));
-        } catch (Exception ignore) {
+        String rawConfig = cuteConfig == null || cuteConfig.getMessageInterval() == null
+                ? "1,3"
+                : cuteConfig.getMessageInterval().getOrDefault("llm", "1,3");
+        String[] intervalConfig = rawConfig.split(",");
+        if (intervalConfig.length < 2) {
+            log.warn("消息间隔配置格式非法，回退默认值 1,3: {}", rawConfig);
+            return new int[]{1, 3};
         }
-        return new int[]{firstInterval, sendInterval};
+        try {
+            int firstInterval = Math.max(1, Integer.parseInt(intervalConfig[0].trim()));
+            int sendInterval = Math.max(1, Integer.parseInt(intervalConfig[1].trim()));
+            return new int[]{firstInterval, sendInterval};
+        } catch (NumberFormatException e) {
+            log.warn("消息间隔配置无法解析，回退默认值 1,3: {}", rawConfig);
+            return new int[]{1, 3};
+        }
     }
 
     private boolean shouldFlush(int tokenIndex, int firstInterval, int sendInterval) {

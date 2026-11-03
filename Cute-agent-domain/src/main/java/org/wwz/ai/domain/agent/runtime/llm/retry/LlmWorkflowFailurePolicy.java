@@ -34,8 +34,7 @@ public final class LlmWorkflowFailurePolicy {
         NOT_CONFIGURED,
         MODEL_UNAVAILABLE,
         INVALID_REQUEST,
-        QUOTA,
-        OTHER
+        QUOTA
     }
 
     public record Policy(Decision decision, StopKind kind) {

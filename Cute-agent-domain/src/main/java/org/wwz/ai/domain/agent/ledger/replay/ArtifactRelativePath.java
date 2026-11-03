@@ -2,6 +2,7 @@ package org.wwz.ai.domain.agent.ledger.replay;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactFormatter;
@@ -11,6 +12,7 @@ import java.util.Map;
 /**
  * 从 artifact 元数据还原工作区相对路径，供历史回放的 fileInfo / artifactRefs 建树。
  */
+@Slf4j
 public final class ArtifactRelativePath {
 
     private ArtifactRelativePath() {
@@ -62,6 +64,9 @@ public final class ArtifactRelativePath {
                 return description.substring("workspace:".length());
             }
         } catch (Exception ignore) {
+            // 元数据损坏时回退到文件名，但仍留下诊断线索，避免整棵回放树无提示降级。
+            log.debug("artifact 元数据解析失败，回退文件名: metadata={}",
+                    StringUtils.abbreviate(metadataJson, 500), ignore);
             return null;
         }
         return null;

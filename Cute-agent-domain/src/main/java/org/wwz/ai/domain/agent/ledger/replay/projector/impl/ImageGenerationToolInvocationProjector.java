@@ -39,7 +39,6 @@ public class ImageGenerationToolInvocationProjector extends AbstractToolInvocati
             Map<String, Object> fileResult = new LinkedHashMap<>();
             fileResult.put("command", "生成图片");
             fileResult.put("fileInfo", mergedFileInfo);
-            putToolBindingIfPresent(fileResult, invocation);
             events.add(buildTaskEvent(
                     state,
                     invocation,

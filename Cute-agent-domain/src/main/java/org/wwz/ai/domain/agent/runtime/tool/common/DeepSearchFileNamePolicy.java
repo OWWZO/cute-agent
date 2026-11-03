@@ -1,11 +1,13 @@
 package org.wwz.ai.domain.agent.runtime.tool.common;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.util.StringUtil;
 
 /**
  * 报告产物命名规则：文件名以 reportFileName 为基准，不从完整任务文本派生。
  */
+@Slf4j
 final class DeepSearchFileNamePolicy {
 
     static final int MAX_REPORT_FILE_NAME_LENGTH = 20;
@@ -26,9 +28,11 @@ final class DeepSearchFileNamePolicy {
 
     static String resolveReportFileName(String requestedFileName, String fallbackFileName) {
         String fileName = sanitizeReportFileName(requestedFileName);
-        if (validateReportFileName(requestedFileName) == null) {
+        String invalidReason = validateReportFileName(requestedFileName);
+        if (invalidReason == null) {
             return fileName;
         }
+        log.warn("报告文件名不合法，使用回退名: requested={}, reason={}", requestedFileName, invalidReason);
         String fallback = sanitizeReportFileName(fallbackFileName);
         return validateReportFileName(fallback) == null ? fallback : DEFAULT_REPORT_FILE_NAME;
     }

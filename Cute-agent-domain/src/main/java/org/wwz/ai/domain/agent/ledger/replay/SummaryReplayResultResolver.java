@@ -56,9 +56,9 @@ public final class SummaryReplayResultResolver {
                                List<Map<String, Object>> artifactRefs,
                                List<String> artifactKeys) {
             this.summaryText = summaryText;
-            this.fileList = fileList == null ? List.of() : fileList;
-            this.artifactRefs = artifactRefs == null ? List.of() : artifactRefs;
-            this.artifactKeys = artifactKeys == null ? List.of() : artifactKeys;
+            this.fileList = fileList == null ? List.of() : List.copyOf(fileList);
+            this.artifactRefs = artifactRefs == null ? List.of() : List.copyOf(artifactRefs);
+            this.artifactKeys = artifactKeys == null ? List.of() : List.copyOf(artifactKeys);
         }
 
         public String getSummaryText() {

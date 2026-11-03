@@ -22,7 +22,6 @@ public class PendingUserQuestion {
 
     public static final String STATUS_PENDING = "pending";
     public static final String STATUS_ANSWERED = "answered";
-    public static final String STATUS_TIMEOUT = "timeout";
     public static final String STATUS_CANCELLED = "cancelled";
 
     private String questionId;

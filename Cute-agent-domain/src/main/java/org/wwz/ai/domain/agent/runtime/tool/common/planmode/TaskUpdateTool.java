@@ -79,6 +79,7 @@ public class TaskUpdateTool implements BaseTool {
                 }
                 SessionTaskListPublisher.publish(context);
                 Map<String, Object> deleted = new LinkedHashMap<>();
+                deleted.put("success", Boolean.TRUE);
                 deleted.put("deleted", Boolean.TRUE);
                 deleted.put("taskId", taskId);
                 deleted.put("message", "已删除任务 #" + taskId);
@@ -87,6 +88,16 @@ public class TaskUpdateTool implements BaseTool {
 
             List<String> addBlocks = asStringList(params.get("addBlocks"));
             List<String> addBlockedBy = asStringList(params.get("addBlockedBy"));
+            boolean hasUpdatableField = params.containsKey("subject")
+                    || params.containsKey("description")
+                    || StringUtils.isNotBlank(status)
+                    || params.containsKey("activeForm")
+                    || params.containsKey("owner")
+                    || addBlocks != null
+                    || addBlockedBy != null;
+            if (!hasUpdatableField) {
+                return fail("TaskUpdate 失败：未提供任何可更新字段");
+            }
             Optional<SessionTaskItem> updated = context.requireSessionTaskList().update(
                     taskId,
                     emptyToNull(ToolArgs.str(params.get("subject"))),

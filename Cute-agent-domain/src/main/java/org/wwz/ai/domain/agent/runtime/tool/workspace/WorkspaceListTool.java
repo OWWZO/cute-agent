@@ -1,5 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.tool.workspace;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -92,10 +94,14 @@ public class WorkspaceListTool extends AbstractWorkspacePathTool {
             return failResult(e.getMessage());
         } catch (IOException e) {
             log.error("{} workspace_list io error, input={}", requestId(context), input, e);
-            return failResult("workspace_list execute failed");
+            return failResult("workspace_list execute failed: " + describe(e));
         } catch (Exception e) {
             log.error("{} workspace_list error, input={}", requestId(context), input, e);
-            return failResult("workspace_list execute failed");
+            return failResult("workspace_list execute failed: " + describe(e));
         }
+    }
+
+    private static String describe(Exception e) {
+        return StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
     }
 }

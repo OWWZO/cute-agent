@@ -18,7 +18,7 @@ public class VectorIndexService {
 
     public boolean isCollectionExist(String collectionName) throws ExecutionException, InterruptedException {
         try {
-            return requireIndexPort().collectionExists(collectionName);
+            return vectorIndexAdminPort.collectionExists(collectionName);
         } catch (Exception e) {
             throw asExecutionException(e);
         }
@@ -27,7 +27,7 @@ public class VectorIndexService {
     public void createCosineCollection(String collectionName, int dimension)
             throws ExecutionException, InterruptedException {
         try {
-            requireIndexPort().createCollection(collectionName, dimension);
+            vectorIndexAdminPort.createCollection(collectionName, dimension);
         } catch (Exception e) {
             throw asExecutionException(e);
         }
@@ -36,7 +36,7 @@ public class VectorIndexService {
     public void recreateCosineCollection(String collectionName, int dimension)
             throws ExecutionException, InterruptedException {
         try {
-            requireIndexPort().recreateCollection(collectionName, dimension);
+            vectorIndexAdminPort.recreateCollection(collectionName, dimension);
         } catch (Exception e) {
             throw asExecutionException(e);
         }
@@ -45,17 +45,10 @@ public class VectorIndexService {
     public void deleteByFilterSync(String collectionName, VectorFilter filter)
             throws ExecutionException, InterruptedException {
         try {
-            requireIndexPort().deleteByFilter(collectionName, filter);
+            vectorIndexAdminPort.deleteByFilter(collectionName, filter);
         } catch (Exception e) {
             throw asExecutionException(e);
         }
-    }
-
-    private VectorIndexAdminPort requireIndexPort() {
-        if (vectorIndexAdminPort == null) {
-            throw new IllegalStateException("Vector index port is unavailable");
-        }
-        return vectorIndexAdminPort;
     }
 
     private ExecutionException asExecutionException(Exception exception) throws InterruptedException {

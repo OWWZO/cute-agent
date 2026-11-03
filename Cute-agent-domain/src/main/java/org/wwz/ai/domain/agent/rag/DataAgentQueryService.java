@@ -24,6 +24,10 @@ public interface DataAgentQueryService {
 
     void chatQuery(DataAgentChatQuery query, AgentMessageStream stream) throws Exception;
 
+    /**
+     * 同步取数。实现吞掉执行异常并返回空列表以便 HTTP 调用方降级，
+     * 失败信息仅记录在服务端日志；调用方无法从返回值区分「无数据」与「查询失败」。
+     */
     List<DataQueryResult> apiChatQuery(DataAgentChatQuery query);
 
     SqlExecutionResult testQuery(DataAgentChatQuery query);

@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.capability;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.domain.agent.adapter.repository.ISessionCapabilityRepository;
@@ -21,6 +22,7 @@ import java.util.Set;
 /**
  * 会话级 skill / MCP 能力清单与差集开关。
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SessionCapabilityService {
@@ -64,8 +66,9 @@ public class SessionCapabilityService {
                 boolean enabled = mcpOv.getOrDefault(mcpId, true);
                 mcps.add(new CapabilityItem(mcpId, label, enabled, "platform"));
             }
-        } catch (Exception ignored) {
-            // 发现失败返回空 MCP 列表
+        } catch (Exception e) {
+            // 发现失败仍降级为空 MCP 列表，但保留告警，避免与「确实没配置」混淆。
+            log.warn("MCP 工具发现失败，按空列表降级: sessionId={}", sessionId, e);
         }
 
         return new SessionCapabilitiesView(false, skills, mcps);

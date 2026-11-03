@@ -13,6 +13,9 @@ public final class VectorPoint {
     private final Map<String, Object> payload;
 
     public VectorPoint(String id, List<Float> vector, Map<String, Object> payload) {
+        if (id == null || id.isBlank()) {
+            throw new IllegalArgumentException("向量点 id 不能为空");
+        }
         this.id = id;
         this.vector = List.copyOf(vector == null ? List.of() : vector);
         this.payload = Map.copyOf(payload == null ? Map.of() : payload);

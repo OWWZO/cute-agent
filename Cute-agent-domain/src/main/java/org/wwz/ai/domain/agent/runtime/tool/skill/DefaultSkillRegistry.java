@@ -263,11 +263,7 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
 
     @Override
     public SkillDescriptor getRequired(String identifier) {
-        try {
-            return find(identifier).orElseThrow(() -> new SkillLoadException("Skill not found: " + identifier));
-        } catch (SkillLoadException e) {
-            throw e;
-        }
+        return find(identifier).orElseThrow(() -> new SkillLoadException("Skill not found: " + identifier));
     }
 
     @Override

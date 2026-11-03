@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.llm;
 
+import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.ledger.model.AgentRunState;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -16,6 +17,7 @@ import java.util.function.Function;
  * 主模型耗尽重试后的备援模型策略。
  * 瞬态网络、鉴权/证书和容量类失败可切换；取消、上下文超限不切换。
  */
+@Slf4j
 public final class LlmModelFallback {
 
     private static final String[] NON_FALLBACK_MARKERS = {
@@ -62,6 +64,7 @@ public final class LlmModelFallback {
             }
             return deps.getLlmDependencies().getModelCatalog().resolveFallbackModelNames(primaryModel);
         } catch (Exception e) {
+            log.debug("解析备用模型失败，按无备用处理: primary={}", primaryModel, e);
             return List.of();
         }
     }

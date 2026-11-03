@@ -20,7 +20,9 @@ public class ChatModelSchema implements Serializable {
     private String dataType;
     private String synonyms;
     private String vectorUuid;
+    /** 默认召回：0 否 / 1 是。 */
     private int defaultRecall;
+    /** 智能分析建议：-1 禁止 / 0 默认 / 1 建议。 */
     private int analyzeSuggest;
     private Integer yn;
 

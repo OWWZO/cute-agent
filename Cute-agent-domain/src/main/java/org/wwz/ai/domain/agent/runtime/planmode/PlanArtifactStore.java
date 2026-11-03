@@ -71,22 +71,4 @@ public class PlanArtifactStore {
         }
     }
 
-    /**
-     * 判断绝对路径是否为当前会话的 plan 文件（plan 期唯一允许写入的路径）。
-     */
-    public boolean isSessionPlanFile(String sessionId, String absolutePath) {
-        if (StringUtils.isBlank(absolutePath)) {
-            return false;
-        }
-        Path planPath = resolvePlanPath(sessionId);
-        if (planPath == null) {
-            return false;
-        }
-        try {
-            Path candidate = Path.of(absolutePath).toAbsolutePath().normalize();
-            return planPath.toAbsolutePath().normalize().equals(candidate);
-        } catch (Exception e) {
-            return false;
-        }
-    }
 }

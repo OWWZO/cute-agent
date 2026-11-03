@@ -36,7 +36,7 @@ public class SqlQueryTool extends AbstractDocReadTool {
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("query", stringProp("SELECT-only SQL query"));
         properties.put("tables", objectProp("name -> records|artifact|path"));
-        properties.put("data", Map.of("type", "array", "items", objectProp("Row object")));
+        properties.put("data", arrayProp("Inline rows registered as table 'data'.", objectProp("Row object")));
         properties.put("source_path", stringProp("Single table file path (alias table name: data)"));
         properties.put("limit", intProp("Max result rows (default 1000)"));
         properties.put("explain", boolProp("If true, only explain query without executing"));

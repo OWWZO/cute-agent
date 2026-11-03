@@ -16,6 +16,11 @@ public final class WorkingMemoryScopes {
     private WorkingMemoryScopes() {
     }
 
+    /**
+     * 归一化 scope：空白回退到 {@link #MAIN}，其余仅 trim。
+     * <p>注意：这里<b>不迁移</b>历史 {@code sub:{agentId}} 值；读取存量数据时调用方需自行识别，
+     * 否则会继续按旧 scope 键读写而与统一后的 main 视图互不可见。</p>
+     */
     public static String normalize(String scope) {
         return StringUtils.isBlank(scope) ? MAIN : scope.trim();
     }

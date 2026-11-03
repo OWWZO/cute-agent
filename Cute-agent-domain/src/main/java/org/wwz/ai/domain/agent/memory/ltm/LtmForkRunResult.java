@@ -14,6 +14,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class LtmForkRunResult {
 
+    /** 未设置状态（builder 默认 0），用于显式识别未初始化的结果。 */
+    public static final int STATUS_UNKNOWN = 0;
     public static final int STATUS_SUCCESS = 1;
     public static final int STATUS_FAILED = 2;
     public static final int STATUS_SKIPPED = 3;

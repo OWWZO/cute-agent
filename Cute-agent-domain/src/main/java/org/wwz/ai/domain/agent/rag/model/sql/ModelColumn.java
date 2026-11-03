@@ -43,7 +43,7 @@ public class ModelColumn {
     private String functionName;
     private List<String> functionArgList;
 
-    private boolean isStar;
+    private boolean star;
 
     private String tableAlias;
 

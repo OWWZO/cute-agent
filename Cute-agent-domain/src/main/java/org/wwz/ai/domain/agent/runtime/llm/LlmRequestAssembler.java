@@ -8,7 +8,6 @@ import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.tool.mcp.model.McpToolInfo;
-import org.wwz.ai.domain.agent.runtime.util.ToolSchemaNormalizer;
 
 import java.util.ArrayList;
 import java.util.Comparator;

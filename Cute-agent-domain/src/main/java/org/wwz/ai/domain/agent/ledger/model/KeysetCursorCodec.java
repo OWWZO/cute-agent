@@ -61,6 +61,9 @@ public final class KeysetCursorCodec {
                 }
                 return decoded;
             }
+        } catch (IllegalArgumentException exception) {
+            // 版本头/尾随数据校验抛出的已是归一化异常，避免二次包装。
+            throw exception;
         } catch (IOException | RuntimeException exception) {
             throw invalidCursor(invalidMessage);
         }

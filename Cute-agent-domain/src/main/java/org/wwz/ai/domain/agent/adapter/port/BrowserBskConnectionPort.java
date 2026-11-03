@@ -28,6 +28,10 @@ public interface BrowserBskConnectionPort {
     /**
      * 断开该用户的所有 bsk 扩展连接（前端「断开」按钮语义）。
      *
+     * <p>语义：幂等——用户没有连接时为空操作；同步——返回前完成连接关闭。
+     * 返回值为 {@code void}，调用方无法区分「本次确实断开」与「本来就没连」，
+     * 如需展示差异应先调用 {@link #isOnline(String)}。</p>
+     *
      * @param userId 配对时的用户 id
      */
     void disconnect(String userId);

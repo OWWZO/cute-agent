@@ -24,6 +24,7 @@ public class UserQuestionRecord {
     private String toolCallId;
     private List<Map<String, Object>> questions;
     private Map<String, String> answers;
+    /** 生命周期状态，取值必须来自 {@link UserQuestionStatuses} 的常量。 */
     private String status;
     private LocalDateTime expiresAt;
     private String resumeRequestId;

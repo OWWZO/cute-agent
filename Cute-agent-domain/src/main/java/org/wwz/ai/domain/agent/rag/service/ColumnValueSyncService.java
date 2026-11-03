@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.rag.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelInfo;
@@ -12,14 +13,12 @@ import java.util.List;
 /**
  * Domain-facing column-value index facade kept for startup and metadata compatibility callers.
  */
+@Slf4j
 @Service
 public class ColumnValueSyncService {
 
-    private ColumnValueIndexAdminPort columnValueIndexAdminPort;
-    private ColumnValueSyncPort columnValueSyncPort;
-
-    public ColumnValueSyncService() {
-    }
+    private final ColumnValueIndexAdminPort columnValueIndexAdminPort;
+    private final ColumnValueSyncPort columnValueSyncPort;
 
     @Autowired
     public ColumnValueSyncService(ColumnValueIndexAdminPort columnValueIndexAdminPort,
@@ -45,10 +44,16 @@ public class ColumnValueSyncService {
     }
 
     public void syncColumnValueBatch(ChatModelInfo modelInfo, List<ChatModelSchema> schemas) {
-        if (schemas == null || schemas.isEmpty() || columnValueSyncPort == null) {
+        if (schemas == null || schemas.isEmpty()) {
+            return;
+        }
+        String modelCode = modelInfo == null ? null : modelInfo.getCode();
+        if (columnValueSyncPort == null) {
+            log.warn("column-value 同步端口缺失，跳过同步: modelCode={}", modelCode);
             return;
         }
         if (columnValueIndexAdminPort == null || !columnValueIndexAdminPort.isAvailable()) {
+            log.warn("column-value 索引不可用，跳过同步: modelCode={}", modelCode);
             return;
         }
         columnValueSyncPort.syncColumnValues(modelInfo, List.copyOf(schemas));
@@ -64,13 +69,5 @@ public class ColumnValueSyncService {
         if (columnValueIndexAdminPort == null) {
             throw new IllegalStateException("column-value index port is unavailable");
         }
-    }
-
-    public void setColumnValueIndexAdminPort(ColumnValueIndexAdminPort columnValueIndexAdminPort) {
-        this.columnValueIndexAdminPort = columnValueIndexAdminPort;
-    }
-
-    public void setColumnValueSyncPort(ColumnValueSyncPort columnValueSyncPort) {
-        this.columnValueSyncPort = columnValueSyncPort;
     }
 }

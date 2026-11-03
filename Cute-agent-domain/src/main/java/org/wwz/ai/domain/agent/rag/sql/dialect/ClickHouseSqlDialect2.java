@@ -21,9 +21,4 @@ public class ClickHouseSqlDialect2 extends ClickHouseSqlDialect {
         buf.append(val.replace(literalEndQuoteString, literalEscapedQuote));
         buf.append(literalEndQuoteString);
     }
-
-    @Override
-    public String quoteIdentifier(String val) {
-        return super.quoteIdentifier(val);
-    }
 }

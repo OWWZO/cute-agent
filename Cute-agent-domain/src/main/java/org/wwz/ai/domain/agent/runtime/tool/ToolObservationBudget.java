@@ -70,9 +70,8 @@ public final class ToolObservationBudget {
         if (file == null) {
             return ToolObservationSerializer.truncateForLlm(observation, cap);
         }
-        String relative = context.getWorkspaceRoot() == null
-                ? file.toString()
-                : relativize(Path.of(context.getWorkspaceRoot()), file);
+        // persist() 仅在 workspaceRoot 非空白时返回文件，这里直接相对化。
+        String relative = relativize(Path.of(context.getWorkspaceRoot()), file);
         return envelope(observation.length(), relative, observation.substring(0, PREVIEW_CHARS));
     }
 

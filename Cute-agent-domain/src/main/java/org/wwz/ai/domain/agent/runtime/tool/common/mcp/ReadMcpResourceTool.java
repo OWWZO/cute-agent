@@ -72,8 +72,8 @@ public class ReadMcpResourceTool implements BaseTool {
             return ToolResultPayload.okData(McpToolNames.READ_MCP_RESOURCE, fields);
         } catch (Exception e) {
             log.warn("ReadMcpResource failed", e);
-            String msg = "ReadMcpResource 失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
-            return ToolResultPayload.failureFrom(msg, null);
+            // 异常细节只留在服务端日志，避免把主机名/路径/连接串带进模型上下文。
+            return ToolResultPayload.failureFrom("ReadMcpResource 失败，详见服务端日志。", null);
         }
     }
 

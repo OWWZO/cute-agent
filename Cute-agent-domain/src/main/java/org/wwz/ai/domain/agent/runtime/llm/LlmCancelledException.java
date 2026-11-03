@@ -7,6 +7,8 @@ import java.util.concurrent.CancellationException;
  */
 public class LlmCancelledException extends CancellationException {
 
+    private static final long serialVersionUID = 1L;
+
     private final String partialContent;
 
     public LlmCancelledException(String reason, String partialContent) {

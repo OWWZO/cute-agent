@@ -95,11 +95,6 @@ public class WorkingMemoryProjector {
         if (message.getRole() == RoleType.TOOL) {
             return "tool_observation";
         }
-        if (message.getRole() == RoleType.ASSISTANT
-                && message.getToolCalls() != null
-                && !message.getToolCalls().isEmpty()) {
-            return "assistant";
-        }
         if (message.getRole() == RoleType.ASSISTANT) {
             return "assistant";
         }

@@ -16,6 +16,10 @@ import java.util.List;
  */
 public record OpenUiFixResult(String status, String content, List<OpenUiFixError> errors, String message) {
 
+    public OpenUiFixResult {
+        errors = errors == null ? List.of() : List.copyOf(errors);
+    }
+
     public static final String FIXED = "fixed";
     public static final String ALREADY_VALID = "already_valid";
     public static final String FIX_FAILED = "fix_failed";

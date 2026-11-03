@@ -39,7 +39,8 @@ public final class SessionControl {
      * 绑定共享的 Todo 列表。null 被忽略，避免把已工作的列表打空。
      */
     public synchronized void bindSessionTaskList(SessionTaskListStore store) {
-        if (store != null) {
+        // 只在未绑定或重复绑定同一实例时生效，避免后到的绑定覆盖仍在使用的 Todo 列表。
+        if (store != null && (this.sessionTaskList == null || this.sessionTaskList == store)) {
             this.sessionTaskList = store;
         }
     }
@@ -69,7 +70,8 @@ public final class SessionControl {
      * 绑定共享的后台任务表。null 被忽略。
      */
     public synchronized void bindBackgroundTasks(RuntimeBackgroundTaskRegistry registry) {
-        if (registry != null) {
+        // 同上：不覆盖已绑定的注册表，避免丢失在跑任务的 Future/取消句柄。
+        if (registry != null && (this.backgroundTasks == null || this.backgroundTasks == registry)) {
             this.backgroundTasks = registry;
         }
     }

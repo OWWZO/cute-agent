@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.rag.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.domain.agent.rag.model.embedding.TextEmbeddingRequest;
@@ -11,6 +12,7 @@ import java.util.List;
 /**
  * Domain-facing embedding facade kept for the startup runner compatibility contract.
  */
+@Slf4j
 @Service
 public class TextEmbeddingService {
 
@@ -32,6 +34,7 @@ public class TextEmbeddingService {
             TextEmbeddingResult result = textEmbeddingPort.embed(new TextEmbeddingRequest(texts, true));
             return result == null || !result.isAvailable() ? null : result.getVectors();
         } catch (Exception e) {
+            log.warn("文本向量化失败，返回空结果: textCount={}", texts == null ? 0 : texts.size(), e);
             return null;
         }
     }

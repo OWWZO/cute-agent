@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.tool.cli;
 
+import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Value;
 
@@ -12,7 +13,7 @@ import java.util.List;
  * 工具结果、LLM observation 或 Ledger metadata。
  */
 @Value
-@Builder
+@Builder(access = AccessLevel.PACKAGE)
 public class CliArtifactCapturePlan {
 
     List<String> originalArgs;

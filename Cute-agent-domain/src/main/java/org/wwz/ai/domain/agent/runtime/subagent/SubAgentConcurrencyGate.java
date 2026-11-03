@@ -17,15 +17,25 @@ public final class SubAgentConcurrencyGate {
     private final int maxConcurrent;
     private final long acquireTimeoutSeconds;
 
+    /**
+     * @param acquireTimeoutSeconds 获取许可的等待秒数；0 表示不等待（tryAcquire 立即返回），
+     *                              负值会被归零，因此配置为负时等同「不等待」
+     */
     public SubAgentConcurrencyGate(int maxConcurrent, long acquireTimeoutSeconds) {
         this.maxConcurrent = Math.max(1, maxConcurrent);
         this.acquireTimeoutSeconds = Math.max(0L, acquireTimeoutSeconds);
         this.semaphore = new Semaphore(this.maxConcurrent, true);
     }
 
+    /**
+     * 默认全局闸门。返回共享实例，确保未显式注入 gate 的调用方仍受同一个全局并发上限约束。
+     */
     public static SubAgentConcurrencyGate defaults() {
-        return new SubAgentConcurrencyGate(DEFAULT_MAX_CONCURRENT, DEFAULT_ACQUIRE_TIMEOUT_SECONDS);
+        return DEFAULT_GATE;
     }
+
+    private static final SubAgentConcurrencyGate DEFAULT_GATE =
+            new SubAgentConcurrencyGate(DEFAULT_MAX_CONCURRENT, DEFAULT_ACQUIRE_TIMEOUT_SECONDS);
 
     public int getMaxConcurrent() {
         return maxConcurrent;

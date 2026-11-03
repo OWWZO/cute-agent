@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
-import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.askuser.UserInputRequiredException;
@@ -20,7 +19,6 @@ import java.util.Map;
  * 不再在工具线程上 Future.get 阻塞等待。
  * </p>
  */
-@Slf4j
 public class AskUserQuestionTool implements BaseTool {
 
     public static final String NAME = "AskUserQuestion";

@@ -18,6 +18,7 @@ public final class DesktopControlStatuses {
     }
 
     public static boolean isOpen(String status) {
-        return PENDING.equals(status) || RESUME_PENDING.equals(status) || RESUMING.equals(status);
+        // 显式判空：List.of(...).contains(null) 会抛 NPE，这里保持对 null 返回 false。
+        return status != null && OPEN.contains(status);
     }
 }

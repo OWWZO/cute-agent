@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.tasklist;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentResult;
@@ -18,6 +19,7 @@ import java.util.function.BooleanSupplier;
  * 后台运行任务注册表。
  * 可选挂载 {@link TasklistPersistencePort} 实现跨 run 持久化。
  */
+@Slf4j
 public class RuntimeBackgroundTaskRegistry {
 
     private final Map<String, RuntimeBackgroundTask> tasks = new ConcurrentHashMap<>();
@@ -371,9 +373,8 @@ public class RuntimeBackgroundTaskRegistry {
         try {
             persistence.upsertBackgroundTask(sessionId, task);
         } catch (Exception e) {
-            // 落库失败会导致跨轮 TaskOutput not_found；至少打到 stderr 便于运维发现
-            System.err.println("[RuntimeBackgroundTaskRegistry] persist failed sessionId="
-                    + sessionId + " taskId=" + task.getId() + " err=" + e.getMessage());
+            // 落库失败会导致跨轮 TaskOutput not_found，保留完整异常便于运维排查。
+            log.error("后台任务落库失败 sessionId={} taskId={}", sessionId, task.getId(), e);
         }
     }
 

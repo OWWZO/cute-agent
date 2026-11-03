@@ -22,6 +22,7 @@ public class DesktopControlRecord {
     private String reason;
     private String streamUrl;
     private Double holdUntil;
+    /** 生命周期状态，取值必须来自 {@link DesktopControlStatuses} 的常量。 */
     private String status;
     private String resumeRequestId;
     private String resumeContextJson;

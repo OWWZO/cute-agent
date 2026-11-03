@@ -2,7 +2,6 @@ package org.wwz.ai.domain.agent.memory.ltm;
 
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -27,13 +26,6 @@ public final class LtmMemoryGuard {
     /** flush/review fork：禁止再触发 sync/review 调度 */
     public static boolean isSideEffectsDisabled(AgentContext context) {
         return context != null && Boolean.TRUE.equals(context.getLtmSideEffectsDisabled());
-    }
-
-    public static boolean isMemoryWriteTool(String toolName) {
-        if (toolName == null || toolName.isBlank()) {
-            return false;
-        }
-        return MEMORY_WRITE_TOOLS.contains(toolName.trim().toLowerCase(Locale.ROOT));
     }
 
     public static String deniedMessage() {
