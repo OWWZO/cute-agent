@@ -2,9 +2,108 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
-import { WorkspaceMRagView } from "./view";
+import { WorkspaceMRagView, type WorkspaceMRagViewProps } from "./view";
+
+function buildProps(
+  overrides: Partial<WorkspaceMRagViewProps> = {}
+): WorkspaceMRagViewProps {
+  return {
+    knowledgeBases: [],
+    knowledgeBasesLoading: false,
+    knowledgeBasesError: "",
+    selectedKnowledgeBaseId: "",
+    onSelectKnowledgeBase: () => {},
+    onRefreshKnowledgeBases: () => {},
+    deletingKnowledgeBaseId: "",
+    onDeleteKnowledgeBase: () => {},
+    createKnowledgeBaseName: "",
+    createKnowledgeBaseDesc: "",
+    onCreateKnowledgeBaseNameChange: () => {},
+    onCreateKnowledgeBaseDescChange: () => {},
+    creatingKnowledgeBase: false,
+    onCreateKnowledgeBase: () => {},
+    selectedKnowledgeBase: null,
+    files: [],
+    filesLoading: false,
+    filesError: "",
+    uploadingFiles: false,
+    addingWebUrl: false,
+    webUrl: "",
+    onWebUrlChange: () => {},
+    onUploadFiles: () => {},
+    onAddWebUrl: () => {},
+    onRefreshFiles: () => {},
+    activeFullContentFileId: "",
+    fullContentLoading: false,
+    fullContentDrawerOpen: false,
+    fullContentTitle: "",
+    fullContentStatus: "IDLE",
+    fullContentError: "",
+    fullContentMarkdown: "",
+    onOpenFullContent: () => {},
+    onCloseFullContent: () => {},
+    onDeleteFile: () => {},
+    sessions: [],
+    sessionsLoading: false,
+    sessionsError: "",
+    activeSessionId: "",
+    sessionTurns: [],
+    onCreateSession: () => {},
+    onSelectSession: () => {},
+    question: "",
+    onQuestionChange: () => {},
+    querying: false,
+    queryAnswer: "",
+    queryError: "",
+    queryRawChunks: [],
+    onSubmitQuery: () => {},
+    onStopQuery: () => {},
+    onClearQueryResult: () => {},
+    ...overrides,
+  };
+}
 
 describe("WorkspaceMRagView", () => {
+  it("知识源加载完成前不显示空态", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <WorkspaceMRagView {...buildProps({ knowledgeBasesLoading: true })} />
+      </MemoryRouter>
+    );
+
+    expect(html).toContain("正在加载知识源");
+    expect(html).not.toContain("先选一个知识源");
+  });
+
+  it("资料加载完成前不显示「先导入资料」", () => {
+    const knowledgeBase = {
+      id: "kb-1",
+      name: "产品资料库",
+      description: "用于销售问答",
+      chunkType: "fixed_size" as const,
+      chunkSize: null,
+      chunkOverlapSize: null,
+      createdAt: "2026-04-26T10:00:00",
+      updatedAt: "2026-04-26T10:00:00",
+      raw: {},
+    };
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <WorkspaceMRagView
+          {...buildProps({
+            knowledgeBases: [knowledgeBase],
+            selectedKnowledgeBaseId: knowledgeBase.id,
+            selectedKnowledgeBase: knowledgeBase,
+            filesLoading: true,
+          })}
+        />
+      </MemoryRouter>
+    );
+
+    expect(html).toContain("正在加载资料");
+    expect(html).not.toContain("先导入资料");
+  });
+
   it("渲染知识库、文件访问入口和检索结果区域", () => {
     const html = renderToStaticMarkup(
       <MemoryRouter initialEntries={["/workspace/mrag"]}>

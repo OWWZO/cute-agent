@@ -15,7 +15,10 @@ type RefreshKnowledgeBaseOptions = {
 
 export function useKnowledgeBaseCatalog(toolBaseUrl: string) {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
-  const [knowledgeBasesLoading, setKnowledgeBasesLoading] = useState(false);
+  // 首次进入时目录尚未请求，先按加载中处理，避免先闪一下「先选一个知识源」。
+  const [knowledgeBasesLoading, setKnowledgeBasesLoading] = useState(
+    Boolean(toolBaseUrl)
+  );
   const [knowledgeBasesError, setKnowledgeBasesError] = useState("");
   const [createKnowledgeBaseName, setCreateKnowledgeBaseName] = useState("");
   const [createKnowledgeBaseDesc, setCreateKnowledgeBaseDesc] = useState("");

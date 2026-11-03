@@ -171,6 +171,15 @@ function ActionButton(props: {
   );
 }
 
+function CenteredLoading(props: { label: string }) {
+  return (
+    <div className="flex min-h-[48vh] items-center justify-center text-ui-caption text-[var(--chat-text-muted)]">
+      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+      {props.label}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Knowledge Base Card                                               */
 /* ------------------------------------------------------------------ */
@@ -737,13 +746,17 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
         <div className="relative min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[760px] px-5 pb-44 pt-8 sm:px-8 sm:pt-10">
             {!selectedKnowledgeBase ? (
-              <div className="flex min-h-[48vh] items-center justify-center">
-                <EmptyState
-                  icon={DatabaseZap}
-                  title="先选一个知识源"
-                  description="知识源决定 MRAG 的检索范围，选中后再导入文件或网页链接。"
-                />
-              </div>
+              knowledgeBasesLoading ? (
+                <CenteredLoading label="正在加载知识源..." />
+              ) : (
+                <div className="flex min-h-[48vh] items-center justify-center">
+                  <EmptyState
+                    icon={DatabaseZap}
+                    title="先选一个知识源"
+                    description="知识源决定 MRAG 的检索范围，选中后再导入文件或网页链接。"
+                  />
+                </div>
+              )
             ) : queryAnswer || queryError || querying ? (
               <motion.div
                 initial={{
@@ -864,6 +877,8 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
                   </article>
                 ))}
               </div>
+            ) : filesLoading && files.length === 0 ? (
+              <CenteredLoading label="正在加载资料..." />
             ) : files.length ? (
               <div className="flex min-h-[48vh] flex-col items-center justify-center text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--chat-surface-soft)] text-[var(--chat-text-muted)]">

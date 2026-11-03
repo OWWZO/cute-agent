@@ -30,7 +30,10 @@ export function useKnowledgeBaseFiles(
   selectedKnowledgeBaseId: string
 ) {
   const [files, setFiles] = useState<KnowledgeBaseFile[]>([]);
-  const [filesLoading, setFilesLoading] = useState(false);
+  // 恢复上次选中的知识源时，首帧还没触发文件请求，先保持加载态避免闪出「先导入资料」。
+  const [filesLoading, setFilesLoading] = useState(
+    Boolean(selectedKnowledgeBaseId)
+  );
   const [filesError, setFilesError] = useState("");
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [webUrl, setWebUrl] = useState("");
@@ -277,6 +280,7 @@ export function useKnowledgeBaseFiles(
     if (!selectedKnowledgeBaseId) {
       setFiles([]);
       setFilesError("");
+      setFilesLoading(false);
       resetFullContentState();
       return;
     }
