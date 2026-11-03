@@ -22,8 +22,10 @@ public class AiAgentChannelIdentityPO {
 
     private String platform;
 
+    /** 平台侧用户标识，例如 QQ 的 openid。 */
     private String platformUserId;
 
+    /** 内部用户标识，由 {@code (bindingId, platformUserId)} 关联得到。 */
     private String userId;
 
     private String displayName;

@@ -199,7 +199,6 @@ public final class CliArtifactCandidateParser {
         }
         String normalized = raw.trim().replace('\\', '/');
         if (normalized.startsWith("/") || normalized.startsWith("//")
-                || normalized.matches("^[A-Za-z]:.*")
                 || normalized.contains("://")
                 || normalized.matches("^[A-Za-z][A-Za-z0-9+.-]*:.*")) {
             return null;

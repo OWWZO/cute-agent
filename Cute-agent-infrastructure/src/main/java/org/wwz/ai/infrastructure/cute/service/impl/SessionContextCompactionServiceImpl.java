@@ -18,7 +18,6 @@ import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 import org.wwz.ai.domain.agent.memory.ltm.LtmManager;
-import org.wwz.ai.domain.agent.memory.ltm.LtmOwner;
 import org.wwz.ai.domain.agent.memory.ltm.LtmOwnerResolver;
 import org.wwz.ai.domain.agent.memory.ltm.MemoryFlushPolicy;
 import org.wwz.ai.domain.agent.memory.ltm.LtmServices;
@@ -524,16 +523,6 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
         return "";
     }
 
-    private static boolean isAuditedStrategy(String strategy) {
-        return STRATEGY_FULL_LLM.equals(strategy)
-                || "session-memory".equals(strategy)
-                || STRATEGY_DROP_OLDEST.equals(strategy)
-                || "micro-only".equals(strategy)
-                || STRATEGY_ABORT_UNCHANGED.equals(strategy)
-                || STRATEGY_LOCAL_FALLBACK.equals(strategy)
-                || isSuccessfulTrimStrategy(strategy);
-    }
-
     private static boolean isSuccessfulTrimStrategy(String strategy) {
         return STRATEGY_LOCAL_FALLBACK.equals(strategy)
                 || STRATEGY_DROP_OLDEST.equals(strategy)
@@ -727,9 +716,6 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
             return;
         }
         int afterTokens = compactor.estimateTokens(after);
-        if (afterTokens >= beforeTokens && !isAuditedStrategy(strategy)) {
-            return;
-        }
         try {
             String summary = null;
             for (Message message : after) {

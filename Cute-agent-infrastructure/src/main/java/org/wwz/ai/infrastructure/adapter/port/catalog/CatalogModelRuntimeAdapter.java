@@ -15,11 +15,13 @@ import java.util.List;
 public class CatalogModelRuntimeAdapter implements ICatalogModelRuntimePort {
     private final ObjectProvider<LlmModelCatalog> catalogProvider;
 
+    @Override
     public List<CatalogModel> listUserSelectableModels() {
         LlmModelCatalog catalog = catalogProvider.getIfAvailable();
         return catalog == null ? List.of() : catalog.listUserSelectableModels();
     }
 
+    @Override
     public void invalidateAll() {
         LlmModelCatalog catalog = catalogProvider.getIfAvailable();
         if (catalog != null) catalog.invalidateAll();

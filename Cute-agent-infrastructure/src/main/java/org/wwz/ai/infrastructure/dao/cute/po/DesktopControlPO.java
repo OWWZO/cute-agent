@@ -18,10 +18,12 @@ public class DesktopControlPO {
     private String reason;
     private String streamUrl;
     private Double holdUntil;
+    /** 生命周期状态，取值来自 DesktopControlStatuses。 */
     private String status;
     private String resumeRequestId;
     private String resumeContextJson;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+    /** 软删标记：0=有效，1=已删除。 */
     private Integer deleted;
 }

@@ -12,6 +12,7 @@ import java.util.List;
 @Mapper
 public interface ILlmInvocationLedgerDao {
 
+    /** 插入 LLM 调用并回填自增主键 {@code invocation.id}。 */
     int insertLlmInvocation(LlmInvocation invocation);
 
     int updateLlmInvocationFinish(LlmInvocation invocation);

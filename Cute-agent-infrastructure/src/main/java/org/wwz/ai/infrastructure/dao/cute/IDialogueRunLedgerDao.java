@@ -19,6 +19,10 @@ public interface IDialogueRunLedgerDao {
 
     DialogueRun queryByRequestId(@Param("requestId") String requestId);
 
+    /**
+     * 只读取会话列表所需的摘要列；queryText/finalSummaryText 最长 241 字符，
+     * token、错误、updated/deleted 等未投影字段保持 null。
+     */
     DialogueRun querySummaryByRequestId(@Param("requestId") String requestId);
 
     List<DialogueRunView> queryRecentBySessionId(@Param("sessionId") String sessionId,
@@ -28,6 +32,12 @@ public interface IDialogueRunLedgerDao {
                                             @Param("offset") int offset,
                                             @Param("limit") int limit);
 
+    /**
+     * 按 {@code (create_time, id)} keyset 分页。
+     *
+     * <p>两个游标同时为 null 时返回首页；否则必须同时提供，并按
+     * {@code create_time ASC, id ASC} 稳定排序和元组比较。</p>
+     */
     List<DialogueRunView> queryBySessionIdAfter(@Param("sessionId") String sessionId,
                                                 @Param("afterCreateTime") java.time.LocalDateTime afterCreateTime,
                                                 @Param("afterId") Long afterId,

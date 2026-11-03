@@ -60,8 +60,7 @@ public class DesktopControlRepository implements IDesktopControlRepository {
         if (StringUtils.isBlank(sessionId)) {
             return false;
         }
-        Integer count = desktopControlDao.countOpenBySessionId(sessionId.trim());
-        return count != null && count > 0;
+        return desktopControlDao.countOpenBySessionId(sessionId.trim()) > 0;
     }
 
     @Override

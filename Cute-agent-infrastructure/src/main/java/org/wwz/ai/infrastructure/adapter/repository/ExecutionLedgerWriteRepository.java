@@ -68,11 +68,18 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
         return dialogueRunLedgerDao.updateRunFinish(run);
     }
 
+    /**
+     * 全量 upsert 会话行；调用方必须提供完整的标题、状态和计数。
+     * 仅用于完整快照写入，run 启动路径应使用 {@link #upsertSessionOnRunStart(DialogueSessionUpsertRecord)}。
+     */
     @Override
     public void upsertSession(DialogueSessionUpsertRecord record) {
         dialogueSessionLedgerDao.upsertSession(record);
     }
 
+    /**
+     * run 启动时的会话 upsert：已有行只原子递增 run_count，并保留既有 finished/failed 计数与 started_at。
+     */
     @Override
     public void upsertSessionOnRunStart(DialogueSessionUpsertRecord record) {
         dialogueSessionLedgerDao.upsertSessionOnRunStart(record);

@@ -8,6 +8,9 @@ import java.util.Map;
 
 /**
  * deep_search 输出表 DAO。
+ *
+ * <p>insert 的 Map 使用 camelCase key（toolInvocationId/runId/requestId/sessionId/toolCallId/
+ * status/errorMsg/query/answerSummary/stagesJson）；查询结果的 key 为 JDBC 列标签。</p>
  */
 @Mapper
 public interface IToolOutputDeepSearchDao {

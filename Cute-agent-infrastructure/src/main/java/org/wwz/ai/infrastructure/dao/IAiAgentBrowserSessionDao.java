@@ -18,6 +18,10 @@ public interface IAiAgentBrowserSessionDao {
 
     AiAgentBrowserSession queryByAgentBrowserName(@Param("agentBrowserName") String agentBrowserName);
 
+    /**
+     * 按 ownerKey 更新 kernel session、browser name、lastUsedAt 与 updateTime。
+     * {@code id} 不参与 WHERE 条件；调用方必须设置 {@code ownerKey}。
+     */
     int updateSession(AiAgentBrowserSession row);
 
     int updateLastUsedAt(@Param("ownerKey") String ownerKey, @Param("lastUsedAt") LocalDateTime lastUsedAt);

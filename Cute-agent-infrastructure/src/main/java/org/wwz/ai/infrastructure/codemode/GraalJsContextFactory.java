@@ -47,6 +47,11 @@ public final class GraalJsContextFactory {
         }
     }
 
+    /**
+     * 创建新的 JS Context。
+     *
+     * <p>调用方拥有返回值的生命周期，必须在执行结束时关闭；推荐使用 try-with-resources。</p>
+     */
     public static Context newContext() {
         return Context.newBuilder("js")
                 .engine(sharedEngine())

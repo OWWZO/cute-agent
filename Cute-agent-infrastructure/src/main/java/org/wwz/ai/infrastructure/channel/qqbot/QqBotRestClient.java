@@ -72,12 +72,12 @@ public class QqBotRestClient {
         }
 
         try {
-            return post(appId, appSecret, path, body, true);
+            return post(appId, appSecret, path, body);
         } catch (TokenExpiredException e) {
             // token 被服务端判定失效：清缓存后重试一次，不重试第二次。
             tokenService.invalidate(appId);
             try {
-                return post(appId, appSecret, path, body, false);
+                return post(appId, appSecret, path, body);
             } catch (Exception retryFailure) {
                 log.warn("qqbot send retry after 401 failed appId={} target={}", appId, target.targetId(), retryFailure);
                 return ChannelPushResult.fail("发送失败：" + retryFailure.getMessage(), false);
@@ -93,8 +93,7 @@ public class QqBotRestClient {
     private ChannelPushResult post(String appId,
                                    String appSecret,
                                    String path,
-                                   JSONObject body,
-                                   boolean allowTokenRetry) throws Exception {
+                                   JSONObject body) throws Exception {
         String token = tokenService.getAccessToken(appId, appSecret);
         Request request = new Request.Builder()
                 .url(QqBotConstants.API_BASE + path)

@@ -1,4 +1,4 @@
 /**
- * 实现对外部的api调用，类的名称为 XxxPort 接口定义在 domain 中
+ * 外部能力适配器：实现 domain 层定义的 XxxPort 接口，实现类统一使用 XxxAdapter 后缀。
  */
 package org.wwz.ai.infrastructure.adapter.port;

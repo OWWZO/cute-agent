@@ -25,6 +25,9 @@ public interface IDialogueSessionLedgerDao {
 
     /**
      * run 结束时的会话主表写入：按终态原子累加 finished/failed 计数，不做读-改-写。
+     *
+     * <p>{@code latestSummaryText} 会原样写入，传 null 会清空该列。调用方应只在首次进入终态时
+     * 将一个 delta 设为 1，另一个设为 0；本方法不额外校验 delta。</p>
      */
     int updateSessionRunFinish(@Param("sessionId") String sessionId,
                                @Param("status") int status,
