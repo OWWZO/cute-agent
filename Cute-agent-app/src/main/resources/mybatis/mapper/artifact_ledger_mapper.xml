@@ -137,7 +137,7 @@
         ORDER BY run_id, create_time ASC, id ASC
     </select>
 
-    <select id="queryBySessionId" resultMap="ArtifactRecordMap">
+    <sql id="artifactQueryBySessionId">
         SELECT a.*
         FROM ai_agent_artifact a
         INNER JOIN ai_agent_dialogue_run r ON r.id = a.run_id
@@ -170,6 +170,15 @@
                 AND s.deleted = 0
           )
         ORDER BY create_time ASC, id ASC
+    </sql>
+
+    <select id="queryBySessionId" resultMap="ArtifactRecordMap">
+        <include refid="artifactQueryBySessionId"/>
+    </select>
+
+    <select id="queryBySessionIdWithLimit" resultMap="ArtifactRecordMap">
+        <include refid="artifactQueryBySessionId"/>
+        LIMIT #{limit}
     </select>
 
     <select id="queryBySessionIdLimit" resultMap="ArtifactRecordMap">

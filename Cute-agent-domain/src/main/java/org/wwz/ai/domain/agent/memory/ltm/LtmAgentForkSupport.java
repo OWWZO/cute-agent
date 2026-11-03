@@ -59,7 +59,15 @@ public final class LtmAgentForkSupport {
             return t;
         }
     },
-            new ThreadPoolExecutor.AbortPolicy());
+            new ThreadPoolExecutor.AbortPolicy() {
+                @Override
+                public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+                    // 有界队列饱和时必须留下可观测信号，否则调用方只能看到泛化的 rejected 失败。
+                    log.warn("ltm fork rejected: poolSize={}, activeCount={}, queueSize={}",
+                            executor.getPoolSize(), executor.getActiveCount(), executor.getQueue().size());
+                    throw new java.util.concurrent.RejectedExecutionException("ltm fork pool saturated");
+                }
+            });
 
     private LtmAgentForkSupport() {
     }

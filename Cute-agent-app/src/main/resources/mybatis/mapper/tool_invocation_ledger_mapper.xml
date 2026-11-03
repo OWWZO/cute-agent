@@ -78,6 +78,25 @@
         )
     </insert>
 
+    <insert id="batchInsertToolInvocations" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ai_agent_tool_invocation (
+            run_id, llm_invocation_id, tool_call_id, parent_tool_call_id, sub_agent_id, sub_agent_type,
+            sub_agent_description, dispatch_index, agent_name, step_no,
+            tool_name, tool_provider, input_json, llm_oberserve, tool_result, status, error_msg,
+            started_at, finished_at, duration_ms, create_time, update_time, deleted
+        ) VALUES
+        <foreach collection="list" item="invocation" separator=",">
+            (
+                #{invocation.runId}, #{invocation.llmInvocationId}, #{invocation.toolCallId},
+                #{invocation.parentToolCallId}, #{invocation.subAgentId}, #{invocation.subAgentType},
+                #{invocation.subAgentDescription}, #{invocation.dispatchIndex}, #{invocation.agentName}, #{invocation.stepNo},
+                #{invocation.toolName}, #{invocation.toolProvider}, #{invocation.inputJson},
+                #{invocation.llmObservation}, #{invocation.toolResult}, #{invocation.status}, #{invocation.errorMsg},
+                #{invocation.startedAt}, #{invocation.finishedAt}, #{invocation.durationMs}, NOW(), NOW(), 0
+            )
+        </foreach>
+    </insert>
+
     <update id="updateToolInvocationFinish" parameterType="org.wwz.ai.domain.agent.ledger.entity.ToolInvocation">
         UPDATE ai_agent_tool_invocation
         SET status = #{status},

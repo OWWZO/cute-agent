@@ -4,8 +4,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.dto.File;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -16,6 +18,8 @@ public class ToolArtifactRegistry {
 
     // 核心存储：所有工具-文件绑定关系（唯一可信数据源）
     private final List<ToolArtifactBinding> bindings = new ArrayList<>();
+    /** 去重键索引：注册从 O(n) 线性扫描降为 O(1)，批量登记不再退化成 O(n²)。 */
+    private final Set<String> bindingKeys = new HashSet<>();
 
     /**
      * 登记一个生成的文件
@@ -35,7 +39,7 @@ public class ToolArtifactRegistry {
             .build();
 
         // 核心存储去重：相同绑定不重复添加
-        if (!containsBinding(binding)) {
+        if (bindingKeys.add(dedupeKey(binding))) {
             bindings.add(binding);
         }
         return binding;
@@ -61,26 +65,14 @@ public class ToolArtifactRegistry {
 
     // ========== 私有工具方法 ==========
 
-    /** 判断是否已存在相同绑定 */
-    private boolean containsBinding(ToolArtifactBinding candidate) {
-        for (ToolArtifactBinding existing : bindings) {
-            if (sameBinding(existing, candidate)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** 绑定是否相同：比较 工具调用ID、工具名、文件名、文件URL、是否内部文件 */
-    private boolean sameBinding(ToolArtifactBinding left, ToolArtifactBinding right) {
-        if (left == null || right == null) {
-            return false;
-        }
-        return Objects.equals(readToolCallId(left), readToolCallId(right))
-            && Objects.equals(readToolName(left), readToolName(right))
-            && Objects.equals(readFileName(left), readFileName(right))
-            && Objects.equals(readFileUrl(left), readFileUrl(right))
-            && Objects.equals(readInternalFlag(left), readInternalFlag(right));
+    /** 绑定去重键：工具调用ID、工具名、文件名、文件URL、是否内部文件。 */
+    private String dedupeKey(ToolArtifactBinding binding) {
+        return String.join("\u0001",
+            String.valueOf(readToolCallId(binding)),
+            String.valueOf(readToolName(binding)),
+            String.valueOf(readFileName(binding)),
+            String.valueOf(readFileUrl(binding)),
+            String.valueOf(readInternalFlag(binding)));
     }
 
     // ========== 安全取值工具方法 ==========

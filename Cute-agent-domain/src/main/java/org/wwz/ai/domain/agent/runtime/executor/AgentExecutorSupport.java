@@ -77,6 +77,10 @@ public final class AgentExecutorSupport {
 
     /**
      * 为受控异步任务增加超时；超时完成对外 Future 后，同时中断底层 FutureTask。
+     * <p>使用 {@link CompletableFuture#orTimeout(long, TimeUnit)}：JDK 在 Future 提前完成时会
+     * 取消挂起的超时任务，不会把 Future 引用保留到超时时刻。</p>
+     * <p>注意：普通 {@link CompletableFuture} 没有可中断的底层任务，超时只是令其异常完成；
+     * 仅 {@link CancellableCompletableFuture}（由 {@link #supplyAsync} 创建）会被真正取消。</p>
      */
     public static <T> CompletableFuture<T> withTimeout(CompletableFuture<T> future,
                                                         long timeout,
@@ -86,15 +90,13 @@ public final class AgentExecutorSupport {
         if (future.isDone()) {
             return future;
         }
-        CompletableFuture.delayedExecutor(timeout, unit).execute(() -> {
-            TimeoutException timeoutException = new TimeoutException();
-            // 先完成对外 Future，再取消底层任务；调用方不会因为执行器线程迟迟不退出而永久等待。
-            if (future.completeExceptionally(timeoutException)
+        future.whenComplete((value, error) -> {
+            if (error instanceof TimeoutException
                     && future instanceof CancellableCompletableFuture<?> cancellable) {
                 cancellable.cancelDelegate(true);
             }
         });
-        return future;
+        return future.orTimeout(timeout, unit);
     }
 
     /**

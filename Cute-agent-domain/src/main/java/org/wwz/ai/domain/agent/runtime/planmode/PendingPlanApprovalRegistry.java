@@ -30,6 +30,7 @@ public class PendingPlanApprovalRegistry {
                                       String planContent,
                                       String planFilePath,
                                       Long timeoutMs) {
+        evictExpired();
         String approvalId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         long timeout = timeoutMs != null && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS;
         PendingPlanApproval item = PendingPlanApproval.builder()
@@ -52,6 +53,7 @@ public class PendingPlanApprovalRegistry {
         if (StringUtils.isBlank(approvalId)) {
             return Optional.empty();
         }
+        evictExpired();
         return Optional.ofNullable(pending.get(approvalId.trim()));
     }
 
@@ -60,6 +62,7 @@ public class PendingPlanApprovalRegistry {
         if (StringUtils.isBlank(sessionId)) {
             return result;
         }
+        evictExpired();
         for (PendingPlanApproval item : pending.values()) {
             if (sessionId.equals(item.getSessionId())
                     && PendingPlanApproval.STATUS_PENDING.equals(item.getStatus())) {
@@ -159,12 +162,42 @@ public class PendingPlanApprovalRegistry {
             throw e;
         } catch (java.util.concurrent.ExecutionException e) {
             Throwable cause = e.getCause();
+            if (cause instanceof TimeoutException timeoutException) {
+                // 惰性清理可能先于 await 的自身超时把 Future 以 TimeoutException 完成，
+                // 对调用方仍保持「超时」这一种异常语义。
+                throw timeoutException;
+            }
             if (cause instanceof RuntimeException runtimeException) {
                 throw runtimeException;
             }
             throw new IllegalStateException(cause == null ? e.getMessage() : cause.getMessage(), cause);
         } finally {
             pending.remove(item.getApprovalId());
+        }
+    }
+
+    /**
+     * 惰性清理已过期条目：超时只在 awaitDecision 内生效，若请求创建后从未走到 await
+     * （异常/中止/只读 get），条目连同完整 planContent 会永久留在单例 map 里。
+     */
+    private void evictExpired() {
+        long now = System.currentTimeMillis();
+        for (PendingPlanApproval item : pending.values()) {
+            if (item == null || !PendingPlanApproval.STATUS_PENDING.equals(item.getStatus())) {
+                continue;
+            }
+            if (item.getCreatedAtMs() + item.getTimeoutMs() >= now) {
+                continue;
+            }
+            synchronized (item) {
+                if (!PendingPlanApproval.STATUS_PENDING.equals(item.getStatus())
+                        || pending.get(item.getApprovalId()) != item) {
+                    continue;
+                }
+                item.setStatus(PendingPlanApproval.STATUS_TIMEOUT);
+                item.getFuture().completeExceptionally(new TimeoutException("plan approval expired"));
+                pending.remove(item.getApprovalId(), item);
+            }
         }
     }
 

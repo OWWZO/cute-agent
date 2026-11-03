@@ -32,6 +32,8 @@ public interface ExecutionLedgerQueryService {
     int MAX_SESSION_TREE_SIZE = 100;
     /** 最近工具调用查询的硬上限，与其它台账分页保持一致。 */
     int MAX_RECENT_TOOL_INVOCATION_PAGE_SIZE = 100;
+    /** 单次会话 artifact 查询的硬上限，避免长会话把整张产物表读进内存。 */
+    int MAX_SESSION_ARTIFACTS = 500;
 
     /** 已授权调用方使用：调用方必须先完成归属校验。 */
     ExecutionRunDetail queryRunDetail(String requestId);
@@ -39,8 +41,21 @@ public interface ExecutionLedgerQueryService {
     /** 归属校验通过后返回 run 详情；非 owner 返回 {@code null}。 */
     ExecutionRunDetail queryRunDetail(String userId, String requestId);
 
-    /** 只读取当前会话可见的输入/输出 artifact，不展开 run 回放明细。 */
-    List<ArtifactView> querySessionArtifacts(String sessionId);
+    /**
+     * 只读取当前会话可见的输入/输出 artifact，不展开 run 回放明细。
+     * <p>等价于 {@link #querySessionArtifacts(String, int)} 并取默认上限
+     * {@link #MAX_SESSION_ARTIFACTS}。</p>
+     */
+    default List<ArtifactView> querySessionArtifacts(String sessionId) {
+        return querySessionArtifacts(sessionId, MAX_SESSION_ARTIFACTS);
+    }
+
+    /**
+     * 只读取当前会话可见的输入/输出 artifact，并强制截断到 {@code limit} 行。
+     * <p>{@code limit <= 0} 取默认值，任何情况下不超过 {@link #MAX_SESSION_ARTIFACTS}；
+     * “可见”指 {@code visibility=visible}，实现层负责过滤。</p>
+     */
+    List<ArtifactView> querySessionArtifacts(String sessionId, int limit);
 
     /** 归属校验通过后返回会话产物；非 owner 返回空列表。 */
     List<ArtifactView> querySessionArtifacts(String userId, String sessionId);

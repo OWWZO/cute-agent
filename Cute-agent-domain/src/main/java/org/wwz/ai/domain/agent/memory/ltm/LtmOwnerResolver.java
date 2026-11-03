@@ -28,7 +28,6 @@ public final class LtmOwnerResolver {
             return LtmOwner.user(resolvedUserId);
         }
         // 异步/调度线程没有请求上下文时会走到这里，靠下面的 erp / session 兜底，绝不再回退 anonymous。
-        }
         if (StringUtils.isNotBlank(erp)) {
             // ERP 与 userId 是不同身份来源，必须使用不同 owner type。
             return LtmOwner.erp(erp);

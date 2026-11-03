@@ -239,9 +239,11 @@ public final class WorkingMemoryCompactor {
         }
 
         List<Message> current = new ArrayList<>(messages);
-        // 至少保留尾部 keepMin 规模；若仍超阈值则继续砍到至少 1 条
+        // 至少保留尾部 keepMin 规模；若仍超阈值则继续砍到至少 1 条。
+        // 总 token 只算一次，之后每砍掉一个前缀就减去对应消息的 token，避免每轮全量重扫（O(n^2)）。
         int floor = Math.max(1, findKeepStartIndex(current, budget));
-        while (estimateTokens(current) > threshold && current.size() > floor) {
+        int currentTokens = estimateTokens(current);
+        while (currentTokens > threshold && current.size() > floor) {
             // 每轮按 tool pair 计算安全删除长度，不能只删除 assistant tool_use 而留下孤立 tool_result。
             int cut = nextSafeDropCount(current);
             if (cut <= 0) {
@@ -253,20 +255,30 @@ public final class WorkingMemoryCompactor {
             if (cut <= 0) {
                 break;
             }
+            currentTokens -= tokensOfPrefix(current, cut);
             current = new ArrayList<>(current.subList(cut, current.size()));
         }
 
         // 仍超阈值：允许突破 floor，但保留至少 1 条且 tool-safe
-        while (estimateTokens(current) > threshold && current.size() > 1) {
+        while (currentTokens > threshold && current.size() > 1) {
             int cut = nextSafeDropCount(current);
             if (cut <= 0 || cut >= current.size()) {
                 // 强制丢最前一条（若是 assistant tool 则扩到完整 pair）
                 cut = Math.max(1, expandForwardToCloseToolPairs(current, 1));
                 cut = Math.min(cut, current.size() - 1);
             }
+            currentTokens -= tokensOfPrefix(current, cut);
             current = new ArrayList<>(current.subList(cut, current.size()));
         }
         return sanitizeToolProtocol(current);
+    }
+
+    private int tokensOfPrefix(List<Message> messages, int count) {
+        int tokens = 0;
+        for (int i = 0; i < count; i++) {
+            tokens += tokenCounter.estimateOneMessage(messages.get(i));
+        }
+        return tokens;
     }
 
     private List<Message> dropOldestPreservingHandoff(List<Message> messages, int threshold, int handoffIdx) {

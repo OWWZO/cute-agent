@@ -369,6 +369,14 @@ public class AgentContext {
         return sessionControl().requireSessionTaskList(listId, resolveTasklistPersistence());
     }
 
+    /**
+     * 只读取已存在的会话 Todo 列表，不触发 {@link #requireSessionTaskList()} 的惰性补建与 DB hydrate。
+     * <p>发布快照等只读路径应在列表尚未建立时直接跳过，而不是为了发空快照去读库。</p>
+     */
+    public SessionTaskListStore peekSessionTaskList() {
+        return sessionControl.getSessionTaskList();
+    }
+
     public RuntimeBackgroundTaskRegistry requireBackgroundTasks() {
         // 进程内按 session 共享 registry，保证跨轮 TaskOutput 能命中仍在跑的后台任务。
         String sid = sessionId != null && !sessionId.isBlank() ? sessionId : requestId;

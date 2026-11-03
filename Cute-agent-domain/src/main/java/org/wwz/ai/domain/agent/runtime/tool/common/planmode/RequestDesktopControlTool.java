@@ -82,10 +82,6 @@ public class RequestDesktopControlTool implements BaseTool {
         try {
             CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
             String sessionId = StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId());
-            String ownerKey = resolveOwnerKey(context);
-            if (ownerKey == null) {
-                return fail("缺少用户身份，无法请求桌面控制");
-            }
             DesktopSessionRemote.OpenResult opened = DesktopSessionRemote.open(
                     context.getRuntimeDependencies().requireRemoteHttpPort(),
                     config,

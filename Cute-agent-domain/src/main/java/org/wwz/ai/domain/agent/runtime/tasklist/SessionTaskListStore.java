@@ -249,13 +249,26 @@ public class SessionTaskListStore {
     }
 
     public Map<String, Object> toClientSnapshot() {
+        // 只读一次共享 map 并按同一份列表计算所有计数，避免并发增删时 total/计数器与 tasks 对不上。
+        List<SessionTaskItem> items = list();
+        List<Map<String, Object>> taskMaps = new ArrayList<>(items.size());
+        long pending = 0;
+        long inProgress = 0;
+        long completed = 0;
+        for (SessionTaskItem item : items) {
+            taskMaps.add(item.toDetailMap());
+            if (SessionTaskItem.STATUS_PENDING.equals(item.getStatus())) {
+                pending++;
+            } else if (SessionTaskItem.STATUS_IN_PROGRESS.equals(item.getStatus())) {
+                inProgress++;
+            } else if (SessionTaskItem.STATUS_COMPLETED.equals(item.getStatus())) {
+                completed++;
+            }
+        }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("listId", listId);
-        body.put("tasks", toClientTaskList());
-        body.put("total", tasks.size());
-        long pending = list().stream().filter(t -> SessionTaskItem.STATUS_PENDING.equals(t.getStatus())).count();
-        long inProgress = list().stream().filter(t -> SessionTaskItem.STATUS_IN_PROGRESS.equals(t.getStatus())).count();
-        long completed = list().stream().filter(t -> SessionTaskItem.STATUS_COMPLETED.equals(t.getStatus())).count();
+        body.put("tasks", taskMaps);
+        body.put("total", items.size());
         body.put("pending", pending);
         body.put("inProgress", inProgress);
         body.put("completed", completed);

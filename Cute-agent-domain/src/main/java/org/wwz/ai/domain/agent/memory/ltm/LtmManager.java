@@ -30,6 +30,16 @@ public class LtmManager {
         t.setDaemon(true);
         return t;
     });
+    /**
+     * 同步 pre-fetch 专用执行器：与 background 队列隔离。
+     * <p>background 上可能排着 syncTurn / session 边界等慢任务；共用单线程会让
+     * 受超时保护的 pre-fetch 排在它们后面，造成本不该有的超时。</p>
+     */
+    private final ExecutorService prefetchWorker = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "ltm-prefetch");
+        t.setDaemon(true);
+        return t;
+    });
 
     public LtmManager() {
         this(8000L);
@@ -116,7 +126,7 @@ public class LtmManager {
         if (!provider.isExternal()) {
             return provider.prefetch(query, sessionId);
         }
-        Future<String> future = background.submit(() -> provider.prefetch(query, sessionId));
+        Future<String> future = prefetchWorker.submit(() -> provider.prefetch(query, sessionId));
         try {
             return future.get(prefetchTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
@@ -240,8 +250,10 @@ public class LtmManager {
     public void shutdownAll() {
         // 先停止后台任务，再按反向注册顺序关闭 Provider，减少后台回调访问已释放资源的机会。
         background.shutdown();
+        prefetchWorker.shutdown();
         try {
             background.awaitTermination(5, TimeUnit.SECONDS);
+            prefetchWorker.awaitTermination(5, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

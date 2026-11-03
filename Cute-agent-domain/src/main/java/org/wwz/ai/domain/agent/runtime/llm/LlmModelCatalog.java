@@ -42,6 +42,8 @@ public class LlmModelCatalog {
 
     private volatile List<LlmModelBinding> cache = Collections.emptyList();
     private volatile long fetchedAt;
+    /** 是否已成功加载过（空结果也算已加载），避免空目录时每次调用都打 DB。 */
+    private volatile boolean loaded;
 
     public LlmModelCatalog(ILlmModelConfigRepository repository,
                            LlmChatModelResolver chatModelResolver,
@@ -152,11 +154,12 @@ public class LlmModelCatalog {
     public void invalidateAll() {
         cache = Collections.emptyList();
         fetchedAt = 0L;
+        loaded = false;
         chatModelResolver.invalidateAll();
     }
 
     private List<LlmModelBinding> loadUsable(long nowMs) {
-        if (!cache.isEmpty() && cacheMs > 0 && nowMs - fetchedAt < cacheMs) {
+        if (loaded && cacheMs > 0 && nowMs - fetchedAt < cacheMs) {
             return cache;
         }
         try {
@@ -166,6 +169,7 @@ public class LlmModelCatalog {
             }
             cache = List.copyOf(loaded);
             fetchedAt = nowMs;
+            this.loaded = true;
             return cache;
         } catch (Exception e) {
             log.warn("加载可用模型目录失败，沿用缓存或空目录: cachedSize={}", cache.size(), e);

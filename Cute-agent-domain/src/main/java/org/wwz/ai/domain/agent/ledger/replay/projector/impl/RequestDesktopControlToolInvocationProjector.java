@@ -40,7 +40,7 @@ public class RequestDesktopControlToolInvocationProjector extends AbstractToolIn
         Map<String, Object> observation = readMap(invocation == null ? null : StringUtils.defaultIfBlank(
                 invocation.getToolResult(), invocation.getLlmObservation()));
         String controlId = stringValue(observation.get("controlId"));
-        DesktopControlRecord persisted = findPersisted(controlId, invocation);
+        DesktopControlRecord persisted = findPersisted(controlId, invocation, state);
         Map<String, Object> payload = persisted == null
                 ? new LinkedHashMap<>()
                 : new LinkedHashMap<>(DesktopControlObservationSupport.toReplayPayload(persisted));
@@ -85,7 +85,9 @@ public class RequestDesktopControlToolInvocationProjector extends AbstractToolIn
         ));
     }
 
-    private DesktopControlRecord findPersisted(String controlId, ToolInvocationView invocation) {
+    private DesktopControlRecord findPersisted(String controlId,
+                                               ToolInvocationView invocation,
+                                               AgentStreamAccumulator state) {
         if (desktopControlRepository == null) {
             return null;
         }
@@ -95,7 +97,8 @@ public class RequestDesktopControlToolInvocationProjector extends AbstractToolIn
                 id -> desktopControlRepository.findByControlId(id).orElse(null),
                 desktopControlRepository::listOpenBySessionId,
                 DesktopControlRecord::getToolInvocationId,
-                DesktopControlRecord::getToolCallId
+                DesktopControlRecord::getToolCallId,
+                state
         );
     }
 }

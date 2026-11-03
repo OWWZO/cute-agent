@@ -32,8 +32,13 @@ public class LogPrinter implements Printer {
                      String digitalEmployee,
                      Boolean isFinal) {
         if ("deep_search".equals(messageType)) {
-            message = JSON.toJSONString(message);
-            log.debug("{} {} {} {} {} {} {}", request.getRequestId(), messageId, messageType, message, extraResultMap, digitalEmployee, isFinal);
+            if (!log.isDebugEnabled()) {
+                // DEBUG 关闭时不做任何序列化：deep_search 正文大且发送频繁。
+                return;
+            }
+            // String 已是序列化结果，再 toJSONString 会二次转义。
+            Object loggedMessage = message instanceof String ? message : JSON.toJSONString(message);
+            log.debug("{} {} {} {} {} {} {}", request.getRequestId(), messageId, messageType, loggedMessage, extraResultMap, digitalEmployee, isFinal);
             return;
         }
         // INFO 只留结构信息：消息可能含用户内容 / PII / 工具结果，完整载荷只在 DEBUG 输出。

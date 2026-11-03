@@ -125,6 +125,14 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
     }
 
     @Override
+    public int batchInsertToolInvocations(List<ToolInvocation> invocations) {
+        if (invocations == null || invocations.isEmpty()) {
+            return 0;
+        }
+        return toolInvocationLedgerDao.batchInsertToolInvocations(invocations);
+    }
+
+    @Override
     public int updateToolInvocationFinish(ToolInvocation invocation) {
         return toolInvocationLedgerDao.updateToolInvocationFinish(invocation);
     }

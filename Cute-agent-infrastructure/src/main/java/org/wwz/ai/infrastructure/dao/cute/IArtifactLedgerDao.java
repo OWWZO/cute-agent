@@ -32,6 +32,9 @@ public interface IArtifactLedgerDao {
 
     List<ArtifactRecord> queryBySessionIdLimit(@Param("sessionId") String sessionId,
                                                @Param("limit") int limit);
+    /** 与 {@link #queryBySessionId(String)} 同口径，但由 SQL LIMIT 强制截断。 */
+    List<ArtifactRecord> queryBySessionIdWithLimit(@Param("sessionId") String sessionId,
+                                                   @Param("limit") int limit);
 
     List<ArtifactRecord> queryByToolInvocationIds(@Param("toolInvocationIds") List<Long> toolInvocationIds);
 

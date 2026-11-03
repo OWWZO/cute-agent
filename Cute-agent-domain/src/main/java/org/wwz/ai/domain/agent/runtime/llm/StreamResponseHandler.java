@@ -207,6 +207,9 @@ public class StreamResponseHandler {
         String reasoningMessageId = canAllocateStreamMessageId(context) ? StringUtil.getUUID() : null;
         int[] intervals = resolveIntervals();
         int[] tokenIndex = new int[]{1};
+        // reasoning 与 content 是两条独立流；共用 content 计数器会让 reasoning 永远停在 1，
+        // shouldFlush 恒真，等于每个 reasoning delta 都单独推送。
+        int[] reasoningIndex = new int[]{1};
         Map<String, ToolCallAccumulator> toolCallAccumulators = new LinkedHashMap<>();
         String[] finishReason = new String[1];
         LlmUsageSnapshot[] usageHolder = new LlmUsageSnapshot[]{LlmUsageSnapshot.empty()};
@@ -245,12 +248,13 @@ public class StreamResponseHandler {
                         if (StringUtils.isNotEmpty(reasoningDelta)
                                 && pushToClient && reasoningMessageId != null && context.getPrinter() != null) {
                             reasoningBuffer.append(reasoningDelta);
-                            if (shouldFlush(tokenIndex[0], intervals[0], intervals[1])
+                            if (shouldFlush(reasoningIndex[0], intervals[0], intervals[1])
                                     || reasoningBuffer.length() >= 24) {
                                 sendStreamEvent(context, reasoningMessageId, ReasoningContentExtractor.EVENT_TYPE,
                                         reasoningBuffer.toString(), runtimeTiming, false);
                                 reasoningBuffer.setLength(0);
                             }
+                            reasoningIndex[0]++;
                         }
                     }
 

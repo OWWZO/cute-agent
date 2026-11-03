@@ -148,11 +148,7 @@ public final class SkillFrontMatterParser {
                 // `key:` 后跟嵌套块或列表，降级路径无法恢复其结构。
                 continue;
             }
-            if (value.length() >= 2
-                    && ((value.startsWith("\"") && value.endsWith("\""))
-                    || (value.startsWith("'") && value.endsWith("'")))) {
-                value = value.substring(1, value.length() - 1);
-            }
+            // 降级路径与正常路径保持同一契约：值原样保留，不擅自剥离引号。
             fields.put(key, value);
         }
         List<String> warnings = new ArrayList<>(1);

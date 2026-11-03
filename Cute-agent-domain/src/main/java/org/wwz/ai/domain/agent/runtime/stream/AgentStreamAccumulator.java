@@ -3,7 +3,9 @@ package org.wwz.ai.domain.agent.runtime.stream;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,6 +41,16 @@ public class AgentStreamAccumulator {
 
     @Builder.Default
     private Map<String, Object> resultMap = new HashMap<>();
+
+    /**
+     * 单次回放内的附属状态查询缓存（如 HITL 让步记录）。
+     * <p>只在一次 projectHistory 生命周期内复用，不参与序列化/比较；
+     * 键必须包含记录类型与 sessionId，避免同一回放内不同类型记录互相污染。</p>
+     */
+    @Builder.Default
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private final Map<String, Object> replayLookupCache = new HashMap<>();
 
     public static final String PLANNER_ROUND_ID_KEY = "plannerRoundId";
 
@@ -116,5 +128,13 @@ public class AgentStreamAccumulator {
             return;
         }
         resultMap.put(PLANNER_ROUND_ID_KEY, plannerRoundId);
+    }
+
+    public synchronized Object getReplayLookup(String key) {
+        return replayLookupCache.get(key);
+    }
+
+    public synchronized void putReplayLookup(String key, Object value) {
+        replayLookupCache.put(key, value);
     }
 }

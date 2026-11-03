@@ -21,6 +21,9 @@ import java.util.Map;
 @Slf4j
 public class ListMcpResourcesTool implements BaseTool {
 
+    /** 单个 MCP server 可能暴露上百条 resource，全量回传会挤爆上下文窗口。 */
+    private static final int MAX_RETURNED_RESOURCES = 100;
+
     @Override
     public String getName() {
         return McpToolNames.LIST_MCP_RESOURCES;
@@ -62,8 +65,10 @@ public class ListMcpResourcesTool implements BaseTool {
                     ? executor.listGlobalResources()
                     : executor.listResources(server);
 
-            List<Map<String, Object>> rows = new ArrayList<>();
-            for (McpResourceInfo resource : resources) {
+            int returned = Math.min(resources.size(), MAX_RETURNED_RESOURCES);
+            List<Map<String, Object>> rows = new ArrayList<>(returned);
+            for (int i = 0; i < returned; i++) {
+                McpResourceInfo resource = resources.get(i);
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("uri", resource.getUri());
                 row.put("name", resource.getName());
@@ -78,6 +83,10 @@ public class ListMcpResourcesTool implements BaseTool {
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("resources", rows);
             fields.put("count", rows.size());
+            if (resources.size() > returned) {
+                fields.put("total", resources.size());
+                fields.put("truncated", Boolean.TRUE);
+            }
             return ToolResultPayload.okData(McpToolNames.LIST_MCP_RESOURCES, fields);
         } catch (Exception e) {
             log.warn("ListMcpResources failed", e);

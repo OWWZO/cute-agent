@@ -46,8 +46,13 @@ public class HasAggVisitor extends SqlBasicVisitor<Boolean> {
 
     @Override
     public Boolean visit(SqlCall call) {
+        if (isAgg) {
+            // 已判定含聚合，后续子树不可能改变结果，直接短路。
+            return Boolean.TRUE;
+        }
         if (AGG_NAME_SET.contains(call.getOperator().getName().toLowerCase())) {
             isAgg = true;
+            return Boolean.TRUE;
         }
         return super.visit(call);
     }

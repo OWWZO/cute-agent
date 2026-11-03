@@ -90,6 +90,15 @@ public interface IExecutionLedgerWriteRepository {
     void insertToolInvocation(ToolInvocation invocation);
 
     /**
+     * 批量写入工具调用预登记行，成功时把生成主键回填到每个 {@link ToolInvocation#getId()}。
+     * <p>实现必须使用单条多值 INSERT，不得退化为逐条写入；单条语句整体失败（如唯一键冲突）时
+     * 不插入任何行，调用方可回退到 {@link #insertToolInvocation(ToolInvocation)} 逐条补偿。</p>
+     *
+     * @return 实际插入行数
+     */
+    int batchInsertToolInvocations(List<ToolInvocation> invocations);
+
+    /**
      * 结算工具调用终态。守卫与 {@code IExecutionLedgerReconcileRepository#updateToolInvocationFinish}
      * 一致（仅更新 {@code status=RUNNING AND finished_at IS NULL} 的行），返回受影响行数。
      *

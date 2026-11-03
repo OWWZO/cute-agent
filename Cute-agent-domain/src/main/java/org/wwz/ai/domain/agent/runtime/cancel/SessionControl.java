@@ -57,13 +57,23 @@ public final class SessionControl {
 
     /**
      * 读取或按会话 key 补建 Todo 列表（listId 优先 sessionId）。
-     * 以本实例为 monitor 的双检锁，见类注释并发约束。
+     * <p>构造（含 hydrate 的 DB 读）在 monitor 之外完成，避免慢库把共享控制面锁住；
+     * 并发补建时以 monitor 内二次检查决定唯一发布者，多余的 store 直接丢弃。</p>
+     * <p>注意：子 Agent 与父 Agent 共享本实例，子上下文用自己的 sessionId 调用时拿到的
+     * 是父列表，这是 {@link #SessionControl} 类注释描述的刻意共享，不是 key 错配。</p>
      */
-    public synchronized SessionTaskListStore requireSessionTaskList(String listId, TasklistPersistencePort persistence) {
-        if (sessionTaskList == null) {
-            sessionTaskList = new SessionTaskListStore(listId, persistence);
+    public SessionTaskListStore requireSessionTaskList(String listId, TasklistPersistencePort persistence) {
+        SessionTaskListStore existing = sessionTaskList;
+        if (existing != null) {
+            return existing;
         }
-        return sessionTaskList;
+        SessionTaskListStore created = new SessionTaskListStore(listId, persistence);
+        synchronized (this) {
+            if (sessionTaskList == null) {
+                sessionTaskList = created;
+            }
+            return sessionTaskList;
+        }
     }
 
     /**
@@ -88,12 +98,22 @@ public final class SessionControl {
 
     /**
      * 读取或按会话 key 补建后台任务注册表（进程内按 session 共享，保证跨轮 TaskOutput
-     * 命中仍在跑的后台任务）。以本实例为 monitor 的双检锁，见类注释并发约束。
+     * 命中仍在跑的后台任务）。
+     * <p>hub 的创建（含 hydrate）已移到 monitor 与 hub bin lock 之外，避免
+     * 「持有本 monitor 再拿静态 map 锁」的锁序反转；发布仍由 monitor 内二次检查收口。
+     * 子 Agent 共享父 registry 是类注释描述的刻意行为。</p>
      */
-    public synchronized RuntimeBackgroundTaskRegistry requireBackgroundTasks(String sessionId, TasklistPersistencePort persistence) {
-        if (backgroundTasks == null) {
-            backgroundTasks = SessionBackgroundTaskHub.getOrCreate(sessionId, persistence);
+    public RuntimeBackgroundTaskRegistry requireBackgroundTasks(String sessionId, TasklistPersistencePort persistence) {
+        RuntimeBackgroundTaskRegistry existing = backgroundTasks;
+        if (existing != null) {
+            return existing;
         }
-        return backgroundTasks;
+        RuntimeBackgroundTaskRegistry created = SessionBackgroundTaskHub.getOrCreate(sessionId, persistence);
+        synchronized (this) {
+            if (backgroundTasks == null) {
+                backgroundTasks = created;
+            }
+            return backgroundTasks;
+        }
     }
 }
