@@ -44,7 +44,14 @@ public class ToolInvocationFinishRecord {
 
     private ToolStructuredOutput structuredOutput;
 
+    /** 错误信息；写入账本时截断到 2000 字符，调用方不能假定完整文本被保存。 */
     private String errorMsg;
 
+    /**
+     * 完成时间；{@code null} 表示尚未完成。
+     * <p>后台派发 ACK 是 provisional 写（子 Agent 仍在跑），必须保持为 {@code null}，
+     * 让账本行继续处于 RUNNING；真正结算时才能通过终态守卫。调用方不得用
+     * {@code LocalDateTime.now()} 兜底该字段，否则会静默破坏后台结算。</p>
+     */
     private LocalDateTime finishedAt;
 }

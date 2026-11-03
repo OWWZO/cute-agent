@@ -13,9 +13,6 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * data_analysis projector。
- */
-/**
  * 数据分析工具的历史回放投影器，恢复分析过程、结果摘要和产物信息。
  */
 public class DataAnalysisToolInvocationProjector extends AbstractToolInvocationProjector {

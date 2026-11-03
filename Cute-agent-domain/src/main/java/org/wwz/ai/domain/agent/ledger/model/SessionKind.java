@@ -19,14 +19,16 @@ public enum SessionKind {
     /**
      * 子智能体会话：与主会话同构（独立 run / 记忆 / 观察流），可被用户续聊。
      * <p>
-     * 血缘由 {@code parent_session_id} 表达；「可续聊」由 {@code assertInteractive} 放行，
+     * 血缘由 {@code parent_session_id} 表达；「可续聊」由 case 层的
+     * {@code ConversationSessionAuthorizationService#assertInteractive} 放行，
      * 与「是否进侧栏列表」是两件事——后者等前端会话树 UI 落地时再放开
      * （见 {@code 2026-10-26-subagent-first-class-session-plan.md} §7.4）。
      */
     SUBAGENT("subagent"),
 
     /**
-     * 未知或缺失类型：一律 fail-closed —— 既不进侧栏列表，也不作为可交互会话放行。
+     * 未知或缺失类型：一律 fail-closed —— 既不进侧栏列表，也不作为可交互会话放行
+     * （由 case 层 {@code ConversationSessionAuthorizationService#assertInteractive} 拒绝）。
      * <p>
      * 之所以不回落 {@link #CONVERSATION}：新增类型（如未来的 {@code subagent_v2}）若被误判成普通会话，
      * 会直接绕过列表过滤与只读闸门，属于权限 fail-open。

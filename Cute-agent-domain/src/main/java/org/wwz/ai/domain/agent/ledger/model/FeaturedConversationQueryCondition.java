@@ -20,8 +20,14 @@ public class FeaturedConversationQueryCondition {
      */
     private String status;
 
+    /** 关联会话 id，等值匹配；{@code null} 或空白表示不按会话过滤。 */
     private String sessionId;
 
+    /**
+     * 标题模糊匹配（SQL {@code LIKE CONCAT('%', value, '%')}）；
+     * {@code null} 或空白表示不按标题过滤。传入值中的 {@code %} / {@code _} 不会被转义，
+     * 会作为 LIKE 通配符生效。
+     */
     private String title;
 
     private int offset;
