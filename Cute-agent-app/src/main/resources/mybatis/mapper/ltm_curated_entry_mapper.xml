@@ -69,5 +69,6 @@
           AND deleted = 0
           AND status = 'ACTIVE'
         ORDER BY id ASC
+        LIMIT #{limit}
     </select>
 </mapper>

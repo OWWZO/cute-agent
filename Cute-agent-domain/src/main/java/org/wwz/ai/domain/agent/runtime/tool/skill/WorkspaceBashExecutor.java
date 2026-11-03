@@ -17,16 +17,34 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 /**
- * 在会话工作区 cwd 下执行 shell 命令（本地进程沙箱）。
+ * 在会话工作区 cwd 下执行 shell 命令（<b>没有沙箱隔离</b>）。
  *
- * <p>对齐参考项目 bash 工具语义：非零退出码 / 超时是业务结果（exit_code / timed_out），
- * 不是工具通道错误。真正的隔离（Docker）可在后续替换本实现而不改 BashTool 契约。
+ * <p><b>信任边界：</b>命令以宿主用户的完整权限运行，{@code workspaceRoot} 只是初始工作目录，
+ * 不是安全边界；进程可以读写工作区之外的任意路径、访问网络并修改系统状态。因此只能用于
+ * 受信任的本地命令，不能把模型/用户输入直接交给它。需要真正隔离时应切换到远端沙箱
+ * （{@code BashTool}）或后续的 Docker 实现。</p>
+ *
+ * <p>当前最小护栏：内置高危命令拒绝列表 + 可配置追加模式，执行前记录审计日志。
+ * 对齐参考项目 bash 工具语义：非零退出码 / 超时是业务结果（exit_code / timed_out），
+ * 不是工具通道错误。真正的隔离（Docker）可在后续替换本实现而不改 BashTool 契约。</p>
  */
 @Slf4j
 @Component
 public class WorkspaceBashExecutor {
+
+    /** 内置拒绝项：只拦截明确可能破坏宿主的命令，不做通用 shell 解析。 */
+    private static final List<Pattern> DEFAULT_DENY_PATTERNS = List.of(
+            Pattern.compile("(?i)\\brm\\s+-[a-z]*(?:r[a-z]*f|f[a-z]*r)[a-z]*\\s+(?:/|--no-preserve-root|~)(?:\\s|$)"),
+            Pattern.compile("(?i)\\brm\\s+-r\\s+-f\\s+(?:/|--no-preserve-root|~)(?:\\s|$)"),
+            Pattern.compile("(?i)\\bmkfs(?:\\.[a-z0-9]+)?\\b"),
+            Pattern.compile("(?i)\\bdd\\s+if="),
+            Pattern.compile("(?i)\\b(?:shutdown|reboot|poweroff|halt)\\b"),
+            Pattern.compile("(?i)\\bformat\\s+[a-z]:"),
+            Pattern.compile(":\\(\\)\\s*\\{")
+    );
 
     private final SkillRuntimeOptions options;
 
@@ -47,6 +65,20 @@ public class WorkspaceBashExecutor {
         } catch (IOException e) {
             throw new IllegalStateException("failed to ensure workspace: " + cwd, e);
         }
+
+        String denied = deniedReason(command, options.getBashDeniedPatterns());
+        if (denied != null) {
+            log.warn("bash.exec denied cwd={} pattern={} command={}",
+                    cwd, denied, abbreviateForLog(command));
+            return ExecResult.builder()
+                    .exitCode(126)
+                    .stdout("")
+                    .stderr("command denied by policy: " + denied)
+                    .timedOut(false)
+                    .durationMs(0L)
+                    .build();
+        }
+        log.info("bash.exec start cwd={} command={}", cwd, abbreviateForLog(command));
 
         long effectiveTimeout = timeoutMs > 0
                 ? Math.min(timeoutMs, options.getBashMaxTimeoutSec() * 1000L)
@@ -81,7 +113,7 @@ public class WorkspaceBashExecutor {
                 process.destroyForcibly();
                 outThread.join(2_000);
                 errThread.join(2_000);
-                return ExecResult.builder()
+                ExecResult timeoutResult = ExecResult.builder()
                         .exitCode(null)
                         .stdout(stdout.text())
                         .stderr(merge(stderr.text(), "execution timed out after " + (effectiveTimeout / 1000) + "s"))
@@ -89,11 +121,14 @@ public class WorkspaceBashExecutor {
                         .timedOut(true)
                         .durationMs(System.currentTimeMillis() - started)
                         .build();
+                log.info("bash.exec finish cwd={} exit=timeout durationMs={}",
+                        cwd, timeoutResult.getDurationMs());
+                return timeoutResult;
             }
             outThread.join(2_000);
             errThread.join(2_000);
             int code = process.exitValue();
-            return ExecResult.builder()
+            ExecResult result = ExecResult.builder()
                     .exitCode(code)
                     .stdout(stdout.text())
                     .stderr(stderr.text())
@@ -101,6 +136,9 @@ public class WorkspaceBashExecutor {
                     .timedOut(false)
                     .durationMs(System.currentTimeMillis() - started)
                     .build();
+            log.info("bash.exec finish cwd={} exit={} durationMs={}",
+                    cwd, result.getExitCode(), result.getDurationMs());
+            return result;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             if (process != null) {
@@ -110,6 +148,37 @@ public class WorkspaceBashExecutor {
         } catch (IOException e) {
             throw new IllegalStateException("bash start failed: " + e.getMessage(), e);
         }
+    }
+
+    /** @return 命中的拒绝规则；未命中返回 {@code null}。 */
+    static String deniedReason(String command, List<String> extraPatterns) {
+        if (command == null || command.isBlank()) {
+            return null;
+        }
+        for (Pattern pattern : DEFAULT_DENY_PATTERNS) {
+            if (pattern.matcher(command).find()) {
+                return pattern.pattern();
+            }
+        }
+        if (extraPatterns != null) {
+            for (String extra : extraPatterns) {
+                if (extra == null || extra.isBlank()) {
+                    continue;
+                }
+                try {
+                    if (Pattern.compile(extra, Pattern.CASE_INSENSITIVE).matcher(command).find()) {
+                        return extra;
+                    }
+                } catch (Exception e) {
+                    log.warn("invalid bash denied pattern ignored: {}", extra);
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String abbreviateForLog(String command) {
+        return command.length() <= 1_000 ? command : command.substring(0, 1_000) + "…";
     }
 
     private static List<String> buildShellArgv(String command) {

@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.dao.catalog;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.wwz.ai.infrastructure.dao.po.catalog.AiClientApiPO;
 
 import java.util.List;
@@ -27,5 +28,9 @@ public interface IAiClientApiConfigDao {
 
     List<AiClientApiPO> queryEnabled();
 
+    List<AiClientApiPO> queryEnabledLimit(@Param("limit") int limit);
+
     List<AiClientApiPO> queryAll();
+
+    List<AiClientApiPO> queryPage(@Param("offset") int offset, @Param("limit") int limit);
 }

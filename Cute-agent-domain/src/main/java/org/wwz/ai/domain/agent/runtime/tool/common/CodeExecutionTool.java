@@ -15,14 +15,21 @@ import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspacePaths;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
+import org.wwz.ai.domain.agent.security.OutboundUrlGuard;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /** 调用侧 Agent 直接执行 Python 源码，复用受控 code_execution Runner。 */
 @Slf4j
 public class CodeExecutionTool implements BaseTool {
+
+    private static final Pattern WINDOWS_DRIVE = Pattern.compile("^[A-Za-z]:.*");
+
     @Override public String getName() { return "code_execution"; }
 
     @Override public String getDescription() {
@@ -33,7 +40,8 @@ public class CodeExecutionTool implements BaseTool {
                 + "plt.savefig('chart.png')；df.to_excel('结果.xlsx')。\n"
                 + "本次新增或修改的工作区文件会自动采集上传，前端可预览/下载。\n"
                 + "结果里的 produced_files[].url 可直接作为 document_generate 的 image.url。\n"
-                + "禁止写死宿主绝对路径。fileNames 仅用于 http(s) URL 或工作区外绝对路径。";
+                + "禁止写死宿主绝对路径。fileNames 仅用于公网 http(s) URL 或会话工作区内路径；"
+                + "工作区外绝对路径与内网地址会被拒绝。";
     }
 
     @Override public Map<String, Object> toParams() {
@@ -54,7 +62,8 @@ public class CodeExecutionTool implements BaseTool {
         properties.put("fileNames", Map.of(
                 "type", "array",
                 "items", Map.of("type", "string"),
-                "description", "可选。仅填 http(s) URL 或工作区外绝对路径，系统会下载到会话工作区。"
+                "description", "可选。仅填公网 http(s) URL 或会话工作区内路径，系统会下载/定位到会话工作区；"
+                        + "工作区外绝对路径和内网地址会被拒绝。"
                         + "工作区已有文件不要填这里，源码里用相对路径 Path/open 直接读。"
         ));
         Map<String, Object> fileItem = new LinkedHashMap<>(freeformObject);
@@ -76,12 +85,20 @@ public class CodeExecutionTool implements BaseTool {
             if (source.isBlank()) return ToolResultPayload.failure("source 不能为空", "source 不能为空", null, "missing source");
             ToolArtifactSource artifactSource = context.requireCurrentToolArtifactSource(getName());
             CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
+            Path workspaceRoot = WorkspacePaths.resolveSandboxRoot(
+                    context.getWorkspaceRoot(), context.getSessionId());
             Map<String, Object> request = new LinkedHashMap<>(params);
+            request.put("fileNames", validateFileNames(toStringList(params.get("fileNames")), workspaceRoot));
+            String workspaceFile = validateWorkspaceFile(stringValue(params.get("workspaceFile")));
+            if (workspaceFile != null) {
+                request.put("workspaceFile", workspaceFile);
+            } else {
+                request.remove("workspaceFile");
+            }
             request.put("requestId", context.getSessionId());
             request.put("sessionId", context.getSessionId());
             request.put("ownerKey", resolveOwnerKey(context));
-            request.put("workspaceRoot", WorkspacePaths.resolveSandboxRoot(
-                    context.getWorkspaceRoot(), context.getSessionId()).toString());
+            request.put("workspaceRoot", workspaceRoot.toString());
             request.put("permissionProfile", "workspace");
             request.put("source", source);
             // 远端执行统一绑定当前会话工作区；返回文件再登记到当前 tool artifact source，形成可回放的产物链。
@@ -151,6 +168,77 @@ public class CodeExecutionTool implements BaseTool {
             log.error("{} code_execution failed", context == null ? "unknown" : context.getRequestId(), e);
             return ToolResultPayload.failureFrom("code_execution 执行失败：" + e.getMessage(), null);
         }
+    }
+
+    /**
+     * fileNames 只允许公网 http(s) URL 或会话工作区内路径。
+     * <p>URL 由 {@link OutboundUrlGuard} 解析真实 IP 后判定地址类别；绝对路径必须落在会话工作区内，
+     * 防止把宿主任意文件拉进工作区再回传。</p>
+     */
+    static List<String> validateFileNames(List<String> raw, Path workspaceRoot) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        Math.max(0, 1);
+        List<String> validated = new ArrayList<>(raw.size());
+        for (String value : raw) {
+            String name = StringUtils.trimToEmpty(value);
+            if (name.isEmpty()) {
+                continue;
+            }
+            if (name.startsWith("http://") || name.startsWith("https://")) {
+                OutboundUrlGuard.validateHttpUrl(name);
+                validated.add(name);
+                continue;
+            }
+            validated.add(validateWorkspacePath(name, workspaceRoot.toAbsolutePath().normalize()));
+        }
+        return validated;
+    }
+
+    /** workspaceFile 必须是工作区内相对路径，拒绝绝对路径、盘符与 {@code ..} 穿越。 */
+    static String validateWorkspaceFile(String raw) {
+        if (StringUtils.isBlank(raw)) {
+            return null;
+        }
+        return validateWorkspacePath(raw.trim(), null);
+    }
+
+    private static String validateWorkspacePath(String raw, Path workspaceRoot) {
+        String normalized = raw.replace('\\', '/').trim();
+        if (normalized.isEmpty() || normalized.startsWith("/") || normalized.startsWith("~")
+                || WINDOWS_DRIVE.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("不允许工作区外绝对路径: " + raw);
+        }
+        Path relative = Path.of(normalized).normalize();
+        if (relative.isAbsolute() || relative.startsWith("..")) {
+            throw new IllegalArgumentException("路径不能逃逸会话工作区: " + raw);
+        }
+        if (workspaceRoot == null) {
+            return relative.toString().replace('\\', '/');
+        }
+        Path target = workspaceRoot.resolve(relative).normalize();
+        if (!target.startsWith(workspaceRoot)) {
+            throw new IllegalArgumentException("路径不能逃逸会话工作区: " + raw);
+        }
+        return relative.toString().replace('\\', '/');
+    }
+
+    private static List<String> toStringList(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>(list.size());
+        for (Object item : list) {
+            if (item != null) {
+                out.add(String.valueOf(item));
+            }
+        }
+        return out;
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private String resolveOwnerKey(AgentContext context) {

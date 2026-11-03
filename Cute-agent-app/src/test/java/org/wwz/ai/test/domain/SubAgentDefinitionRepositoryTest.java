@@ -110,6 +110,14 @@ public class SubAgentDefinitionRepositoryTest {
         }
 
         @Override
+        public List<SubAgentDefinitionPO> queryPage(int offset, int limit) {
+            return queryAll().stream()
+                    .skip(Math.max(offset, 0))
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
         public SubAgentDefinitionPO queryByAgentKey(String agentKey) {
             return rows.stream()
                     .filter(r -> agentKey.equals(r.getAgentKey()))

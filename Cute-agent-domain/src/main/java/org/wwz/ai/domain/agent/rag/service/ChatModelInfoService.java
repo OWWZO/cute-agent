@@ -96,8 +96,6 @@ public class ChatModelInfoService {
         if (CollectionUtils.isEmpty(modelList)) {
             return false;
         }
-        Map<String, Long> schemaCountMap = chatModelSchemaService.listDistinctSchemas().stream()
-                .collect(Collectors.groupingBy(ChatModelSchema::getModelCode, Collectors.counting()));
         Map<String, ChatModelInfo> modelMap = modelList.stream()
                 .collect(Collectors.toMap(ChatModelInfo::getCode, model -> model, (left, right) -> left));
         for (DataQueryModelConfig modelConfig : tableList) {
@@ -105,7 +103,8 @@ public class ChatModelInfoService {
             if (modelInfo == null) {
                 return false;
             }
-            if (schemaCountMap.getOrDefault(modelConfig.getId(), 0L) <= 0) {
+            // 按模型查询 schema，避免为了数行数而把整张 schema 表读进内存。
+            if (chatModelSchemaService.listDistinctSchemas(modelConfig.getId()).isEmpty()) {
                 return false;
             }
         }
@@ -292,16 +291,14 @@ public class ChatModelInfoService {
 
     public List<DataQueryModelDescriptor> queryAllModelsWithSchema() {
         List<ChatModelInfo> modelList = listDistinctModels();
-        List<ChatModelSchema> schemaList = chatModelSchemaService.listDistinctSchemas();
-        List<DataQuerySchema> schemaDtoList = new ArrayList<>();
-        for (ChatModelSchema schema : schemaList) {
-            DataQuerySchema dto = new DataQuerySchema();
-            BeanUtils.copyProperties(schema, dto);
-            schemaDtoList.add(dto);
-        }
-        Map<String, List<DataQuerySchema>> schemaMap = schemaDtoList.stream().collect(Collectors.groupingBy(DataQuerySchema::getModelCode));
         List<DataQueryModelDescriptor> dtoList = new ArrayList<>();
         for (ChatModelInfo modelInfo : modelList) {
+            List<DataQuerySchema> schemaDtoList = new ArrayList<>();
+            for (ChatModelSchema schema : chatModelSchemaService.listDistinctSchemas(modelInfo.getCode())) {
+                DataQuerySchema dto = new DataQuerySchema();
+                BeanUtils.copyProperties(schema, dto);
+                schemaDtoList.add(dto);
+            }
             DataQueryModelDescriptor dto = new DataQueryModelDescriptor();
             dto.setModelCode(modelInfo.getCode());
             dto.setModelName(modelInfo.getName());
@@ -309,7 +306,7 @@ public class ChatModelInfoService {
             dto.setUsePrompt(modelInfo.getUsePrompt());
             dto.setType(modelInfo.getType());
             dto.setContent(modelInfo.getContent());
-            dto.setSchemaList(schemaMap.get(modelInfo.getCode()));
+            dto.setSchemaList(schemaDtoList);
             dtoList.add(dto);
         }
         return dtoList;

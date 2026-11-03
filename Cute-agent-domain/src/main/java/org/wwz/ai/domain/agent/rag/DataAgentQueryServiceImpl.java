@@ -184,12 +184,15 @@ public class DataAgentQueryServiceImpl implements DataAgentQueryService {
 
         if (CollectionUtils.isEmpty(recalled)) {
             log.warn("{},{} 召回schema为空，读取数据库", query.getTraceId(), query.getRequestId());
-            return chatModelSchemaService.listDistinctSchemas().stream()
-                    .map(this::toDataQuerySchema)
-                    .collect(Collectors.toCollection(ArrayList::new));
+            return new ArrayList<>(chatModelSchemaService.queryAllSchemas());
         }
 
-        List<ChatModelSchema> defaults = chatModelSchemaService.queryDefaultRecallFields();
+        List<String> modelCodes = recalled.stream()
+                .map(DataQuerySchema::getModelCode)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .toList();
+        List<ChatModelSchema> defaults = chatModelSchemaService.queryDefaultRecallFields(modelCodes);
         mergeSchema(recalled, defaults);
         return recalled;
     }

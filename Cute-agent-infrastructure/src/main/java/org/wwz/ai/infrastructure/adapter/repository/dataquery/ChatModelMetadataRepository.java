@@ -2,7 +2,9 @@ package org.wwz.ai.infrastructure.adapter.repository.dataquery;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Repository;
 import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelInfo;
 import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelSchema;
@@ -21,6 +23,7 @@ import java.util.Map;
  * 问数模型元数据仓储实现。
  * 问数模型元数据仓储适配器，负责 PO 与 RAG Domain Model 的映射。
  */
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class ChatModelMetadataRepository implements IChatModelMetadataRepository {
@@ -60,11 +63,40 @@ public class ChatModelMetadataRepository implements IChatModelMetadataRepository
         List<ChatModelSchemaPO> schemaList = chatModelSchemaMapper.selectList(
                 Wrappers.<ChatModelSchemaPO>lambdaQuery()
                         .orderByDesc(ChatModelSchemaPO::getId)
+                        .last("LIMIT " + MAX_DISTINCT_SCHEMA_ROWS)
         );
+        if (schemaList != null && schemaList.size() >= MAX_DISTINCT_SCHEMA_ROWS) {
+            log.warn("chatModelSchema.distinct_query reached limit={}；请改用 modelCode 维度查询",
+                    MAX_DISTINCT_SCHEMA_ROWS);
+        }
+        return distinctSchemas(schemaList);
+    }
+
+    @Override
+    public List<ChatModelSchema> listDistinctSchemas(String modelCode) {
+        if (StringUtils.isBlank(modelCode)) {
+            return List.of();
+        }
+        List<ChatModelSchemaPO> schemaList = chatModelSchemaMapper.selectList(
+                Wrappers.<ChatModelSchemaPO>lambdaQuery()
+                        .eq(ChatModelSchemaPO::getModelCode, modelCode.trim())
+                        .orderByDesc(ChatModelSchemaPO::getId)
+                        .last("LIMIT " + MAX_DISTINCT_SCHEMA_ROWS)
+        );
+        if (schemaList != null && schemaList.size() >= MAX_DISTINCT_SCHEMA_ROWS) {
+            log.warn("chatModelSchema.distinct_query reached limit modelCode={} limit={}",
+                    modelCode, MAX_DISTINCT_SCHEMA_ROWS);
+        }
+        return distinctSchemas(schemaList);
+    }
+
+    private List<ChatModelSchema> distinctSchemas(List<ChatModelSchemaPO> schemaList) {
         Map<String, ChatModelSchemaPO> schemaMap = new LinkedHashMap<>();
-        for (ChatModelSchemaPO schema : schemaList) {
-            String key = schema.getModelCode() + "::" + schema.getColumnId();
-            schemaMap.putIfAbsent(key, schema);
+        if (schemaList != null) {
+            for (ChatModelSchemaPO schema : schemaList) {
+                String key = schema.getModelCode() + "::" + schema.getColumnId();
+                schemaMap.putIfAbsent(key, schema);
+            }
         }
         List<ChatModelSchema> result = new ArrayList<>();
         for (ChatModelSchemaPO schema : schemaMap.values()) {

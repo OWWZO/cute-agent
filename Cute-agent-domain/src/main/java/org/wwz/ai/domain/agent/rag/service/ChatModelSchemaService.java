@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.wwz.ai.domain.agent.rag.model.config.DataQueryModelConfig;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQuerySchema;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryTableColumn;
+import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelInfo;
 import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelSchema;
 import org.wwz.ai.domain.agent.rag.port.IChatModelMetadataRepository;
 import org.apache.commons.collections4.CollectionUtils;
@@ -102,13 +103,31 @@ public class ChatModelSchemaService {
                 .collect(Collectors.toList());
     }
 
+    /** 只加载指定模型的默认召回字段，避免一次拉全表。 */
+    public List<ChatModelSchema> queryDefaultRecallFields(Collection<String> modelCodes) {
+        if (CollectionUtils.isEmpty(modelCodes)) {
+            return List.of();
+        }
+        List<ChatModelSchema> schemas = new ArrayList<>();
+        for (String modelCode : new LinkedHashSet<>(modelCodes)) {
+            schemas.addAll(listDistinctSchemas(modelCode));
+        }
+        return schemas.stream()
+                .filter(schema -> schema.getDefaultRecall() == 1)
+                .collect(Collectors.toList());
+    }
+
     public List<DataQuerySchema> queryAllSchemas() {
-        List<ChatModelSchema> list = listDistinctSchemas();
         List<DataQuerySchema> schemaList = new ArrayList<>();
-        for (ChatModelSchema schema : list) {
-            DataQuerySchema dataQuerySchema = new DataQuerySchema();
-            BeanUtils.copyProperties(schema, dataQuerySchema);
-            schemaList.add(dataQuerySchema);
+        for (ChatModelInfo model : chatModelMetadataRepository.listDistinctModels()) {
+            if (model == null || StringUtils.isBlank(model.getCode())) {
+                continue;
+            }
+            for (ChatModelSchema schema : listDistinctSchemas(model.getCode())) {
+                DataQuerySchema dataQuerySchema = new DataQuerySchema();
+                BeanUtils.copyProperties(schema, dataQuerySchema);
+                schemaList.add(dataQuerySchema);
+            }
         }
         return schemaList;
     }
@@ -125,6 +144,11 @@ public class ChatModelSchemaService {
      */
     public List<ChatModelSchema> listDistinctSchemas() {
         return chatModelMetadataRepository.listDistinctSchemas();
+    }
+
+    /** 按模型编码读取字段，过滤下推到持久化层。 */
+    public List<ChatModelSchema> listDistinctSchemas(String modelCode) {
+        return chatModelMetadataRepository.listDistinctSchemas(modelCode);
     }
 
     public Set<String> getIgnoreFields(String ignoreFields) {

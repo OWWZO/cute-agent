@@ -151,10 +151,17 @@ public class MyBatisCuratedMemoryStore implements CuratedMemoryStore {
     }
 
     @Override
-    public List<CuratedMemoryEntry> listActive(LtmOwner owner, CuratedMemoryScope scope) {
+    public List<CuratedMemoryEntry> listActive(LtmOwner owner, CuratedMemoryScope scope, int limit) {
+        int normalizedLimit = limit <= 0
+                ? DEFAULT_LIST_LIMIT
+                : Math.min(limit, DEFAULT_LIST_LIMIT);
         try {
             List<CuratedMemoryEntry> rows = curatedEntryDao.selectActive(
-                    owner.getType().name(), owner.getId(), scope.getCode());
+                    owner.getType().name(), owner.getId(), scope.getCode(), normalizedLimit);
+            if (rows != null && rows.size() >= normalizedLimit) {
+                log.warn("listActive curated memory reached limit owner={} scope={} limit={}",
+                        owner, scope, normalizedLimit);
+            }
             return rows == null ? List.of() : List.copyOf(rows);
         } catch (Exception e) {
             log.warn("listActive curated memory failed owner={} scope={}: {}", owner, scope, e.toString());

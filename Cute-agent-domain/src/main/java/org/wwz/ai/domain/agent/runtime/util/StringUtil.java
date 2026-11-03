@@ -127,7 +127,11 @@ public class StringUtil {
         }
         StringBuilder result = new StringBuilder();
         for (char c : input.toCharArray()) {
-            if (!specialCharsSet.contains(c)) {
+            // 路径分隔符必须替换而不是删除：否则 "../../x" 会变成 "....x" 这类仍可能被下游
+            // 当作路径片段拼接的名字。统一替换为 "_" 后，调用方拿到的永远是单段文件名。
+            if (c == '/' || c == '\\') {
+                result.append('_');
+            } else if (!specialCharsSet.contains(c)) {
                 result.append(c);
             }
         }

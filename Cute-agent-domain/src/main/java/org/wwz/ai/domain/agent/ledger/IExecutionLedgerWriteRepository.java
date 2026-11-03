@@ -5,6 +5,7 @@ import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.entity.LlmInvocation;
 import org.wwz.ai.domain.agent.ledger.entity.ToolInvocation;
+import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord;
 
 import java.time.LocalDateTime;
@@ -15,6 +16,9 @@ import java.util.List;
  * 仅暴露当前 Recorder 所需的领域级写操作，屏蔽底层 DAO 细节。
  */
 public interface IExecutionLedgerWriteRepository {
+
+    /** 写端口上 run 扫描的硬上限：该查询只服务会话标题恢复等小规模用途。 */
+    int DEFAULT_RUN_SCAN_LIMIT = 100;
 
     void insertRun(DialogueRun run);
 
@@ -65,7 +69,19 @@ public interface IExecutionLedgerWriteRepository {
                                int failedDelta,
                                LocalDateTime lastActiveAt);
 
-    List<org.wwz.ai.domain.agent.ledger.model.DialogueRunView> queryRunsBySessionId(String sessionId);
+    /**
+     * 兼容旧调用方：只取前 {@value #DEFAULT_RUN_SCAN_LIMIT} 条 run。
+     * <p>需要更多数据请走读仓储的分页接口；写端口不提供无界扫描。</p>
+     */
+    default List<DialogueRunView> queryRunsBySessionId(String sessionId) {
+        return queryRunsBySessionId(sessionId, DEFAULT_RUN_SCAN_LIMIT);
+    }
+
+    /**
+     * 按会话读取 run 视图，最多 {@code limit} 行（{@code limit <= 0} 取默认值，
+     * 且实现最多放大到 {@value #DEFAULT_RUN_SCAN_LIMIT}）。
+     */
+    List<DialogueRunView> queryRunsBySessionId(String sessionId, int limit);
 
     void insertLlmInvocation(LlmInvocation invocation);
 

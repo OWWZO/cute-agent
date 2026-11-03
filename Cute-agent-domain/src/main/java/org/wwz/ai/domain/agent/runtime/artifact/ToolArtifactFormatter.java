@@ -164,9 +164,9 @@ public final class ToolArtifactFormatter {
         }
         File file = binding.getFile();
         return String.format("- filePath:%s fileName:%s fileDesc:%s",
-                resolveWorkspacePath(file),
-                StringUtils.defaultString(file.getFileName()),
-                StringUtils.defaultString(StringUtils.abbreviate(file.getDescription(), 80)));
+                sanitizeInline(resolveWorkspacePath(file)),
+                sanitizeInline(file.getFileName()),
+                StringUtils.abbreviate(sanitizeInline(file.getDescription()), 80));
     }
 
     /**
@@ -182,10 +182,21 @@ public final class ToolArtifactFormatter {
         File file = binding.getFile();
         ToolArtifactSource source = binding.getSource();
         return String.format("filePath:%s toolName:%s fileName:%s fileDesc:%s fileUrl:%s",
-                resolveWorkspacePath(file),
-                StringUtils.defaultString(source.getToolName()),
-                StringUtils.defaultString(file.getFileName()),
-                StringUtils.defaultString(StringUtils.abbreviate(file.getDescription(), 120)),
-                resolveFileUrl(file));
+                sanitizeInline(resolveWorkspacePath(file)),
+                sanitizeInline(source.getToolName()),
+                sanitizeInline(file.getFileName()),
+                StringUtils.abbreviate(sanitizeInline(file.getDescription()), 120),
+                sanitizeInline(resolveFileUrl(file)));
+    }
+
+    /**
+     * 产物元数据来自工具输出 / 用户文件，可能包含换行或控制字符。
+     * 这里压成单行，避免破坏「一行一个产物」的上下文格式或伪造出新的 filePath/toolName 字段。
+     */
+    static String sanitizeInline(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replaceAll("[\\r\\n\\t\\p{Cntrl}]+", " ").trim();
     }
 }

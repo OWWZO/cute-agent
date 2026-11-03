@@ -25,6 +25,9 @@ public interface IExecutionLedgerReadRepository {
      */
     int MAX_BATCH_RUN_IDS = 100;
 
+    /** 单会话产物查询的默认安全上限。 */
+    int DEFAULT_SESSION_ARTIFACT_LIMIT = 500;
+
     DialogueRun queryRunByRequestId(String requestId);
 
     DialogueRun queryRunSummaryByRequestId(String requestId);
@@ -120,5 +123,18 @@ public interface IExecutionLedgerReadRepository {
      */
     List<ArtifactRecord> queryArtifactsByRunIdsWithSubagentFold(List<Long> runIds);
 
-    List<ArtifactRecord> queryArtifactsBySessionId(String sessionId);
+    /**
+     * 单会话产物查询的默认入口；等价于
+     * {@code queryArtifactsBySessionId(sessionId, DEFAULT_SESSION_ARTIFACT_LIMIT)}。
+     */
+    default List<ArtifactRecord> queryArtifactsBySessionId(String sessionId) {
+        return queryArtifactsBySessionId(sessionId, DEFAULT_SESSION_ARTIFACT_LIMIT);
+    }
+
+    /**
+     * 查询单会话（含子会话与子 Agent 血缘）产物，最多 {@code limit} 行。
+     * <p>实现必须把 LIMIT 下推到 SQL；{@code limit <= 0} 取默认上限，且不得超过
+     * {@link #DEFAULT_SESSION_ARTIFACT_LIMIT}。命中上限时应记录日志，提示调用方改用分页/按 run 查询。</p>
+     */
+    List<ArtifactRecord> queryArtifactsBySessionId(String sessionId, int limit);
 }

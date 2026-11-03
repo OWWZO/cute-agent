@@ -160,8 +160,15 @@ public class InMemoryCuratedMemoryStore implements CuratedMemoryStore {
     }
 
     @Override
-    public synchronized List<CuratedMemoryEntry> listActive(LtmOwner owner, CuratedMemoryScope scope) {
-        return List.copyOf(activeList(owner, scope));
+    public synchronized List<CuratedMemoryEntry> listActive(LtmOwner owner, CuratedMemoryScope scope, int limit) {
+        int normalizedLimit = limit <= 0
+                ? DEFAULT_LIST_LIMIT
+                : Math.min(limit, DEFAULT_LIST_LIMIT);
+        List<CuratedMemoryEntry> active = activeList(owner, scope);
+        if (active.size() <= normalizedLimit) {
+            return List.copyOf(active);
+        }
+        return List.copyOf(active.subList(0, normalizedLimit));
     }
 
     @Override

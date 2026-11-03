@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.adapter.repository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.entity.ArtifactRecord;
@@ -26,6 +27,7 @@ import java.util.List;
  *
  * <p>这里只把 DAO 查询结果映射为 ledger 读模型，不创建历史消息表或其它第二套持久化真相。</p>
  */
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class ExecutionLedgerReadRepository implements IExecutionLedgerReadRepository {
@@ -175,7 +177,17 @@ public class ExecutionLedgerReadRepository implements IExecutionLedgerReadReposi
     }
 
     @Override
-    public List<ArtifactRecord> queryArtifactsBySessionId(String sessionId) {
-        return artifactLedgerDao.queryBySessionId(sessionId);
+    public List<ArtifactRecord> queryArtifactsBySessionId(String sessionId, int limit) {
+        int normalizedLimit = limit <= 0
+                ? DEFAULT_SESSION_ARTIFACT_LIMIT
+                : Math.min(limit, DEFAULT_SESSION_ARTIFACT_LIMIT);
+        List<ArtifactRecord> artifacts =
+                artifactLedgerDao.queryBySessionIdLimit(sessionId, normalizedLimit);
+        if (artifacts != null && artifacts.size() >= normalizedLimit) {
+            // 没有总数查询，命中上限即提示可能截断；调用方需要更完整数据时应按 run 分页聚合。
+            log.warn("artifact.session_query reached limit sessionId={} limit={}",
+                    sessionId, normalizedLimit);
+        }
+        return artifacts;
     }
 }

@@ -41,7 +41,7 @@ public class SubAgentDefinitionAdminApplicationServiceTest {
         }
 
         @Override
-        public List<SubAgentDefinitionRecord> listAll() {
+        public List<SubAgentDefinitionRecord> listAll(int offset, int limit) {
             return List.of();
         }
 

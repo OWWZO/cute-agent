@@ -8,6 +8,12 @@ import java.util.Map;
 /**
  * 远端 HTTP 请求描述。
  * domain 只表达请求语义与超时约束，不关心底层使用哪种 HTTP 客户端实现。
+ *
+ * <p><b>出站安全边界：</b>本对象不校验 {@link #url} 与 {@link #proxy}，适配器实现必须承担
+ * SSRF 防护义务：只允许 {@code http}/{@code https}，拒绝带凭据 URL 与非规范 IPv4 写法，
+ * 解析真实 IP 后拒绝 loopback / link-local / private / ULA / multicast / 未指定地址
+ * （含 IPv4-mapped），并对重定向目标逐跳复检。{@link #proxy} 只能来自受信任的部署配置，
+ * 不得直接透传用户输入；如需代理白名单，由适配器按部署策略执行。</p>
  */
 @Value
 @Builder
@@ -19,7 +25,7 @@ public class RemoteHttpRequest {
     String method;
 
     /**
-     * 完整请求地址。
+     * 完整请求地址；仅允许 http(s)，且必须通过适配器的出站地址校验（见类注释）。
      */
     String url;
 
@@ -62,6 +68,7 @@ public class RemoteHttpRequest {
     /**
      * 可选的单请求代理地址，例如 http://127.0.0.1:7890。
      * 为空时使用 HTTP 适配器的默认网络路径。
+     * <p>只允许来自受信任部署配置，不得透传用户输入；适配器应按部署策略校验代理 scheme 与 host。</p>
      */
     String proxy;
 }

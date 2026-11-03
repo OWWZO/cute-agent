@@ -105,7 +105,12 @@ public class ApiConfigApplicationServiceTest {
         }
 
         @Override
-        public List<AiClientApiConfig> findEnabled() {
+        public List<AiClientApiConfig> findEnabled(int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<AiClientApiConfig> findAll(int offset, int limit) {
             return List.of();
         }
 

@@ -254,7 +254,7 @@ final class ToolExecutionPipeline {
                 );
             }
 
-            ToolResultPayload payload = normalizeToolResultPayload(toolName, resultObject);
+            ToolResultPayload payload = normalizeToolResultPayload(context, toolName, resultObject);
             String toolResult = StringUtils.defaultString(payload.getToolResult());
             String llmObservation = StringUtils.defaultIfBlank(payload.getLlmObservation(), toolResult);
             if (Boolean.TRUE.equals(payload.getFailed())) {
@@ -481,7 +481,7 @@ final class ToolExecutionPipeline {
         return null;
     }
 
-    private ToolResultPayload normalizeToolResultPayload(String toolName, Object rawResult) {
+    static ToolResultPayload normalizeToolResultPayload(AgentContext context, String toolName, Object rawResult) {
         if (rawResult instanceof ToolResultPayload payload) {
             boolean failed = Boolean.TRUE.equals(payload.getFailed());
             String toolResult = StringUtils.defaultString(payload.getToolResult());
@@ -490,14 +490,15 @@ final class ToolExecutionPipeline {
                 String compact = failed ? null : ToolObservationFormatter.format(toolName, payload.getLlmData());
                 if (compact != null) {
                     // 投影后仍可能超大（大仓库 grep / 长文件 read）：完整内容落工作区，模型拿到可续读的信封。
-                    llmObservation = ToolObservationBudget.apply(agent.getContext(), toolName, compact);
+                    llmObservation = ToolObservationBudget.apply(context, toolName, compact);
                 } else if (payload.getLlmData() != null || failed) {
                     // 未登记投影器的工具（MCP / Python / legacy）同样要过预算：
                     // 否则它们只能靠全局 maxObserve 兜底，单次几十 KB 的结果照样反复重放进上下文。
                     llmObservation = ToolObservationBudget.apply(
-                            agent.getContext(), toolName, ToolObservationSerializer.serializePayload(payload));
+                            context, toolName, ToolObservationSerializer.serializePayload(payload));
                 } else {
-                    llmObservation = toolResult;
+                    // 只有 toolResult、没有 llmData 的 payload 同样可能很大，不能绕过预算。
+                    llmObservation = ToolObservationBudget.apply(context, toolName, toolResult);
                 }
             }
             if (StringUtils.isBlank(toolResult)) {
@@ -520,7 +521,8 @@ final class ToolExecutionPipeline {
         if (rawResult instanceof String textResult) {
             return ToolResultPayload.builder()
                     .toolResult(textResult)
-                    .llmObservation(ToolObservationSerializer.serializeSuccess(textResult))
+                    .llmObservation(ToolObservationBudget.apply(
+                            context, toolName, ToolObservationSerializer.serializeSuccess(textResult)))
                     .llmData(textResult)
                     .failed(Boolean.FALSE)
                     .build();
@@ -528,7 +530,7 @@ final class ToolExecutionPipeline {
         String serialized = ToolObservationSerializer.serializeSuccess(rawResult);
         return ToolResultPayload.builder()
                 .toolResult(serialized)
-                .llmObservation(serialized)
+                .llmObservation(ToolObservationBudget.apply(context, toolName, serialized))
                 .llmData(rawResult)
                 .failed(Boolean.FALSE)
                 .build();
@@ -588,7 +590,8 @@ final class ToolExecutionPipeline {
         }
         DeferredToolCall.Result result = DeferredToolCall.resolve(agent.getAvailableTools(), parsed);
         if (!result.ok()) {
-            ToolResultPayload payload = normalizeToolResultPayload(originalName, result.errorPayload());
+            ToolResultPayload payload = normalizeToolResultPayload(
+                    agent.getContext(), originalName, result.errorPayload());
             String toolResult = StringUtils.defaultString(payload.getToolResult());
             String observation = StringUtils.defaultIfBlank(payload.getLlmObservation(), toolResult);
             ToolExecutionOutcome early = Boolean.TRUE.equals(payload.getFailed())

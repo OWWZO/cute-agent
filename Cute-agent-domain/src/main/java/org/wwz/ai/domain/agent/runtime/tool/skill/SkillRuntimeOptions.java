@@ -64,6 +64,14 @@ public class SkillRuntimeOptions {
     @Builder.Default
     private int bashOutputMaxChars = 64_000;
 
+    /**
+     * 本地 bash 执行的额外拒绝命令正则（大小写不敏感）。
+     * <p>内置高危模式始终生效；这里只用于部署方追加自己的禁止项。
+     * 仅约束 {@code WorkspaceBashExecutor} 的本地执行路径，远端沙箱 bash 由 Runner 负责。</p>
+     */
+    @Builder.Default
+    private List<String> bashDeniedPatterns = new ArrayList<>();
+
     // ── 扫描发现 ─────────────────────────────────────────────────────────
 
     /**

@@ -23,4 +23,7 @@ public class SkillFile {
     private boolean binary;
 
     private long size;
+
+    /** 文件超过单次注入上限，{@link #content} 只包含开头部分。 */
+    private boolean truncated;
 }

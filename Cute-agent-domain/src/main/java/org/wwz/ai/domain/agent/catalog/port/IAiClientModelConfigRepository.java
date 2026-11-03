@@ -13,6 +13,9 @@ import java.util.Optional;
  */
 public interface IAiClientModelConfigRepository {
 
+    /** 默认分页安全上限：旧的无参查询最多读取这么多行。 */
+    int DEFAULT_LIST_LIMIT = 500;
+
     boolean insert(AiClientModelConfig config);
 
     boolean updateById(AiClientModelConfig config);
@@ -33,7 +36,19 @@ public interface IAiClientModelConfigRepository {
 
     List<AiClientModelConfig> findByModelType(String modelType);
 
-    List<AiClientModelConfig> findEnabled();
+    /** 启用配置；默认最多 {@link #DEFAULT_LIST_LIMIT} 行，持久化层负责 LIMIT。 */
+    default List<AiClientModelConfig> findEnabled() {
+        return findEnabled(DEFAULT_LIST_LIMIT);
+    }
 
-    List<AiClientModelConfig> findAll();
+    /** 启用配置（最多 {@code limit} 行）；{@code limit <= 0} 时取默认上限。 */
+    List<AiClientModelConfig> findEnabled(int limit);
+
+    /** 全量配置的默认分页入口；等价于 {@code findAll(0, DEFAULT_LIST_LIMIT)}。 */
+    default List<AiClientModelConfig> findAll() {
+        return findAll(0, DEFAULT_LIST_LIMIT);
+    }
+
+    /** 按 {@code create_time DESC, id DESC} 分页读取全部配置。实现必须把 LIMIT 下推到 SQL。 */
+    List<AiClientModelConfig> findAll(int offset, int limit);
 }
