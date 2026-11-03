@@ -9,8 +9,8 @@ import {
   buildDefaultToolBaseUrl,
   formatBytes,
   toPrettyJson,
-  trimTrailingSlash,
 } from "@/pages/WorkspaceImageGeneration/utils";
+import { trimTrailingSlash } from "@/utils/fileUrl";
 
 export { formatBytes, toPrettyJson };
 

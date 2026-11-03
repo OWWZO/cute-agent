@@ -3,8 +3,8 @@ import { z } from "zod";
 /**
  * 前端 SSE 协议边界校验。
  *
- * <p>这里只验证事件信封和关键主键，保留未知字段供后续业务投影消费；这样协议向后
- * 兼容时不会因为后端新增富结构字段而让网络层拒绝整条事件。</p>
+ * <p>信封与 eventData 会保留未知字段供后续业务投影消费；dataChatEventSchema
+ * 按 eventType 严格解析，未声明字段不会进入 dataChat 投影。</p>
  */
 const answerEnvelopeSchema = z.object({
   status: z.string(),
@@ -21,6 +21,7 @@ const eventDataSchema = z.object({
   taskId: z.string(),
   taskOrder: z.number(),
   resultMap: z.object({ messageType: z.string().optional() }).passthrough(),
+  /** 只校验数组外壳；ArtifactReference 各字段由业务消费层再次收窄。 */
   artifactRefs: z.array(z.object({}).passthrough()).optional(),
 }).passthrough();
 

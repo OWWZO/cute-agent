@@ -13,9 +13,13 @@ export type FileKind =
 /** 文件类型角标底色/字色。走语义 token，避免写死 hex。 */
 export const FILE_KIND_TONE = "bg-hover text-foreground-subtle";
 
+function resolveKindExt(type?: string, name?: string): string {
+  return (type || name?.split(".").pop() || "").toLowerCase();
+}
+
 // 优先使用后端提供的类型，缺失时才从文件名后缀推断，保证展示和下载协议一致。
 export function resolveFileKind(type?: string, name?: string): FileKind {
-  const ext = (type || name?.split(".").pop() || "").toLowerCase();
+  const ext = resolveKindExt(type, name);
   if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"].includes(ext)) {
     return "img";
   }
@@ -34,12 +38,12 @@ export function resolveFileKind(type?: string, name?: string): FileKind {
 
 export function fileKindLabel(type?: string, name?: string) {
   const kind = resolveFileKind(type, name);
-  const ext = (type || name?.split(".").pop() || "").toUpperCase();
+  const ext = resolveKindExt(type, name).toUpperCase();
   switch (kind) {
     case "img":
-      return `Image · ${ext || "PNG"}`;
+      return `Image · ${ext}`;
     case "xlsx":
-      return `Spreadsheet · ${ext || "XLSX"}`;
+      return `Spreadsheet · ${ext}`;
     case "md":
       return name?.replace(/\.[^.]+$/, "") || `Document · ${ext || "MD"}`;
     case "html":
@@ -47,13 +51,13 @@ export function fileKindLabel(type?: string, name?: string) {
     case "pdf":
       return "PDF · PDF";
     case "ppt":
-      return `演示文稿 · ${ext || "PPTX"}`;
+      return `演示文稿 · ${ext}`;
     case "css":
       return "样式文件 · CSS";
     case "py":
       return "Python · PY";
     case "code":
-      return `Code · ${ext || "FILE"}`;
+      return `Code · ${ext}`;
     default:
       return ext ? `File · ${ext}` : "File";
   }

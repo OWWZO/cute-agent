@@ -32,11 +32,14 @@ export function resolveDeepSearchStage(
 
 export function normalizeDeepSearchQueries(value: unknown): string[] {
   // 后端可能返回单个字符串或数组，统一成去空白、去空项的数组供标题和卡片复用。
-  const rawQueries = Array.isArray(value)
-    ? value
-    : value == null
-      ? []
-      : [value];
+  let rawQueries: unknown[];
+  if (Array.isArray(value)) {
+    rawQueries = value;
+  } else if (value === null || value === undefined) {
+    rawQueries = [];
+  } else {
+    rawQueries = [value];
+  }
 
   return rawQueries
     .map((item) => String(item ?? "").trim())
@@ -227,6 +230,22 @@ export function findChapterStateForQuery(
   });
 }
 
+function resolveChapterPreviewDescription(
+  resultCount: number,
+  summaryStreaming: boolean
+): string {
+  if (resultCount && summaryStreaming) {
+    return `${formatCountLabel(resultCount, "条来源")}，正在生成章节总结，点击查看右侧详情。`;
+  }
+  if (resultCount) {
+    return `${formatCountLabel(resultCount, "条来源")}，含章节总结，点击查看右侧详情。`;
+  }
+  if (summaryStreaming) {
+    return "章节总结生成中，点击查看右侧详情。";
+  }
+  return "章节总结已生成，点击查看右侧详情。";
+}
+
 export function buildDeepSearchPreviewModel(
   task: { messageType?: string; resultMap?: DeepSearchResultMapLike | null }
 ): DeepSearchPreviewModel | undefined {
@@ -269,11 +288,10 @@ export function buildDeepSearchPreviewModel(
       stage: chapterSummary ? "chapter_summary" : stage,
       query,
       statusLabel: summaryStreaming ? "正在总结章节" : "章节完成",
-      description: resultCount
-        ? `${formatCountLabel(resultCount, "条来源")}${summaryStreaming ? "，正在生成章节总结，点击查看右侧详情。" : "，含章节总结，点击查看右侧详情。"}`
-        : summaryStreaming
-          ? "章节总结生成中，点击查看右侧详情。"
-          : "章节总结已生成，点击查看右侧详情。",
+      description: resolveChapterPreviewDescription(
+        resultCount,
+        summaryStreaming
+      ),
       loading: summaryStreaming,
       interactive: true,
       resultCount,

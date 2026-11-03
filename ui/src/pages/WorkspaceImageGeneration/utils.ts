@@ -6,7 +6,10 @@ import type {
 import {
   normalizeFileUrlForBrowser,
   normalizeToolBaseUrlForBrowser,
+  trimTrailingSlash,
 } from "@/utils/fileUrl";
+
+export { trimTrailingSlash };
 
 const DATA_URL_RE = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i;
 const MARKDOWN_IMAGE_RE = /!\[[^\]]*]\((https?:\/\/[^)\s]+)\)/i;
@@ -34,10 +37,6 @@ export const checkerboardStyle = {
 
 export function buildDefaultToolBaseUrl(): string {
   return normalizeToolBaseUrlForBrowser(CUTE_TOOL_BASE_URL);
-}
-
-export function trimTrailingSlash(url: string): string {
-  return (url || "").trim().replace(/\/+$/, "");
 }
 
 export function createLocalId(prefix: string): string {

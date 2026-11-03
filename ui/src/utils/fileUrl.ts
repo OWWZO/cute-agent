@@ -1,4 +1,16 @@
-import { trimTrailingSlash } from "@/pages/WorkspaceImageGeneration/utils";
+const TOOL_PATH_PREFIX = "/tool/";
+const FILE_TOOL_PATH_PREFIX = "/v1/file_tool";
+const LEGACY_TOOL_PORT = "1601";
+const LEGACY_TOOL_HOSTNAMES = new Set([
+  "owwzo.top",
+  "www.owwzo.top",
+  "owwzo.cloud",
+  "www.owwzo.cloud",
+]);
+
+export function trimTrailingSlash(url: string): string {
+  return (url || "").trim().replace(/\/+$/, "");
+}
 
 // 浏览器端只使用当前页面的 origin，避免服务端返回的旧工具地址把资源请求带回历史端口。
 function buildCurrentToolOrigin(): string {
@@ -46,12 +58,8 @@ function shouldRewriteToCurrentTool(url: URL): boolean {
   const isLoopback =
     url.hostname === "127.0.0.1" ||
     url.hostname === "localhost";
-  const isLegacyTopDomain =
-    url.hostname === "owwzo.top" ||
-    url.hostname === "www.owwzo.top" ||
-    url.hostname === "owwzo.cloud" ||
-    url.hostname === "www.owwzo.cloud";
-  const isToolPort = url.port === "1601";
+  const isLegacyTopDomain = LEGACY_TOOL_HOSTNAMES.has(url.hostname);
+  const isToolPort = url.port === LEGACY_TOOL_PORT;
 
   if (isToolPort || (isLoopback && !url.port)) {
     return true;
@@ -61,7 +69,7 @@ function shouldRewriteToCurrentTool(url: URL): boolean {
     return true;
   }
 
-  return url.host === currentHost && url.pathname.startsWith("/tool/");
+  return url.host === currentHost && url.pathname.startsWith(TOOL_PATH_PREFIX);
 }
 
 export function normalizeToolBaseUrlForBrowser(rawUrl?: string | null): string {
@@ -99,7 +107,7 @@ export function normalizeToolBaseUrlForBrowser(rawUrl?: string | null): string {
     if (normalized === "/tool") {
       return currentToolBaseUrl;
     }
-    if (normalized.startsWith("/tool/")) {
+    if (normalized.startsWith(TOOL_PATH_PREFIX)) {
       return `${currentOrigin}${normalized}`;
     }
     if (normalized.startsWith("/")) {
@@ -115,7 +123,7 @@ export function normalizeToolBaseUrlForBrowser(rawUrl?: string | null): string {
  */
 export function isToolFilePath(value: string): boolean {
   return (
-    value.startsWith("/tool/") ||
+    value.startsWith(TOOL_PATH_PREFIX) ||
     value.startsWith("preview/") ||
     value.startsWith("/preview/") ||
     value.startsWith("download/") ||
@@ -174,15 +182,15 @@ export function normalizeFileUrlForBrowser(rawUrl?: string | null): string {
     return currentToolUrl.toString();
   } catch {
     // 相对路径无法被 URL 解析时，仅补当前 origin，不猜测其它外部主机。
-    if (normalized.startsWith("/tool/")) {
+    if (normalized.startsWith(TOOL_PATH_PREFIX)) {
       const currentOrigin = buildCurrentToolOrigin();
       return currentOrigin ? `${currentOrigin}${normalized}` : normalized;
     }
     const currentToolBaseUrl = buildCurrentToolBaseUrl();
     if (currentToolBaseUrl && isToolFilePath(normalized)) {
       return normalized.startsWith("/")
-        ? `${currentToolBaseUrl}/v1/file_tool${normalized}`
-        : `${currentToolBaseUrl}/v1/file_tool/${normalized}`;
+        ? `${currentToolBaseUrl}${FILE_TOOL_PATH_PREFIX}${normalized}`
+        : `${currentToolBaseUrl}${FILE_TOOL_PATH_PREFIX}/${normalized}`;
     }
     return normalized;
   }

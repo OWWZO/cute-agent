@@ -13,7 +13,7 @@ import {
 import { mergePendingAskUserQuestions } from "@/utils/askUserRestore";
 import { mergePendingDesktopControls } from "@/utils/desktopControlRestore";
 import { mergePendingPlanApprovals } from "@/utils/planApprovalRestore";
-import { claimHitlResumeDispatch } from "@/utils/hitlResumeIntent";
+import { scheduleHitlResumeDispatch } from "@/utils/hitlResumeIntent";
 
 /** bootstrap 一次取回的三类 HITL pending。 */
 export interface SessionHitlPending {
@@ -33,18 +33,11 @@ export function applySessionHitlPending(
   pending: SessionHitlPending
 ): CHAT.ConversationHistory {
   const withAsk = mergePendingAskUserQuestions(conversation, pending.askUser);
-  // 下一帧再派发，确保 ChatView 已挂上 resume 事件监听
-  if (withAsk.autoResumes.length) {
-    window.setTimeout(() => {
-      for (const item of withAsk.autoResumes) {
-        // 快速切会话 / StrictMode 双调用可能重复派发同一个 resumeRequestId
-        if (!claimHitlResumeDispatch(`ask-user::${item.resumeRequestId}`)) {
-          continue;
-        }
-        dispatchAskUserResume(item);
-      }
-    }, 0);
-  }
+  scheduleHitlResumeDispatch(
+    "ask-user",
+    withAsk.autoResumes,
+    dispatchAskUserResume
+  );
 
   const withDesktop = mergePendingDesktopControls(withAsk.conversation, pending.desktopControl);
   for (const item of withDesktop.autoResumes) {
@@ -52,17 +45,11 @@ export function applySessionHitlPending(
   }
 
   const withPlan = mergePendingPlanApprovals(withDesktop.conversation, pending.planApproval);
-  if (withPlan.autoResumes.length) {
-    window.setTimeout(() => {
-      for (const item of withPlan.autoResumes) {
-        // 快速切会话 / StrictMode 双调用可能重复派发同一个 resumeRequestId
-        if (!claimHitlResumeDispatch(`plan-approval::${item.resumeRequestId}`)) {
-          continue;
-        }
-        dispatchPlanApprovalResume(item);
-      }
-    }, 0);
-  }
+  scheduleHitlResumeDispatch(
+    "plan-approval",
+    withPlan.autoResumes,
+    dispatchPlanApprovalResume
+  );
 
   return withPlan.conversation;
 }
