@@ -14,7 +14,7 @@ import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.rag.model.sql.*;
-import org.wwz.ai.domain.agent.rag.sql.dialect.ClickHouseSqlDialect2;
+import org.wwz.ai.domain.agent.rag.sql.dialect.ClickHouseCustomSqlDialect;
 import org.wwz.ai.domain.agent.rag.sql.dialect.MysqlCustomSqlDialect;
 import org.wwz.ai.domain.agent.rag.sql.dialect.SqlDialectUtil;
 
@@ -43,7 +43,7 @@ public class SqlParserUtils {
     private static SqlParser.Config parserConfig(@NonNull String dialectString) {
         // 方言只影响解析器配置和少量语法兼容，不改变后续统一的 SqlModel 结构。
         if (isClickHouseDialect(dialectString)) {
-            return ClickHouseSqlDialect2.DEFAULT.configureParser(SqlParser.config())
+            return ClickHouseCustomSqlDialect.DEFAULT.configureParser(SqlParser.config())
                     .withConformance(SqlConformanceEnum.LENIENT);
         }
         return MysqlCustomSqlDialect.DEFAULT.configureParser(SqlParser.config())
@@ -490,7 +490,7 @@ public class SqlParserUtils {
         }
         if (selectNode.getWhere() != null) {
             WhereCondition whereCondition = parseSelectWhere(selectNode.getWhere(), dialect);
-            List<WhereCondition> whereConditionList = flattenConditions(whereCondition, "AND".equalsIgnoreCase(whereCondition.getOperator()));
+            List<WhereCondition> whereConditionList = flattenConditions(whereCondition);
             sqlModel.setWhereConditionList(whereConditionList);
         }
         if (selectNode.getGroup() != null) {
@@ -512,7 +512,7 @@ public class SqlParserUtils {
     }
 
 
-    private static List<WhereCondition> flattenConditions(WhereCondition condition, boolean isAnd) {
+    private static List<WhereCondition> flattenConditions(WhereCondition condition) {
         List<WhereCondition> flatConditions = new ArrayList<>();
         // AND 可以安全展开为独立条件；OR 必须保留整棵子树，否则会改变 SQL 的布尔语义。
         if (condition.getOperator() == null) {
@@ -520,7 +520,7 @@ public class SqlParserUtils {
         } else {
             if (condition.getOperator().equalsIgnoreCase(AND)) {
                 for (WhereCondition operand : condition.getConditionList()) {
-                    flatConditions.addAll(flattenConditions(operand, true));
+                    flatConditions.addAll(flattenConditions(operand));
                 }
             } else if (condition.getOperator().equalsIgnoreCase(OR)) {
                 flatConditions.add(condition);

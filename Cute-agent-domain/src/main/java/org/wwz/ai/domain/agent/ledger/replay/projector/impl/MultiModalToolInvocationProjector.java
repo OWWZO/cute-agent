@@ -6,6 +6,7 @@ import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 import org.wwz.ai.domain.agent.ledger.model.replay.ProjectedReplayEvent;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.MultimodalAgentToolOutput;
+import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputNames;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,7 +22,7 @@ public class MultiModalToolInvocationProjector extends AbstractToolInvocationPro
 
     @Override
     public boolean supports(String toolName) {
-        return "multimodalagent_tool".equals(toolName);
+        return ToolOutputNames.MULTIMODAL_AGENT.equals(toolName);
     }
 
     @Override

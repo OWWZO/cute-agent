@@ -13,6 +13,14 @@ public interface ISessionCapabilityRepository {
      */
     Map<String, Map<String, Boolean>> findOverrides(String sessionId);
 
+    /**
+     * 写入单条能力覆盖。
+     *
+     * @param kind 能力类型，只允许 {@code SessionCapabilityService.KIND_SKILL}（"skill"）或
+     *             {@code KIND_MCP}（"mcp"）；调用方必须先 trim 并转为小写，实现按原样落库，
+     *             不做归一化
+     * @param refId 能力标识（skill id / mcp id），不能为空
+     */
     void upsert(String sessionId, String kind, String refId, boolean enabled);
 
     List<SessionCapabilityRow> listBySession(String sessionId);

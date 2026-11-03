@@ -58,8 +58,15 @@ public final class LlmResilientCompletionPort implements LlmCompletionPort {
     public LlmResponse complete(LlmRequest request) {
         LlmResponse response = delegate.complete(request);
         for (int retry = 0; retry < emptyCompletionMaxRetries && isEmptyResponse(response); retry++) {
-            LOG.warning(() -> "LLM returned an empty completion, retrying once: " + describe(request));
-            response = delegate.complete(request);
+            int attempt = retry + 1;
+            LOG.warning(() -> "LLM returned an empty completion, retrying attempt "
+                    + attempt + "/" + emptyCompletionMaxRetries + ": " + describe(request));
+            try {
+                response = delegate.complete(request);
+            } catch (RuntimeException e) {
+                LOG.log(Level.WARNING, "empty-completion retry failed, propagating: " + describe(request), e);
+                throw e;
+            }
         }
         return response;
     }
@@ -162,8 +169,9 @@ public final class LlmResilientCompletionPort implements LlmCompletionPort {
                 return;
             }
             if (!outputSeen.get() && emptyRetries.get() < emptyCompletionMaxRetries) {
-                emptyRetries.incrementAndGet();
-                LOG.warning(() -> "LLM stream completed without any output, retrying once: " + describe(request));
+                int attempt = emptyRetries.incrementAndGet();
+                LOG.warning(() -> "LLM stream completed without any output, retrying attempt "
+                        + attempt + "/" + emptyCompletionMaxRetries + ": " + describe(request));
                 openAttempt();
                 return;
             }

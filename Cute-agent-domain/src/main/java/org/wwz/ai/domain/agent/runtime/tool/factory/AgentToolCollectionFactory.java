@@ -770,7 +770,8 @@ public class AgentToolCollectionFactory {
                 catalog,
                 skillLoader,
                 skillRuntimeLayout,
-                skillScriptDiscoverer);
+                skillScriptDiscoverer,
+                skillRuntimeOptions);
         toolCollection.addTool(skillViewTool);
         SkillsSearchTool skillsSearchTool = new SkillsSearchTool(catalog);
         toolCollection.addTool(skillsSearchTool);

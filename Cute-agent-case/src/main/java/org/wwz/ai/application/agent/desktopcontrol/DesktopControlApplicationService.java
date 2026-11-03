@@ -59,7 +59,7 @@ public class DesktopControlApplicationService {
         }
 
         String resumeRequestId = "resume_" + UUID.randomUUID().toString().replace("-", "");
-        boolean ok = desktopControlRepository.casCompletePending(
+        boolean ok = desktopControlRepository.casResumePending(
                 controlId.trim(), userId, resumeRequestId);
         if (!ok) {
             DesktopControlRecord latest = desktopControlRepository.findByControlId(controlId.trim()).orElse(existing);

@@ -31,7 +31,7 @@ public class DataAgentApplicationService implements IDataAgentApplicationService
 
     @Override
     public Nl2SqlQueryResult queryAllSchema() {
-        return dataQueryMapper.toResult(dataAgentQueryService.queryAllSchema());
+        return dataQueryMapper.toResult(dataAgentQueryService.buildQueryWithAllSchema());
     }
 
     @Override

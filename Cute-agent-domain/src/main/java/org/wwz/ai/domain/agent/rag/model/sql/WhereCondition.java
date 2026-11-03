@@ -25,10 +25,6 @@ public class WhereCondition  implements Serializable {
     private String valueKind;
     private String secondValueKind;
     /**
-     * 是否为动态时间字段
-     */
-    private Integer dateColumn;
-    /**
      * 日期字段值格式
      */
     private String dateColumnFormat;

@@ -12,6 +12,11 @@ import java.util.concurrent.TimeoutException;
  */
 public abstract class AbstractExecuteSupport extends AbstractMultiThreadStrategyRouter<AgentExecutionCommand, DefaultPlanSolveAgentExecuteStrategyFactory.DynamicContext, String> {
 
+    /**
+     * 空实现，刻意不做节点级多线程展开。
+     * <p>PlanSolve 主路径是单 React 代理；子类不得依赖本方法执行任何业务逻辑或校验，
+     * 需要初始化时请覆写对应的生命周期钩子。</p>
+     */
     @Override
     protected void multiThread(AgentExecutionCommand requestParameter, DefaultPlanSolveAgentExecuteStrategyFactory.DynamicContext dynamicContext) throws ExecutionException, InterruptedException, TimeoutException {
         // PlanSolve 主路径为单 React 代理，无节点级多线程扩展

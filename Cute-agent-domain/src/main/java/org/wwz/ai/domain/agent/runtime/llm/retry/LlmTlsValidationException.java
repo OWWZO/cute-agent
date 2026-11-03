@@ -11,6 +11,8 @@ package org.wwz.ai.domain.agent.runtime.llm.retry;
  */
 public class LlmTlsValidationException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     /** 稳定错误码，写进日志便于跨版本对账。 */
     public static final String CODE = "MODEL_TLS_VALIDATION_FAILED";
 

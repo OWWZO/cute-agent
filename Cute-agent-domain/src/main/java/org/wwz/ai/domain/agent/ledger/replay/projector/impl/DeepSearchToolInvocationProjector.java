@@ -48,10 +48,10 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
                 continue;
             }
             Map<String, Object> resultMap = switch (stageType) {
-                case "extend" -> buildExtendResult(output, stage);
-                case "search" -> buildSearchResult(output, stage);
-                case "chapter_summary" -> buildChapterSummaryResult(output, stage);
-                case "report" -> buildReportResult(output, stage);
+                case DeepSearchStage.STAGE_EXTEND -> buildExtendResult(output, stage);
+                case DeepSearchStage.STAGE_SEARCH -> buildSearchResult(output, stage);
+                case DeepSearchStage.STAGE_CHAPTER_SUMMARY -> buildChapterSummaryResult(output, stage);
+                case DeepSearchStage.STAGE_REPORT -> buildReportResult(output, stage);
                 default -> Map.of();
             };
             if (resultMap.isEmpty()) {
@@ -71,7 +71,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
 
     private Map<String, Object> buildExtendResult(DeepSearchToolOutput output, DeepSearchStage stage) {
         Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", "extend");
+        resultMap.put("messageType", DeepSearchStage.STAGE_EXTEND);
         resultMap.put("isFinal", true);
         resultMap.put("searchFinish", false);
         resultMap.put("query", output.getQuery());
@@ -85,7 +85,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
 
     private Map<String, Object> buildSearchResult(DeepSearchToolOutput output, DeepSearchStage stage) {
         Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", "search");
+        resultMap.put("messageType", DeepSearchStage.STAGE_SEARCH);
         resultMap.put("isFinal", true);
         resultMap.put("searchFinish", true);
         resultMap.put("query", output.getQuery());
@@ -144,7 +144,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
 
     private Map<String, Object> buildChapterSummaryResult(DeepSearchToolOutput output, DeepSearchStage stage) {
         Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", "chapter_summary");
+        resultMap.put("messageType", DeepSearchStage.STAGE_CHAPTER_SUMMARY);
         resultMap.put("isFinal", true);
         resultMap.put("searchFinish", true);
         resultMap.put("query", output.getQuery());
@@ -190,7 +190,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
 
     private Map<String, Object> buildReportResult(DeepSearchToolOutput output, DeepSearchStage stage) {
         Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", "report");
+        resultMap.put("messageType", DeepSearchStage.STAGE_REPORT);
         resultMap.put("isFinal", true);
         resultMap.put("query", output.getQuery());
         resultMap.put("answer", StringUtils.defaultString(stage.getAnswer()));
@@ -198,7 +198,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
     }
 
     private List<Map<String, Object>> resolveStageArtifactRefs(String stageType, List<ArtifactView> artifacts) {
-        if (!"report".equals(stageType) || artifacts == null || artifacts.isEmpty()) {
+        if (!DeepSearchStage.STAGE_REPORT.equals(stageType) || artifacts == null || artifacts.isEmpty()) {
             return List.of();
         }
         List<ArtifactView> finalArtifacts = artifacts.stream()

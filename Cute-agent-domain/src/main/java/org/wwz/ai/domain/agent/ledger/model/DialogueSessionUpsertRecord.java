@@ -26,7 +26,10 @@ public class DialogueSessionUpsertRecord {
     private Long bindingId;
 
     /**
-     * 会话类型（落库为 code）。为空时由 SQL 默认值兜底为 {@code conversation}。
+     * 会话类型（落库为 code），调用方应传
+     * {@link org.wwz.ai.domain.agent.ledger.model.SessionKind#code()}。
+     * 为空时由 SQL 默认值兜底为 {@code conversation}；非法 code 不会被写入校验拦截，
+     * 只会在读取侧被 {@code SessionKind} 的白名单过滤。
      */
     private String sessionKind;
 

@@ -108,7 +108,7 @@ public class SchemaRecallService {
             for (ColumnValueHit hit : result.getHits()) {
                 Map<String, Object> row = new HashMap<>(hit.getFields());
                 if (hit.getScore() != null) {
-                    row.put("_score", hit.getScore());
+                    row.put("score", hit.getScore());
                 }
                 dataList.add(row);
             }

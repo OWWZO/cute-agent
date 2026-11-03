@@ -14,6 +14,13 @@ import java.util.Objects;
  */
 @Data
 public class Memory {
+
+    /**
+     * 历史版本注入的 ReAct 续跑提示词前缀。仅用于清理旧消息，
+     * 修改提示词时必须同步这里或改用显式消息标记。
+     */
+    private static final String LEGACY_REACT_CONTINUATION_PREFIX = "根据当前状态和可用工具，确定下一步行动";
+
     private List<Message> messages = new ArrayList<>();
 
     /**
@@ -71,7 +78,7 @@ public class Memory {
             if (message.getRole() == RoleType.ASSISTANT && Objects.nonNull(message.getToolCalls()) && !message.getToolCalls().isEmpty()) {
                 iterator.remove();
             }
-            if (Objects.nonNull(message.getContent()) && message.getContent().startsWith("根据当前状态和可用工具，确定下一步行动")) {
+            if (Objects.nonNull(message.getContent()) && message.getContent().startsWith(LEGACY_REACT_CONTINUATION_PREFIX)) {
                 iterator.remove();
             }
         }

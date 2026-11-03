@@ -46,6 +46,11 @@ public class DataTransformTool extends AbstractDocReadTool {
         properties.put("data", Map.of("type", "array", "items", objectProp("Row object")));
         properties.put("source_path", stringProp("Input file path under workspace"));
         properties.put("output_format", stringProp("records | dict"));
-        return objectSchema(properties, List.of());
+        Map<String, Object> schema = objectSchema(properties, List.of());
+        // 至少要有一个转换操作，否则调用没有意义（输入可来自 data/source_path/artifact）。
+        schema.put("anyOf", List.of(
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("transformations")),
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("operations"))));
+        return schema;
     }
 }

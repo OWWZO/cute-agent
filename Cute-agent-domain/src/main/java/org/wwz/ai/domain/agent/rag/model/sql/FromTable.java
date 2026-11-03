@@ -1,6 +1,5 @@
 package org.wwz.ai.domain.agent.rag.model.sql;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.calcite.sql.JoinConditionType;
@@ -9,7 +8,6 @@ import org.apache.calcite.sql.JoinType;
 import java.util.List;
 
 @NoArgsConstructor
-@AllArgsConstructor
 @Data
 /**
  * SQL 查询 FROM 表描述，承载表名、别名及来源类型。

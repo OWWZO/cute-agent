@@ -530,10 +530,6 @@ public final class WorkingMemoryCompactor {
         }
     }
 
-    public int ensureLastUserMessageInTail(List<Message> messages, int tailStart, CompactionBudget budget) {
-        return ensureLastUserMessageInTail(messages, tailStart, 0);
-    }
-
     public int ensureLastUserMessageInTail(List<Message> messages, int tailStart, int headEnd) {
         if (messages == null || messages.isEmpty()) {
             return 0;
@@ -557,10 +553,6 @@ public final class WorkingMemoryCompactor {
             return Math.max(findTurnPairEnd(messages, lastUser), head + 1);
         }
         return adjusted;
-    }
-
-    public int ensureLastAssistantMessageInTail(List<Message> messages, int tailStart, CompactionBudget budget) {
-        return ensureLastAssistantMessageInTail(messages, tailStart, 0);
     }
 
     public int ensureLastAssistantMessageInTail(List<Message> messages, int tailStart, int headEnd) {

@@ -6,6 +6,7 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.util.SqlBasicVisitor;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -17,22 +18,26 @@ public class HasAggVisitor extends SqlBasicVisitor<Boolean> {
     public static final String COUNT_DISTINCT = "count_distinct";
 
     private boolean isAgg = false;
-    public static final Set<String> AGG_NAME_SET = new HashSet<>();
+
+    /** 只读聚合函数名集合，避免调用方修改后影响全局判定。 */
+    private static final Set<String> AGG_NAME_SET;
 
     static {
+        Set<String> names = new HashSet<>();
         for (SqlKind sqlKind : SqlKind.AGGREGATE) {
-            AGG_NAME_SET.add(sqlKind.name().toLowerCase());
+            names.add(sqlKind.name().toLowerCase());
         }
         for (ClickHouseAggregateFunction ckAgg : ClickHouseAggregateFunction.class.getEnumConstants()) {
-            AGG_NAME_SET.add(ckAgg.name().toLowerCase());
+            names.add(ckAgg.name().toLowerCase());
             if(CollectionUtils.isNotEmpty(ckAgg.getAliases())){
-                AGG_NAME_SET.addAll(ckAgg.getAliases());
+                names.addAll(ckAgg.getAliases());
             }
         }
-        AGG_NAME_SET.add(COUNT_DISTINCT);
-        AGG_NAME_SET.add("stddev");
-        AGG_NAME_SET.add("percentile");
-        AGG_NAME_SET.add("percentile_approx");
+        names.add(COUNT_DISTINCT);
+        names.add("stddev");
+        names.add("percentile");
+        names.add("percentile_approx");
+        AGG_NAME_SET = Collections.unmodifiableSet(names);
     }
 
     public boolean isAgg() {

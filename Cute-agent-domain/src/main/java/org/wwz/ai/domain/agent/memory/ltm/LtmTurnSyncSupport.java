@@ -36,8 +36,9 @@ public final class LtmTurnSyncSupport {
         if (deps == null) {
             return;
         }
-        String user = agentContext.getQuery();
-        if (StringUtils.isBlank(user)) {
+        // 这里是用户本轮 query 内容，不是 userId；仅作为 LTM 同步的素材。
+        String userQuery = agentContext.getQuery();
+        if (StringUtils.isBlank(userQuery)) {
             return;
         }
         String assistant = "";
@@ -55,8 +56,8 @@ public final class LtmTurnSyncSupport {
 
         LtmManager ltmManager = deps.getOptionalLtmManager();
         if (ltmManager != null) {
-            ltmManager.syncAll(user, assistant, agentContext.getSessionId(), messages);
-            ltmManager.queuePrefetchAll(user, agentContext.getSessionId());
+            ltmManager.syncAll(userQuery, assistant, agentContext.getSessionId(), messages);
+            ltmManager.queuePrefetchAll(userQuery, agentContext.getSessionId());
         }
 
         BackgroundReviewService review = LtmServices.backgroundReview();
@@ -92,7 +93,7 @@ public final class LtmTurnSyncSupport {
                 agentContext.getSessionId(),
                 agentContext.getRequestId(),
                 owner,
-                user,
+                userQuery,
                 assistant,
                 snapshot,
                 parentSystem,

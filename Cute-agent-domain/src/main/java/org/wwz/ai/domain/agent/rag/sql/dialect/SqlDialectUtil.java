@@ -16,7 +16,7 @@ public class SqlDialectUtil {
     public static SqlDialect fromDialectString(String dialectString) {
         String normalized = StringUtils.trimToEmpty(dialectString);
         if (StringUtils.equalsIgnoreCase("clickhouse", normalized)) {
-            return ClickHouseSqlDialect2.DEFAULT;
+            return ClickHouseCustomSqlDialect.DEFAULT;
         }
         if (StringUtils.isNotBlank(normalized) && !StringUtils.equalsIgnoreCase("mysql", normalized)) {
             // 配置写错时不再静默按 MySQL 生成 SQL，留一条可检索的告警。

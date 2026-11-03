@@ -19,6 +19,10 @@ public final class ColumnValueHit {
         return fields;
     }
 
+    /**
+     * 召回得分。{@code null} 表示上游未返回得分（不是 0 分），消费方比较/排序前必须判空；
+     * 与 {@code VectorSearchHit#getScore()} 的 primitive 语义不同。
+     */
     public Float getScore() {
         return score;
     }

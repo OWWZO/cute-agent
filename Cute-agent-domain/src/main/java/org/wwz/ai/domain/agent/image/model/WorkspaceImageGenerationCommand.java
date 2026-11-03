@@ -9,6 +9,8 @@ import java.util.List;
 
 /**
  * 生图工作台生成命令。
+ * <p>{@link #fileNames} / {@link #maskFileNames} 按引用持有，不做防御性拷贝；
+ * 命令交给异步执行路径后，调用方不得再修改传入的列表。</p>
  */
 @Data
 @Builder

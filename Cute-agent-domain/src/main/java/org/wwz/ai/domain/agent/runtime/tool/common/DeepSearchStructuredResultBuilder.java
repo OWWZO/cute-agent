@@ -67,19 +67,19 @@ public class DeepSearchStructuredResultBuilder {
             this.query = response.getQuery().trim();
         }
         String messageType = StringUtils.defaultString(response.getMessageType());
-        if ("extend".equals(messageType)) {
+        if (DeepSearchrResponse.MESSAGE_TYPE_EXTEND.equals(messageType)) {
             recordExtend(response.getSearchResult());
             return;
         }
-        if ("search".equals(messageType)) {
+        if (DeepSearchrResponse.MESSAGE_TYPE_SEARCH.equals(messageType)) {
             recordSearch(response.getSearchResult());
             return;
         }
-        if ("chapter_summary".equals(messageType)) {
+        if (DeepSearchrResponse.MESSAGE_TYPE_CHAPTER_SUMMARY.equals(messageType)) {
             recordChapterSummary(response);
             return;
         }
-        if ("report".equals(messageType)) {
+        if (DeepSearchrResponse.MESSAGE_TYPE_REPORT.equals(messageType)) {
             recordReportChunk(response.getAnswer());
         }
     }

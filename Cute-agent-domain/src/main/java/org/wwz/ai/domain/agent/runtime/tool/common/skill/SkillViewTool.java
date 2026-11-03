@@ -16,6 +16,7 @@ import org.wwz.ai.domain.agent.runtime.tool.skill.SkillLoader;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillPromptIndexBuilder;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillRef;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillRuntimeLayout;
+import org.wwz.ai.domain.agent.runtime.tool.skill.SkillRuntimeOptions;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillScriptDefinition;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillScriptDiscoverer;
 
@@ -41,6 +42,8 @@ public class SkillViewTool implements BaseTool {
     private final SkillLoader skillLoader;
     private final SkillRuntimeLayout skillRuntimeLayout;
     private final SkillScriptDiscoverer skillScriptDiscoverer;
+    /** 可为 null（测试/极简装配）；null 时使用 SkillPromptIndexBuilder 的默认预算。 */
+    private final SkillRuntimeOptions skillRuntimeOptions;
 
     @Override
     public String getName() {
@@ -112,7 +115,14 @@ public class SkillViewTool implements BaseTool {
         Set<String> disabled = context == null || context.getDisabledSkillNames() == null
                 ? Set.of()
                 : context.getDisabledSkillNames();
-        return SkillPromptIndexBuilder.build(skillCatalog.list(), disabled);
+        if (skillRuntimeOptions == null) {
+            return SkillPromptIndexBuilder.build(skillCatalog.list(), disabled);
+        }
+        return SkillPromptIndexBuilder.build(
+                skillCatalog.list(),
+                disabled,
+                skillRuntimeOptions.getPromptIndexMaxChars(),
+                skillRuntimeOptions.getPromptIndexDescriptionChars());
     }
 
     private Object loadDocument(SkillRef ref) {

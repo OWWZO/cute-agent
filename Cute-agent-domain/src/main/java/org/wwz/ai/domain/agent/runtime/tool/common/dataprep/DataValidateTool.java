@@ -36,6 +36,13 @@ public class DataValidateTool extends AbstractDocReadTool {
         properties.put("rules", Map.of("type", "array", "description", "Extra validation rules", "items", objectProp("Validation rule")));
         properties.put("data", Map.of("type", "array", "items", objectProp("Row object")));
         properties.put("source_path", stringProp("Input file path under workspace"));
-        return objectSchema(properties, List.of());
+        Map<String, Object> schema = objectSchema(properties, List.of());
+        // 至少要有一个校验输入/规则，否则远端调用只会失败或返回空报告。
+        schema.put("anyOf", List.of(
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("schema")),
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("rules")),
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("data")),
+                Map.of("type", "object", "properties", Map.of(), "required", List.of("source_path"))));
+        return schema;
     }
 }

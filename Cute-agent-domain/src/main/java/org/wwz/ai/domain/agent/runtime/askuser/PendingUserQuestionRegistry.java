@@ -5,6 +5,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -83,7 +85,10 @@ public class PendingUserQuestionRegistry {
             if (!PendingUserQuestion.STATUS_PENDING.equals(item.getStatus())) {
                 return false;
             }
-            item.setAnswers(answers == null ? Map.of() : answers);
+            // 复制调用方传入的可变 Map，避免 answer 返回后提交线程继续修改，被等待线程并发观测到。
+            item.setAnswers(answers == null
+                    ? Map.of()
+                    : Collections.unmodifiableMap(new LinkedHashMap<>(answers)));
             item.setStatus(PendingUserQuestion.STATUS_ANSWERED);
             item.getFuture().complete(item.getAnswers());
         }

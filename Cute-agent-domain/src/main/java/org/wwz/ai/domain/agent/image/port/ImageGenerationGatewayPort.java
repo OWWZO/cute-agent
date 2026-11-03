@@ -6,7 +6,7 @@ import org.wwz.ai.domain.agent.image.model.ImageGenerationGatewayResponse;
 /**
  * 生图工作台下游调用端口。
  */
-public interface ICuteImageGenerationGateway {
+public interface ImageGenerationGatewayPort {
 
     /**
      * 调用下游图片生成服务。

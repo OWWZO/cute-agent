@@ -6,6 +6,9 @@ import org.wwz.ai.domain.agent.channel.model.ChannelChatType;
 /**
  * 渠道会话键：把「会话形态 + 目标 + 发送者」映射成稳定的 sessionId。
  * <p>不加租户前缀——QQ 的 openid 按 bot 隔离，同一人在不同 bot 下 openid 不同，天然唯一。</p>
+ * <p><b>当前只有 QQ 一个渠道</b>，键前缀 {@code qq_} 是硬编码的，键本身不含平台维度。
+ * 新增其它渠道（微信/飞书等）时必须同时扩展键格式并保持对存量 {@code qq_} 会话的兼容，
+ * 否则不同平台的同值 id 会命中同一个 sessionId。</p>
  */
 public final class ChannelSessionKey {
 

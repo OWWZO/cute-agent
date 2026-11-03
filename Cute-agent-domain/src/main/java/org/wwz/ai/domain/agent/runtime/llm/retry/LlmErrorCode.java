@@ -24,6 +24,10 @@ public enum LlmErrorCode {
     INVALID_MODEL_REQUEST,
     /** 响应无法解析（空补全、非法 JSON 等）。 */
     INVALID_MODEL_RESPONSE,
-    /** provider 未配置 / 鉴权失败。 */
+    /**
+     * provider 鉴权失败（HTTP 401/403、provider code 1006）。
+     * <p>历史上也用于「provider 未配置」，但当前分类器不会产生后者；
+     * 消费方应把它当作「凭据/配置需要人工修复」，不要与可重试错误混用。</p>
+     */
     PROVIDER_NOT_CONFIGURED
 }

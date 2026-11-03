@@ -21,53 +21,47 @@ public final class OpenUiResources {
     /** Autofix 用的 cloud 形态组件库声明（`]]>openui:config` 块），只发给 Thesys，不进模型上下文。 */
     public static final String AUTOFIX_CONFIG = "openui/openui-cloud-config.txt";
 
-    private static volatile String residentPrompt;
-    private static volatile String componentsCatalog;
-    private static volatile String autofixConfig;
+    private static final LazyResource RESIDENT_PROMPT_RESOURCE = new LazyResource(RESIDENT_PROMPT);
+    private static final LazyResource COMPONENTS_CATALOG_RESOURCE = new LazyResource(COMPONENTS_CATALOG);
+    private static final LazyResource AUTOFIX_CONFIG_RESOURCE = new LazyResource(AUTOFIX_CONFIG);
 
     private OpenUiResources() {
     }
 
     public static String residentPrompt() {
-        String cached = residentPrompt;
-        if (cached == null) {
-            synchronized (OpenUiResources.class) {
-                cached = residentPrompt;
-                if (cached == null) {
-                    cached = load(RESIDENT_PROMPT);
-                    residentPrompt = cached;
-                }
-            }
-        }
-        return cached;
+        return RESIDENT_PROMPT_RESOURCE.get();
     }
 
     public static String componentsCatalog() {
-        String cached = componentsCatalog;
-        if (cached == null) {
-            synchronized (OpenUiResources.class) {
-                cached = componentsCatalog;
-                if (cached == null) {
-                    cached = load(COMPONENTS_CATALOG);
-                    componentsCatalog = cached;
-                }
-            }
-        }
-        return cached;
+        return COMPONENTS_CATALOG_RESOURCE.get();
     }
 
     public static String autofixConfigBlock() {
-        String cached = autofixConfig;
-        if (cached == null) {
-            synchronized (OpenUiResources.class) {
-                cached = autofixConfig;
-                if (cached == null) {
-                    cached = load(AUTOFIX_CONFIG);
-                    autofixConfig = cached;
+        return AUTOFIX_CONFIG_RESOURCE.get();
+    }
+
+    /** 单一实现的 volatile 双检懒加载，避免三份拷贝各自演化。 */
+    private static final class LazyResource {
+        private final String path;
+        private volatile String value;
+
+        private LazyResource(String path) {
+            this.path = path;
+        }
+
+        private String get() {
+            String cached = value;
+            if (cached == null) {
+                synchronized (this) {
+                    cached = value;
+                    if (cached == null) {
+                        cached = load(path);
+                        value = cached;
+                    }
                 }
             }
+            return cached;
         }
-        return cached;
     }
 
     private static String load(String path) {

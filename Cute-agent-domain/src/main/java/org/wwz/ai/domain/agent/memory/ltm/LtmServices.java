@@ -16,6 +16,14 @@ public final class LtmServices {
         memoryFlushService = flush;
     }
 
+    /**
+     * 清空定位，供 Spring 上下文关闭/测试收尾时调用，避免旧上下文的服务泄漏到下一个运行时。
+     */
+    public static void unbind() {
+        backgroundReviewService = null;
+        memoryFlushService = null;
+    }
+
     public static BackgroundReviewService backgroundReview() {
         return backgroundReviewService;
     }

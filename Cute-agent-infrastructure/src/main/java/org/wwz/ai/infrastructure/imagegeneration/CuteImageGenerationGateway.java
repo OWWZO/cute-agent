@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.wwz.ai.domain.agent.runtime.util.StringUtil;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
-import org.wwz.ai.domain.agent.image.port.ICuteImageGenerationGateway;
+import org.wwz.ai.domain.agent.image.port.ImageGenerationGatewayPort;
 import org.wwz.ai.domain.agent.image.model.ImageGenerationGatewayFile;
 import org.wwz.ai.domain.agent.image.model.ImageGenerationGatewayRequest;
 import org.wwz.ai.domain.agent.image.model.ImageGenerationGatewayResponse;
@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
-public class CuteImageGenerationGateway implements ICuteImageGenerationGateway {
+public class CuteImageGenerationGateway implements ImageGenerationGatewayPort {
 
     private static final Pattern UNSAFE_FILE_CHARS = Pattern.compile("[<>:\"/\\\\|?*\\x00-\\x1F]+");
 

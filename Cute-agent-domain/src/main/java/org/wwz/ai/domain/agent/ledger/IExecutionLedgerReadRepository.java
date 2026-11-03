@@ -42,6 +42,12 @@ public interface IExecutionLedgerReadRepository {
 
     List<DialogueRunView> queryRecentRunsBySessionId(String sessionId, int limit);
 
+    /**
+     * offset 分页读取 session run。
+     * <p>实现必须自行收敛参数：{@code offset < 0} 按 0 处理，{@code limit <= 0} 取默认值，
+     * 且 {@code limit} 不超过最大页大小（当前实现为 100），不得把调用方传入的
+     * 任意大 limit 原样下推到 SQL。</p>
+     */
     List<DialogueRunView> queryRunsBySessionId(String sessionId, int offset, int limit);
 
     /**
@@ -61,8 +67,13 @@ public interface IExecutionLedgerReadRepository {
 
     List<DialogueSessionView> queryRecentSessions(int limit);
 
+    /** 读取会话完整实体（含计数、标题、模型偏好等全部列），用于偏好/上下文等全量读取。 */
     DialogueSession querySessionEntity(String sessionId);
 
+    /**
+     * 只读取归属判定所需的最小列：{@code id / sessionId / userId / bindingId / sessionKind / deleted}。
+     * <p>其余字段为 {@code null}，调用方不得依赖；仅用于授权校验等不需要完整实体的场景。</p>
+     */
     DialogueSession querySessionOwnership(String sessionId);
 
     DialogueSessionView querySession(String userId, String sessionId);

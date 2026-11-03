@@ -30,6 +30,9 @@ public interface BaseTool {
 
     /**
      * 无上下文的工具描述。描述与运行时配置无关的工具只实现本方法。
+     * <p>若同时覆写了 {@link #getDescription(AgentContext)}，本方法必须与
+     * {@code getDescription(null)} 保持一致；注册期快照（如 DeferredToolEntry）读的是无参版本，
+     * 两套描述分叉会让同一工具对外暴露不同说明。</p>
      */
     String getDescription();
 
@@ -47,6 +50,9 @@ public interface BaseTool {
 
     /**
      * 无上下文的参数 schema。schema 与运行时配置无关的工具只实现本方法。
+     * <p>若同时覆写了 {@link #toParams(AgentContext)}，本方法必须与 {@code toParams(null)}
+     * 保持一致；DeferredToolCatalog 等注册期路径仍读取无参版本，两份 schema 分叉会导致
+     * 同一工具出现不一致的参数定义。</p>
      */
     Map<String, Object> toParams();
 

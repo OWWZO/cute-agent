@@ -20,6 +20,8 @@ public interface ExecutionLedgerQueryService {
     int MAX_SESSION_RUN_PAGE_SIZE = 100;
     int DEFAULT_RECENT_SESSION_PAGE_SIZE = 10;
     int MAX_RECENT_SESSION_PAGE_SIZE = 100;
+    /** 会话树查询返回节点数的硬上限。 */
+    int MAX_SESSION_TREE_SIZE = 100;
 
     ExecutionRunDetail queryRunDetail(String requestId);
 
@@ -64,7 +66,12 @@ public interface ExecutionLedgerQueryService {
 
     /**
      * 查整棵会话树：给定树中任一节点，返回「根 + 全部后代」的扁平列表。
-     * <p>层级由 {@code parentSessionId} 表达，调用方自行组树；列表内根会话在前。</p>
+     * <p>层级由 {@code rootSessionId} 表达，调用方自行组树；列表内根会话在前。</p>
+     * <p>{@code limit} 限制的是<b>本次返回的总节点数</b>（不是每层子节点数，也不是深度）：
+     * 超过上限时只返回部分树（根优先），调用方无法从返回值判断是否被截断。
+     * {@code limit <= 0} 时实现取默认值，任何情况下不超过 {@link #MAX_SESSION_TREE_SIZE}。
+     * 树的根由 {@code rootSessionId} 等值查询确定，不做父链遍历，
+     * 因此畸形/成环的 {@code parentSessionId} 不会导致无界遍历。</p>
      */
     List<DialogueSessionView> querySessionTree(String sessionId, int limit);
 }
