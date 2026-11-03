@@ -130,13 +130,16 @@ public final class SkillFrontMatterParser {
     }
 
     /**
-     * 降级解析：逐行按第一个 {@code :} 切分。此路径下会剥掉成对的外层引号，
+     * 降级解析：只认顶格的 {@code key: value} 标量行。此路径下会剥掉成对的外层引号，
      * 因为已经没有 YAML 语义可以依赖。正常路径<b>不会</b>修改任何值。
+     * <p>
+     * 缩进行/列表项/空值行属于嵌套结构，逐行切割会把它们压平成脏键（如把
+     * {@code metadata:} 的子键当成顶层字段），因此这里直接跳过，宁缺勿错。
      */
     private static FieldParseResult degraded(String block, String reason) {
         Map<String, Object> fields = new LinkedHashMap<>();
         for (String line : block.split("\\R")) {
-            if (line.isBlank()) {
+            if (line.isBlank() || line.startsWith(" ") || line.startsWith("\t") || line.startsWith("-")) {
                 continue;
             }
             int idx = line.indexOf(':');
@@ -148,6 +151,10 @@ public final class SkillFrontMatterParser {
                 continue;
             }
             String value = line.substring(idx + 1).trim();
+            if (value.isEmpty()) {
+                // `key:` 后跟嵌套块或列表，降级路径无法恢复其结构。
+                continue;
+            }
             if (value.length() >= 2
                     && ((value.startsWith("\"") && value.endsWith("\""))
                     || (value.startsWith("'") && value.endsWith("'")))) {
