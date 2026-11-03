@@ -80,18 +80,6 @@ public final class DeferredToolCall {
         return new LinkedHashMap<>();
     }
 
-    public static Object parseParametersSchema(String parameters) {
-        if (StringUtils.isBlank(parameters)) {
-            return Map.of();
-        }
-        try {
-            Object parsed = JSON.parse(parameters);
-            return parsed == null ? Map.of() : parsed;
-        } catch (Exception ignored) {
-            return Map.of();
-        }
-    }
-
     private static Object parseArguments(Object rawArgs) {
         if (rawArgs == null) {
             return Map.of();

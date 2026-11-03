@@ -235,7 +235,7 @@ public class SkillPackageService {
     public Map<String, Object> deleteRelativeFile(String skillName, String relativePath) {
         String name = SkillPackageParser.sanitizeSkillName(skillName);
         String rel = normalizeRelativePath(relativePath);
-        if ("SKILL.md".equalsIgnoreCase(rel)) {
+        if ("SKILL.md".equalsIgnoreCase(rel) || rel.endsWith("/SKILL.md")) {
             throw new SkillLoadException("不能删除 SKILL.md；删除整个技能请用管理端或 delete 动作");
         }
         Path root = requireWritableRoot();

@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.tool.skill;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.regex.Pattern;
@@ -10,6 +11,7 @@ import java.util.regex.Pattern;
  * <p>对外 / 沙箱统一：{@code skills/&lt;技能名&gt;}（虚拟路径；workspace 工具映射到 runtime 库，
  * bash 执行时在沙箱 cwd 下物化为同名相对路径）。
  */
+@Slf4j
 @Component
 public class SkillRuntimeLayout {
 
@@ -52,6 +54,8 @@ public class SkillRuntimeLayout {
 
     public String segmentOf(String name) {
         if (name == null || name.isBlank()) {
+            // 空技能名通常意味着上游解析失败；回退到公共目录会让多个技能互相覆盖，先留下告警。
+            log.warn("技能名为空，目录回退到 {}", FALLBACK_SEGMENT);
             return FALLBACK_SEGMENT;
         }
         String cleaned = UNSAFE_SEGMENT.matcher(name.trim()).replaceAll("-");

@@ -12,6 +12,14 @@ public record SkillRef(
 
     public static final String SOURCE_BUILTIN = "builtin";
 
+    public SkillRef {
+        if (source == null || relativePath == null) {
+            throw new IllegalArgumentException("SkillRef source/relativePath 不能为空");
+        }
+        // id 是注册表查找键，统一由 source + relativePath 派生，防止直接调用构造器破坏一致性。
+        id = source + ":" + relativePath;
+    }
+
     public static SkillRef of(String source, String name, String relativePath) {
         String src = source == null || source.isBlank() ? SOURCE_BUILTIN : source.trim();
         String skillName = name == null ? "" : name.trim();

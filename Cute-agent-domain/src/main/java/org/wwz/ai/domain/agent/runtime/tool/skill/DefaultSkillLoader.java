@@ -30,6 +30,7 @@ public class DefaultSkillLoader implements SkillLoader {
         String content = skillMarkdownParser.readBody(descriptor.getBasePath());
         return SkillDocument.builder()
                 .descriptor(descriptor)
+                // 当前解析器缺失/空文件时抛 SkillLoadException，不返回 null；保留兜底防止未来实现变化。
                 .content(content == null ? "" : content)
                 .linkedFiles(descriptor.getFiles() == null ? List.of() : List.copyOf(descriptor.getFiles()))
                 .build();

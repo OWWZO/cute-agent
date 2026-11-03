@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -22,5 +21,5 @@ public class SkillDocument {
     private String content;
 
     @Builder.Default
-    private List<SkillFileDescriptor> linkedFiles = new ArrayList<>();
+    private List<SkillFileDescriptor> linkedFiles = List.of();
 }
