@@ -25,6 +25,10 @@ public abstract class AbstractToolOutputPO {
 
     private String toolCallId;
 
+    /**
+     * 工具调用终态 code；有效写入命令要求非空，取值约束见 ExecutionLedgerConstants.STATUS_*。
+     * 手工构造 PO 时仍可能为 null。
+     */
     private Integer status;
 
     private String errorMsg;
