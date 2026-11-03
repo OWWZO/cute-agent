@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.llm;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -25,6 +26,7 @@ import java.util.Optional;
  * </ul>
  * 未命中 DB 时返回 empty，由调用方决定是否允许兼容配置兜底。
  */
+@Slf4j
 @Component
 public class LlmModelCatalog {
 
@@ -168,6 +170,7 @@ public class LlmModelCatalog {
             fetchedAt = nowMs;
             return cache;
         } catch (Exception e) {
+            log.warn("加载可用模型目录失败，沿用缓存或空目录: cachedSize={}", cache.size(), e);
             if (!cache.isEmpty()) {
                 return cache;
             }

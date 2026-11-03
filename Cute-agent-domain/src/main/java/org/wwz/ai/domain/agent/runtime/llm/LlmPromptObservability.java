@@ -205,7 +205,6 @@ public final class LlmPromptObservability {
             bundle.setCacheStatus(cacheStatus);
             bundle.setCacheRiskFlags(cacheRiskFlags);
             bundle.setUsage(snapshot);
-            bundle.setCachedPromptTokens(cachedPromptTokens);
             bundle.setObsLines(lines);
         }
         // 上游真实 prompt_tokens 校准 ContextRing
@@ -288,7 +287,6 @@ public final class LlmPromptObservability {
         private String cacheStatus;
         private String cacheRiskFlags;
         private LlmUsageSnapshot usage;
-        private Integer cachedPromptTokens;
         private List<String> obsLines;
     }
 }

@@ -47,14 +47,13 @@ public class ColumnValueSyncService {
         if (schemas == null || schemas.isEmpty()) {
             return;
         }
+        String modelCode = modelInfo == null ? null : modelInfo.getCode();
         if (columnValueSyncPort == null) {
-            log.warn("column-value 同步端口缺失，跳过同步: modelCode={}",
-                    modelInfo == null ? null : modelInfo.getModelCode());
+            log.warn("column-value 同步端口缺失，跳过同步: modelCode={}", modelCode);
             return;
         }
         if (columnValueIndexAdminPort == null || !columnValueIndexAdminPort.isAvailable()) {
-            log.warn("column-value 索引不可用，跳过同步: modelCode={}",
-                    modelInfo == null ? null : modelInfo.getModelCode());
+            log.warn("column-value 索引不可用，跳过同步: modelCode={}", modelCode);
             return;
         }
         columnValueSyncPort.syncColumnValues(modelInfo, List.copyOf(schemas));

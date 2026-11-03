@@ -38,6 +38,13 @@ public class Memory {
     }
 
     /**
+     * setter 同样把 null 归一为空列表，避免后续 getLastMessage()/size() 空指针。
+     */
+    public void setMessages(List<Message> messages) {
+        this.messages = messages == null ? new ArrayList<>() : messages;
+    }
+
+    /**
      * 获取最后一条消息
      */
     public Message getLastMessage() {

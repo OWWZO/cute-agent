@@ -18,6 +18,8 @@ public class PendingInjectMessage {
     public static final String SOURCE_COORDINATOR = "coordinator";
 
     private String text;
+    /** 消息来源，取值见 {@link #SOURCE_USER} / {@link #SOURCE_COORDINATOR}。 */
     private String source;
-    private long createdAtMs;
+    @Builder.Default
+    private long createdAtMs = System.currentTimeMillis();
 }

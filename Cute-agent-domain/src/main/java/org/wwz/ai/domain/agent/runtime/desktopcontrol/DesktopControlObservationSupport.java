@@ -41,10 +41,6 @@ public final class DesktopControlObservationSupport {
                 RequestDesktopControlTool.NAME, false);
     }
 
-    public static boolean hasToolResult(List<Message> messages, String toolCallId) {
-        return PendingYieldToolCalls.hasToolResult(messages, toolCallId);
-    }
-
     public static Map<String, Object> toClientPayload(DesktopControlRecord record) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("messageType", "desktop_control");

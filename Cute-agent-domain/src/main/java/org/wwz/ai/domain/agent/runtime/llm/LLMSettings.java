@@ -24,11 +24,13 @@ public class LLMSettings {
 
     private double temperature;
 
+    @JSONField(name = "api_type")
     private String apiType;
 
     @JSONField(name = "apikey")
     private String apiKey;
 
+    @JSONField(name = "api_version")
     private String apiVersion;
 
     @JSONField(name = "base_url")
@@ -37,6 +39,7 @@ public class LLMSettings {
     @JSONField(name = "interface_url")
     private String interfaceUrl;
 
+    @JSONField(name = "function_call_type")
     private String functionCallType;
 
     @JSONField(name = "max_input_tokens")
@@ -45,5 +48,6 @@ public class LLMSettings {
     @JSONField(name = "reasoning_effort")
     private String reasoningEffort;
 
+    @JSONField(name = "ext_params")
     private Map<String, Object> extParams;
 }
