@@ -14,6 +14,10 @@ import java.util.List;
 @Mapper
 public interface IFeaturedConversationDao {
 
+    /**
+     * 由 {@code featured_id} 或 {@code session_id} 唯一键触发插入或更新；冲突时恢复为未删除。
+     * MySQL 对内容未变化的重复写入返回 0，调用方不能仅凭返回值判断记录是否存在。
+     */
     int upsert(FeaturedConversationPO po);
 
     /** 按 featuredId 查询未删除记录；SQL 使用 LIMIT 1。 */

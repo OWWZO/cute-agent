@@ -28,6 +28,18 @@ function buildCurrentToolBaseUrl(): string {
   return `${origin}/tool`;
 }
 
+function applyCurrentToolBase(
+  parsed: URL,
+  currentToolBaseUrl: string,
+  alreadyPrefixed: boolean
+): URL {
+  const currentToolUrl = new URL(currentToolBaseUrl);
+  currentToolUrl.pathname = alreadyPrefixed ? parsed.pathname : `/tool${parsed.pathname}`;
+  currentToolUrl.search = parsed.search;
+  currentToolUrl.hash = parsed.hash;
+  return currentToolUrl;
+}
+
 export function buildFilePreviewUrlForBrowser(
   requestId?: string | null,
   fileName?: string | null
@@ -92,12 +104,11 @@ export function normalizeToolBaseUrlForBrowser(rawUrl?: string | null): string {
       return parsed.toString().replace(/\/$/, "");
     }
 
-    const currentToolUrl = new URL(currentToolBaseUrl);
-    currentToolUrl.pathname = parsed.pathname.startsWith("/tool")
-      ? parsed.pathname
-      : `/tool${parsed.pathname}`;
-    currentToolUrl.search = parsed.search;
-    currentToolUrl.hash = parsed.hash;
+    const currentToolUrl = applyCurrentToolBase(
+      parsed,
+      currentToolBaseUrl,
+      parsed.pathname.startsWith("/tool")
+    );
     return currentToolUrl.toString().replace(/\/$/, "");
   } catch {
     // 部分历史值不是完整 URL，按路径前缀兜底，保证坏数据不会阻断页面渲染。
@@ -173,12 +184,11 @@ export function normalizeFileUrlForBrowser(rawUrl?: string | null): string {
       return parsed.toString();
     }
 
-    const currentToolUrl = new URL(currentToolBaseUrl);
-    currentToolUrl.pathname = parsed.pathname.startsWith("/tool/")
-      ? parsed.pathname
-      : `/tool${parsed.pathname}`;
-    currentToolUrl.search = parsed.search;
-    currentToolUrl.hash = parsed.hash;
+    const currentToolUrl = applyCurrentToolBase(
+      parsed,
+      currentToolBaseUrl,
+      parsed.pathname.startsWith("/tool/")
+    );
     return currentToolUrl.toString();
   } catch {
     // 相对路径无法被 URL 解析时，仅补当前 origin，不猜测其它外部主机。
