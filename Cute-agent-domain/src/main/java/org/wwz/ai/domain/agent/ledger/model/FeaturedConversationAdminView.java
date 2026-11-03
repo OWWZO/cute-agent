@@ -31,6 +31,7 @@ public class FeaturedConversationAdminView {
 
     private Integer sortOrder;
 
+    /** 发布状态：{@code ONLINE} / {@code OFFLINE}。 */
     private String status;
 
     private LocalDateTime publishedAt;

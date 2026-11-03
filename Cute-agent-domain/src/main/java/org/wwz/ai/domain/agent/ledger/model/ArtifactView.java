@@ -26,10 +26,13 @@ public class ArtifactView {
 
     private String toolCallId;
 
+    /** input / output。 */
     private String artifactRole;
 
+    /** 取值见 {@code ExecutionLedgerConstants.VISIBILITY_VISIBLE} / {@code VISIBILITY_INTERNAL}。 */
     private String visibility;
 
+    /** user_upload / tool_output。 */
     private String sourceType;
 
     private String sourceName;

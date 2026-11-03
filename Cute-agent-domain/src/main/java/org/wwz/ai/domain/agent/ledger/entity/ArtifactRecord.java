@@ -9,6 +9,9 @@ import java.time.LocalDateTime;
 
 /**
  * 输入/输出文件归属账本。
+ * <p>归属不变量：{@code runId} 与 {@code requestId} 至少有一个非空；
+ * {@code artifactRole=output} 时 {@code toolInvocationId} / {@code toolCallId} 应指向产生该产物的工具调用。
+ * 两者都为空的行无法被任何按 run/session 的查询命中，属于孤儿行。</p>
  */
 @Data
 @Builder

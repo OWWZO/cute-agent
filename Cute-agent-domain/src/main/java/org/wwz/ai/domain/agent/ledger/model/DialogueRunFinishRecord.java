@@ -16,8 +16,10 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class DialogueRunFinishRecord {
 
+    /** 仅用于空值校验与失败日志定位；实际写入以 {@link #requestId} 查询到的 run 为准。 */
     private Long runId;
 
+    /** 结束 run 的权威关联键。 */
     private String requestId;
 
     private Integer status;

@@ -29,6 +29,10 @@ public class ToolInvocationFinishRecord {
 
     private String toolName;
 
+    /**
+     * 终态状态，取值必须是 {@code ExecutionLedgerConstants.STATUS_*} 中已登记的常量；
+     * 该值会原样写入 ledger 行并参与终态守卫，null 或未登记值会破坏结算判断。
+     */
     private Integer status;
 
     private String llmObservation;

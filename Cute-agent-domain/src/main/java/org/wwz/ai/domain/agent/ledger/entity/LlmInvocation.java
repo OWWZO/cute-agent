@@ -33,7 +33,7 @@ public class LlmInvocation {
     /** ask / askTool */
     private String callKind;
 
-    /** 是否流式 */
+    /** 是否流式：{@code 1}=是，{@code 0}=否，{@code null}=上游未记录（未知，不等同于 0）。 */
     private Integer streaming;
 
     /** 模型名 */

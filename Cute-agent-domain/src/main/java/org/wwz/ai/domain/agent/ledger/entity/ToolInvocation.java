@@ -66,7 +66,11 @@ public class ToolInvocation {
     /** 工具完整结果 JSON（历史回放 / 前端卡片 / 右侧预览用） */
     private String toolResult;
 
-    /** 状态 */
+    /**
+     * 状态，取值见 {@code ExecutionLedgerConstants.STATUS_*}（RUNNING/SUCCESS/FAILED/STOPPED 等）。
+     * <p>不允许写入未登记的整数；下游用 {@code STATUS_SUCCESS} 等常量比较，
+     * null 或未知值会被视为「非成功」。</p>
+     */
     private Integer status;
 
     /** 错误信息 */
