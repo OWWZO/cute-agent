@@ -37,9 +37,11 @@ public class ToolCallTool implements BaseTool {
         Map<String, Object> arguments = new LinkedHashMap<>();
         arguments.put("type", "object");
         arguments.put("description", "Arguments for the tool, matching its schema.");
-        // 自由对象：形状由被调工具的 schema 决定，这里只显式声明空 properties/required。
+        // 自由对象：形状由被调工具的 schema 决定；显式 additionalProperties=true，
+        // 避免部分 provider 把空 properties 解释为「不接受任何字段」而丢弃实参。
         arguments.put("properties", new LinkedHashMap<String, Object>());
         arguments.put("required", List.of());
+        arguments.put("additionalProperties", true);
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("name", name);
         properties.put("arguments", arguments);

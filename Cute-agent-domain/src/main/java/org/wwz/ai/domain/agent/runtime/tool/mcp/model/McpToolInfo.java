@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
 
 /**
  * MCP 工具元数据模型，描述工具名称、说明和输入 schema。
@@ -23,8 +24,9 @@ public class McpToolInfo {
     private String mcpId;
 
     /**
-     * 模型可见工具名（FQ：mcp__{server}__{tool}）。
+     * 模型可见工具名（FQ：mcp__{server}__{tool}），必填，是工具解析与去重的键。
      */
+    @NonNull
     private String name;
 
     /**

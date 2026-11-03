@@ -10,7 +10,7 @@ import java.util.List;
  * <p>key = sessionId + messageId + programHash：意图的 SEARCH 针对特定原文，
  * 原文 hash 是重放时判断"意图是否还有效"的依据。messageId 沿用会话的 requestId。</p>
  */
-public interface IOpenuiRepairIntentRepository {
+public interface IOpenUiRepairIntentRepository {
 
     /**
      * 覆盖式保存一个 key 下的全部意图（先删旧再插新，intent_index 按列表顺序 0..n）。

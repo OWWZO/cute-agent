@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.wwz.ai.domain.agent.adapter.repository.IOpenuiRepairIntentRepository;
+import org.wwz.ai.domain.agent.adapter.repository.IOpenUiRepairIntentRepository;
 import org.wwz.ai.domain.agent.runtime.openui.OpenUiAutofixService;
 import org.wwz.ai.domain.agent.runtime.openui.OpenUiDiagnosis;
 import org.wwz.ai.domain.agent.runtime.openui.OpenUiFixError;
@@ -40,10 +40,10 @@ import java.util.Map;
 public class OpenUiRepairController {
 
     private final OpenUiAutofixService autofixService;
-    private final IOpenuiRepairIntentRepository repairIntentRepository;
+    private final IOpenUiRepairIntentRepository repairIntentRepository;
 
     public OpenUiRepairController(OpenUiAutofixService autofixService,
-                                  IOpenuiRepairIntentRepository repairIntentRepository) {
+                                  IOpenUiRepairIntentRepository repairIntentRepository) {
         this.autofixService = autofixService;
         this.repairIntentRepository = repairIntentRepository;
     }

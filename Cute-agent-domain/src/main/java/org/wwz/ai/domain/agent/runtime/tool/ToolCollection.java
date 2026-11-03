@@ -214,7 +214,7 @@ public class ToolCollection {
             if (executor == null) {
                 log.error("requestId:{} execute mcp tool {} failed, McpToolExecutor not found",
                         agentContext != null ? agentContext.getRequestId() : "unknown", name);
-                return "Tool" + name + " Error.";
+                return "Tool " + name + " Error.";
             }
             return executor.executeTool(toolInfo, toolInput);
         }
@@ -227,7 +227,7 @@ public class ToolCollection {
             if (executor == null) {
                 log.error("requestId:{} execute deferred mcp tool {} failed, McpToolExecutor not found",
                         agentContext != null ? agentContext.getRequestId() : "unknown", name);
-                return "Tool" + name + " Error.";
+                return "Tool " + name + " Error.";
             }
             return executor.executeTool(deferred.getMcpToolInfo(), toolInput);
         }
