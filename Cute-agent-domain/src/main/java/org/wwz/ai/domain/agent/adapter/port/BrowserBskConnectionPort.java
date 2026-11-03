@@ -11,6 +11,10 @@ package org.wwz.ai.domain.agent.adapter.port;
  * <p>本端口只暴露<b>在线状态</b>与<b>断开</b>两件事，不暴露 bsk 帧语义：
  * bsk 帧路由是 trigger 层网关的职责，domain 不感知。</p>
  *
+ * <p>线程安全：{@link #isOnline(String)} / {@link #disconnect(String)} 会被 HTTP 请求线程调用，
+ * 而连接表由 bsk WS 网关线程并发增删，实现必须保证并发调用安全
+ * （当前实现基于 {@code ConcurrentHashMap}）。</p>
+ *
  * <p>实现方在 trigger 层（{@code trigger/http/browser/bsk/BskConnectionRegistry}）——
  * bsk WS 网关本身就在 trigger（协议适配层），与 {@link BrowserRelaySocketPort}
  * 的实现在 infrastructure 的原因不同。</p>
@@ -20,7 +24,7 @@ public interface BrowserBskConnectionPort {
     /**
      * 该用户当前是否有<b>已握手且仍在线</b>的 bsk 扩展连接。
      *
-     * @param userId 配对时的用户 id
+     * @param userId 配对时的用户 id；为 null 或空白时返回 false
      * @return 无连接返回 false
      */
     boolean isOnline(String userId);
@@ -32,7 +36,7 @@ public interface BrowserBskConnectionPort {
      * 返回值为 {@code void}，调用方无法区分「本次确实断开」与「本来就没连」，
      * 如需展示差异应先调用 {@link #isOnline(String)}。</p>
      *
-     * @param userId 配对时的用户 id
+     * @param userId 配对时的用户 id；为 null 或空白时为空操作
      */
     void disconnect(String userId);
 }
