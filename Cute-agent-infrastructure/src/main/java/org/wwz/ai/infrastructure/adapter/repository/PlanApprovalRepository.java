@@ -62,8 +62,7 @@ public class PlanApprovalRepository implements IPlanApprovalRepository {
         if (StringUtils.isBlank(sessionId)) {
             return false;
         }
-        Integer count = planApprovalDao.countOpenBySessionId(sessionId.trim());
-        return count != null && count > 0;
+        return planApprovalDao.countOpenBySessionId(sessionId.trim()) > 0;
     }
 
     @Override

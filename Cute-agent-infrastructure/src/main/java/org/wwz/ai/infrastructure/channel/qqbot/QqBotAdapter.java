@@ -22,11 +22,9 @@ public class QqBotAdapter implements ChannelAdapter {
 
     public static final String PLATFORM = "qqbot";
 
-    private final QqBotRestClient restClient;
     private final ReplyWindow replyWindow;
 
     public QqBotAdapter(QqBotRestClient restClient, ChannelProperties properties) {
-        this.restClient = restClient;
         this.replyWindow = ReplyWindow.ofSeconds(properties.getQqbot().getReplyWindowSeconds());
     }
 

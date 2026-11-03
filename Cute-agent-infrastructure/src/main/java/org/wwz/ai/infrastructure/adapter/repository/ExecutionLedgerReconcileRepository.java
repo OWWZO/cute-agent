@@ -54,9 +54,6 @@ public class ExecutionLedgerReconcileRepository implements IExecutionLedgerRecon
                 continue;
             }
             RuntimeBackgroundTask task = MyBatisTasklistPersistence.toBackgroundTask(row);
-            if (task == null) {
-                continue;
-            }
             result.add(OrphanBackgroundTaskRow.builder()
                     .sessionId(row.getSessionId())
                     .task(task)

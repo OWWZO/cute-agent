@@ -18,6 +18,12 @@ public class ConversationFilePortAdapter implements ConversationFilePort {
 
     private final CuteFileGateway cuteFileGateway;
 
+    /**
+     * 上传会话附件。
+     *
+     * <p>调用方保留 {@code content} 的所有权，并负责在方法返回后关闭该流；
+     * 本适配器不会关闭它，也不会在失败时接管它的生命周期。</p>
+     */
     @Override
     public ConversationUploadedFile upload(String sessionId,
                                            String originalFileName,
