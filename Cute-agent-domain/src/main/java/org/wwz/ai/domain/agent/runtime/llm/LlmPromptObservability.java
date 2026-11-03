@@ -58,8 +58,7 @@ public final class LlmPromptObservability {
                 estimate.getSystemFingerprint(),
                 String.join(",", estimate.getToolNames() == null ? List.of() : estimate.getToolNames()),
                 estimate.getToolSchemaFingerprint(),
-                estimate.getMessageCount(),
-                estimate.getSystemChars()
+                estimate.getMessageCount()
         );
 
         String cacheStatus = "UNKNOWN";
@@ -276,7 +275,7 @@ public final class LlmPromptObservability {
     }
 
     private record PromptSnapshot(String systemFingerprint, String toolNamesKey, String toolSchemaFingerprint,
-                                 int messageCount, int systemChars) {
+                                 int messageCount) {
     }
 
     @Data

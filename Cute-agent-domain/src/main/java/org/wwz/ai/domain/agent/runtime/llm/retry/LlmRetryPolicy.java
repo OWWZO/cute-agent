@@ -31,6 +31,8 @@ public record LlmRetryPolicy(int maxAttempts,
     public static final String ENV_MAX_DELAY_MS = "CUTE_LLM_RETRY_MAX_DELAY_MS";
     public static final String ENV_JITTER = "CUTE_LLM_RETRY_JITTER";
 
+    private static final System.Logger LOG = System.getLogger(LlmRetryPolicy.class.getName());
+
     public LlmRetryPolicy {
         if (maxAttempts < 1) {
             maxAttempts = 1;
@@ -102,6 +104,7 @@ public record LlmRetryPolicy(int maxAttempts,
         try {
             return Long.parseLong(raw);
         } catch (NumberFormatException ignore) {
+            LOG.log(System.Logger.Level.WARNING, "无法解析长整数配置 " + key + "=" + raw + "，按未配置处理");
             return null;
         }
     }
@@ -114,6 +117,7 @@ public record LlmRetryPolicy(int maxAttempts,
         try {
             return Double.parseDouble(raw);
         } catch (NumberFormatException ignore) {
+            LOG.log(System.Logger.Level.WARNING, "无法解析浮点配置 " + key + "=" + raw + "，按未配置处理");
             return null;
         }
     }

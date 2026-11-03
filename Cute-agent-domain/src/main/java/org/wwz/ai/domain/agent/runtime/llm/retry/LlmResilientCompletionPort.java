@@ -141,8 +141,9 @@ public final class LlmResilientCompletionPort implements LlmCompletionPort {
             }
             try {
                 consumer.accept(event);
-            } catch (Throwable consumerFailure) {
-                LOG.log(Level.FINE, "LLM stream event consumer failed", consumerFailure);
+            } catch (RuntimeException consumerFailure) {
+                // 只吞运行时异常；Error 继续向上抛，避免吞掉 OOM/栈溢出等致命问题。
+                LOG.log(Level.WARNING, "LLM stream event consumer failed", consumerFailure);
             }
         }
 

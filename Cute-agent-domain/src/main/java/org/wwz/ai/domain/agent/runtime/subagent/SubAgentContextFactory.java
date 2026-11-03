@@ -75,8 +75,6 @@ public final class SubAgentContextFactory {
         if (parent == null) {
             throw new IllegalArgumentException("parent AgentContext 不能为空");
         }
-        // 短 requestId：避免 parentRequestId + ":sub:" + agentId 撑破 working_memory.request_id 列宽
-        String childRequestId = newChildRequestId(agentId);
         // 显式 parentToolUseId 优先；否则回退当前线程绑定的 Agent 工具 toolCallId。
         // 二者皆空时子工具无法嵌套到父卡片（前端只显示 totalToolUseCount）。
         String parentToolUseId = StringUtils.isNotBlank(explicitParentToolUseId)

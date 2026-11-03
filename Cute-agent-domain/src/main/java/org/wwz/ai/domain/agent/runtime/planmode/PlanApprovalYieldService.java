@@ -77,7 +77,7 @@ public class PlanApprovalYieldService {
                 .build();
 
         planApprovalRepository.insert(record);
-        if (sessionWorkingMemoryService != null && executor != null) {
+        if (executor != null) {
             sessionWorkingMemoryService.persistTurn(
                     agentContext.getSessionId(),
                     agentContext.getRequestId(),

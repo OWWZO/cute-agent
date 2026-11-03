@@ -23,6 +23,7 @@ public class PlanApprovalRecord {
     private String planContent;
     private String planFilePath;
     private PlanApprovalDecision decision;
+    /** 生命周期状态，取值必须来自 {@link PlanApprovalStatuses} 的常量。 */
     private String status;
     private LocalDateTime expiresAt;
     private String resumeRequestId;

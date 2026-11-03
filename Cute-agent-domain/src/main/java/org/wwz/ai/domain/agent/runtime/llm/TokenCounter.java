@@ -59,13 +59,6 @@ public class TokenCounter {
         return (text.length() + CHARS_PER_TOKEN - 1) / CHARS_PER_TOKEN;
     }
 
-    public int countImage(Map<String, Object> imageItem) {
-        if (imageItem == null) {
-            return IMAGE_DEFAULT_TOKENS;
-        }
-        return IMAGE_DEFAULT_TOKENS;
-    }
-
     public int countContent(Object content) {
         if (content == null) {
             return 0;

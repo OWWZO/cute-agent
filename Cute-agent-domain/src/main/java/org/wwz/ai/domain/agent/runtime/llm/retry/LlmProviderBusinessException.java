@@ -27,7 +27,7 @@ public class LlmProviderBusinessException extends RuntimeException {
     private final Boolean retryable;
 
     private LlmProviderBusinessException(Builder builder) {
-        super(builder.message);
+        super(builder.message, builder.cause);
         this.providerCode = builder.providerCode;
         this.providerId = builder.providerId;
         this.statusCode = builder.statusCode;
@@ -122,11 +122,7 @@ public class LlmProviderBusinessException extends RuntimeException {
         }
 
         public LlmProviderBusinessException build() {
-            LlmProviderBusinessException error = new LlmProviderBusinessException(this);
-            if (cause != null) {
-                error.initCause(cause);
-            }
-            return error;
+            return new LlmProviderBusinessException(this);
         }
     }
 }

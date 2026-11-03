@@ -36,7 +36,7 @@ public class AgentStreamAccumulatorTest {
         accumulator.setResultMapSubTask("tool-1");
 
         Assert.assertEquals("round-1", accumulator.getPlannerRoundId());
-        Assert.assertEquals(1, accumulator.getResulMapTask().size());
-        Assert.assertEquals(List.of("task-1", "tool-1"), accumulator.getResulMapTask().get(0));
+        Assert.assertEquals(1, accumulator.getResultMapTask().size());
+        Assert.assertEquals(List.of("task-1", "tool-1"), accumulator.getResultMapTask().get(0));
     }
 }
