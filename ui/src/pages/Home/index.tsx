@@ -58,6 +58,7 @@ import {
 } from "@/utils/conversationHistory";
 import { applySessionHitlPending, restoreHitlForSession } from "@/utils/hitlRestore";
 import { readActiveRun } from "@/utils/activeRunStorage";
+import { isSubAgentSessionId } from "@/utils/sessionTree";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   deriveConversationMetaFromInput,
@@ -593,7 +594,8 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
 
   const upsertLocalRecentSession = useCallback(
     (conversation: CHAT.ConversationHistory) => {
-      if (!conversation.sessionId) {
+      if (!conversation.sessionId || isSubAgentSessionId(conversation.sessionId)) {
+        // 子会话已有树里的入口；写进本地近期会话会让它在侧栏顶层再出现一次。
         return;
       }
 

@@ -1,5 +1,18 @@
 import type { ConversationSessionItem } from "@/services/agentConversation";
 
+/** 子会话 ID 前缀，与后端 `SubAgentContextFactory.CHILD_SESSION_ID_PREFIX` 对齐。 */
+const SUB_AGENT_SESSION_ID_PREFIX = "sub_";
+
+/**
+ * 子会话只挂在父会话的树里，不能作为顶层近期会话重复出现。
+ *
+ * 会话列表接口按 `sessionKind` 过滤，但本地会话壳不带类型；重载后恢复一个
+ * 正在运行的子会话时（自动续流会把它写进本地近期会话），只能靠 ID 前缀认身份。
+ */
+export function isSubAgentSessionId(sessionId?: string | null) {
+  return Boolean(sessionId?.startsWith(SUB_AGENT_SESSION_ID_PREFIX));
+}
+
 /**
  * 会话树节点：主会话在上，子会话挂在它下面。
  *

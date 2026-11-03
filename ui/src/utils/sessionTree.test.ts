@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { ConversationSessionItem } from "@/services/agentConversation";
-import { buildSessionTree, flattenSessionTree } from "./sessionTree";
+import {
+  buildSessionTree,
+  flattenSessionTree,
+  isSubAgentSessionId,
+} from "./sessionTree";
 
 function session(
   sessionId: string,
@@ -99,6 +103,16 @@ describe("buildSessionTree", () => {
 
     // 两个都互为父：没有任何根，也不会爆栈
     expect(roots).toHaveLength(0);
+  });
+});
+
+describe("isSubAgentSessionId", () => {
+  it("只认后端确定性派生的 sub_ 前缀会话", () => {
+    expect(isSubAgentSessionId("sub_b2ce9f32825e4faa")).toBe(true);
+    expect(isSubAgentSessionId("session-1793680016611-5011")).toBe(false);
+    expect(isSubAgentSessionId("qq_c2c_abc")).toBe(false);
+    expect(isSubAgentSessionId("")).toBe(false);
+    expect(isSubAgentSessionId(null)).toBe(false);
   });
 });
 

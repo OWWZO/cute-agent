@@ -217,6 +217,27 @@ describe("contentHelpers delivery files", () => {
     ]);
   });
 
+  it("ignores a closing $$$ delimiter instead of treating it as a file", () => {
+    const html = file("index.html", { relativePath: "test-page/index.html" });
+    const task = conclusionTask(
+      "测试页已完成。$$$\ntest-page/index.html\n$$$",
+      [html]
+    );
+
+    expect(resolveTaskSummaryArtifactKeys(task)).toEqual(["test-page/index.html"]);
+    expect(pickFeaturedDeliveryFiles(task, [html]).map((item) => item.name)).toEqual([
+      "index.html",
+    ]);
+  });
+
+  it("does not synthesize a file card when only delimiters remain", () => {
+    const html = file("report.html");
+    const task = conclusionTask("页面已生成。$$$\n$$$", [html]);
+
+    expect(resolveTaskSummaryArtifactKeys(task)).toEqual([]);
+    expect(pickFeaturedDeliveryFiles(task, [html])).toEqual([]);
+  });
+
   it("strips list markers and trailing punctuation from $$$ keys", () => {
     const html = file("simple-showcase.html");
     const task = conclusionTask(

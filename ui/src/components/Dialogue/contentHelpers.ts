@@ -77,6 +77,9 @@ function normalizeArtifactKey(raw: string) {
   if (!text) {
     return "";
   }
+  // 模型偶尔把分隔符重复输出（`正文$$$\n$$$ file.md`），残留的 $$$ 不是文件键，
+  // 不清掉会合成出一张名为 "$$$" 的假文件卡。
+  text = text.replaceAll(PROTOCOL_DELIMITER, " ").trim();
   text = text.replace(/^[-*+]\s+/, "").replace(/^\d+[.)]\s+/, "").trim();
   text = text.replace(/^[*`]+|[`*]+$/g, "").trim();
   const markdownLink = text.match(/^\[[^\]]*]\(([^)]+)\)$/);

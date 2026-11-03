@@ -72,11 +72,13 @@ export const ConclusionSection: FC<{
           <MessageToolbar response={summaryText} alwaysVisible />
         ) : null}
       </Message>
+      {/* 终答仍在流式输出时先不露出工作区入口：$$$ 点名边流边解析，
+          入口会随解析结果反复显隐。 */}
       <AttachmentList
         files={attachmentFiles}
         preview={true}
         review={(file) => changeFile?.(file, chat)}
-        showWorkspaceFilesEntry={showWorkspaceFilesEntry}
+        showWorkspaceFilesEntry={showWorkspaceFilesEntry && !summaryStreaming}
         onOpenWorkspaceFiles={onOpenWorkspaceFiles}
       />
     </div>
