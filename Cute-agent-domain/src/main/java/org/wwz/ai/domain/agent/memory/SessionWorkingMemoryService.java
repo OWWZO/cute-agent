@@ -39,6 +39,11 @@ public interface SessionWorkingMemoryService {
 
     /**
      * 持久化本轮 delta 到指定 scope。
+     * <p><b>幂等契约：</b>以 {@code (sessionId, memoryScope, requestId)} 为唯一轮次键。
+     * 同一 requestId 重复调用不得追加第二轮 delta：已存在 READY turn 时应直接返回，
+     * 保证 run 重试或部分失败后的补偿调用不会污染下一轮 preload。</p>
+     * <p>实现需保证「查重 + 插入」对同一 requestId 的并发调用不产生两条 turn
+     * （依赖存储层唯一约束或调用方串行化）。</p>
      */
     void persistTurn(String sessionId,
                      String memoryScope,

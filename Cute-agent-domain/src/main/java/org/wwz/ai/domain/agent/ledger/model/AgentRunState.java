@@ -43,17 +43,17 @@ public class AgentRunState {
     @Builder.Default
     @ToString.Exclude
     @Setter(AccessLevel.NONE)
-    private transient ThreadLocal<String> currentAgentNameHolder = new ThreadLocal<>();
+    private ThreadLocal<String> currentAgentNameHolder = new ThreadLocal<>();
 
     @Builder.Default
     @ToString.Exclude
     @Setter(AccessLevel.NONE)
-    private transient ThreadLocal<Integer> currentStepNoHolder = new ThreadLocal<>();
+    private ThreadLocal<Integer> currentStepNoHolder = new ThreadLocal<>();
 
     @Builder.Default
     @ToString.Exclude
     @Setter(AccessLevel.NONE)
-    private transient ThreadLocal<Long> currentLlmInvocationIdHolder = new ThreadLocal<>();
+    private ThreadLocal<Long> currentLlmInvocationIdHolder = new ThreadLocal<>();
 
     /**
      * 申请下一个全局递增的 LLM 顺序号。

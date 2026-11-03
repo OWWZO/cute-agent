@@ -40,10 +40,20 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
     private final SkillScriptDiscoverer skillScriptDiscoverer;
     private final SkillPathGuard skillPathGuard;
 
-    private volatile Map<String, SkillDescriptor> byId = Collections.emptyMap();
-    private volatile Map<String, SkillDescriptor> byUniqueName = Collections.emptyMap();
-    private volatile Map<String, List<SkillDescriptor>> byName = Collections.emptyMap();
-    private volatile List<SkillDescriptor> descriptors = Collections.emptyList();
+    /**
+     * 一次扫描得到的完整只读索引。读者只捕获一次快照引用，
+     * 不会看到新旧两代索引混搭。
+     */
+    private record SkillSnapshot(List<SkillDescriptor> descriptors,
+                                 Map<String, SkillDescriptor> byId,
+                                 Map<String, List<SkillDescriptor>> byName,
+                                 Map<String, SkillDescriptor> byUniqueName) {
+
+        private static final SkillSnapshot EMPTY = new SkillSnapshot(
+                List.of(), Map.of(), Map.of(), Map.of());
+    }
+
+    private volatile SkillSnapshot snapshot = SkillSnapshot.EMPTY;
     private volatile List<Path> skillRootDirectories = Collections.emptyList();
     private final AtomicLong catalogVersion = new AtomicLong(0);
     private volatile String lastScanSignature;
@@ -163,7 +173,7 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
     @Override
     public Collection<SkillDefinition> listSkills() {
         List<SkillDefinition> definitions = new ArrayList<>();
-        for (SkillDescriptor descriptor : byUniqueName.values()) {
+        for (SkillDescriptor descriptor : snapshot.byUniqueName().values()) {
             definitions.add(toDefinition(descriptor));
         }
         return definitions;
@@ -182,7 +192,7 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
     @Override
     public Path resolveAllowedPath(Path candidatePath) {
         Path normalizedCandidatePath = candidatePath.toAbsolutePath().normalize();
-        for (SkillDescriptor descriptor : descriptors) {
+        for (SkillDescriptor descriptor : snapshot.descriptors()) {
             Path skillBasePath = descriptor.getBasePath().toAbsolutePath().normalize();
             if (normalizedCandidatePath.startsWith(skillBasePath)) {
                 return skillPathGuard.ensureUnderRoot(skillBasePath, normalizedCandidatePath);
@@ -193,7 +203,7 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
 
     @Override
     public String buildSkillDescription() {
-        if (descriptors.isEmpty()) {
+        if (snapshot.descriptors().isEmpty()) {
             return "当前没有可用 skill。";
         }
         return "当前可用 skills 见 system prompt 中的 <available_skills>。使用 skill_view 加载正文。";
@@ -201,12 +211,12 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
 
     @Override
     public List<SkillDescriptor> list() {
-        return descriptors;
+        return snapshot.descriptors();
     }
 
     @Override
     public List<SkillSearchHit> search(SkillQuery query) {
-        return SkillCatalogSearch.search(descriptors, query);
+        return SkillCatalogSearch.search(snapshot.descriptors(), query);
     }
 
     @Override
@@ -220,13 +230,14 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
             return Optional.empty();
         }
         String trimmed = identifier.trim();
-        SkillDescriptor byExactId = byId.get(trimmed);
+        SkillSnapshot current = snapshot;
+        SkillDescriptor byExactId = current.byId().get(trimmed);
         if (byExactId != null) {
             return Optional.of(byExactId);
         }
         if (trimmed.contains("/")) {
             String slashPath = trimmed.replace('\\', '/');
-            for (SkillDescriptor descriptor : descriptors) {
+            for (SkillDescriptor descriptor : current.descriptors()) {
                 if (slashPath.equals(descriptor.getRef().relativePath())) {
                     return Optional.of(descriptor);
                 }
@@ -237,7 +248,7 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
             String source = trimmed.substring(0, colon);
             String rest = trimmed.substring(colon + 1);
             if (!source.isBlank() && !rest.isBlank() && !rest.contains("\\") && rest.indexOf(':') < 0) {
-                for (SkillDescriptor descriptor : descriptors) {
+                for (SkillDescriptor descriptor : current.descriptors()) {
                     if (source.equals(descriptor.getSource())
                             && (rest.equals(descriptor.getName()) || rest.equals(descriptor.getRef().relativePath()))) {
                         return Optional.of(descriptor);
@@ -245,7 +256,7 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
                 }
             }
         }
-        List<SkillDescriptor> sameName = byName.get(trimmed);
+        List<SkillDescriptor> sameName = current.byName().get(trimmed);
         if (sameName != null && sameName.size() == 1) {
             return Optional.of(sameName.get(0));
         }
@@ -269,10 +280,12 @@ public class DefaultSkillRegistry implements SkillRegistry, SkillCatalog {
                                  Map<String, SkillDescriptor> idIndex,
                                  Map<String, List<SkillDescriptor>> nameIndex,
                                  Map<String, SkillDescriptor> uniqueNameIndex) {
-        this.descriptors = Collections.unmodifiableList(new ArrayList<>(loaded));
-        this.byId = Collections.unmodifiableMap(idIndex);
-        this.byName = unmodifiableNameIndex(nameIndex);
-        this.byUniqueName = Collections.unmodifiableMap(uniqueNameIndex);
+        SkillSnapshot next = new SkillSnapshot(
+                Collections.unmodifiableList(new ArrayList<>(loaded)),
+                Collections.unmodifiableMap(new LinkedHashMap<>(idIndex)),
+                unmodifiableNameIndex(nameIndex),
+                Collections.unmodifiableMap(new LinkedHashMap<>(uniqueNameIndex)));
+        this.snapshot = next;
         catalogVersion.incrementAndGet();
     }
 

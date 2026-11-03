@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
-import org.wwz.ai.domain.agent.adapter.repository.IOpenuiRepairIntentRepository;
+import org.wwz.ai.domain.agent.adapter.repository.IOpenUiRepairIntentRepository;
 import org.wwz.ai.domain.agent.runtime.openui.OpenUiRepairIntent;
 import org.wwz.ai.infrastructure.dao.IOpenuiRepairIntentDao;
 import org.wwz.ai.infrastructure.dao.po.OpenuiRepairIntentPO;
@@ -19,7 +19,7 @@ import java.util.List;
 @Slf4j
 @Repository
 @RequiredArgsConstructor
-public class OpenuiRepairIntentRepository implements IOpenuiRepairIntentRepository {
+public class OpenuiRepairIntentRepository implements IOpenUiRepairIntentRepository {
 
     private final IOpenuiRepairIntentDao repairIntentDao;
 

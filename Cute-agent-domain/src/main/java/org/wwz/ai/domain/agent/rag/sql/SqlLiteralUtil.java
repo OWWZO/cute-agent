@@ -14,7 +14,7 @@ public final class SqlLiteralUtil {
     private SqlLiteralUtil() {
     }
 
-    private static final Set<SqlTypeName> numericType =
+    private static final Set<SqlTypeName> NUMERIC_TYPE =
             ImmutableSet.<SqlTypeName>builder()
                     .add(SqlTypeName.TINYINT)
                     .add(SqlTypeName.SMALLINT)
@@ -25,6 +25,6 @@ public final class SqlLiteralUtil {
                     .build();
 
     public static boolean isNumericValue(SqlTypeName typeName) {
-        return numericType.contains(typeName);
+        return NUMERIC_TYPE.contains(typeName);
     }
 }

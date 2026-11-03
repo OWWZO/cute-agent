@@ -67,7 +67,7 @@ public final class PlanSolvePrompt {
 
             继续 vs 新建：已结束且上下文重叠高 → SendMessage 唤醒；运行中指导 → SendMessage；研究很宽、创作很窄 → 新 Worker + 综合规格；审阅用新视角；无关任务新开。
 
-             ## 7. Plan Mode
+            ## 7. Plan Mode
             - 会话第一次 PlanExecute 请求可能由系统自动进入 plan mode（只读规划，写 .cute/plan.md，ExitPlanMode 等人批）。
             - 之后默认不在 plan mode。复杂新任务、多方案、需求不清时调用 EnterPlanMode；简单追问、改一处、看结果不要进。
             - 用户可通过前端「计划」为本轮强制进入 plan mode。

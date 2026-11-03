@@ -161,7 +161,7 @@ public class AgentContext {
      */
     @Builder.Default
     @JSONField(serialize = false)
-    Map<String, WorkspaceFileReadState> workspaceReadStateByPath = new ConcurrentHashMap<>();
+    volatile Map<String, WorkspaceFileReadState> workspaceReadStateByPath = new ConcurrentHashMap<>();
 
     /**
      * Cute 运行时依赖包。
@@ -626,7 +626,11 @@ public class AgentContext {
             return;
         }
         if (workspaceReadStateByPath == null) {
-            workspaceReadStateByPath = new ConcurrentHashMap<>();
+            synchronized (this) {
+                if (workspaceReadStateByPath == null) {
+                    workspaceReadStateByPath = new ConcurrentHashMap<>();
+                }
+            }
         }
         workspaceReadStateByPath.put(state.getAbsolutePath(), state);
     }

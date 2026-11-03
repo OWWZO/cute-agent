@@ -31,7 +31,7 @@ public class PlanApprovalYieldService {
 
     private final IPlanApprovalRepository planApprovalRepository;
     private final SessionWorkingMemoryService sessionWorkingMemoryService;
-    private final org.wwz.ai.domain.agent.runtime.yieldcard.AfterCommitCardSender afterCommitCardSender;
+    private final AfterCommitCardSender afterCommitCardSender;
 
     @Transactional(rollbackFor = Exception.class)
     public PlanApprovalRecord yieldAndNotify(AgentContext agentContext,
