@@ -123,6 +123,30 @@ export function isToolFilePath(value: string): boolean {
   );
 }
 
+/**
+ * 把下载地址收敛到同源预览地址。
+ *
+ * 部分任务产物只回传 downloadUrl，上游兜底会把它塞进 previewUrl；
+ * 「在新窗口打开」必须打开预览端点，而不是让浏览器直接下载文件。
+ */
+export function toFilePreviewUrl(rawUrl?: string | null): string {
+  const normalized = normalizeFileUrlForBrowser(rawUrl);
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (!parsed.pathname.includes("/download/")) {
+      return normalized;
+    }
+    parsed.pathname = parsed.pathname.replace("/download/", "/preview/");
+    return parsed.toString();
+  } catch {
+    return normalized;
+  }
+}
+
 export function normalizeFileUrlForBrowser(rawUrl?: string | null): string {
   const normalized = (rawUrl || "").trim();
   if (!normalized) {

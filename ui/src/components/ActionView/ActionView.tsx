@@ -28,6 +28,7 @@ import FileList from "./FileList";
 import { PlanView, PlanViewAction } from "../PlanView";
 import { PanelItemType } from "../ActionPanel";
 import { copyText, downloadFile } from "@/utils";
+import { toFilePreviewUrl } from "@/utils/fileUrl";
 import { toast } from "sonner";
 import { iconType } from "@/utils/constants";
 import {
@@ -719,8 +720,9 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
    * 空态卡随之消失；`empty` 的含义是「宿主该把整个工作区收起」。
    */
   const paneMode = resolveWorkspacePaneMode(selectedTab);
-  const previewUrl =
-    selectedFile?.previewUrl || selectedFile?.url || "";
+  const previewUrl = toFilePreviewUrl(
+    selectedFile?.previewUrl || selectedFile?.url || ""
+  );
   const downloadUrl =
     selectedFile?.downloadUrl || selectedFile?.url || "";
   const selectedExt = (
