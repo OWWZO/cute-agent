@@ -8,6 +8,7 @@
 renderer 按需导入：某个可选渲染依赖缺失时，不影响其它格式继续工作。
 """
 
+import importlib
 from pathlib import Path
 from typing import Any, Callable, Dict
 
@@ -41,5 +42,5 @@ def get_renderer(fmt: str) -> Renderer:
             f"Unsupported document format: {fmt!r}. Supported: {list(SUPPORTED_FORMATS)}"
         )
     module_name, func_name = _RENDERER_SPECS[key]
-    module = __import__(module_name, fromlist=[func_name])
+    module = importlib.import_module(module_name)
     return getattr(module, func_name)

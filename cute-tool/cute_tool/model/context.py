@@ -116,10 +116,8 @@ class AnalysisContext(object):
 
         self.queue = queue  # 可选：流式事件推送队列
 
-    @property
-    def schemas_json(self) -> str:
-        """将 schema 转为 JSON 字符串，注入 LLM prompt。"""
-        schemas = [
+    def _normalized_schemas(self) -> List[Dict]:
+        return [
             {
                 "table": s["modelName"],
                 "columns": [
@@ -128,6 +126,7 @@ class AnalysisContext(object):
                         "type": c["dataType"],
                         "comment": c["columnComment"],
                         "valueExample": c.get("fewShot"),
+                        "valueExampleMarkdown": c.get("fewShot", ""),
                     }
                     for c in s["schemaList"]
                 ],
@@ -139,28 +138,41 @@ class AnalysisContext(object):
             }
             for s in self.schemas
         ]
+
+    @property
+    def schemas_json(self) -> str:
+        """将 schema 转为 JSON 字符串，注入 LLM prompt。"""
+        schemas = [
+            {
+                **schema,
+                "columns": [
+                    {
+                        key: value
+                        for key, value in column.items()
+                        if key != "valueExampleMarkdown"
+                    }
+                    for column in schema["columns"]
+                ],
+            }
+            for schema in self._normalized_schemas()
+        ]
         return json.dumps(schemas, ensure_ascii=False, indent=2)
 
     @property
     def schemas_markdown(self) -> str:
         """将 schema 转为 Markdown 表格，便于模型阅读。"""
         schemas = ""
-        for s in self.schemas:
+        for s in self._normalized_schemas():
             columns = (
                 "| name | type | comment | valueExample |\n| --- | --- | --- | --- |\n"
             )
             columns += "\n".join(
                 [
-                    f"| {c['columnName']} | {c['dataType']} | {c['columnComment']} | {c.get('fewShot', '')} |"
-                    for c in s["schemaList"]
+                    f"| {c['name']} | {c['type']} | {c['comment']} | {c['valueExampleMarkdown']} |"
+                    for c in s["columns"]
                 ]
             )
-            noAnalysisColumns = [
-                c["columnName"]
-                for c in s["schemaList"]
-                if c.get("analyzeSuggest", 0) == -1
-            ]
-            schemas += f"""\ntable: {s["modelName"]}\n\ncolumns:\n\n{columns}\n\nnoAnalysisColumns: {noAnalysisColumns}\n"""
+            schemas += f"""\ntable: {s["table"]}\n\ncolumns:\n\n{columns}\n\nnoAnalysisColumns: {s["noAnalysisColumns"]}\n"""
         return schemas
 
     def save_insight(self, df: "pd.DataFrame", insight: str, analysis_process: str):  # type: ignore

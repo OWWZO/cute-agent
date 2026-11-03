@@ -10,7 +10,7 @@ the layout it produces is professional; the question is only how each output
 format *embeds* that layout. This module exposes both options:
 
 - :func:`math_vector_path` — the laid-out equation as **vector geometry**
-  (Bézier outlines + bar rectangles) in points, for crisp, scalable,
+  (Bézier outlines; bar rectangles are reserved for future use) in points, for crisp, scalable,
   resolution-independent embedding (used by the PDF renderer as real
   ReportLab paths — no rasterisation).
 - :func:`render_math_png` — the same layout rasterised to a transparent PNG
@@ -55,7 +55,8 @@ class MathVector:
     # Each contour: list of (op, points) where op is "m"/"l"/"c" and points
     # are (x, y) tuples already scaled to points.
     contours: list[list[tuple[str, tuple[float, ...]]]] = field(default_factory=list)
-    # Filled bars (fraction/radical rules): (x, y, w, h) in points.
+    # Reserved for filled fraction/radical bars: (x, y, w, h) in points.
+    # math_vector_path currently emits rules as path contours, so this stays empty.
     rects: list[tuple[float, float, float, float]] = field(default_factory=list)
 
 

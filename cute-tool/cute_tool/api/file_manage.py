@@ -130,7 +130,6 @@ async def upload_file(body: FileUploadRequest):
     """JSON 方式上传文本内容并登记元数据。"""
     # 存储名必须先归一化，再参与 file_id 计算，保证同名文件在不同入口生成一致主键。
     body.file_name = normalize_stored_file_name(body.file_name)
-    body.request_id = body.request_id
     file_info = await FileInfoOp.add_by_content(
         filename=body.file_name,
         content=body.content,

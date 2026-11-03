@@ -43,8 +43,8 @@ def render_chart_png(
         logger.warning("docgen_chart_no_series", title=block.title)
         return None
 
-    palette = _series_palette(theme, len(series))
-    text_color = theme.colors.text if not theme.deck.dark else theme.colors.text
+    palette = _series_palette(theme)
+    text_color = theme.colors.text
     fig, ax = plt.subplots(figsize=(width_in, height_in), dpi=dpi)
     try:
         _draw(ax, block, series, palette)
@@ -162,7 +162,7 @@ def _draw(ax: Any, block: ChartBlock, series: list[Any], palette: list[str]) -> 
     ax.set_xticklabels(cats, fontsize=9)
 
 
-def _series_palette(theme: Theme, n: int) -> list[str]:
+def _series_palette(theme: Theme) -> list[str]:
     base = [
         theme.colors.primary,
         theme.colors.accent,

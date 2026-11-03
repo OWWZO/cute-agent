@@ -712,7 +712,7 @@ def render_docx(spec: DocumentSpec, output_path: Path) -> dict[str, Any]:
 
     # -- header / footer -----------------------------------------------
 
-    _apply_header_footer(section, spec, theme, _style_run, align_map, qn=qn, pt=Pt)
+    _apply_header_footer(section, spec, theme, _style_run, align_map, qn=qn)
 
     # -- TOC -------------------------------------------------------------
 
@@ -864,7 +864,6 @@ def _apply_header_footer(
     align_map: dict[str, Any],
     *,
     qn: Any,
-    pt: Any,
 ) -> None:
     for cfg, container in ((spec.header, section.header), (spec.footer, section.footer)):
         if cfg is None:

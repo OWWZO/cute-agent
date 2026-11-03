@@ -5,7 +5,7 @@
 # Date:   2025/9/8
 # =====================
 """分析数据语义模型：列/指标/筛选/兄弟组，支撑洞察计算。"""
-from typing import Any, List, Literal, Optional
+from typing import Any, List, Literal, Optional, Sequence
 import uuid
 import pandas as pd
 import numpy as np
@@ -161,7 +161,7 @@ class SiblingGroup(BaseModel):
                 .rename(columns={"agg_name_temp": self.data.measure.column}).reset_index()
         return df
 
-    def __eq__(self, other: "DataModel") -> bool:
+    def __eq__(self, other: "SiblingGroup") -> bool:
         return self.data == other.data and self.filters == other.filters and self.breakdown == other.breakdown
 
     def __str__(self):
@@ -169,7 +169,7 @@ class SiblingGroup(BaseModel):
 
 
 class SiblingGroupContainer(list):
-    def __init__(self, sgs:  SiblingGroup | List[SiblingGroup] = [], threshold: float = 0.01):
+    def __init__(self, sgs: SiblingGroup | Sequence[SiblingGroup] = (), threshold: float = 0.01):
         if isinstance(sgs, SiblingGroup):
             sgs = [sgs]
         sgs = [sg for sg in sgs if sg.impact >= threshold]

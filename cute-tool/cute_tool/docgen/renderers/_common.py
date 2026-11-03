@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Renderer 之间共用的纯函数。
 
-pdf / docx / html 三个 renderer 各自复制了一份完全相同的 ``_looks_chinese``，
+pdf / docx / html 三个 renderer 各自复制了一份完全相同的 ``looks_chinese``，
 这里收敛成单一来源。渲染主体仍留在各自模块（它们对"如何画"的假设差别很大，
 不适合强行合并）；各 renderer 的颜色解析输出类型不同（str / Color / RGBColor），
 也没有合并价值。

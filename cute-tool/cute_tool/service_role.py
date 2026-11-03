@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-from typing import Literal
+from typing import Literal, get_args
 
 ServiceRole = Literal["all", "api", "sandbox"]
 
-_VALID = frozenset({"all", "api", "sandbox"})
+_VALID = frozenset(get_args(ServiceRole))
 _DEFAULT_SANDBOX_URL = "http://127.0.0.1:1602"
 
 
