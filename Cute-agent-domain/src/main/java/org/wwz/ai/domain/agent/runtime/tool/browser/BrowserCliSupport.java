@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.tool.browser;
 
 import com.alibaba.fastjson.JSON;
+import lombok.extern.slf4j.Slf4j;
 import com.alibaba.fastjson.JSONObject;
 import org.wwz.ai.domain.agent.adapter.port.cli.CliResult;
 import org.apache.commons.lang3.StringUtils;
@@ -30,6 +31,7 @@ import java.util.Set;
  * 但 argv 解析、产物捕获、viewport 发布、字段构建与缓存目录规则逐字相同。
  * 这些共有部分收敛到此处，两端各自只保留后端接入。
  */
+@Slf4j
 public final class BrowserCliSupport {
 
     private static final long DEFAULT_TIMEOUT_FALLBACK_MS = 60_000L;
@@ -181,8 +183,9 @@ public final class BrowserCliSupport {
         if (start < 0 || end <= start) {
             return Map.of();
         }
+        String jsonText = trimmed.substring(start, end + 1);
         try {
-            JSONObject json = JSON.parseObject(trimmed.substring(start, end + 1));
+            JSONObject json = JSON.parseObject(jsonText);
             if (json == null) {
                 return Map.of();
             }
@@ -195,7 +198,9 @@ public final class BrowserCliSupport {
                 }
             }
             return fields;
-        } catch (RuntimeException ignore) {
+        } catch (RuntimeException e) {
+            log.warn("viewport JSON 解析失败，忽略该段输出: text={}",
+                    StringUtils.abbreviate(jsonText, 500), e);
             return Map.of();
         }
     }
@@ -219,6 +224,9 @@ public final class BrowserCliSupport {
     }
 
     public static String resolveCacheDir(OpenCliProperties properties, String userId) {
+        if (StringUtils.isBlank(userId)) {
+            throw new IllegalArgumentException("userId 不能为空");
+        }
         String root = StringUtils.trimToNull(properties.getCacheDir());
         if (root == null) {
             root = Path.of(System.getProperty("java.io.tmpdir"), "cute-opencli").toString();

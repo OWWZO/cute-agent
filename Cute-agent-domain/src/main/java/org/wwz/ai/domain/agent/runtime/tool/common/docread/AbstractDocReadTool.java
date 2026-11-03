@@ -41,6 +41,10 @@ public abstract class AbstractDocReadTool extends AbstractDocRemoteTool {
             return;
         }
         if (payload instanceof String text) {
+            if (StringUtils.isBlank(text)) {
+                putMessage(json, data);
+                return;
+            }
             data.put("data", truncate(text));
         } else {
             // 结构化 payload 未超限时保留原对象，超限才降级为截断后的 JSON 字符串：

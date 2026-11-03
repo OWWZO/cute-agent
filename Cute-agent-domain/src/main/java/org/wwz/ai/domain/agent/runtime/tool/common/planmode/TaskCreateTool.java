@@ -66,11 +66,7 @@ public class TaskCreateTool implements BaseTool {
             String description = ToolArgs.str(params.get("description"));
             String activeForm = ToolArgs.str(params.get("activeForm"));
             if (StringUtils.isBlank(subject) || StringUtils.isBlank(description)) {
-                return ToolResultPayload.failure(
-                        "TaskCreate 失败：subject 与 description 必填",
-                        "TaskCreate 失败：subject 与 description 必填",
-                        null,
-                        "missing fields");
+                return ToolResultPayload.failureFrom("TaskCreate 失败：subject 与 description 必填", null);
             }
             SessionTaskItem item = context.requireSessionTaskList()
                     .create(subject, description, activeForm, null);

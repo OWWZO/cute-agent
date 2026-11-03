@@ -290,7 +290,4 @@ public abstract class AbstractDocRemoteTool implements BaseTool {
         return m;
     }
 
-    protected static String formatList(String... items) {
-        return String.join(", ", items);
-    }
 }

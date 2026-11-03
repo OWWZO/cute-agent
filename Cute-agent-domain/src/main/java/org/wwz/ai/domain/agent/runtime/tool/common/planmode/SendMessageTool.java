@@ -80,7 +80,7 @@ public class SendMessageTool implements BaseTool {
             }
 
             String sessionId = StringUtils.defaultIfBlank(agentContext.getSessionId(), agentContext.getRequestId());
-            ResolvedTarget target = resolveTarget(agentContext, sessionId, to);
+            ResolvedTarget target = resolveTarget(agentContext, to);
             if (target == null || StringUtils.isBlank(target.agentId)) {
                 return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, Map.of(
                         "ok", false,
@@ -102,7 +102,7 @@ public class SendMessageTool implements BaseTool {
         }
     }
 
-    private ResolvedTarget resolveTarget(AgentContext agentContext, String sessionId, String to) {
+    private ResolvedTarget resolveTarget(AgentContext agentContext, String to) {
         // 模型侧只有 agentId 一种句柄：先在本会话的后台任务里找该子 Agent 最近一次运行，
         // 取不到就直接当 agentId 用（mailbox 可能仍 active，或该子 Agent 从未落过后台任务）。
         Optional<RuntimeBackgroundTask> latest =

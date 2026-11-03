@@ -71,8 +71,8 @@ public class ToolDescribeTool implements BaseTool {
             return ToolResultPayload.okData(McpToolNames.TOOL_DESCRIBE, fields);
         } catch (Exception e) {
             log.warn("ToolDescribe failed", e);
-            String msg = "ToolDescribe 失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
-            return ToolResultPayload.failureFrom(msg, null);
+            // 与文件内其他模型可见消息保持一致用英文，且不回传原始异常细节。
+            return ToolResultPayload.failureFrom("ToolDescribe failed, see server logs.", null);
         }
     }
 

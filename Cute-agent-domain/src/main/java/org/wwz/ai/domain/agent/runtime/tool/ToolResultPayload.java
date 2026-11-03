@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolStructuredOutput;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -117,22 +118,6 @@ public class ToolResultPayload {
     }
 
     /**
-     * rich tool 强类型输出快捷工厂。
-     * 注意：会预填 llmObservation，BaseAgent 不会再 serialize llmData。
-     * 新工具请优先 {@link #fromData(Object, ToolStructuredOutput)}。
-     */
-    public static ToolResultPayload structured(String toolResult,
-                                               String llmObservation,
-                                               ToolStructuredOutput structuredOutput) {
-        return ToolResultPayload.builder()
-                .toolResult(toolResult)
-                .llmObservation(llmObservation)
-                .structuredOutput(structuredOutput)
-                .failed(Boolean.FALSE)
-                .build();
-    }
-
-    /**
      * 失败结果快捷工厂。
      */
     public static ToolResultPayload failure(String toolResult,
@@ -190,6 +175,7 @@ public class ToolResultPayload {
         if (fields != null) {
             data.putAll(fields);
         }
-        return data;
+        // 载荷会被后续阶段共享读取，冻结结构避免某一阶段原地修改影响其他消费者。
+        return Collections.unmodifiableMap(data);
     }
 }

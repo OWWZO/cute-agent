@@ -26,5 +26,9 @@ public interface TasklistPersistencePort {
 
     Optional<RuntimeBackgroundTask> findBackgroundTask(String sessionId, String taskId);
 
+    /**
+     * 后台任务只做 upsert，没有删除操作：完成/失败/停止的任务行会保留并随会话重新 hydrate。
+     * 旧行清理由持久化实现或外部保留策略负责，不在本端口约定内。
+     */
     void upsertBackgroundTask(String sessionId, RuntimeBackgroundTask task);
 }

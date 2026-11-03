@@ -94,14 +94,14 @@ public class ExitPlanModeTool implements BaseTool {
                 }
             }
 
-            state.requestExitWithPlan(planContent, planFilePath);
-
             String toolCallId = null;
             ToolArtifactSource source = agentContext.getCurrentToolArtifactSource();
             if (source != null) {
                 toolCallId = source.getToolCallId();
             }
 
+            // 所有可能失败的步骤完成后再改状态，避免异常路径留下「已请求退出」的假状态。
+            state.requestExitWithPlan(planContent, planFilePath);
             throw new PlanApprovalRequiredException(planContent, planFilePath, toolCallId);
         } catch (PlanApprovalRequiredException yield) {
             throw yield;

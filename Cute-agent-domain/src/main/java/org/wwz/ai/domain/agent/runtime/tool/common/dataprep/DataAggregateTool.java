@@ -33,7 +33,11 @@ public class DataAggregateTool extends AbstractDocReadTool {
     @Override
     protected Map<String, Object> defaultParams() {
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("operation", stringProp("groupby | pivot | describe | value_counts | rolling"));
+        properties.put("operation", Map.of(
+                "type", "string",
+                "enum", List.of("groupby", "pivot", "describe", "value_counts", "rolling"),
+                "description", "Aggregation operation type"
+        ));
         properties.put("data", Map.of("type", "array", "description", "Inline list of row objects", "items", objectProp("Row object")));
         properties.put("source_path", stringProp("CSV/JSON/JSONL/Parquet path under workspace"));
         properties.put("group_by", Map.of("type", "array", "items", Map.of("type", "string"), "description", "Group-by columns"));
