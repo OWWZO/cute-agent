@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.channel.model;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * 一次入站消息的归一化结果。
@@ -24,4 +25,17 @@ public record ChannelInboundEvent(
         String messageId,
         Instant receivedAt
 ) {
+
+    public ChannelInboundEvent {
+        if (platform == null || platform.isBlank()) {
+            throw new IllegalArgumentException("platform must not be blank");
+        }
+        Objects.requireNonNull(bindingId, "bindingId");
+        Objects.requireNonNull(chatType, "chatType");
+        if (targetId == null || targetId.isBlank()) {
+            throw new IllegalArgumentException("targetId must not be blank");
+        }
+        Objects.requireNonNull(platformUserId, "platformUserId");
+        Objects.requireNonNull(receivedAt, "receivedAt");
+    }
 }

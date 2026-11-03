@@ -17,6 +17,9 @@ public interface ChannelAdapter {
      * 推纯文本。实现方负责按平台上限切块与格式转换。
      * <p>实现 MUST NOT 抛异常：所有失败以 {@link ChannelPushResult#success()} 为 false 返回，
      * 否则异常会冒泡到 projection 观察者循环。</p>
+     * <p><b>分块与重试语义：</b>返回的 {@link ChannelPushResult} 描述整次调用的聚合结果，
+     * 不区分单个分块。调用方对 {@code retryable=true} 的重试必须重发完整 {@code text}；
+     * 实现需保证重发不会因已投递的分块产生不可接受的重复，做不到时须返回 {@code retryable=false}。</p>
      */
     ChannelPushResult pushText(ChannelTarget target, String text);
 }
