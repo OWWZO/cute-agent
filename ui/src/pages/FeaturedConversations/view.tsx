@@ -30,6 +30,7 @@ export function FeaturedConversationsView(
 ) {
   const hasCards = props.page.list.length > 0;
   const featuredCount = props.page.total || props.page.list.length;
+  const totalPages = Math.ceil(props.page.total / props.pageSize);
 
   return (
     <div className="h-full w-full overflow-y-auto bg-[var(--chat-surface-soft)] text-[var(--chat-text)]">
@@ -100,10 +101,7 @@ export function FeaturedConversationsView(
                         />
                       </PaginationItem>
                     ) : null}
-                    {Array.from(
-                      { length: Math.ceil(props.page.total / props.pageSize) },
-                      (_, index) => index + 1
-                    ).map((pageNo) => (
+                    {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNo) => (
                       <PaginationItem key={pageNo}>
                         <PaginationLink
                           href="#"
@@ -117,7 +115,7 @@ export function FeaturedConversationsView(
                         </PaginationLink>
                       </PaginationItem>
                     ))}
-                    {props.pageNo < Math.ceil(props.page.total / props.pageSize) ? (
+                    {props.pageNo < totalPages ? (
                       <PaginationItem>
                         <PaginationNext
                           href="#"

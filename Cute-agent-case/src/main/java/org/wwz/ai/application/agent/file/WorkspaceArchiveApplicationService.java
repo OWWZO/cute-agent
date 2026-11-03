@@ -38,7 +38,9 @@ public class WorkspaceArchiveApplicationService {
                 return;
             }
             try (Stream<Path> walk = Files.walk(root)) {
-                for (Path file : walk.filter(Files::isRegularFile).toList()) {
+                var files = walk.filter(Files::isRegularFile).iterator();
+                while (files.hasNext()) {
+                    Path file = files.next();
                     Path relative = root.relativize(file);
                     String entryName = relative.toString().replace('\\', '/');
                     if (StringUtils.isBlank(entryName) || entryName.contains("..")) {

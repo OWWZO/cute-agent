@@ -410,9 +410,9 @@ public class AgentStreamProjection implements AgentSessionStream {
      * {@code finishToolInvocation}），中间 delta 即可移除；末帧本身保留，因为它是该组的
      * 全文快照，重订时前端要靠它一次性补齐。
      * <p>
-     * <b>刻意不设帧数 / 时长上限</b>：任何按帧数或时间窗口裁剪，都会在长思考、长工具流时
-     * 丢掉前半段内容，而这段内容在落库前没有第二份副本。按落库边界清理的缓冲长度天然有界于
-     * 「一次调用期间的帧数」，不需要额外阈值。
+     * <b>刻意不设全局帧数 / 时长上限</b>：任何按帧数或时间窗口裁剪，都会在长思考、长工具流时
+     * 丢掉前半段内容，而这段内容在落库前没有第二份副本。因此缓冲长度会随本投影生命周期内
+     * 保留的末帧和其它骨架帧增长，并不等同于「一次调用期间的帧数」上限。
      */
     private void prunePersistedDeltas(AgentSessionStreamFrame finalFrame) {
         Map<String, Object> eventData = readEventData(finalFrame);
