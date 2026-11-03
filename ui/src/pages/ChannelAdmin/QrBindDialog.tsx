@@ -11,6 +11,48 @@ interface QrBindDialogProps {
   onRetry: () => void;
 }
 
+function renderQrContent(
+  phase: QrPhase,
+  error: string | null,
+  qrImage: string | null,
+  onRetry: () => void
+) {
+  if (phase === "loading" || phase === "idle") {
+    return <Loader2 className="size-6 animate-spin text-muted-foreground" />;
+  }
+
+  if (phase === "expired") {
+    return (
+      <div className="text-center">
+        <p className="text-sm text-destructive">{error || "二维码已失效"}</p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          onClick={onRetry}
+        >
+          <RefreshCw className="mr-1 size-3.5" />
+          重新生成
+        </Button>
+      </div>
+    );
+  }
+
+  if (!qrImage) {
+    return null;
+  }
+
+  return (
+    <img
+      src={qrImage}
+      alt="绑定二维码"
+      width={240}
+      height={240}
+      className="rounded-lg border bg-white p-2"
+    />
+  );
+}
+
 /**
  * 扫码弹层。
  *
@@ -59,32 +101,7 @@ export default function QrBindDialog({
         </div>
 
         <div className="flex min-h-[240px] items-center justify-center">
-          {phase === "loading" || phase === "idle" ? (
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
-          ) : phase === "expired" ? (
-            <div className="text-center">
-              <p className="text-sm text-destructive">
-                {error || "二维码已失效"}
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={onRetry}
-              >
-                <RefreshCw className="mr-1 size-3.5" />
-                重新生成
-              </Button>
-            </div>
-          ) : qrImage ? (
-            <img
-              src={qrImage}
-              alt="绑定二维码"
-              width={240}
-              height={240}
-              className="rounded-lg border bg-white p-2"
-            />
-          ) : null}
+          {renderQrContent(phase, error, qrImage, onRetry)}
         </div>
 
         {phase === "waiting" ? (

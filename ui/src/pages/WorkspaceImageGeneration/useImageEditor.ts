@@ -15,6 +15,18 @@ export function revokeEditorImageObjectUrls(
   images.forEach((item) => URL.revokeObjectURL(item.objectUrl));
 }
 
+function applyBrushStyle(
+  context: CanvasRenderingContext2D,
+  toolMode: "brush" | "eraser",
+  brushSize: number
+): void {
+  context.globalCompositeOperation =
+    toolMode === "eraser" ? "destination-out" : "source-over";
+  context.fillStyle = "rgba(239, 68, 68, 0.55)";
+  context.strokeStyle = "rgba(239, 68, 68, 0.55)";
+  context.lineWidth = brushSize;
+}
+
 async function createEditorImageItem(file: File): Promise<EditorImageItem> {
   const objectUrl = URL.createObjectURL(file);
   try {
@@ -187,8 +199,7 @@ export function useImageEditor() {
       if (!context) {
         return;
       }
-      context.globalCompositeOperation = toolMode === "eraser" ? "destination-out" : "source-over";
-      context.fillStyle = "rgba(239, 68, 68, 0.55)";
+      applyBrushStyle(context, toolMode, brushSize);
       context.beginPath();
       context.arc(x, y, brushSize / 2, 0, Math.PI * 2);
       context.fill();
@@ -199,9 +210,7 @@ export function useImageEditor() {
       if (!context) {
         return;
       }
-      context.globalCompositeOperation = toolMode === "eraser" ? "destination-out" : "source-over";
-      context.strokeStyle = "rgba(239, 68, 68, 0.55)";
-      context.lineWidth = brushSize;
+      applyBrushStyle(context, toolMode, brushSize);
       context.beginPath();
       context.moveTo(startX, startY);
       context.lineTo(endX, endY);
@@ -321,7 +330,8 @@ export function useImageEditor() {
       return;
     }
 
-    const context = maskCanvasRef.current.getContext("2d");
+    const context =
+      maskContextRef.current ?? maskCanvasRef.current.getContext("2d");
     if (context) {
       context.clearRect(0, 0, maskCanvasRef.current.width, maskCanvasRef.current.height);
     }

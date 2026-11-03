@@ -3,6 +3,8 @@ import { buildDefaultToolBaseUrl } from "@/pages/WorkspaceImageGeneration/utils"
 import type { SopEditorDraft, SopItem, SopStatus, SopStep } from "./types";
 
 export const SOP_WORKSPACE_STORAGE_KEY = "workspace-sop:state";
+const DEFAULT_SOP_TYPE = "list";
+const DEFAULT_SOP_STATUS: SopStatus = "online";
 
 export function resolveToolBaseUrl(): string {
   return buildDefaultToolBaseUrl();
@@ -17,9 +19,9 @@ export function createEmptyDraft(): SopEditorDraft {
     sopId: null,
     sopName: "",
     sopDesc: "",
-    sopType: "list",
+    sopType: DEFAULT_SOP_TYPE,
     sopSteps: [createEmptyStep()],
-    status: "online",
+    status: DEFAULT_SOP_STATUS,
   };
 }
 
@@ -29,7 +31,7 @@ export function sopItemToDraft(item: SopItem): SopEditorDraft {
     sopId: item.sopId,
     sopName: item.sopName,
     sopDesc: item.sopDesc,
-    sopType: item.sopType || "list",
+    sopType: item.sopType || DEFAULT_SOP_TYPE,
     sopSteps:
       item.sopSteps && item.sopSteps.length > 0
         ? item.sopSteps.map((step) => ({
@@ -37,21 +39,27 @@ export function sopItemToDraft(item: SopItem): SopEditorDraft {
             steps: step.steps && step.steps.length > 0 ? [...step.steps] : [""],
           }))
         : [createEmptyStep()],
-    status: item.status || "online",
+    status: item.status || DEFAULT_SOP_STATUS,
   };
 }
 
 export function normalizeStatus(value: unknown): SopStatus {
   // 只接受已知状态，其它后端值按在线处理，保证列表展示有安全默认值。
-  const status = String(value || "online").toLowerCase();
+  const status = String(value || DEFAULT_SOP_STATUS).toLowerCase();
   if (status === "offline" || status === "draft") {
     return status;
   }
-  return "online";
+  return DEFAULT_SOP_STATUS;
 }
 
 export function statusLabel(status: SopStatus): string {
   if (status === "online") return "已上线";
   if (status === "offline") return "已下线";
   return "草稿";
+}
+
+export function statusBadgeClass(status: SopStatus): string {
+  return status === "online"
+    ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+    : "bg-[var(--chat-surface-muted)] text-[var(--chat-text-soft)]";
 }

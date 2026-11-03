@@ -15,6 +15,7 @@ export const DEFAULT_ROW_HEIGHT_ESTIMATE_PX = 120;
 /** 缓存上限：超长会话防内存膨胀；淘汰最久未写入的行。 */
 const MAX_ROW_HEIGHT_CACHE_ENTRIES = 4000;
 
+/** Callers must use one key type consistently; `Map` treats `1` and `"1"` as distinct keys. */
 export type TimelineRowHeightCacheKey = string | number;
 
 export class TimelineRowHeightCache {

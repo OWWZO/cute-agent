@@ -40,7 +40,7 @@ export function workDurationParts(durationMs: number): WorkDurationPart[] {
   if (days > 0) parts.push({ value: days, unit: UNITS.day });
   if (hours > 0) parts.push({ value: hours, unit: UNITS.hour });
   if (minutes > 0) parts.push({ value: minutes, unit: UNITS.minute });
-  if (seconds > 0 || parts.length === 0) {
+  if (seconds > 0) {
     parts.push({ value: seconds, unit: UNITS.second });
   }
   return parts.slice(0, 2);

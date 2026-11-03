@@ -3,8 +3,9 @@ import { resolveServiceBaseUrl } from "@/utils/origin";
 import { submitAcceptedCommand } from "./agentRun";
 
 const customHost = resolveServiceBaseUrl(SERVICE_BASE_URL);
+const ASK_USER_API_PREFIX = "/api/agent/ask-user";
 
-export const ASK_USER_RESUME_URL = `${customHost}/api/agent/ask-user/resume`;
+export const ASK_USER_RESUME_URL = `${customHost}${ASK_USER_API_PREFIX}/resume`;
 
 export type AskUserAnswerPayload = {
   questionId: string;
@@ -32,15 +33,15 @@ export type AskUserResumeEventDetail = {
 
 export const askUserApi = {
   answer: (payload: AskUserAnswerPayload) =>
-    api.post<AskUserAnswerResult>("/api/agent/ask-user/answer", payload) as unknown as Promise<AskUserAnswerResult>,
+    api.post<AskUserAnswerResult>(`${ASK_USER_API_PREFIX}/answer`, payload) as unknown as Promise<AskUserAnswerResult>,
 
   pending: (sessionId: string) =>
-    api.get<Record<string, unknown>[]>("/api/agent/ask-user/pending", {
+    api.get<Record<string, unknown>[]>(`${ASK_USER_API_PREFIX}/pending`, {
       sessionId,
     }) as unknown as Promise<Record<string, unknown>[]>,
 
   cancel: (questionId: string) =>
-    api.post<Record<string, unknown>>("/api/agent/ask-user/cancel", {
+    api.post<Record<string, unknown>>(`${ASK_USER_API_PREFIX}/cancel`, {
       questionId,
     }) as unknown as Promise<Record<string, unknown>>,
 };

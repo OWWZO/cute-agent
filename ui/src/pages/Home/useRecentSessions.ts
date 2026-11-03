@@ -21,6 +21,20 @@ export function useRecentSessions() {
   const requestInFlightRef = useRef(false);
   const requestVersionRef = useRef(0);
 
+  const applySessionPage = useCallback(
+    (
+      page: Awaited<ReturnType<typeof conversationHistoryApi.listSessions>>,
+      nextSessions: ConversationSessionItem[]
+    ) => {
+      sessionsRef.current = nextSessions;
+      setRecentSessions(nextSessions);
+      nextCursorRef.current = page?.nextCursor || null;
+      hasMoreRef.current = Boolean(page?.hasMore && nextCursorRef.current);
+      setRecentSessionsHasMore(hasMoreRef.current);
+    },
+    []
+  );
+
   const refreshRecentSessions = useCallback((enabled = true) => {
     // 首页未进入会话态时跳过请求；失败只记录日志，不能阻断首页展示。
     if (!enabled) {
@@ -37,11 +51,7 @@ export function useRecentSessions() {
           return sessionsRef.current;
         }
         const nextSessions = page?.sessions || [];
-        sessionsRef.current = nextSessions;
-        setRecentSessions(nextSessions);
-        nextCursorRef.current = page?.nextCursor || null;
-        hasMoreRef.current = Boolean(page?.hasMore && nextCursorRef.current);
-        setRecentSessionsHasMore(hasMoreRef.current);
+        applySessionPage(page, nextSessions);
         return nextSessions;
       })
       .catch((error) => {
@@ -54,7 +64,7 @@ export function useRecentSessions() {
           setRecentSessionsLoading(false);
         }
       });
-  }, []);
+  }, [applySessionPage]);
 
   const loadMoreRecentSessions = useCallback(() => {
     const after = nextCursorRef.current;
@@ -87,11 +97,7 @@ export function useRecentSessions() {
           }
         });
         const nextSessions = Array.from(merged.values());
-        sessionsRef.current = nextSessions;
-        setRecentSessions(nextSessions);
-        nextCursorRef.current = page?.nextCursor || null;
-        hasMoreRef.current = Boolean(page?.hasMore && nextCursorRef.current);
-        setRecentSessionsHasMore(hasMoreRef.current);
+        applySessionPage(page, nextSessions);
         return nextSessions;
       })
       .catch((error) => {
@@ -104,7 +110,7 @@ export function useRecentSessions() {
           setRecentSessionsLoadingMore(false);
         }
       });
-  }, []);
+  }, [applySessionPage]);
 
   return {
     recentSessions,

@@ -238,7 +238,7 @@ export async function recallTestSop(
   );
   return {
     sopMode: String(data?.sop_mode || ""),
-    choosedSopString: String(data?.choosed_sop_string || ""),
+    chosenSopString: String(data?.choosed_sop_string || ""),
     hits: (data?.hits || []).map((hit) => ({
       sopId: String(hit.sop_id || ""),
       sopName: String(hit.sop_name || ""),

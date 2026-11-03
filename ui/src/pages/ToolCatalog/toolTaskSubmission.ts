@@ -4,7 +4,7 @@ import { validateToolFieldValues, type ToolFieldErrors } from "./toolCatalogMode
 export async function submitToolTask(
   toolFunction: ToolFunction,
   values: Record<string, unknown>,
-  onStartToolTask: (draft: ToolTaskDraft) => void,
+  onStartToolTask: (draft: ToolTaskDraft) => void | Promise<void>,
 ): Promise<ToolFieldErrors> {
   const errors = validateToolFieldValues(toolFunction.fields, values);
   if (Object.keys(errors).length > 0) {

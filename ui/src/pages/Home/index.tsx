@@ -98,6 +98,7 @@ import {
   buildFeaturedConversationFormState,
   canFeatureConversationSession,
   type FeaturedConversationFormState,
+  isFeaturedConversationOnline,
   toFeaturedConversationUpsertPayload,
   validateFeaturedConversationForm,
 } from "./featuredConversationAdminModel";
@@ -1097,7 +1098,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           if (!latestRecord?.featuredId) {
             throw new Error("未查询到新创建的精品记录");
           }
-          if (latestRecord.status?.toUpperCase() !== "ONLINE") {
+          if (!isFeaturedConversationOnline(latestRecord.status)) {
             await featuredConversationAdminApi.online(
               latestRecord.featuredId,
               featuredAdminForm.operator.trim()
@@ -1143,7 +1144,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
 
     setFeaturedAdminSubmitting(true);
     try {
-      if (featuredAdminRecord.status?.toUpperCase() === "ONLINE") {
+      if (isFeaturedConversationOnline(featuredAdminRecord.status)) {
         await featuredConversationAdminApi.offline(
           featuredAdminRecord.featuredId,
           operator
@@ -1526,7 +1527,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
               onSaveDraft={() => {
                 void handleSaveFeaturedDraft(false);
               }}
-              onPublish={() => {
+              onToggleStatus={() => {
                 if (featuredAdminRecord) {
                   void handleToggleFeaturedStatus();
                 } else {

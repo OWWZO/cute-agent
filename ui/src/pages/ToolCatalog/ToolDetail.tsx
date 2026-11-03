@@ -11,6 +11,10 @@ export type ToolDetailProps = {
   onSelectFunction: (toolFunction: ToolFunction) => void;
 };
 
+function getCommandKindLabel(kind: ToolCatalogItem["kind"]): string {
+  return kind === "opencli-site" ? "OpenCLI 命令" : "BaseTool 名称";
+}
+
 export default function ToolDetail({ tool, onBack, onSelectFunction }: ToolDetailProps) {
   const Icon = getToolCatalogIcon(tool.iconKey);
 
@@ -69,7 +73,7 @@ export default function ToolDetail({ tool, onBack, onSelectFunction }: ToolDetai
             </span>
             <span className="mt-auto w-full border-t border-[var(--color-line)] pt-3 text-left">
               <span className="block text-ui-xs font-medium uppercase text-[var(--color-text-faint)]">
-                {tool.kind === "opencli-site" ? "OpenCLI 命令" : "BaseTool 名称"}
+                {getCommandKindLabel(tool.kind)}
               </span>
               <code className="mt-1 block break-all font-mono text-ui-sm text-[var(--color-text)]">
                 {toolFunction.command ?? toolFunction.id}

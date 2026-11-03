@@ -103,13 +103,11 @@ export type KnowledgeBaseDeleteResult = {
   deletedFileCount: number;
 };
 
-export type KnowledgeBaseFileFullContent = {
-  knowledgeBaseId: string;
+export type KnowledgeBaseFileFullContent = Pick<
+  KnowledgeBaseFile,
+  "knowledgeBaseId" | "title" | "sourceType" | "sourceUrl" | "fileStatus"
+> & {
   fileId: string;
-  title: string;
-  sourceType: MRagSourceType;
-  sourceUrl: string;
-  fileStatus: MRagFileStatus;
   contentStatus: MRagFullContentStatus;
   contentFormat: string;
   content: string;

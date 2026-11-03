@@ -38,40 +38,11 @@
 
   /* 源页面字体为 next/font/google 的 Inter；
      此处复用项目已打包的 @fontsource-variable/inter，避免运行时网络请求。 */
-  --font-inter: "Inter Variable", "Inter", var(--font-ui);
+  --font-inter: "Inter Variable", "Inter", var(--font-ui), sans-serif;
   --font-sans: var(--font-inter);
 }
 
 /* ---- 源项目 @layer utilities（原样迁移，作用域限定） ---- */
-
-.liquid-glass-scope .glass-effect {
-  backdrop-filter: blur(25px) saturate(180%);
-  -webkit-backdrop-filter: blur(25px) saturate(180%);
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-
-.liquid-glass-scope .gradient-bg {
-  background-image: url("/images/gradient-background.jpg");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  position: relative;
-}
-
-.liquid-glass-scope .gradient-bg::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.05);
-  pointer-events: none;
-}
 
 .liquid-glass-scope .hover-lift {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -80,11 +51,6 @@
 .liquid-glass-scope .hover-lift:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-}
-
-.liquid-glass-scope .focus-glow:focus {
-  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.3);
-  outline: none;
 }
 
 .liquid-glass-scope .ripple-effect {
@@ -134,7 +100,4 @@
     background: rgba(255, 255, 255, 0.88);
   }
 
-  .liquid-glass-scope .glass-effect {
-    background: rgba(255, 255, 255, 0.92);
-  }
 }

@@ -1,4 +1,6 @@
-import type { KnowledgeBase, KnowledgeBaseFile } from "./types";
+import type { KnowledgeBase, KnowledgeBaseFile, MRagFileStatus } from "./types";
+
+const IN_PROGRESS_FILE_STATUSES = new Set<MRagFileStatus>(["PENDING", "RUNNING"]);
 
 export function resolveSelectedKnowledgeBaseId(
   knowledgeBases: Array<Pick<KnowledgeBase, "id">>,
@@ -34,9 +36,7 @@ export function shouldPollKnowledgeBaseFiles(
   files: Array<Pick<KnowledgeBaseFile, "fileStatus">>
 ) {
   // 只有 PENDING/RUNNING 代表仍在处理，失败或完成状态都应停止轮询。
-  return files.some(
-    (file) => file.fileStatus === "PENDING" || file.fileStatus === "RUNNING"
-  );
+  return files.some((file) => IN_PROGRESS_FILE_STATUSES.has(file.fileStatus));
 }
 
 export function resolveKnowledgeBaseAfterDeletion(

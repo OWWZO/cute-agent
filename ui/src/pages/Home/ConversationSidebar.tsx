@@ -289,6 +289,11 @@ const ConversationSidebar = memo(function ConversationSidebar(
   );
 
   const isTaskFilesPanel = sidebarPanel === "task-files";
+  const searchPanelClassName = cn(
+    "grid",
+    searchOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+    !reduce && "transition-[grid-template-rows,opacity] duration-[var(--duration-dropdown)] ease-[var(--ease-out)]"
+  );
 
   return (
     // 侧栏用 --chat-nav 实色：它是与内容区并列的结构面，不是浮层。
@@ -345,20 +350,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
             <span>新建任务</span>
           </button>
 
-          <div
-            className={cn(
-              "grid",
-              reduce
-                ? searchOpen
-                  ? "grid-rows-[1fr] opacity-100"
-                  : "grid-rows-[0fr] opacity-0"
-                : "transition-[grid-template-rows,opacity] duration-[var(--duration-dropdown)] ease-[var(--ease-out)]",
-              !reduce &&
-                (searchOpen
-                  ? "grid-rows-[1fr] opacity-100"
-                  : "grid-rows-[0fr] opacity-0")
-            )}
-          >
+          <div className={searchPanelClassName}>
             <div
               className={cn(
                 "min-h-0 overflow-hidden",

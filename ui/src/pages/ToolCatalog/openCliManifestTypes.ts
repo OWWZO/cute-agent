@@ -1,4 +1,4 @@
-import type { ToolCategory } from "./toolCatalog";
+import type { ToolAccess, ToolCategory } from "./toolCatalog";
 
 export type OpenCliArgumentDefinition = {
   name: string;
@@ -15,7 +15,7 @@ export type OpenCliCommandDefinition = {
   site: string;
   name: string;
   description: string;
-  access: "read" | "write";
+  access: ToolAccess;
   browser: boolean;
   args: OpenCliArgumentDefinition[];
 };

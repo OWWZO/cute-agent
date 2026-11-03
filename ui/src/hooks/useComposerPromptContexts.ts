@@ -21,7 +21,7 @@ import {
   type ConversationSelectionAttachment,
   type WebElementAttachment,
 } from "@/lib/promptContexts";
-import { createPromptContextId } from "@/lib/promptContexts/ids";
+import { createPromptContextId } from "@/lib/promptContexts";
 
 export interface ComposerPromptContextState {
   codeComments: readonly CodeCommentAttachment[];

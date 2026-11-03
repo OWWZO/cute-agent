@@ -15,6 +15,18 @@ export function useMragHistory(toolBaseUrl: string, selectedKnowledgeBaseId: str
   const [sessionDetail, setSessionDetail] = useState<MRagSessionDetail | null>(null);
   const [sessionDetailLoading, setSessionDetailLoading] = useState(false);
 
+  const applyCreatedSession = useCallback((created: MRagSessionSummary) => {
+    setActiveSessionId(created.sessionId);
+    setSessionDetail({
+      session: created,
+      turns: [],
+    });
+    setSessions((previous) => [
+      created,
+      ...previous.filter((item) => item.sessionId !== created.sessionId),
+    ]);
+  }, []);
+
   const refreshSessions = useCallback(async () => {
     setSessionsLoading(true);
     setSessionsError("");
@@ -56,28 +68,18 @@ export function useMragHistory(toolBaseUrl: string, selectedKnowledgeBaseId: str
     const created = await createMragSession(toolBaseUrl, {
       kbId: selectedKnowledgeBaseId,
     });
-    setActiveSessionId(created.sessionId);
-    setSessionDetail({
-      session: created,
-      turns: [],
-    });
-    setSessions((previous) => [created, ...previous.filter((item) => item.sessionId !== created.sessionId)]);
+    applyCreatedSession(created);
     return created.sessionId;
-  }, [activeSessionId, selectedKnowledgeBaseId, toolBaseUrl]);
+  }, [activeSessionId, applyCreatedSession, selectedKnowledgeBaseId, toolBaseUrl]);
 
   const createSession = useCallback(async () => {
     // 显式新建始终产生新 session，并置顶到本地历史列表，同时去掉同 ID 旧项。
     const created = await createMragSession(toolBaseUrl, {
       kbId: selectedKnowledgeBaseId,
     });
-    setActiveSessionId(created.sessionId);
-    setSessionDetail({
-      session: created,
-      turns: [],
-    });
-    setSessions((previous) => [created, ...previous.filter((item) => item.sessionId !== created.sessionId)]);
+    applyCreatedSession(created);
     return created;
-  }, [selectedKnowledgeBaseId, toolBaseUrl]);
+  }, [applyCreatedSession, selectedKnowledgeBaseId, toolBaseUrl]);
 
   // 自动打开最新会话只需要「当前有没有选中」这一个瞬时值；
   // 直接依赖 activeSessionId 会让每次切会话/建会话都重拉一次历史列表。

@@ -56,7 +56,12 @@ export function parseComposerPromptContexts(content: string): SerializedPromptCo
   };
 }
 
-/** 判断一段消息里是否真的含上下文尾块（回显时用来决定是否走解析路径）。 */
+/**
+ * 判断一段消息里是否真的含上下文尾块。
+ *
+ * 该辅助函数会完整解析三类尾块；生产渲染路径当前直接调用
+ * `parseComposerPromptContexts`，这里主要供测试和需要布尔结果的调用方使用。
+ */
 export function hasComposerPromptContexts(content: string): boolean {
   const parsed = parseComposerPromptContexts(content);
   return (

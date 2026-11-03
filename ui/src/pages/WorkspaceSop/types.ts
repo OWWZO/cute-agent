@@ -26,15 +26,13 @@ export type SopRecallHit = {
 
 export type SopRecallTestResult = {
   sopMode: string;
-  choosedSopString: string;
+  chosenSopString: string;
   hits: SopRecallHit[];
 };
 
-export type SopEditorDraft = {
+export type SopEditorDraft = Pick<
+  SopItem,
+  "sopName" | "sopDesc" | "sopType" | "sopSteps" | "status"
+> & {
   sopId: string | null;
-  sopName: string;
-  sopDesc: string;
-  sopType: string;
-  sopSteps: SopStep[];
-  status: SopStatus;
 };

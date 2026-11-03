@@ -23,6 +23,10 @@ const BLOCK_TITLE = "# userselect:";
 const BLOCK_FENCE = "userselect";
 const BLOCK_PATTERN = /(?:\n\n)?# userselect:\n```userselect\n([\s\S]*?)\n```\s*$/;
 
+/**
+ * The selection entry points are responsible for applying these limits before dispatching.
+ * The builders/parsers below intentionally remain lossless and do not validate or truncate.
+ */
 export const CONVERSATION_SELECTION_MAX_TEXT_LENGTH = 8_000;
 export const CONVERSATION_SELECTION_MAX_COUNT = 8;
 export const CONVERSATION_SELECTION_MAX_TOTAL_LENGTH = 16_000;
@@ -99,6 +103,8 @@ export function parsePromptConversationSelections(
       return { visibleContent: text, references: [] };
     }
     const references: ConversationSelectionAttachment[] = [];
+    // Parsing is atomic: a malformed entry invalidates the whole trailing block so callers
+    // never unknowingly send a partial selection set.
     for (const [index, value] of parsed.entries()) {
       if (!value || typeof value !== "object" || Array.isArray(value)) {
         return { visibleContent: text, references: [] };

@@ -17,6 +17,8 @@ export function loadCachedSessionFiles<T>(
 
   const request = load(sessionId)
     .then((value) => {
+      // A forced reload may supersede this request. Only the request still registered for
+      // the session is allowed to update the cache or clear the in-flight entry.
       if (requests.get(sessionId) === request) {
         cache.set(sessionId, value);
       }

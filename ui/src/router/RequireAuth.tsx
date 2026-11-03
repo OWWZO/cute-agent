@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import Loading from "@/components/ActionPanel/Loading";
 import { useAuth } from "@/stores/auth";
-import { buildLoginPath, ROUTES } from "./routes";
+import { buildLoginPath } from "./routes";
 
 export default function RequireAuth() {
   const auth = useAuth();
@@ -14,7 +14,7 @@ export default function RequireAuth() {
   }
 
   if (auth.status !== "authenticated") {
-    return <Navigate to={buildLoginPath(returnUrl || ROUTES.HOME)} replace />;
+    return <Navigate to={buildLoginPath(returnUrl)} replace />;
   }
 
   return <Outlet />;

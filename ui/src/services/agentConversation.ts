@@ -1,6 +1,8 @@
 import api from "./index";
 
 const DEFAULT_DEVICE_ID = "device-default";
+const CONVERSATION_API_PREFIX = "/api/agent/conversation";
+const SESSION_API_PREFIX = "/api/agent/session";
 
 let runtimeDeviceId: string | null = DEFAULT_DEVICE_ID;
 
@@ -169,18 +171,18 @@ export type ConversationSessionQuery = ConversationHistoryQuery;
 
 export const conversationHistoryApi = {
   listSessions: (params: ConversationSessionQuery = {}) =>
-    api.get<ConversationSessionPage>("/api/agent/conversation/sessions", {
+    api.get<ConversationSessionPage>(`${CONVERSATION_API_PREFIX}/sessions`, {
       limit: params.limit ?? 10,
       ...(params.after ? { after: params.after } : {}),
     }) as unknown as Promise<ConversationSessionPage>,
   getSessionDetail: (sessionId: string, params: ConversationHistoryQuery = {}) =>
     api.get<ConversationHistoryPage>(
-      `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}`,
+      `${CONVERSATION_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}`,
       params
     ) as unknown as Promise<ConversationHistoryPage>,
   getSessionFiles: (sessionId: string) =>
     api.get<ConversationSessionFile[]>(
-      `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/files`
+      `${CONVERSATION_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/files`
     ) as unknown as Promise<ConversationSessionFile[]>,
   /**
    * 会话树：给树中任一节点，返回「根 + 全部后代」的扁平列表。
@@ -188,7 +190,7 @@ export const conversationHistoryApi = {
    */
   getSessionTree: (sessionId: string, limit = 200) =>
     api.get<ConversationSessionItem[]>(
-      `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/tree`,
+      `${CONVERSATION_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/tree`,
       { limit }
     ) as unknown as Promise<ConversationSessionItem[]>,
   /**
@@ -206,7 +208,7 @@ export const conversationHistoryApi = {
     }
   ) =>
     api.post<{ accepted: boolean; sessionId: string; requestId: string }>(
-      `/api/agent/session/${encodeURIComponent(sessionId)}/query`,
+      `${SESSION_API_PREFIX}/${encodeURIComponent(sessionId)}/query`,
       body
     ) as unknown as Promise<{
       accepted: boolean;
@@ -215,15 +217,15 @@ export const conversationHistoryApi = {
     }>,
   getSessionStatus: (sessionId: string) =>
     api.get<ConversationSessionStatus>(
-      `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/status`
+      `${CONVERSATION_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/status`
     ) as unknown as Promise<ConversationSessionStatus>,
   getSessionBootstrap: (sessionId: string, params: ConversationHistoryQuery = {}) =>
     api.get<ConversationSessionBootstrap>(
-      `/api/agent/conversation/sessions/${encodeURIComponent(sessionId)}/bootstrap`,
+      `${CONVERSATION_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/bootstrap`,
       params
     ) as unknown as Promise<ConversationSessionBootstrap>,
   getRunReplay: (requestId: string) =>
     api.get<ConversationRunReplay>(
-      `/api/agent/conversation/runs/${encodeURIComponent(requestId)}/replay`
+      `${CONVERSATION_API_PREFIX}/runs/${encodeURIComponent(requestId)}/replay`
     ) as unknown as Promise<ConversationRunReplay>,
 };

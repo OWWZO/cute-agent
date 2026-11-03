@@ -115,12 +115,7 @@ export function validateToolFieldValues(
     }
 
     if (field.type === "number") {
-      const numberValue =
-        typeof value === "number"
-          ? value
-          : typeof value === "string"
-            ? Number(value)
-            : Number.NaN;
+      const numberValue = parseNumberValue(value);
       if (!Number.isFinite(numberValue)) {
         errors[field.name] = "请输入有效数字";
         continue;
@@ -207,10 +202,15 @@ export function serializeToolPromptParameters(
 ): string {
   const lines: string[] = [];
 
-  const labelFor = (field: ToolField) =>
-    includeArgumentNames
-      ? `${field.label} (${field.positional ? `位置参数 ${field.name}` : `--${field.name}`})`
-      : field.label;
+  const labelFor = (field: ToolField) => {
+    if (!includeArgumentNames) {
+      return field.label;
+    }
+    const argumentLabel = field.positional
+      ? `位置参数 ${field.name}`
+      : `--${field.name}`;
+    return `${field.label} (${argumentLabel})`;
+  };
 
   for (const field of fields) {
     const value = values[field.name];
@@ -258,10 +258,12 @@ export function buildToolPrompt(input: {
   const taskName = isOpenCli
     ? `OpenCLI 的 ${command}`
     : `BaseTool 的 ${command}`;
-  const header =
-    access === "write"
-      ? `这是一个写入操作，请${isOpenCli ? "执行" : "使用"} ${taskName} 功能。`
-      : `请${isOpenCli ? "使用" : "调用"} ${taskName} 功能。`;
+  let header: string;
+  if (access === "write") {
+    header = `这是一个写入操作，请${isOpenCli ? "执行" : "使用"} ${taskName} 功能。`;
+  } else {
+    header = `请${isOpenCli ? "使用" : "调用"} ${taskName} 功能。`;
+  }
   const writeNotice = (() => {
     if (access !== "write") return "";
     if (isOpenCli) {
@@ -296,6 +298,16 @@ function isEmptyValue(value: unknown): boolean {
     return value.length === 0;
   }
   return false;
+}
+
+function parseNumberValue(value: unknown): number {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string") {
+    return Number(value);
+  }
+  return Number.NaN;
 }
 
 function countFiles(value: unknown): number {
