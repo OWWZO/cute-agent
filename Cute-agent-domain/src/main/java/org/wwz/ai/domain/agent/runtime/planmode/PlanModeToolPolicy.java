@@ -86,7 +86,8 @@ public final class PlanModeToolPolicy {
         String name = toolName.trim();
         String lower = name.toLowerCase(Locale.ROOT);
         if (ALWAYS_ALLOWED.contains(name)) {
-            // Agent 在 plan 期允许，子代理工具池会额外剥离写工具
+            // 主 Agent 在 plan 期允许这些工具。子 Agent 不经过本策略（context.isSubAgent() 直接放行），
+            // 其工具池由 SubAgentFilter 管理，且不会剥离 workspace_write/workspace_edit。
             return null;
         }
         if (SIDE_EFFECT_TOOLS.contains(name)) {

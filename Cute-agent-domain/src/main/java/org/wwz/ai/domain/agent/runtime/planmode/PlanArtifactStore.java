@@ -58,6 +58,11 @@ public class PlanArtifactStore {
         }
     }
 
+    /**
+     * 读取计划正文。
+     * <p>返回空可能表示「未生成过计划」或「读取失败（I/O/权限）」；两种情况的区分只体现在
+     * 服务端 warn 日志里（带 sessionId），调用方无法据此给出更精确的提示。</p>
+     */
     public Optional<String> readPlan(String sessionId) {
         Path path = resolvePlanPath(sessionId);
         if (path == null || !Files.isRegularFile(path)) {

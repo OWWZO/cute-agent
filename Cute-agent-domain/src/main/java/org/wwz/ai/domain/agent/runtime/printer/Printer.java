@@ -60,6 +60,19 @@ public interface Printer {
     }
 
     /**
+     * 发送带扩展结果字段的消息（同时指定 digitalEmployee）。
+     * <p>{@code extraResultMap} 与 {@code digitalEmployee} 均允许为 null，由实现自行处理。</p>
+     */
+    default void sendWithResultMap(String messageId,
+                                   String messageType,
+                                   Object message,
+                                   Map<String, Object> extraResultMap,
+                                   String digitalEmployee,
+                                   Boolean isFinal) {
+        send(messageId, messageType, message, extraResultMap, digitalEmployee, isFinal);
+    }
+
+    /**
      * 发送带扩展结果字段的最终消息。
      */
     default void sendWithResultMap(String messageType, Object message, Map<String, Object> extraResultMap) {

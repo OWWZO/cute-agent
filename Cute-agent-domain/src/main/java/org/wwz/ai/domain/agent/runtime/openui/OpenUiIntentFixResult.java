@@ -14,6 +14,10 @@ import java.util.List;
  *   <li>{@code disabled} —— intent-enabled 配置关闭，调用方回退整段 Autofix；</li>
  *   <li>{@code error} —— 模型目录无可用配置 / 请求失败，message 有原因。</li>
  * </ul>
+ *
+ * @param model   仅在 {@code intent_ok}/{@code intent_empty} 时有值，其余状态为 {@code null}
+ * @param message 仅在 {@code intent_empty}/{@code disabled}/{@code error} 时有值，
+ *                {@code intent_ok} 时为 {@code null}
  */
 public record OpenUiIntentFixResult(String status, List<OpenUiRepairIntent> blocks, String model, String message) {
 

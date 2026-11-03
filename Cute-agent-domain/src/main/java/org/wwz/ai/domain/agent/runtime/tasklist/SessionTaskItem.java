@@ -46,6 +46,11 @@ public class SessionTaskItem {
         return map;
     }
 
+    /**
+     * 生成展示用快照。
+     * <p>{@code metadata} 只做浅拷贝：嵌套的可变值仍与本任务项共享，
+     * 修改嵌套内容会影响原 item；需要隔离时调用方须自行深拷贝。</p>
+     */
     public Map<String, Object> toDetailMap() {
         Map<String, Object> map = toSummaryMap();
         map.put("description", description);

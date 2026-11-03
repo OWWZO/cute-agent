@@ -10,7 +10,9 @@ public class PlanApprovalRequiredException extends RuntimeException {
     private final String toolCallId;
 
     public PlanApprovalRequiredException(String planContent, String planFilePath, String toolCallId) {
-        super("PLAN_APPROVAL_REQUIRED");
+        // 控制流信号不需要栈；带上定位信息，避免落到未特判的处理器时无法关联到具体工具调用。
+        super("PLAN_APPROVAL_REQUIRED toolCallId=" + toolCallId + " planFile=" + planFilePath,
+                null, false, false);
         this.planContent = planContent;
         this.planFilePath = planFilePath;
         this.toolCallId = toolCallId;
