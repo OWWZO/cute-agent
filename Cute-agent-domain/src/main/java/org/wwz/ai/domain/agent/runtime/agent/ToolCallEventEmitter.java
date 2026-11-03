@@ -1,5 +1,6 @@
 package org.wwz.ai.domain.agent.runtime.agent;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.replay.ReplayTiming;
 import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
@@ -14,6 +15,7 @@ import java.util.Map;
  * <p>
  * 协议字段集中在这里，前端卡片依赖它渲染工具条；账本与执行逻辑不感知协议细节。
  */
+@Slf4j
 final class ToolCallEventEmitter {
 
     private final BaseAgent agent;
@@ -63,6 +65,9 @@ final class ToolCallEventEmitter {
         String toolCallId = command.getId();
         String toolName = dispatch == null ? command.getFunction().getName() : dispatch.toolName;
         if (StringUtils.isBlank(toolCallId) || StringUtils.isBlank(toolName)) {
+            // 终态事件被抑制时前端卡片可能停在 running，至少留下可诊断的日志。
+            log.warn("工具事件缺少 toolCallId/toolName，事件被丢弃: status={}, isFinal={}, toolCallId={}, toolName={}",
+                    status, isFinal, toolCallId, toolName);
             return;
         }
 

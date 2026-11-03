@@ -181,7 +181,6 @@ public class ReactImplAgent extends ReActAgent {
 
         for (ToolCall command : toolCalls) {
             ToolExecutionOutcome outcome = toolOutcomes.get(command.getId());
-            String toolResult = outcome == null ? "" : outcome.getToolResult();
 
             sendToolResult(command, outcome);
 

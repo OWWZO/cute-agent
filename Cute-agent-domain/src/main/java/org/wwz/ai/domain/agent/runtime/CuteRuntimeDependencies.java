@@ -2,6 +2,7 @@ package org.wwz.ai.domain.agent.runtime;
 
 import lombok.Builder;
 import lombok.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.Environment;
 import org.wwz.ai.domain.agent.adapter.port.BrowserRelayPort;
 import org.wwz.ai.domain.agent.adapter.port.BrowserBskConnectionPort;
@@ -44,6 +45,7 @@ import java.util.concurrent.Executor;
  * Cute 运行时依赖包。
  * domain 侧只依赖这个 typed bundle，不再直接触碰 Spring 容器全局入口。
  */
+@Slf4j
 @Value
 @Builder(toBuilder = true)
 public class CuteRuntimeDependencies {
@@ -407,6 +409,7 @@ public class CuteRuntimeDependencies {
         try {
             return Integer.parseInt(value.trim());
         } catch (NumberFormatException ignore) {
+            log.warn("整数配置无法解析，使用默认值 {}: value='{}'", defaultValue, value);
             return defaultValue;
         }
     }
@@ -418,6 +421,7 @@ public class CuteRuntimeDependencies {
         try {
             return Double.parseDouble(value.trim());
         } catch (NumberFormatException ignore) {
+            log.warn("浮点配置无法解析，使用默认值 {}: value='{}'", defaultValue, value);
             return defaultValue;
         }
     }

@@ -418,7 +418,7 @@ public class SqlParserUtils {
     }
 
 
-    private static String cleanSql(String sql, String dialect) {
+    private static String cleanSql(String sql) {
         String semicolon = ";";
         if (StringUtils.endsWith(sql, semicolon)) {
             sql = StringUtils.substringBeforeLast(sql, semicolon);
@@ -439,7 +439,7 @@ public class SqlParserUtils {
     public static SqlModel parseSelectSql(String sql, String dialect) throws SqlParseException {
         log.debug("待解析sql:{}", sql);
         // 先清理结尾分号并隐藏 hint，再验证查询类型；这样模型只接收 SELECT 结构，hint 仍可在执行阶段恢复。
-        sql = cleanSql(sql, dialect);
+        sql = cleanSql(sql);
         SqlModel sqlModel = new SqlModel();
         sql = hintParse(sqlModel, sql);
 
