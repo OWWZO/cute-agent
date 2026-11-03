@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -28,6 +29,8 @@ public class DialogueRunStartRecord {
 
     private String entryAgent;
 
+    /** 原始用户输入，可能含 PII / 密钥，禁止进入 toString。 */
+    @ToString.Exclude
     private String queryText;
 
     private LocalDateTime startedAt;

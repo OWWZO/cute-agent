@@ -90,7 +90,9 @@ public final class DesktopSessionRemote {
                     .callTimeoutSeconds(30L)
                     .build());
         } catch (Exception e) {
-            log.warn("{} desktop_session close failed ownerKey={}", requestId, ownerKey, e);
+            // ownerKey 是用户标识，日志聚合系统访问面更广，不写入消息；原始异常只进 DEBUG。
+            log.warn("{} desktop_session close failed: {}", requestId, e.getClass().getSimpleName());
+            log.debug("{} desktop_session close failed detail", requestId, e);
         }
     }
 }

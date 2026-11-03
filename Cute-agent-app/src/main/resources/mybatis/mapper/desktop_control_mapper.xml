@@ -100,6 +100,9 @@
         WHERE control_id = #{controlId}
           AND deleted = 0
           AND status = 'RESUMING'
+          <if test="userId != null and userId != ''">
+              AND (user_id IS NULL OR user_id = #{userId})
+          </if>
     </update>
 
     <update id="markFailed">

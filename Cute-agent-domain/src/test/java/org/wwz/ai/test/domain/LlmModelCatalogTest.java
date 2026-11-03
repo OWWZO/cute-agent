@@ -95,6 +95,30 @@ public class LlmModelCatalogTest {
     }
 
     @Test
+    public void userSelectabilityMirrorsPickPrecedence() {
+        // fallback 行的 modelId 与 primary 行的 modelName 同名：pick 先按 modelId 命中 fallback。
+        // 校验必须与解析给出同一结论，不能只看 primary 的 modelName 就放行。
+        LlmModelBinding primary = LlmModelBinding.builder()
+                .id(1L)
+                .modelId("m-primary")
+                .modelName("shared-model")
+                .modelUsage("default")
+                .build();
+        LlmModelBinding fallback = LlmModelBinding.builder()
+                .id(2L)
+                .modelId("shared-model")
+                .modelName("fallback-upstream")
+                .modelUsage("fallback")
+                .build();
+        ILlmModelConfigRepository repository = Mockito.mock(ILlmModelConfigRepository.class);
+        Mockito.when(repository.listUsable()).thenReturn(List.of(primary, fallback));
+        LlmModelCatalog catalog = new LlmModelCatalog(repository, null, 0L);
+
+        Assert.assertSame(fallback, LlmModelCatalog.pick(List.of(primary, fallback), "shared-model"));
+        Assert.assertFalse("校验必须与 pick 的实际解析结果一致", catalog.isUserSelectableModel("shared-model"));
+    }
+
+    @Test
     public void fallbackModelComesFromDatabaseUsage() {
         ILlmModelConfigRepository repository = Mockito.mock(ILlmModelConfigRepository.class);
         Mockito.when(repository.listUsable()).thenReturn(List.of(GROK, GPT));

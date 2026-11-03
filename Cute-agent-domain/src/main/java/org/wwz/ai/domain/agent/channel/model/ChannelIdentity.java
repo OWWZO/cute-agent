@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -24,11 +25,15 @@ public class ChannelIdentity {
 
     private String platform;
 
+    /** 平台侧用户标识（如 QQ openid），属于 PII，禁止进入 toString。 */
+    @ToString.Exclude
     private String platformUserId;
 
     /** 内部 user_id，形如 {@code ch_42_a1b2c3d4e5f6g7h8}。 */
     private String userId;
 
+    /** 平台昵称，属于 PII，禁止进入 toString。 */
+    @ToString.Exclude
     private String displayName;
 
     private LocalDateTime firstSeenAt;

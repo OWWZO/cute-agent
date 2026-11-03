@@ -32,7 +32,20 @@ public interface SkillRegistry {
 
     SkillDefinition getRequiredSkill(String skillName);
 
-    Path assertPathAllowed(Path candidatePath);
+    /**
+     * 校验路径并返回 guard 规范化后的安全路径。
+     * <p>返回值必须用于后续文件 I/O；调用方若继续使用原始 {@code candidatePath}，
+     * 符号链接 / {@code ..} 解析结果会被绕过。</p>
+     */
+    Path resolveAllowedPath(Path candidatePath);
+
+    /**
+     * 仅断言路径合法，不返回安全路径。
+     * <p>校验后还要读写文件时请改用 {@link #resolveAllowedPath(Path)} 并使用其返回值。</p>
+     */
+    default void assertPathAllowed(Path candidatePath) {
+        resolveAllowedPath(candidatePath);
+    }
 
     String buildSkillDescription();
 }

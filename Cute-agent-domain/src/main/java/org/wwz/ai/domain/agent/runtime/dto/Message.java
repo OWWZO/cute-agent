@@ -10,7 +10,9 @@ package org.wwz.ai.domain.agent.runtime.dto;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
 import org.wwz.ai.domain.agent.runtime.enums.RoleType;
 
@@ -59,12 +61,14 @@ public class Message {
      * - USER："帮我分析这款产品的市场竞争力"；
      * - ASSISTANT："需要调用市场检索工具获取竞品数据，工具调用参数如下：..."。
      */
+    @ToString.Exclude
     private String content;
 
     /**
      * 模型原生 CoT / reasoning_content（与 content 独立）。
      * DeepSeek / Qwen3 等推理模型在 tool-call 轮次回传时需要此字段。
      */
+    @ToString.Exclude
     private String reasoningContent;
 
     /**
@@ -73,6 +77,8 @@ public class Message {
      * 场景：用户上传商品图片提问、大模型返回图文回答等；
      * 格式示例："data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."。
      */
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private String base64Image;
 
     /**

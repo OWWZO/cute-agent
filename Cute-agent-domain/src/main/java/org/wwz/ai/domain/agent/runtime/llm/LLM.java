@@ -5,7 +5,9 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -56,7 +58,9 @@ public class LLM {
     private final int maxTokens;
     /** 默认温度。 */
     private final double temperature;
-    /** API Key。 */
+    /** API Key。禁止进入 toString / equals / hashCode。 */
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private final String apiKey;
     /** Base URL。 */
     private final String baseUrl;
@@ -64,7 +68,9 @@ public class LLM {
     private final String interfaceUrl;
     /** 工具调用模式。 */
     private final String functionCallType;
-    /** 原始模型配置，供 Spring AI 解析器复用。 */
+    /** 原始模型配置，供 Spring AI 解析器复用；其中也含 API Key，禁止进入 toString / equals / hashCode。 */
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private final LLMSettings llmSettings;
     /** 出站请求装配：domain Message / 工具集合 → LlmRequest（无状态，可共享）。 */
     private static final LlmRequestAssembler REQUEST_ASSEMBLER = new LlmRequestAssembler();

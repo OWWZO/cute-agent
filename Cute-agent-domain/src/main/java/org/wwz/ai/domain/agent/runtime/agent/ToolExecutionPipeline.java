@@ -30,6 +30,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 /**
  * 工具执行管线：预登记 → 执行 → observation 收口 → 账本/产物/SSE 终态。
@@ -40,6 +41,14 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 final class ToolExecutionPipeline {
+
+    /** DEBUG 日志中工具入参/结果的最大字符数，避免超大载荷刷爆日志。 */
+    private static final int LOG_PAYLOAD_LIMIT = 2048;
+
+    /** 常见凭证字段名；DEBUG 打印工具入参时把这些字段的值替换为 ***。 */
+    private static final Pattern SENSITIVE_LOG_FIELD = Pattern.compile(
+            "(?i)(\\b(?:api[_-]?key|apikey|access[_-]?token|token|secret|password|authorization)"
+                    + "[\\\"']?\\s*[=:]\\s*[\\\"']?)([^\\\"',}\\]]+)");
 
     private final BaseAgent agent;
     private final ToolTimingTracker timings = new ToolTimingTracker();
@@ -239,10 +248,13 @@ final class ToolExecutionPipeline {
                 context.clearCurrentToolArtifactSource();
             }
 
-            if ("deep_search".equals(toolName)) {
-                log.debug("{} execute tool: {} {} result {}", context.getRequestId(), toolName, args, resultObject);
-            } else {
-                log.info("{} execute tool: {} {} result {}", context.getRequestId(), toolName, args, resultObject);
+            // 工具入参/结果可能含凭证、PII 或超大载荷：INFO 只留结构信息，完整内容截断后进 DEBUG。
+            log.info("{} execute tool: {} argsType={} resultType={} resultLength={}",
+                    context.getRequestId(), toolName, typeName(args), typeName(resultObject),
+                    lengthOf(resultObject));
+            if (log.isDebugEnabled()) {
+                log.debug("{} execute tool detail: {} args={} result={}",
+                        context.getRequestId(), toolName, abbreviate(args), abbreviate(resultObject));
             }
 
             if (resultObject == null) {
@@ -599,5 +611,24 @@ final class ToolExecutionPipeline {
             return new ToolDispatch(originalName, parsed, true, ToolCallJson.normalize(originalArgs), early);
         }
         return new ToolDispatch(result.name(), result.arguments(), true, ToolCallJson.write(result.arguments()), null);
+    }
+
+    private static String typeName(Object value) {
+        return value == null ? "null" : value.getClass().getSimpleName();
+    }
+
+    private static int lengthOf(Object value) {
+        return value instanceof CharSequence text ? text.length() : -1;
+    }
+
+    static String abbreviate(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        String text = value instanceof CharSequence sequence ? sequence.toString() : String.valueOf(value);
+        text = SENSITIVE_LOG_FIELD.matcher(text).replaceAll("$1***");
+        return text.length() <= LOG_PAYLOAD_LIMIT
+                ? text
+                : text.substring(0, LOG_PAYLOAD_LIMIT) + "...(truncated, total=" + text.length() + ")";
     }
 }

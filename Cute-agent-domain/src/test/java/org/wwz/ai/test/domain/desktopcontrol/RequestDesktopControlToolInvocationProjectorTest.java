@@ -88,7 +88,7 @@ public class RequestDesktopControlToolInvocationProjectorTest {
             }
 
             @Override
-            public boolean markCompleted(String controlId) {
+            public boolean markCompleted(String controlId, String userId) {
                 return false;
             }
 
@@ -158,7 +158,7 @@ public class RequestDesktopControlToolInvocationProjectorTest {
             }
 
             @Override
-            public boolean markCompleted(String controlId) {
+            public boolean markCompleted(String controlId, String userId) {
                 return false;
             }
 

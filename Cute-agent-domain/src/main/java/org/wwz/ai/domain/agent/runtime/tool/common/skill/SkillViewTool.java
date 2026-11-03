@@ -86,11 +86,12 @@ public class SkillViewTool implements BaseTool {
             if (skillName.isBlank()) {
                 return ToolResultPayload.failureFrom("name is required", null);
             }
-            if (isDisabled(skillName, context)) {
-                return ToolResultPayload.failureFrom(
-                        "skill 「" + skillName + "」已在本会话关闭，请在能力面板中重新启用。", null);
-            }
             SkillRef ref = skillCatalog.resolve(skillName);
+            // 禁用集合按注册表规范名存放；必须在 resolve 之后比对，否则 source:name / 相对路径别名可绕过。
+            if (isDisabled(ref.name(), context)) {
+                return ToolResultPayload.failureFrom(
+                        "skill 「" + ref.name() + "」已在本会话关闭，请在能力面板中重新启用。", null);
+            }
             String filePath = readString(rawInput, "file_path");
             if (filePath != null && !filePath.isBlank()) {
                 return loadLinkedFile(ref, filePath.trim());

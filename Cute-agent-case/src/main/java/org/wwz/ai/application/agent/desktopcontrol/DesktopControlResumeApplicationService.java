@@ -138,7 +138,7 @@ public class DesktopControlResumeApplicationService {
                                       AgentStreamProjection projectingStream) {
         try {
             agentDispatchService.dispatch(agentRequest, projectingStream);
-            desktopControlRepository.markCompleted(record.getControlId());
+            desktopControlRepository.markCompleted(record.getControlId(), record.getUserId());
             GptQueryApplicationService.completeProjectionUnlessBackgroundRunning(
                     agentRequest, projectingStream, activeAgentRunRegistry);
         } catch (Exception e) {

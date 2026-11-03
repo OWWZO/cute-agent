@@ -200,7 +200,8 @@ public class ToolCollection {
      * 不再依赖实例字段绑定；尚未迁移的工具仍回落旧签名，行为不变。
      */
     public Object executeResolved(String name, Object toolInput, AgentContext context) {
-        String deny = denyIfNotWhitelisted(name);
+        AgentContext effective = context != null ? context : agentContext;
+        String deny = denyIfNotWhitelisted(name, effective);
         if (deny != null) {
             return deny;
         }
@@ -235,20 +236,24 @@ public class ToolCollection {
         return null;
     }
 
-    private String denyIfNotWhitelisted(String name) {
-        if (agentContext == null
-                || agentContext.getToolDispatchWhitelist() == null
-                || agentContext.getToolDispatchWhitelist().isEmpty()) {
+    /**
+     * 白名单必须按「本次调用的有效上下文」判定：子 Agent / LTM fork 传入的可能是
+     * 与实例字段不同的受限上下文，读实例字段会让限制失效。
+     */
+    private String denyIfNotWhitelisted(String name, AgentContext effective) {
+        if (effective == null
+                || effective.getToolDispatchWhitelist() == null
+                || effective.getToolDispatchWhitelist().isEmpty()) {
             return null;
         }
         String toolName = name == null ? "" : name.trim();
-        if (agentContext.getToolDispatchWhitelist().contains(toolName)) {
+        if (effective.getToolDispatchWhitelist().contains(toolName)) {
             return null;
         }
         String deny = "LTM fork denied non-whitelisted tool: " + toolName
                 + ". Only curator-allowed tools (memory / skill workspace / bash) may run.";
         log.warn("requestId:{} {}",
-                agentContext.getRequestId() == null ? "unknown" : agentContext.getRequestId(),
+                effective.getRequestId() == null ? "unknown" : effective.getRequestId(),
                 deny);
         return deny;
     }

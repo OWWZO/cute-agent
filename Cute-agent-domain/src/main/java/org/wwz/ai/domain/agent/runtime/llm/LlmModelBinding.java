@@ -1,6 +1,8 @@
 package org.wwz.ai.domain.agent.runtime.llm;
 
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.Value;
 
 /**
@@ -26,6 +28,9 @@ public class LlmModelBinding {
      */
     Integer supportsThinking;
     String baseUrl;
+    /** 明文凭证，禁止进入 toString / equals / hashCode。 */
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     String apiKey;
     /** 对话补全路径；空则调用方用默认 /v1/chat/completions 或 /chat/completions。 */
     String completionsPath;

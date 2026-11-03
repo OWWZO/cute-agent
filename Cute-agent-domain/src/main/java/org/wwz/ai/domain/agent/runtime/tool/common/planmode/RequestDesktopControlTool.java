@@ -73,6 +73,12 @@ public class RequestDesktopControlTool implements BaseTool {
         if (source != null) {
             toolCallId = source.getToolCallId();
         }
+        String ownerKey;
+        try {
+            ownerKey = resolveOwnerKey(context);
+        } catch (IllegalStateException e) {
+            return fail(e.getMessage());
+        }
         try {
             CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
             String sessionId = StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId());
@@ -81,7 +87,7 @@ public class RequestDesktopControlTool implements BaseTool {
                     config,
                     context.getRequestId(),
                     sessionId,
-                    resolveOwnerKey(context),
+                    ownerKey,
                     DesktopSessionRemote.DEFAULT_TTL_SECONDS);
             throw new DesktopControlRequiredException(reason, opened.getUrl(), opened.getHoldUntil(), toolCallId);
         } catch (DesktopControlRequiredException yield) {
@@ -91,10 +97,17 @@ public class RequestDesktopControlTool implements BaseTool {
         }
     }
 
+    /**
+     * 桌面按 ownerKey 共享，解析不到真实用户时必须快速失败：
+     * 否则所有异步/无请求上下文的调用方都会落到同一个 anonymous 桌面。
+     */
     private String resolveOwnerKey(AgentContext context) {
         LtmOwner owner = context.getLtmOwner();
         if (owner == null) {
             owner = LtmOwnerResolver.resolve(context.getUserId(), null);
+        }
+        if (owner == null || LtmOwnerResolver.ANONYMOUS_OWNER_ID.equals(owner.getId())) {
+            throw new IllegalStateException("无法识别当前用户，已拒绝打开共享桌面会话");
         }
         return owner.asOwnerKey();
     }

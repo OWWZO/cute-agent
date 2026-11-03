@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,8 +35,12 @@ public class ToolCallMemory {
 
     private String toolProvider;
 
+    /** 工具入参可能含凭证 / 用户数据，禁止进入 toString。 */
+    @ToString.Exclude
     private String inputJson;
 
+    /** 原始模型观察结果，禁止进入 toString。 */
+    @ToString.Exclude
     private String llmObservation;
 
     @Builder.Default

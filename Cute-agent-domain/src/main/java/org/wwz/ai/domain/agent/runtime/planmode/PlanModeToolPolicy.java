@@ -6,6 +6,7 @@ import org.wwz.ai.domain.agent.runtime.tool.common.AgentDispatchTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.mcp.McpToolNames;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskToolNames;
 
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.Set;
 
@@ -51,6 +52,15 @@ public final class PlanModeToolPolicy {
             "code_mode"
     );
 
+    /**
+     * 未知工具名里出现这些 token 即按「可能改状态」拒绝。
+     * 只做整词匹配，避免 read/edit 这类子串误伤 editor 等只读命名。
+     */
+    private static final Set<String> MUTATING_TOKENS = Set.of(
+            "write", "edit", "delete", "remove", "create", "update", "move", "copy", "upload",
+            "exec", "execute", "run", "command", "bash", "shell", "powershell", "patch", "install"
+    );
+
     private static final Set<String> MUTATING = Set.of(
             "workspace_write",
             "workspace_edit",
@@ -87,7 +97,6 @@ public final class PlanModeToolPolicy {
             return null;
         }
         String name = toolName.trim();
-        String lower = name.toLowerCase(Locale.ROOT);
         if (ALWAYS_ALLOWED.contains(name)) {
             // 主 Agent 在 plan 期允许这些工具。子 Agent 不经过本策略（context.isSubAgent() 直接放行），
             // 其工具池由 SubAgentFilter 管理，且不会剥离 workspace_write/workspace_edit。
@@ -109,12 +118,22 @@ public final class PlanModeToolPolicy {
             return "Plan mode: 禁止调用会修改系统状态的工具「" + name + "」。"
                     + " 请只做只读探索、AskUserQuestion、写计划文件，或 ExitPlanMode。";
         }
-        // MCP / 未知工具：默认允许只读类；名字含 write/edit/run 则拦
-        if (lower.contains("write") || lower.contains("edit") || lower.contains("delete")
-                || lower.contains("exec") || lower.contains("run_command")) {
+        // MCP / 未知工具：默认允许只读类；把 camelCase / 分隔符归一后按整词拦，
+        // 避免 runCommand 这类写法漏网，也避免 read_editor 这类只读命名被误伤。
+        if (hasMutatingToken(name)) {
             return "Plan mode: 工具「" + name + "」可能修改状态，已禁止。请退出 plan mode 并获用户批准后再用。";
         }
         return null;
+    }
+
+    private static boolean hasMutatingToken(String toolName) {
+        String normalized = toolName.trim()
+                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .replaceAll("[^A-Za-z0-9]+", "_")
+                .toLowerCase(Locale.ROOT);
+        return Arrays.stream(normalized.split("_"))
+                .filter(token -> !token.isBlank())
+                .anyMatch(MUTATING_TOKENS::contains);
     }
 
     private static boolean isPlanRelativePath(String path) {
