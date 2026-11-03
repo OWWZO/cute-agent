@@ -6,6 +6,7 @@ import org.wwz.ai.domain.agent.memory.WorkingMemoryMessage;
 import org.wwz.ai.domain.agent.memory.WorkingMemorySearchMessage;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface IWorkingMemoryMessageDao {
@@ -36,14 +37,25 @@ public interface IWorkingMemoryMessageDao {
                                                    @Param("limit") int limit,
                                                    @Param("roles") List<String> roles);
 
+    /**
+     * 查询滚动定位锚点；消息不属于该 session、已删除或不可见时返回 null。
+     */
     WorkingMemorySearchMessage selectScrollAnchor(@Param("sessionId") String sessionId,
                                                   @Param("messageId") long messageId);
 
+    /**
+     * 查询锚点之前的消息，按 turnSeq/seqNo/id 倒序取最近一页。
+     * {@code roles} 为 null 或空时不加角色过滤。
+     */
     List<WorkingMemorySearchMessage> selectScrollBefore(@Param("sessionId") String sessionId,
                                                         @Param("messageId") long messageId,
                                                         @Param("limit") int limit,
                                                         @Param("roles") List<String> roles);
 
+    /**
+     * 查询锚点之后的消息，按 turnSeq/seqNo/id 正序取下一页。
+     * {@code roles} 为 null 或空时不加角色过滤。
+     */
     List<WorkingMemorySearchMessage> selectScrollAfter(@Param("sessionId") String sessionId,
                                                        @Param("messageId") long messageId,
                                                        @Param("limit") int limit,
@@ -52,8 +64,8 @@ public interface IWorkingMemoryMessageDao {
     List<WorkingMemorySearchMessage> selectHistoryBySession(@Param("sessionId") String sessionId);
 
     /** 最近的主会话摘要，用于 session_search browse。 */
-    List<java.util.Map<String, Object>> selectRecentSessions(@Param("userId") String userId,
-                                                             @Param("limit") int limit);
+    List<Map<String, Object>> selectRecentSessions(@Param("userId") String userId,
+                                                   @Param("limit") int limit);
 
-    java.util.Map<String, Object> selectSessionSummary(@Param("sessionId") String sessionId);
+    Map<String, Object> selectSessionSummary(@Param("sessionId") String sessionId);
 }

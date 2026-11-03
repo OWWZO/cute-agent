@@ -8,6 +8,9 @@ import java.util.Map;
 
 /**
  * data_analysis 输出表 DAO。
+ *
+ * <p>insert 的 Map 使用 camelCase key（toolInvocationId/runId/requestId/sessionId/toolCallId/
+ * status/errorMsg/task/summary/content）；查询结果的 key 为 JDBC 列标签。</p>
  */
 @Mapper
 public interface IToolOutputDataAnalysisDao {

@@ -8,6 +8,9 @@ import java.util.Map;
 
 /**
  * image_generation_tool 输出表 DAO。
+ *
+ * <p>insert 的 Map 使用 camelCase key；查询结果的 key 为 JDBC 列标签。
+ * 单行查询使用 LIMIT 1，未命中时返回 null。</p>
  */
 @Mapper
 public interface IToolOutputImageGenerationDao {

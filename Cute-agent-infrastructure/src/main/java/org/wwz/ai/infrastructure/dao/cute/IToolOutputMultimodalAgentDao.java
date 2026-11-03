@@ -8,6 +8,9 @@ import java.util.Map;
 
 /**
  * multimodal_agent 输出表 DAO。
+ *
+ * <p>insert 的 Map 使用 camelCase key（toolInvocationId/runId/requestId/sessionId/toolCallId/
+ * status/errorMsg/summary/markdownContent）；查询结果的 key 为 JDBC 列标签。</p>
  */
 @Mapper
 public interface IToolOutputMultimodalAgentDao {
