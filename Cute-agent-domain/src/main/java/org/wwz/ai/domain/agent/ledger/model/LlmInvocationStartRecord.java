@@ -18,8 +18,10 @@ public class LlmInvocationStartRecord {
 
     private Long runId;
 
+    /** 账本关联与幂等键，必填。 */
     private String requestId;
 
+    /** run 内调用序号，必填。 */
     private Integer invocationSeq;
 
     private String agentName;

@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolStructuredOutput;
 
 import java.time.LocalDateTime;
@@ -34,6 +35,7 @@ public class ToolInvocationFinishRecord {
     private String llmObservation;
 
     /** 工具完整结果 JSON（历史回放/前端用）；与 llmObservation 独立写入 */
+    @ToString.Exclude
     private String toolResult;
 
     private ToolStructuredOutput structuredOutput;

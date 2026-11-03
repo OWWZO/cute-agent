@@ -340,7 +340,7 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
 
     private List<DialogueRunView> attachArtifactSummaries(List<DialogueRunView> runViews) {
         if (CollectionUtils.isEmpty(runViews)) {
-            return runViews;
+            return runViews == null ? List.of() : runViews;
         }
         List<Long> runIds = runViews.stream()
                 .map(DialogueRunView::getId)

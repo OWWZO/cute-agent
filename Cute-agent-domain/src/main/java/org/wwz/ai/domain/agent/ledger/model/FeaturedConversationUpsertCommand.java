@@ -16,8 +16,10 @@ import java.util.List;
 @AllArgsConstructor
 public class FeaturedConversationUpsertCommand {
 
+    /** 主键，必填；为空时仓储 upsert 直接返回 false 且不写库。 */
     private String featuredId;
 
+    /** 关联会话 id，必填；为空时仓储 upsert 直接返回 false 且不写库。 */
     private String sessionId;
 
     private String title;

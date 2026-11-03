@@ -299,8 +299,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
      * rich tool 输出和主账本分离，避免结构化结果继续堆在主表。
      */
     private void persistStructuredOutput(ToolInvocationFinishRecord record) {
-        if (toolOutputWriter == null
-                || record == null
+        if (record == null
                 || !ToolOutputNames.isPersistedTool(record.getToolName())
                 || record.getStructuredOutput() == null) {
             return;

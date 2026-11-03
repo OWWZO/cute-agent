@@ -57,6 +57,10 @@ public class ToolInvocationBatchStartRecord {
 
         private String inputJson;
 
+        /**
+         * 派发时刻；应由调用方统一从同一时钟取非空值。为空时写入层回退到
+         * {@code LocalDateTime.now()}，混用会导致同批次耗时不一致。
+         */
         private LocalDateTime startedAt;
     }
 }
