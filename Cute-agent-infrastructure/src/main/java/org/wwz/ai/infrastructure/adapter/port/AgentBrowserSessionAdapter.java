@@ -169,17 +169,9 @@ public class AgentBrowserSessionAdapter implements AgentBrowserSessionPort {
         try {
             AiAgentBrowserSession row = sessionDao.queryByOwnerKey(normalizedUserId);
             if (row == null) {
-                return AgentBrowserSessionStatus.builder()
-                        .exists(false)
-                        .reconstructed(false)
-                        .build();
+                return AgentBrowserSessionStatus.absent();
             }
-            return AgentBrowserSessionStatus.builder()
-                    .exists(true)
-                    .agentSessionId(row.getAgentSessionId())
-                    .lastUsedAt(row.getLastUsedAt())
-                    .reconstructed(false)
-                    .build();
+            return AgentBrowserSessionStatus.present(row.getAgentSessionId(), row.getLastUsedAt());
         } catch (RuntimeException e) {
             throw sanitizedFailure("statusForUser", e);
         }

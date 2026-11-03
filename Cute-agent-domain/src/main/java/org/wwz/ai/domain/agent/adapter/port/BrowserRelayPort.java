@@ -1,22 +1,14 @@
 package org.wwz.ai.domain.agent.adapter.port;
 
-import java.time.Duration;
-import java.util.Map;
-
 /**
  * Outbound Browser Relay capability consumed by Agent tools.
  *
- * <p>This compatibility port is intentionally separate from the inbound
- * {@link BrowserRelaySocketPort} lifecycle/application adapter. It contains
- * no WebSocket object or connection lifecycle methods.</p>
+ * <p>Only the online guard is part of the consumed contract. Command execution
+ * and connection lifecycle stay on the inbound {@link BrowserRelaySocketPort},
+ * so the same relay semantics are not re-declared here with a second set of
+ * result types.</p>
  */
 public interface BrowserRelayPort {
 
     boolean isOnline(String userId);
-
-    BrowserRelayStatus status(String userId);
-
-    BrowserRpcResult call(String userId, String action, Map<String, Object> params, Duration timeout);
-
-    void disconnect(String userId);
 }

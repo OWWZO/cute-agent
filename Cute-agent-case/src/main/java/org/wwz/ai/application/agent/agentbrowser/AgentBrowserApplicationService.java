@@ -27,10 +27,7 @@ public class AgentBrowserApplicationService {
             throw new IllegalArgumentException("userId 不能为空");
         }
         if (agentBrowserSessionPort == null || !agentBrowserSessionPort.isConfigured()) {
-            return AgentBrowserSessionStatus.builder()
-                    .exists(false)
-                    .reconstructed(false)
-                    .build();
+            return AgentBrowserSessionStatus.absent();
         }
         return agentBrowserSessionPort.statusForUser(userId);
     }
