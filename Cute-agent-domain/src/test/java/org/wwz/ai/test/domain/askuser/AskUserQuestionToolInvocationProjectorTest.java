@@ -57,13 +57,12 @@ public class AskUserQuestionToolInvocationProjectorTest {
                         .build());
             }
 
-            @Override public void insert(UserQuestionRecord record) { }
+            @Override public boolean insertIfAbsent(UserQuestionRecord record) { return true; }
             @Override public Optional<UserQuestionRecord> findByResumeRequestId(String resumeRequestId) { return Optional.empty(); }
             @Override public List<UserQuestionRecord> listOpenBySessionId(String sessionId) { return List.of(); }
             @Override public boolean hasOpenBySessionId(String sessionId) { return false; }
             @Override public boolean casAnswerPending(String questionId, String userId, Map<String, String> answers, String resumeRequestId) { return false; }
             @Override public boolean casClaimResume(String resumeRequestId, String userId) { return false; }
-            @Override public boolean markAnswered(String questionId) { return false; }
             @Override public boolean markStatus(String questionId, String status) { return false; }
             @Override public boolean casCancel(String questionId, String userId) { return false; }
         };
@@ -96,13 +95,12 @@ public class AskUserQuestionToolInvocationProjectorTest {
                 .build();
         IUserQuestionRepository repository = new IUserQuestionRepository() {
             @Override public Optional<UserQuestionRecord> findByQuestionId(String questionId) { return Optional.empty(); }
-            @Override public void insert(UserQuestionRecord record) { }
+            @Override public boolean insertIfAbsent(UserQuestionRecord record) { return true; }
             @Override public Optional<UserQuestionRecord> findByResumeRequestId(String resumeRequestId) { return Optional.empty(); }
             @Override public List<UserQuestionRecord> listOpenBySessionId(String sessionId) { return List.of(persisted); }
             @Override public boolean hasOpenBySessionId(String sessionId) { return false; }
             @Override public boolean casAnswerPending(String questionId, String userId, Map<String, String> answers, String resumeRequestId) { return false; }
             @Override public boolean casClaimResume(String resumeRequestId, String userId) { return false; }
-            @Override public boolean markAnswered(String questionId) { return false; }
             @Override public boolean markStatus(String questionId, String status) { return false; }
             @Override public boolean casCancel(String questionId, String userId) { return false; }
         };
@@ -132,7 +130,7 @@ public class AskUserQuestionToolInvocationProjectorTest {
             @Override public Optional<UserQuestionRecord> findByQuestionId(String questionId) {
                 throw new IllegalStateException("ledger read failed");
             }
-            @Override public void insert(UserQuestionRecord record) { }
+            @Override public boolean insertIfAbsent(UserQuestionRecord record) { return true; }
             @Override public Optional<UserQuestionRecord> findByResumeRequestId(String resumeRequestId) { return Optional.empty(); }
             @Override public List<UserQuestionRecord> listOpenBySessionId(String sessionId) {
                 throw new IllegalStateException("ledger read failed");
@@ -140,7 +138,6 @@ public class AskUserQuestionToolInvocationProjectorTest {
             @Override public boolean hasOpenBySessionId(String sessionId) { return false; }
             @Override public boolean casAnswerPending(String questionId, String userId, Map<String, String> answers, String resumeRequestId) { return false; }
             @Override public boolean casClaimResume(String resumeRequestId, String userId) { return false; }
-            @Override public boolean markAnswered(String questionId) { return false; }
             @Override public boolean markStatus(String questionId, String status) { return false; }
             @Override public boolean casCancel(String questionId, String userId) { return false; }
         };

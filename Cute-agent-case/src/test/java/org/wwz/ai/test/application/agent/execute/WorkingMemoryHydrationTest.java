@@ -216,7 +216,8 @@ public class WorkingMemoryHydrationTest {
         }
 
         @Override
-        public void insert(org.wwz.ai.domain.agent.runtime.askuser.UserQuestionRecord record) {
+        public boolean insertIfAbsent(org.wwz.ai.domain.agent.runtime.askuser.UserQuestionRecord record) {
+            return true;
         }
 
         @Override
@@ -250,11 +251,6 @@ public class WorkingMemoryHydrationTest {
 
         @Override
         public boolean casClaimResume(String resumeRequestId, String userId) {
-            return false;
-        }
-
-        @Override
-        public boolean markAnswered(String questionId) {
             return false;
         }
 

@@ -144,7 +144,7 @@ public class AskUserResumeApplicationService {
                                       AgentStreamProjection projectingStream) {
         try {
             agentDispatchService.dispatch(agentRequest, projectingStream);
-            userQuestionRepository.markAnswered(record.getQuestionId());
+            userQuestionRepository.markStatus(record.getQuestionId(), UserQuestionStatuses.ANSWERED);
             GptQueryApplicationService.completeProjectionUnlessBackgroundRunning(
                     agentRequest, projectingStream, activeAgentRunRegistry);
         } catch (Exception e) {

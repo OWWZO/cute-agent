@@ -32,11 +32,11 @@ public class UserQuestionRepository implements IUserQuestionRepository {
     private final IUserQuestionDao userQuestionDao;
 
     @Override
-    public void insert(UserQuestionRecord record) {
+    public boolean insertIfAbsent(UserQuestionRecord record) {
         if (record == null) {
-            return;
+            return false;
         }
-        userQuestionDao.insert(toPo(record));
+        return userQuestionDao.insertIfAbsent(toPo(record)) > 0;
     }
 
     @Override
@@ -97,19 +97,13 @@ public class UserQuestionRepository implements IUserQuestionRepository {
     }
 
     @Override
-    public boolean markAnswered(String questionId) {
-        if (StringUtils.isBlank(questionId)) {
-            return false;
-        }
-        return userQuestionDao.markAnswered(questionId.trim()) > 0;
-    }
-
-    @Override
     public boolean markStatus(String questionId, String status) {
-        if (StringUtils.isBlank(questionId) || StringUtils.isBlank(status)) {
+        String normalizedStatus = StringUtils.trimToNull(status);
+        if (StringUtils.isBlank(questionId) || normalizedStatus == null
+                || !UserQuestionStatuses.RESUME_OUTCOMES.contains(normalizedStatus)) {
             return false;
         }
-        return userQuestionDao.markFailed(questionId.trim(), status.trim()) > 0;
+        return userQuestionDao.markStatus(questionId.trim(), normalizedStatus) > 0;
     }
 
     @Override

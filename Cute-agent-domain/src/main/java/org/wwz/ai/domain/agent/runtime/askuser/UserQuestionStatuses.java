@@ -17,6 +17,8 @@ public final class UserQuestionStatuses {
 
     public static final List<String> OPEN = List.of(PENDING, RESUME_PENDING, RESUMING);
     public static final List<String> CANCELABLE = List.of(PENDING, RESUME_PENDING);
+    /** 续跑收口允许写入的目标状态（{@code markStatus}）。 */
+    public static final List<String> RESUME_OUTCOMES = List.of(ANSWERED, FAILED, RESUME_PENDING);
 
     private UserQuestionStatuses() {
     }

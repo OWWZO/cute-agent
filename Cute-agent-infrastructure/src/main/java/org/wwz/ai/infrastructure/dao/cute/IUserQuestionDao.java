@@ -9,7 +9,7 @@ import java.util.List;
 @Mapper
 public interface IUserQuestionDao {
 
-    int insert(UserQuestionPO row);
+    int insertIfAbsent(UserQuestionPO row);
 
     UserQuestionPO selectByQuestionId(@Param("questionId") String questionId);
 
@@ -27,9 +27,7 @@ public interface IUserQuestionDao {
     int casClaimResume(@Param("resumeRequestId") String resumeRequestId,
                        @Param("userId") String userId);
 
-    int markAnswered(@Param("questionId") String questionId);
-
-    int markFailed(@Param("questionId") String questionId, @Param("status") String status);
+    int markStatus(@Param("questionId") String questionId, @Param("status") String status);
 
     int casCancel(@Param("questionId") String questionId,
                   @Param("userId") String userId,

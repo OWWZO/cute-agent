@@ -1096,7 +1096,6 @@ public class AgentToolCollectionFactoryTest {
                   virtualPaths,
                  workspaceService,
                 workspaceRuntimeOptions,
-                Mockito.mock(org.wwz.ai.domain.agent.runtime.askuser.PendingUserQuestionRegistry.class),
                 Mockito.mock(org.wwz.ai.domain.agent.runtime.planmode.PendingPlanApprovalRegistry.class)
         );
     }
