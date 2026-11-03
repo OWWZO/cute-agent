@@ -340,9 +340,6 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                 MCP <span className="font-mono text-ui-sm">{mcps.length}</span>
               </button>
             </div>
-            <span className="workspace-admin-section-meta">
-              {tab === "skills" ? "技能注册表" : "MCP 连接注册表"}
-            </span>
           </div>
 
           {tab === "skills" ? (
@@ -381,19 +378,6 @@ const CapabilityLibrary: CuteType.FC<Props> = ({ embedded }) => {
                   >
                     <Link2 className="h-4 w-4" />
                     在线导入
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={readOnly}
-                    onClick={() =>
-                      void skillAdminApi.reload().then(() => {
-                        toast.success("已重载技能注册表");
-                        return refresh();
-                      })
-                    }
-                  >
-                    重载注册表
                   </Button>
                 </div>
               </div>

@@ -58,7 +58,4 @@ export const skillAdminApi = {
     api.delete<boolean>(
       `${BASE}/${encodeURIComponent(name)}`
     ) as unknown as Promise<boolean>,
-
-  reload: () =>
-    api.post<boolean>(`${BASE}/reload`) as unknown as Promise<boolean>,
 };
