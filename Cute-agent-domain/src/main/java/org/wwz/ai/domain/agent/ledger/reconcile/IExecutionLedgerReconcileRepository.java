@@ -28,6 +28,9 @@ public interface IExecutionLedgerReconcileRepository {
 
     /**
      * 扫「仍 running 且 started_at_ms 早于宽限窗边界」的后台任务登记行。
+     * <p>{@code startedBeforeMs} 与 {@code started_at_ms} 列同为 UTC epoch 毫秒
+     * （写入方使用 {@code System.currentTimeMillis()}），实现必须直接按毫秒比较，
+     * 不得再引入时区换算；上两个 LocalDateTime 重载对应 DATETIME 列，不要混用。</p>
      */
     List<OrphanBackgroundTaskRow> queryOrphanedRunningBackgroundTasks(long startedBeforeMs, int limit);
 

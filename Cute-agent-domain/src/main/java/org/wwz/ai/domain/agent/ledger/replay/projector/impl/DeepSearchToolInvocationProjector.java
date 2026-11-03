@@ -48,10 +48,10 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
                 continue;
             }
             Map<String, Object> resultMap = switch (stageType) {
-                case "extend" -> buildExtendResult(output, stage);
-                case "search" -> buildSearchResult(output, stage);
-                case "chapter_summary" -> buildChapterSummaryResult(output, stage);
-                case "report" -> buildReportResult(output, stage);
+                case DeepSearchStage.STAGE_EXTEND -> buildExtendResult(output, stage);
+                case DeepSearchStage.STAGE_SEARCH -> buildSearchResult(output, stage);
+                case DeepSearchStage.STAGE_CHAPTER_SUMMARY -> buildChapterSummaryResult(output, stage);
+                case DeepSearchStage.STAGE_REPORT -> buildReportResult(output, stage);
                 default -> Map.of();
             };
             if (resultMap.isEmpty()) {
@@ -198,7 +198,7 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
     }
 
     private List<Map<String, Object>> resolveStageArtifactRefs(String stageType, List<ArtifactView> artifacts) {
-        if (!"report".equals(stageType) || artifacts == null || artifacts.isEmpty()) {
+        if (!DeepSearchStage.STAGE_REPORT.equals(stageType) || artifacts == null || artifacts.isEmpty()) {
             return List.of();
         }
         List<ArtifactView> finalArtifacts = artifacts.stream()

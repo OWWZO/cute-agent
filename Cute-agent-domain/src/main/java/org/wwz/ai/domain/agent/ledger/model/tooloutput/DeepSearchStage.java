@@ -13,6 +13,12 @@ import java.util.List;
 @NoArgsConstructor
 public class DeepSearchStage {
 
+    public static final String STAGE_EXTEND = "extend";
+    public static final String STAGE_SEARCH = "search";
+    public static final String STAGE_CHAPTER_SUMMARY = "chapter_summary";
+    public static final String STAGE_REPORT = "report";
+
+    /** 阶段判别值，取值见 {@code STAGE_*}；未登记的值会被回放投影忽略。 */
     private String stage;
 
     private List<String> queries = new ArrayList<>();
@@ -36,7 +42,7 @@ public class DeepSearchStage {
      */
     public static DeepSearchStage extend(List<String> queries) {
         DeepSearchStage stage = new DeepSearchStage();
-        stage.setStage("extend");
+        stage.setStage(STAGE_EXTEND);
         stage.setQueries(queries == null ? new ArrayList<>() : new ArrayList<>(queries));
         return stage;
     }
@@ -46,7 +52,7 @@ public class DeepSearchStage {
      */
     public static DeepSearchStage search(List<DeepSearchQueryResult> results) {
         DeepSearchStage stage = new DeepSearchStage();
-        stage.setStage("search");
+        stage.setStage(STAGE_SEARCH);
         stage.setResults(results == null ? new ArrayList<>() : new ArrayList<>(results));
         return stage;
     }
@@ -62,7 +68,7 @@ public class DeepSearchStage {
                                                  List<String> queries,
                                                  List<DeepSearchQueryResult> results) {
         DeepSearchStage stage = new DeepSearchStage();
-        stage.setStage("chapter_summary");
+        stage.setStage(STAGE_CHAPTER_SUMMARY);
         stage.setChapterId(chapterId);
         stage.setChapterTitle(chapterTitle);
         stage.setChapterContent(chapterContent);
@@ -79,7 +85,7 @@ public class DeepSearchStage {
      */
     public static DeepSearchStage report(String answer) {
         DeepSearchStage stage = new DeepSearchStage();
-        stage.setStage("report");
+        stage.setStage(STAGE_REPORT);
         stage.setAnswer(answer);
         return stage;
     }

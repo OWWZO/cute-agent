@@ -158,11 +158,9 @@ public class ReplayProjector {
                 }
             }
 
-            String messageType = null;
             // LLM content 不是天然的最终答案：有工具调用时它是过程文，无工具时由 run summary 负责交付。
             // 原生 CoT 单独回放为 llm_reasoning（与 content 双路）
             if (StringUtils.isNotBlank(llmInvocation.getReasoningContent())) {
-                messageType = "llm_reasoning";
                 events.add(buildLlmReplayEvent(
                         bundle,
                         state,
@@ -177,7 +175,7 @@ public class ReplayProjector {
             //   无 tool  -> 终轮正文，投影为 agent_stream（moreRounds=false），前端留在结论区由 result 收口。
             if (StringUtils.isNotBlank(llmInvocation.getResponseText())
                     && shouldProjectResponseTextAsProcess(llmInvocation)) {
-                messageType = resolveLlmMessageType(llmInvocation);
+                String messageType = resolveLlmMessageType(llmInvocation);
                 events.add(buildLlmReplayEvent(
                         bundle,
                         state,
