@@ -3,8 +3,12 @@ package org.wwz.ai.domain.agent.runtime.tool.skill;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.regex.Pattern;
 
 /**
@@ -29,9 +33,11 @@ public class SkillPathGuard {
             throw new SkillLoadException("path escapes registered skill root: " + normalizedCandidate);
         }
         // 词法检查通过后，再比对真实路径，防止 root 内放一个指向外部的符号链接。
-        Path realRoot = toRealPathOrNull(normalizedRoot);
-        Path realCandidate = toRealPathOrNull(normalizedCandidate);
-        if (realRoot != null && realCandidate != null && !realCandidate.startsWith(realRoot)) {
+        // 目标尚不存在时也要判定：取最近的已存在祖先解析真实路径，再把缺失段拼回去；
+        // 解析失败一律拒绝，不能退回纯词法结果（否则父目录软链接可绕过）。
+        Path realRoot = resolveRealPath(normalizedRoot);
+        Path realCandidate = resolveRealPath(normalizedCandidate);
+        if (realRoot == null || realCandidate == null || !realCandidate.startsWith(realRoot)) {
             throw new SkillLoadException(
                     "path escapes registered skill root via symlink: " + normalizedCandidate);
         }
@@ -79,11 +85,32 @@ public class SkillPathGuard {
         return false;
     }
 
-    private static Path toRealPathOrNull(Path path) {
+    /**
+     * 解析真实路径：目标不存在时取最近的已存在祖先做 {@link Path#toRealPath()}，
+     * 再把尚不存在的尾段拼回去，保证父目录链路里的软链接同样被解析。
+     * 任何一步失败返回 null，由调用方拒绝。
+     */
+    private static Path resolveRealPath(Path path) {
+        Path existing = path;
+        Deque<Path> missingTail = new ArrayDeque<>();
+        while (existing != null && !Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) {
+            Path fileName = existing.getFileName();
+            if (fileName == null) {
+                return null;
+            }
+            missingTail.addFirst(fileName);
+            existing = existing.getParent();
+        }
+        if (existing == null) {
+            return null;
+        }
         try {
-            return path.toRealPath();
+            Path real = existing.toRealPath();
+            for (Path fileName : missingTail) {
+                real = real.resolve(fileName);
+            }
+            return real;
         } catch (IOException e) {
-            // 路径不存在等情况：回退到词法检查的结果，不阻断正常流程。
             return null;
         }
     }

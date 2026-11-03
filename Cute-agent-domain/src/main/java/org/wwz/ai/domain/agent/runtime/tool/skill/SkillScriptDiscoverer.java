@@ -2,7 +2,9 @@ package org.wwz.ai.domain.agent.runtime.tool.skill;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -38,6 +40,10 @@ public class SkillScriptDiscoverer {
     );
 
     private static final Set<String> SUPPORTED_RUNTIMES = Set.of("python", "node", "shell", "powershell", "bat");
+
+    /** scripts.yaml 来自外部上传的 skill 包，限制解析体积与别名展开，避免解析阶段被拖垮。 */
+    private static final int MAX_YAML_CODE_POINTS = 1024 * 1024;
+    private static final int MAX_YAML_ALIASES = 50;
 
     private final SkillPathGuard skillPathGuard;
 
@@ -90,7 +96,8 @@ public class SkillScriptDiscoverer {
 
         try {
             String yamlText = Files.readString(scriptsYamlPath, StandardCharsets.UTF_8);
-            Object loaded = new Yaml().load(yamlText);
+            // scripts.yaml 是外部输入：必须用 SafeConstructor，禁止 !!java.* 之类的标签实例化任意类。
+            Object loaded = newYaml().load(yamlText);
             if (!(loaded instanceof Map<?, ?> loadedMap)) {
                 throw new SkillLoadException("scripts.yaml must be a yaml map: " + scriptsYamlPath);
             }
@@ -248,5 +255,12 @@ public class SkillScriptDiscoverer {
             }
         }
         return null;
+    }
+
+    private static Yaml newYaml() {
+        LoaderOptions options = new LoaderOptions();
+        options.setCodePointLimit(MAX_YAML_CODE_POINTS);
+        options.setMaxAliasesForCollections(MAX_YAML_ALIASES);
+        return new Yaml(new SafeConstructor(options));
     }
 }
