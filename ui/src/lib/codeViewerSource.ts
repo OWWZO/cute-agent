@@ -37,6 +37,8 @@ export function pathBaseName(path: string): string {
  *
  * 对齐 ZCode `PreviewPane.tsx:104 normalizeBreadcrumbPathSegments` +
  * `:1546-1568` 的 `rootLabel › parents › fileLabel` 结构。
+ * 这里有意裁掉开头的 `/` 与 Windows 盘符分隔信息，只保留父级段和文件名；
+ * 需要区分绝对路径与相对路径的调用方不能只依赖本函数。
  * 只有裸文件名（如 `generate_fixtures.py`）时 `parents` 为空 —— 此时**不要**
  * 再把同一个名字当副标题重复渲染一遍。
  */
@@ -128,7 +130,8 @@ export function buildTextCodeViewerSource(summary: {
  * tab 去重键。
  * - `patch` 按「路径 + 内容哈希」：同一文件同一补丁不重复开 tab，
  *   内容变了（重跑工具）则视为新 tab。
- * - 其余按路径（无路径时退化为标题）。
+ * - `text` 同样按「路径 + 内容哈希」：内联内容更新会被视为新 tab。
+ * - `file` / `image` 按路径。
  */
 export function sourceTabKey(source: CodeViewerSource): string {
   if (source.type === "patch") {

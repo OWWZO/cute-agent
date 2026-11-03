@@ -116,8 +116,12 @@ function lastDays(input: unknown): string[] {
 }
 
 const weekday = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
+const isWeekend = (date: string) => weekday(date) === 0 || weekday(date) === 6;
+const GROWTH_EPOCH_DAY = 20000;
+const GROWTH_DAYS_PER_STEP = 1500;
 // Slow growth over the year, so trends and period-over-period changes show
-const growth = (date: string) => 1 + (Date.parse(date) / DAY - 20000) / 1500;
+const growth = (date: string) =>
+  1 + (Date.parse(date) / DAY - GROWTH_EPOCH_DAY) / GROWTH_DAYS_PER_STEP;
 
 const PRODUCTS = [
   { product: "Trail runner", category: "Outdoors", price: 128 },
@@ -137,7 +141,7 @@ const PRODUCTS = [
 function orders(input: unknown) {
   return lastDays(input).flatMap((date) => {
     const r = rng(`orders:${date}`);
-    const weekend = weekday(date) === 0 || weekday(date) === 6;
+    const weekend = isWeekend(date);
     const count = Math.round((18 + r() * 14) * (weekend ? 1.35 : 1) * growth(date));
     return Array.from({ length: count }, (_, i) => {
       const p = pick(r, PRODUCTS, [9, 5, 4, 8, 5, 10, 6, 2, 4, 6, 5, 4]);
@@ -187,7 +191,7 @@ function traffic(input: unknown) {
   const sources = { Search: [1800, 0.021], Social: [950, 0.012], Email: [420, 0.045], Direct: [700, 0.03], Referral: [300, 0.035] } as const;
   return lastDays(input).flatMap((date) => {
     const r = rng(`traffic:${date}`);
-    const weekend = weekday(date) === 0 || weekday(date) === 6;
+    const weekend = isWeekend(date);
     return Object.entries(sources).map(([source, [visits, rate]]) => {
       const v = Math.round(visits * (weekend ? 0.75 : 1) * growth(date) * (0.8 + r() * 0.4));
       return { date, source, visits: v, signups: Math.round(v * rate * (0.7 + r() * 0.6)) };

@@ -4,9 +4,6 @@ import { useReducedMotion, type Transition } from "motion/react";
 /** Strong ease-out for UI enters (AUDIT --ease-out). */
 export const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
-/** Strong ease-in-out for on-screen movement (AUDIT --ease-in-out). */
-export const EASE_IN_OUT = [0.77, 0, 0.175, 1] as const;
-
 export const DURATION = {
   press: 0.15,
   tooltip: 0.15,
@@ -17,6 +14,8 @@ export const DURATION = {
   reduced: 0.12,
 } as const;
 
+const QUICK_DURATION_SECONDS = 0.18;
+
 /**
  * 纯透明度/旋转类过渡的完整 transition 预设。
  *
@@ -24,7 +23,7 @@ export const DURATION = {
  * 但时长与曲线仍必须从这里取，不允许组件里散写 `duration: 0.18`。
  */
 export const DURATION_QUICK: Transition = {
-  duration: 0.18,
+  duration: QUICK_DURATION_SECONDS,
   ease: EASE_OUT,
 };
 

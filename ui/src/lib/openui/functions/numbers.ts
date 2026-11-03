@@ -60,7 +60,7 @@ export const Lerp = defineFunction({
 
 export const Allocate = defineFunction({
   name: "Allocate",
-  description: "Splits total in proportion to weights, rounded to decimals (default 2), so the parts add up to exactly total, e.g. @Allocate(100, [1, 1, 1]) is [33.34, 33.33, 33.33]",
+  description: "Splits total in proportion to weights, rounded to decimals (default 2), so the parts add up to total rounded to that precision, e.g. @Allocate(100, [1, 1, 1]) is [33.34, 33.33, 33.33]",
   params: z.object({ total: z.number(), weights: numbers(), decimals: z.number().optional() }),
   returns: z.array(z.number()),
   fn: ({ total, weights, decimals }) => {

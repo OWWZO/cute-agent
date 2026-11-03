@@ -20,7 +20,7 @@ export const Icon = defineComponent({
   description: 'Lucide icon by name, e.g. "map-pin".',
   component: ({ props }) => (
     <span className="iui-icon" style={{ color: fg(props.color) }}>
-      <Glyph name={props.name} size={ICON_SIZE[props.size ?? "md"] ?? 18} />
+      <Glyph name={props.name} size={ICON_SIZE[props.size ?? "md"]} />
     </span>
   ),
 });
@@ -33,6 +33,9 @@ async function getJson(url: string): Promise<Record<string, unknown>> {
   return response.ok ? ((await response.json()) as Record<string, unknown>) : {};
 }
 
+const safeJson = (url: string) =>
+  getJson(url).catch((): Record<string, unknown> => ({}));
+
 const urls = (value: unknown) => (Array.isArray(value) ? value.flatMap((u) => (webUrl(u) ? [u as string] : [])) : []);
 
 /**
@@ -44,8 +47,8 @@ function searchImages(query: string): Promise<string[]> {
   let request = searches.get(query);
   if (!request) {
     request = Promise.all([
-      getJson(withBase(`/api/wiki?title=${encodeURIComponent(query)}`)).catch((): Record<string, unknown> => ({})),
-      getJson(withBase(`/api/image-search?q=${encodeURIComponent(query)}`)).catch((): Record<string, unknown> => ({})),
+      safeJson(withBase(`/api/wiki?title=${encodeURIComponent(query)}`)),
+      safeJson(withBase(`/api/image-search?q=${encodeURIComponent(query)}`)),
     ]).then(([wiki, found]) => {
       const all = [...urls(wiki.photos), ...urls(found.images)];
       if (!all.length) searches.delete(query);
@@ -76,7 +79,13 @@ function useImageSearch(query: string | null): string[] | undefined {
   return query && result?.query === query ? result.images : undefined;
 }
 
-type PhotoProps = { query: string; src?: string | null; aspectRatio?: number | null; radius?: unknown; fit?: string | null };
+type PhotoProps = {
+  query: string;
+  src?: string | null;
+  aspectRatio?: number | null;
+  radius?: z.infer<typeof radiusSchema> | null;
+  fit?: "cover" | "contain" | null;
+};
 
 /** A photo from src, or, without one or when it fails, the best search result for query. */
 function Photo(props: PhotoProps) {

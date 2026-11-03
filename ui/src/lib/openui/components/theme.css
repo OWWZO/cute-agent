@@ -89,8 +89,6 @@
   color-scheme: dark;
   --iui-shadow: 0 4px 20px rgb(0 0 0 / 35%);
   --iui-shadow-sm: 0 1px 3px rgb(0 0 0 / 30%);
-  --iui-info: var(--iui-ink);
-  --iui-info-soft: color-mix(in srgb, var(--iui-ink) 6%, transparent);
   --iui-success: #5bcf9c;
   --iui-success-soft: #13291f;
   --iui-warning: #f0b84f;
@@ -122,7 +120,4 @@
   --iui-chart-5: #ec84a3;
   --iui-chart-6: #5fb3bd;
   --iui-map-water: #1d3540;
-  --iui-ring: var(--iui-ink);
-  --iui-photo-empty: var(--iui-surface);
-  --iui-photo-empty-icon: var(--iui-border-strong);
 }

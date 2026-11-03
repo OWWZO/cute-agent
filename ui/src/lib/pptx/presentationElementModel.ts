@@ -85,6 +85,8 @@ function buildTableCellElements(
       if (cell.hMerge || cell.vMerge) {
         // 原因：pptx-renderer 对纵向 merge continuation 仍推进 gridSpan，横向
         // continuation 则不推进；直接使用物理 cellIndex 会把后续 overlay 左移。
+        // hMerge + vMerge 同时出现时按横向 continuation 处理，假定合并起点
+        // 的 gridSpan 已覆盖这些列。
         if (cell.vMerge && !cell.hMerge) {
           columnIndex += gridSpan;
         }

@@ -187,8 +187,8 @@ export function findLatestPendingPlanApproval(
 }
 
 /**
- * Dock 决策槽：ask > approval > composer
- * （与 kimi ChatDock v-if 顺序一致）
+ * Dock 决策槽：desktop > ask > approval > composer
+ * （与 kimi ChatDock v-if 顺序一致；桌面控制需要用户立即接管，因此优先）。
  */
 export function resolveHitlDockSlot(
   chat?: CHAT.ChatItem | null,

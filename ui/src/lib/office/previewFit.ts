@@ -20,6 +20,9 @@ export interface DocxPreviewFit {
  *
  * `scale = min(1, availableWidth / naturalWidth)`：内容比可视区窄时保持 1，
  * 不做放大（放大只会把纸张拉模糊，且与官方预览行为不一致）。
+ *
+ * `availableWidth` 必须是内容盒宽度；调用方应先排除 padding、border 和滚动条。
+ * 任一尺寸非有限值或不为正时返回 `null`，调用方不得沿用上一次 fit。
  */
 export function calculateDocxPreviewFit({
   availableWidth,
@@ -55,14 +58,17 @@ export function calculateDocxPreviewFit({
  * 拖动面板会按帧触发 ResizeObserver，浮点抖动若直接写入 state 会导致
  * 每帧重渲染；用阈值把亚像素变化吸收掉。
  */
+const SCALE_EPSILON = 0.001;
+const PIXEL_EPSILON = 0.5;
+
 export function isSameDocxPreviewFit(
   current: DocxPreviewFit | null,
   next: DocxPreviewFit
 ): boolean {
   return (
     current !== null &&
-    Math.abs(current.scale - next.scale) < 0.001 &&
-    Math.abs(current.width - next.width) < 0.5 &&
-    Math.abs(current.height - next.height) < 0.5
+    Math.abs(current.scale - next.scale) < SCALE_EPSILON &&
+    Math.abs(current.width - next.width) < PIXEL_EPSILON &&
+    Math.abs(current.height - next.height) < PIXEL_EPSILON
   );
 }

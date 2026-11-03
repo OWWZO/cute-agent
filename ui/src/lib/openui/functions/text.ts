@@ -121,7 +121,7 @@ export const Split = defineFunction({
   params: z.object({ text: z.string(), sep: z.string().optional() }),
   returns: z.array(z.string()),
   fn: ({ text, sep = "," }) => {
-    const parts = text.split(sep === "" ? "" : sep).map((p) => p.trim()).filter((p) => p !== "");
+    const parts = text.split(sep).map((p) => p.trim()).filter((p) => p !== "");
     if (parts.length > MAX_ITEMS) throw new Error(`more than ${MAX_ITEMS} items`);
     return parts;
   },

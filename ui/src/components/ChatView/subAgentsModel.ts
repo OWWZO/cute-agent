@@ -16,7 +16,7 @@ export const AGENTS_PANEL_VARIANT_LABELS: Record<AgentsPanelVariant, string> = {
 
 /**
  * 运行中条目每秒走时的时钟；无运行中条目时不建 interval。
- * 面板与目录共用 —— 两处都要显示「已运行 X 秒」，各自建一个定时器会不同步。
+ * 每次调用拥有独立的定时器与 `now`；面板和目录同时渲染时不会共享时钟。
  */
 export function useNowTicker(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
