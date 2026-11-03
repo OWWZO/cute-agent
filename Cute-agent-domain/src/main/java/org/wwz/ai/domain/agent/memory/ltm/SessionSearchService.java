@@ -8,14 +8,26 @@ public interface SessionSearchService {
 
     /**
      * Hermes 风格的消息历史检索。实现根据请求参数选择 discovery、scroll、read 或 browse。
+     * <p>
+     * 这是给只实现五参版本的旧适配器用的兜底：五参签名没有 scroll / 角色过滤能力，
+     * 遇到这类请求必须显式返回错误，不能静默降级成另一种模式。
      */
     default String search(SessionSearchRequest request) {
         if (request == null) {
             return search(null, null, null, 0, null);
         }
+        if (request.getAroundMessageId() != null || request.getWindow() != null) {
+            return unsupported("around_message_id/window");
+        }
+        if (request.getRoleFilter() != null && !request.getRoleFilter().isBlank()) {
+            return unsupported("role_filter");
+        }
         int limit = request.getLimit() == null ? 0 : request.getLimit();
-        return search(request.getCurrentSessionId(), request.getUserId(), request.getQuery(),
-                limit, request.getScope());
+        String requestedSessionId = request.getSessionId();
+        String sessionId = requestedSessionId != null && !requestedSessionId.isBlank()
+                ? requestedSessionId.trim()
+                : request.getCurrentSessionId();
+        return search(sessionId, request.getUserId(), request.getQuery(), limit, request.getScope());
     }
 
     /**
@@ -26,4 +38,9 @@ public interface SessionSearchService {
      * @param scope      session=仅本会话；user=该 userId 下跨会话
      */
     String search(String sessionId, String userId, String query, int limit, String scope);
+
+    private static String unsupported(String option) {
+        return "{\"success\":false,\"error\":\"legacy session search adapter does not support "
+                + option + "\"}";
+    }
 }
