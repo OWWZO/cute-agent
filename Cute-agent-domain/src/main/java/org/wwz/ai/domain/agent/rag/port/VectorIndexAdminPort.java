@@ -12,6 +12,10 @@ public interface VectorIndexAdminPort {
 
     boolean collectionExists(String collectionName) throws Exception;
 
+    /**
+     * 创建集合；集合已存在时幂等返回（不报错、不清空既有数据）。
+     * <p>本端口不提供 check-then-create 的原子性；并发初始化的调用方必须自行串行化。</p>
+     */
     void createCollection(String collectionName, int dimension) throws Exception;
 
     void recreateCollection(String collectionName, int dimension) throws Exception;

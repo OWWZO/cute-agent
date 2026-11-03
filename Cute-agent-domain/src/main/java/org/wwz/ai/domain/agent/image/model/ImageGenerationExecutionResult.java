@@ -1,11 +1,14 @@
 package org.wwz.ai.domain.agent.image.model;
 
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -37,6 +40,14 @@ public class ImageGenerationExecutionResult {
 
     private Object rawResponse;
 
+    @Setter(AccessLevel.NONE)
     @Builder.Default
     private List<WorkspaceImageFile> files = new ArrayList<>();
+
+    /** 返回只读副本，避免调用方改写执行结果已登记的产出物。 */
+    public List<WorkspaceImageFile> getFiles() {
+        return files == null
+                ? List.of()
+                : Collections.unmodifiableList(new ArrayList<>(files));
+    }
 }
