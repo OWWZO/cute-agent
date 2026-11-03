@@ -48,6 +48,9 @@ public final class ToolObservationBudget {
 
     private static final String OBSERVATION_DIR = ".cute/observations";
 
+    /** 每次落盘最多保留的观测文件数：超出按修改时间删最旧的，避免长会话无界占用工作区。 */
+    private static final int MAX_PERSISTED_FILES = 200;
+
     /** 批量工具并行执行时同一毫秒可能撞名，序号保证文件互不覆盖。 */
     private static final java.util.concurrent.atomic.AtomicLong PERSIST_SEQ =
             new java.util.concurrent.atomic.AtomicLong();
@@ -85,10 +88,41 @@ public final class ToolObservationBudget {
             Path file = dir.resolve(toolName + "-" + System.currentTimeMillis()
                     + "-" + PERSIST_SEQ.incrementAndGet() + ".txt");
             Files.writeString(file, observation, StandardCharsets.UTF_8);
+            pruneOldObservations(dir, file);
             return file;
         } catch (Exception e) {
             log.warn("persist oversized observation failed, tool={}", toolName, e);
             return null;
+        }
+    }
+
+    /**
+     * 保留最新的 {@link #MAX_PERSISTED_FILES} 个观测文件。
+     * <p>清理失败不影响本次落盘（内容已在盘上、信封已可续读），仅记录日志。</p>
+     */
+    private static void pruneOldObservations(Path dir, Path keep) {
+        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+            java.util.List<Path> sorted = files
+                    .filter(Files::isRegularFile)
+                    .sorted(java.util.Comparator.comparingLong(ToolObservationBudget::lastModified))
+                    .collect(java.util.stream.Collectors.toList());
+            int excess = sorted.size() - MAX_PERSISTED_FILES;
+            for (int i = 0; i < excess; i++) {
+                Path candidate = sorted.get(i);
+                if (!candidate.equals(keep)) {
+                    Files.deleteIfExists(candidate);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("prune persisted observations failed, dir={}", dir, e);
+        }
+    }
+
+    private static long lastModified(Path path) {
+        try {
+            return Files.getLastModifiedTime(path).toMillis();
+        } catch (Exception e) {
+            return Long.MAX_VALUE;
         }
     }
 

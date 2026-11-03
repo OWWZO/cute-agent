@@ -98,6 +98,9 @@ public class TaskOutputTool implements BaseTool {
             }
 
             Map<String, Object> fields = new LinkedHashMap<>();
+            // 键名当前是历史混合风格（retrieval_status/agent_id/task_type 为 snake_case，
+            // agentType/totalToolUseCount/totalDurationMs/endedAtMs 为 camelCase）。
+            // 这些键直接进模型上下文与回放，统一改名属于行为变更，见 W3 维护批次记录。
             fields.put("retrieval_status", retrieval);
             fields.put("agent_id", task.getAgentId());
             fields.put("task_type", task.getType());

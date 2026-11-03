@@ -55,9 +55,11 @@ public class DeepSearchTool implements BaseTool {
      */
     private static final long DEEP_SEARCH_IO_TIMEOUT_MINUTES = 20L;
 
+    public static final String TOOL_NAME = "deep_search";
+
     @Override
     public String getName() {
-        return "deep_search";
+        return TOOL_NAME;
     }
 
     @Override

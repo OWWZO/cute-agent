@@ -79,14 +79,6 @@ public final class SkillFrontMatterParser {
     }
 
     /**
-     * 只解析 frontmatter 文本块（不含 {@code ---} 栅栏），供 zip / 片段场景复用。
-     * 降级信息不在此返回，调用方若需要请用 {@link #parse(String)}。
-     */
-    public static Map<String, Object> parseFields(String frontMatterBlock) {
-        return parseBlock(frontMatterBlock).fields();
-    }
-
-    /**
      * 剥离一个前导 BOM。Windows 编辑器保存 UTF-8 时可能写入，
      * 不剥离会导致首行不是 {@code ---}，整个 frontmatter 被静默丢弃。
      */

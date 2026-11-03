@@ -11,6 +11,8 @@ import java.util.Map;
  * <p>
  * 失败项不进入 artifact registry，也不写入 Execution Ledger；但会回传给工具结果，
  * 让调用方知道本次调用实际成功登记了哪些文件。
+ * <p>{@code reason} 的取值是跨进程契约的一部分（工具结果 JSON 里直接可见，见
+ * {@link #toMap()}），保持小写 snake_case；这里的常量只是取值登记处，不是 Java 风格常量。</p>
  */
 @Value
 @Builder

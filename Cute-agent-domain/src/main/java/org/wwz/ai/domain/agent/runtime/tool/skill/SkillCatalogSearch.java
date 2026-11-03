@@ -114,6 +114,13 @@ final class SkillCatalogSearch {
         return 0;
     }
 
+    /**
+     * 按非字母数字分段。
+     * <p>已知局限（刻意保留，不做 C++/node.js 之类技术词归一）：查询词 "C++" 会切成
+     * 单 token {@code c}，可能低分命中其它含 "c" 的技能；完整字符串匹配分支
+     * （{@code score} 开头的 equals/contains，1.0/0.98/0.9）不受影响。skill 检索是
+     * 软排序场景，宁可有噪声也不要漏召。</p>
+     */
     private static List<String> tokenize(String text) {
         if (text == null || text.isBlank()) {
             return List.of();

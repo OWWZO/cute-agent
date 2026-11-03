@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -22,11 +23,13 @@ public final class ToolArgs {
     /**
      * 宽松归一：接受 Map / JSON 字符串 / 任意可序列化对象，无法识别时返回空 map。
      * <p>
-     * 返回的 map 键统一为 String；调用方不应修改它。
+     * 返回的 map 键统一为 String，且<b>一律不可修改</b>：所有分支（含空/非法输入）
+     * 返回同一可写性，调用方若试图 {@code put}/{@code remove} 会立刻抛
+     * {@link UnsupportedOperationException}，而不是只在边界输入上炸。
      */
     public static Map<String, Object> map(Object input) {
         if (input instanceof Map<?, ?> map) {
-            return stringKeyed(map);
+            return unmodifiable(stringKeyed(map));
         }
         if (input == null) {
             return Map.of();
@@ -35,7 +38,7 @@ public final class ToolArgs {
             try {
                 Object parsed = JSON.parse(text);
                 if (parsed instanceof Map<?, ?> map) {
-                    return stringKeyed(map);
+                    return unmodifiable(stringKeyed(map));
                 }
             } catch (Exception ignored) {
                 // 非法 JSON 落到下面的兜底
@@ -44,7 +47,7 @@ public final class ToolArgs {
         }
         try {
             JSONObject obj = JSON.parseObject(JSON.toJSONString(input));
-            return obj == null ? Map.of() : new LinkedHashMap<>(obj);
+            return obj == null ? Map.of() : unmodifiable(new LinkedHashMap<>(obj));
         } catch (Exception ignored) {
             return Map.of();
         }
@@ -57,9 +60,13 @@ public final class ToolArgs {
      */
     public static Map<String, Object> mapStrict(Object input) {
         if (input instanceof Map<?, ?> map) {
-            return stringKeyed(map);
+            return unmodifiable(stringKeyed(map));
         }
         return Map.of();
+    }
+
+    private static Map<String, Object> unmodifiable(Map<String, Object> values) {
+        return Collections.unmodifiableMap(values);
     }
 
     /** 取值并 trim；缺失或空白返回空串。 */

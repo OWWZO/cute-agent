@@ -165,7 +165,6 @@ public class AgentBrowserTool implements BaseTool {
         ToolArtifactSource source = context.getCurrentToolArtifactSource();
         CliArtifactCapturePlan capturePlan = CliArtifactCaptureCoordinator.plan(
                 TOOL_NAME,
-                args,
                 processArgs,
                 context.getWorkspaceRoot(),
                 source == null ? null : source.getToolCallId(),
