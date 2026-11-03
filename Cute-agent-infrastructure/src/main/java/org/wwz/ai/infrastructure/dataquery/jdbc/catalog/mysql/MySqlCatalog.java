@@ -3,7 +3,6 @@ package org.wwz.ai.infrastructure.dataquery.jdbc.catalog.mysql;
 
 
 
-import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryTable;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryTableColumn;
 import org.wwz.ai.domain.agent.rag.model.schema.StandardColumnType;
@@ -12,24 +11,13 @@ import org.wwz.ai.infrastructure.dataquery.jdbc.catalog.CatalogException;
 
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /** MySQL 元数据目录，使用 INFORMATION_SCHEMA 读取列注释和原始类型。 */
-@Slf4j
 public class MySqlCatalog extends AbstractJdbcCatalog {
 
-    protected static final Set<String> SYS_DATABASES = new HashSet<>(4);
     private static final String SELECT_COLUMNS_SQL_TEMPLATE =
             "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA IN  ('%s') AND TABLE_NAME ='%s' ORDER BY ORDINAL_POSITION ASC";
-
-    static {
-        SYS_DATABASES.add("information_schema");
-        SYS_DATABASES.add("mysql");
-        SYS_DATABASES.add("performance_schema");
-        SYS_DATABASES.add("sys");
-    }
 
     @Override
     public List<DataQueryTable> listTables(Connection connection, String schema) throws CatalogException {

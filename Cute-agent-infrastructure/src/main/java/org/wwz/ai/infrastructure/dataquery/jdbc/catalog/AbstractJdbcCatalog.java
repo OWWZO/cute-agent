@@ -5,7 +5,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryTable;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryTableColumn;
 import org.wwz.ai.domain.agent.rag.model.schema.StandardColumnType;
-import org.wwz.ai.infrastructure.dataquery.jdbc.catalog.CatalogException;
 
 import java.sql.*;
 import java.util.ArrayList;

@@ -18,12 +18,13 @@ public class JdbcConnectionPools {
 
     private static final int DEFAULT_INITIAL_CAPACITY = 16;
 
-    private static JdbcConnectionPoolFactory jdbcConnectionPoolFactory;
+    private final JdbcConnectionPoolFactory jdbcConnectionPoolFactory;
     private final Map<String, DatasourceWrapper> pools;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     private JdbcConnectionPools() {
         this.pools = new ConcurrentHashMap<>(DEFAULT_INITIAL_CAPACITY);
+        this.jdbcConnectionPoolFactory = new JdbcConnectionPoolFactory();
     }
 
     private static class SingletonHolder {
@@ -31,7 +32,6 @@ public class JdbcConnectionPools {
 
         static {
             try {
-                jdbcConnectionPoolFactory = new JdbcConnectionPoolFactory();
                 INSTANCE = new JdbcConnectionPools();
                 log.info("JdbcConnectionPools 初始化完成");
             } catch (Exception e) {

@@ -1,7 +1,6 @@
 package org.wwz.ai.infrastructure.dataquery.jdbc.dialect;
 
 
-import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.infrastructure.dataquery.jdbc.JdbcBizException;
 
 import java.util.LinkedList;
@@ -10,7 +9,6 @@ import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 
 /** 根据 JDBC URL 通过 SPI 选择唯一数据库方言实现。 */
-@Slf4j
 public final class JdbcDialectLoader {
 
     private JdbcDialectLoader() {
