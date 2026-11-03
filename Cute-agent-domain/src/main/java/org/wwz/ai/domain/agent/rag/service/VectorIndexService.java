@@ -24,6 +24,12 @@ public class VectorIndexService {
         }
     }
 
+    /**
+     * Creates a collection that must use the cosine distance metric.
+     * <p>The name promises cosine, but {@link VectorIndexAdminPort#createCollection(String, int)} carries no
+     * metric parameter: the current Qdrant implementation hard-codes Cosine, and any new implementation
+     * must keep that metric or this method's guarantee no longer holds.</p>
+     */
     public void createCosineCollection(String collectionName, int dimension)
             throws ExecutionException, InterruptedException {
         try {

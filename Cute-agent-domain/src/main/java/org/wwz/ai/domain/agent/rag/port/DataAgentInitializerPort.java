@@ -10,7 +10,21 @@ package org.wwz.ai.domain.agent.rag.port;
  */
 public interface DataAgentInitializerPort {
 
+    /**
+     * 准备向量索引。
+     *
+     * @param forceRefresh       false 时幂等创建（已存在则复用）；true 时重建并丢弃既有向量
+     * @param embeddingDimension embedding 输出维度，调用方必须传正数且与所配置 embedding 模型一致；
+     *                           端口本身不校验，直接透传给存储端建集合
+     * @throws Exception 实现不可用或建索引失败时抛出
+     */
     void initializeVectorIndex(boolean forceRefresh, int embeddingDimension) throws Exception;
 
+    /**
+     * 准备列值索引。
+     *
+     * @param forceRefresh false 时幂等初始化（索引已存在则复用）；true 时删除并重建，丢弃既有列值数据
+     * @throws Exception 实现不可用或建索引失败时抛出
+     */
     void initializeColumnValueIndex(boolean forceRefresh) throws Exception;
 }

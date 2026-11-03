@@ -9,6 +9,12 @@ public final class DataQueryModelPrompts {
     private DataQueryModelPrompts() {
     }
 
+    /**
+     * Returns the built-in business prompt for a known model id.
+     *
+     * @param modelId model identifier; may be {@code null}
+     * @return the built-in prompt, or {@code null} when the id is null/unknown — callers must null-check
+     */
     public static String businessPromptFor(String modelId) {
         if (SALES_MODEL_ID.equals(modelId)) {
             return "order_date为日维度数据，如果统计月份要使用DATE_FORMAT(`order_date`, '%Y-%m')";

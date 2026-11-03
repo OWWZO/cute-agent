@@ -20,7 +20,10 @@ public interface DataQueryMetadataPort {
     /**
      * 读取表字段定义。
      *
+     * @param tableName 表名，调用方必须传非空值
+     * @param schema    目标 schema；未配置 schema 时调用方会传 {@code null}，实现不得因此抛 NPE
      * @return 字段列表；表不存在或无权限时返回空列表，不返回 {@code null}
+     * @throws IllegalStateException 元数据读取失败时（当前实现把 {@code SQLException} 包装为该异常）
      */
     List<DataQueryTableColumn> queryColumns(String tableName, String schema);
 
