@@ -729,6 +729,12 @@ public class AgentContext {
                 .runtimeDependencies(runtimeDependencies)
                 .dateInfo(dateInfo)
                 .workspaceRoot(workspaceRoot)
+                // 工具池与模型开关是 think/tool 循环的运行前提：fork 若不继承，
+                // 子任务会拿到 null toolCollection，或用默认模型配置调用 LLM。
+                .toolCollection(toolCollection)
+                .model(model)
+                .thinking(thinking)
+                .thinkingEffort(thinkingEffort)
                 .subAgentToolCollection(subAgentToolCollection)
                 .workspaceReadStateByPath(new ConcurrentHashMap<>())
                 .isStream(isStream)

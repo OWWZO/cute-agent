@@ -117,6 +117,10 @@ public class BaseAgentStreamEventHandler {
         // 先同步 planner round 和公共 payload，再按 messageType 投影为 canonical event；
         // eventResult 保存当前任务的聚合状态，ProjectedReplayEvent 只描述本次可回放事件。
         // 因此实时增量和历史 replay 可以共享同一套事件结构，而不共享可变状态对象。
+        if (agentResponse == null || eventResult == null) {
+            // 两个入参缺一都无法投影；返回 null 让上层输出空 eventData，而不是在 switch 里 NPE。
+            return null;
+        }
         boolean isFinal = Boolean.TRUE.equals(agentResponse.getIsFinal());
         boolean isFilterFinal = (Objects.nonNull(agentResponse.getResultMap())
                 && "deep_search".equals(agentResponse.getMessageType())
@@ -420,6 +424,10 @@ public class BaseAgentStreamEventHandler {
     }
 
     private void copyIfPresent(Map<String, Object> target, Map<String, Object> source, String key) {
+        // agent_stream 纯文本帧的 resultMap 为 null；逐键拷贝必须容忍空源。
+        if (source == null) {
+            return;
+        }
         if (source.containsKey(key) && source.get(key) != null) {
             target.put(key, source.get(key));
         }

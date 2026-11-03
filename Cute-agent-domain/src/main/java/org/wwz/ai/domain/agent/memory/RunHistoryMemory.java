@@ -37,4 +37,22 @@ public class RunHistoryMemory {
 
     @Builder.Default
     private List<ReactCycleMemory> reactCycles = new ArrayList<>();
+
+    /**
+     * {@code @Builder.Default} 只作用于 builder 路径：无参/全参构造与 setter 都允许写 null。
+     * 读取侧统一兜底，保证「列表永远可 add / 可迭代」。
+     */
+    public List<FileArtifactMemory> getSessionInputFiles() {
+        if (sessionInputFiles == null) {
+            sessionInputFiles = new ArrayList<>();
+        }
+        return sessionInputFiles;
+    }
+
+    public List<ReactCycleMemory> getReactCycles() {
+        if (reactCycles == null) {
+            reactCycles = new ArrayList<>();
+        }
+        return reactCycles;
+    }
 }

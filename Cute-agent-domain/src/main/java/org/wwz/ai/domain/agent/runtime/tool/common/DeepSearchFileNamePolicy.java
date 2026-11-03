@@ -17,8 +17,13 @@ final class DeepSearchFileNamePolicy {
     }
 
     static String buildSearchResultFileName(String reportFileName) {
-        int extensionStart = reportFileName.lastIndexOf('.');
-        String baseName = extensionStart > 0 ? reportFileName.substring(0, extensionStart) : reportFileName;
+        // 与报告名走同一套清洗：null/空白回退默认名，路径分隔符统一替换为 _。
+        String normalized = sanitizeReportFileName(reportFileName);
+        if (StringUtils.isBlank(normalized)) {
+            normalized = sanitizeReportFileName(DEFAULT_REPORT_FILE_NAME);
+        }
+        int extensionStart = normalized.lastIndexOf('.');
+        String baseName = extensionStart > 0 ? normalized.substring(0, extensionStart) : normalized;
         return baseName + "_search_result.txt";
     }
 

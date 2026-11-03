@@ -38,12 +38,20 @@ public record BrowserCommand(String userId,
                                     Duration timeout) {
         return new BrowserCommand(
                 userId,
-                BrowserAction.of(action),
+                actionOrNull(action),
                 rpcIdFrom(parameters),
                 parameters,
                 timeout,
                 deadlineAtFrom(parameters)
         );
+    }
+
+    /**
+     * action 缺失/空白时保留 {@code null}，交由 {@code BrowserRelayCommandPolicy.rejection}
+     * 判为非法命令；不要在构造期抛 NPE，那会把「无效输入」变成调用方不可恢复的异常。
+     */
+    private static BrowserAction actionOrNull(String action) {
+        return action == null || action.isBlank() ? null : BrowserAction.of(action);
     }
 
     public BrowserCommand withRpcId(String value) {

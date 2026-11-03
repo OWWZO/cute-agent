@@ -226,7 +226,9 @@ public class CuteConfig {
         if (!StringUtils.hasText(json) || "{}".equals(json.trim())) {
             return new HashMap<>();
         }
-        return JSON.parseObject(json, new TypeReference<Map<String, String>>() {});
+        Map<String, String> parsed = JSON.parseObject(json, new TypeReference<Map<String, String>>() {});
+        // 字面量 "null" 会解析成 null；调用方随后会 getOrDefault，必须归一为空 Map。
+        return parsed == null ? new HashMap<>() : parsed;
     }
 
     /**

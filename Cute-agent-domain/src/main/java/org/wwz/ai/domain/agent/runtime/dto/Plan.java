@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 计划类
@@ -90,14 +91,18 @@ public class Plan {
         }
 
         if (newSteps != null) {
+            // 历史数据可能缺 steps/stepStatus/notes；比较与取旧值都必须空安全。
+            List<String> currentSteps = copyList(this.steps);
+            List<String> currentStatus = copyList(this.stepStatus);
+            List<String> currentNotes = copyList(this.notes);
             List<String> newStatuses = new ArrayList<>();
             List<String> newNotes = new ArrayList<>();
 
             for (int i = 0; i < newSteps.size(); i++) {
-                if (i < this.steps.size() && newSteps.get(i).equals(this.steps.get(i))) {
+                if (i < currentSteps.size() && Objects.equals(newSteps.get(i), currentSteps.get(i))) {
                     // 保持原有状态和备注
-                    newStatuses.add(this.stepStatus.get(i));
-                    newNotes.add(this.notes.get(i));
+                    newStatuses.add(i < currentStatus.size() ? currentStatus.get(i) : "not_started");
+                    newNotes.add(i < currentNotes.size() ? currentNotes.get(i) : "");
                 } else {
                     // 新步骤使用默认状态和空备注
                     newStatuses.add("not_started");
@@ -105,7 +110,8 @@ public class Plan {
                 }
             }
 
-            this.steps = newSteps;
+            // 防御性复制：调用方后续修改 newSteps 不能反向改动 Plan。
+            this.steps = new ArrayList<>(newSteps);
             this.stepStatus = newStatuses;
             this.notes = newNotes;
         }
@@ -115,7 +121,12 @@ public class Plan {
      * 更新步骤状态
      */
     public void updateStepStatus(int stepIndex, String status, String note) {
-        if (stepIndex < 0 || stepIndex >= steps.size()) {
+        // 三个列表必须同时覆盖 index：历史计划可能比 steps 短。
+        if (steps == null || stepStatus == null || notes == null
+                || stepIndex < 0
+                || stepIndex >= steps.size()
+                || stepIndex >= stepStatus.size()
+                || stepIndex >= notes.size()) {
             throw new IllegalArgumentException("Invalid step index: " + stepIndex);
         }
 
@@ -132,12 +143,9 @@ public class Plan {
      * 更新步骤状态
      */
     public String getCurrentStep() {
-        for (int i = 0; i < steps.size(); i++) {
-            if ("in_progress".equals(stepStatus.get(i))) {
-                return steps.get(i);
-            }
-        }
-        return "";
+        // 与 getCurrentStepIndex 共用同一套 null/长度保护，避免历史 payload 在回放时 NPE。
+        Integer index = getCurrentStepIndex();
+        return index == null ? "" : steps.get(index);
     }
 
     /**

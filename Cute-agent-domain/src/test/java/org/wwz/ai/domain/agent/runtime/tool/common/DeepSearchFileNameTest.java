@@ -48,4 +48,16 @@ public class DeepSearchFileNameTest {
         Assert.assertEquals("数据分析报告.md",
                 DeepSearchFileNamePolicy.resolveReportFileName(null, "数据分析报告.md"));
     }
+
+    @Test
+    public void searchResultFileNameShouldNormalizeBlankAndPathSeparators() {
+        Assert.assertEquals("深度搜索报告_search_result.txt",
+                DeepSearchFileNamePolicy.buildSearchResultFileName(null));
+        Assert.assertEquals("深度搜索报告_search_result.txt",
+                DeepSearchFileNamePolicy.buildSearchResultFileName("   "));
+        Assert.assertEquals("dir_report_search_result.txt",
+                DeepSearchFileNamePolicy.buildSearchResultFileName("dir/report.md"));
+        Assert.assertEquals("dir_report_search_result.txt",
+                DeepSearchFileNamePolicy.buildSearchResultFileName("dir\\report.md"));
+    }
 }

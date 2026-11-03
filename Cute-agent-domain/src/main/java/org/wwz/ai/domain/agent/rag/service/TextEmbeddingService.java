@@ -45,6 +45,10 @@ public class TextEmbeddingService {
     }
 
     public List<Float> getVector(String text) {
+        if (text == null) {
+            // List.of(null) 会在进入 getVectorBatch 的 try/catch 之前就抛 NPE。
+            return null;
+        }
         List<List<Float>> vectorBatch = getVectorBatch(List.of(text));
         if (vectorBatch != null && !vectorBatch.isEmpty()) {
             return vectorBatch.get(0);

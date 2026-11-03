@@ -291,11 +291,14 @@ public class SqlParserUtils {
             SqlBasicCall basicCall = (SqlBasicCall) from;
             SqlNode tableNode = basicCall.getOperandList().get(0);
             SqlSelect selectNode = findSelectNode(tableNode);
-            if (selectNode != null) {
-                parseList.add(parseSelectFromTable(selectNode.getFrom()));
-            }else{
+            if (selectNode == null || selectNode.getFrom() == null) {
+                // 子查询没有 FROM（如 SELECT 1）时不能解引用 null；按别名表返回即可。
                 return singleFromTable(from);
             }
+            parseList.add(parseSelectFromTable(selectNode.getFrom()));
+            // AS 分支已经解析过子查询的 FROM，继续 accept 会把同一段再解析一次。
+            Collections.reverse(parseList);
+            return parseList.get(0);
         }
 
         from.accept(new SqlBasicVisitor<String>() {

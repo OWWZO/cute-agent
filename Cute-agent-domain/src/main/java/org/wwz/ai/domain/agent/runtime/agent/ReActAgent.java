@@ -110,9 +110,11 @@ public abstract class ReActAgent extends BaseAgent {
      * @param task 生成数字员工的目标任务：用于引导LLM生成匹配任务场景的数字员工配置（如"市场洞察分析"）
      */
     public void generateDigitalEmployee(String task) {
+        // 一次解析请求号：context 可能尚未装配（null），错误日志不能反过来再抛 NPE。
+        String requestId = currentRequestId();
         // 1. 参数校验：任务为空时直接返回，避免无效调用
         if (StringUtils.isEmpty(task)) {
-            log.warn("requestId: {} generateDigitalEmployee task is empty", context.getRequestId());
+            log.warn("requestId: {} generateDigitalEmployee task is empty", requestId);
             return;
         }
 
@@ -135,13 +137,13 @@ public abstract class ReActAgent extends BaseAgent {
 
             // 5. 同步获取异步结果（阻塞等待LLM响应，可根据业务调整为非阻塞）
             String llmResponse = awaitFuture(summaryFuture);
-            log.info("requestId: {} task:{} generateDigitalEmployee LLM响应: {}", context.getRequestId(), task, llmResponse);
+            log.info("requestId: {} task:{} generateDigitalEmployee LLM响应: {}", requestId, task, llmResponse);
 
             // 6. 解析LLM响应为JSON对象（处理两种常见格式）
             JSONObject jsonObject = parseDigitalEmployee(llmResponse);
             if (jsonObject != null) {
                 // 7. 解析成功：更新工具集合中的数字员工配置
-                log.info("requestId:{} generateDigitalEmployee 解析后配置: {}", context.getRequestId(), jsonObject);
+                log.info("requestId:{} generateDigitalEmployee 解析后配置: {}", requestId, jsonObject);
 
                 context.getToolCollection().updateDigitalEmployee(jsonObject);
                 // 8. 记录当前任务，关联数字员工
@@ -150,17 +152,21 @@ public abstract class ReActAgent extends BaseAgent {
                 availableTools = context.getToolCollection();
             } else {
                 // 解析失败：记录错误日志
-                log.error("requestId: {} generateDigitalEmployee 响应解析失败，原始响应:{}", context.getRequestId(), llmResponse);
+                log.error("requestId: {} generateDigitalEmployee 响应解析失败，原始响应:{}", requestId, llmResponse);
             }
 
         } catch (Exception e) {
             if (context != null && context.isRunCancelled()) {
-                log.info("requestId: {} generateDigitalEmployee cancelled", context.getRequestId());
+                log.info("requestId: {} generateDigitalEmployee cancelled", requestId);
                 return;
             }
             // 异常捕获：涵盖LLM调用、JSON解析、工具更新等所有异常场景
-            log.error("requestId: {} generateDigitalEmployee 执行失败", context.getRequestId(), e);
+            log.error("requestId: {} generateDigitalEmployee 执行失败", requestId, e);
         }
+    }
+
+    private String currentRequestId() {
+        return context == null ? null : context.getRequestId();
     }
 
     /**
@@ -176,7 +182,7 @@ public abstract class ReActAgent extends BaseAgent {
     private JSONObject parseDigitalEmployee(String response) {
         // 1. 空值校验：响应为空直接返回null
         if (StringUtils.isBlank(response)) {
-            log.warn("requestId: {} parseDigitalEmployee response is blank", context.getRequestId());
+            log.warn("requestId: {} parseDigitalEmployee response is blank", currentRequestId());
             return null;
         }
 
@@ -200,7 +206,7 @@ public abstract class ReActAgent extends BaseAgent {
             return JSON.parseObject(jsonString);
         } catch (Exception e) {
             // 解析异常：记录日志并返回null
-            log.error("requestId: {} parseDigitalEmployee JSON解析失败，待解析字符串:{}", context.getRequestId(), jsonString, e);
+            log.error("requestId: {} parseDigitalEmployee JSON解析失败，待解析字符串:{}", currentRequestId(), jsonString, e);
             return null;
         }
     }
@@ -220,7 +226,7 @@ public abstract class ReActAgent extends BaseAgent {
         String digitalEmployeePrompt = getDigitalEmployeePrompt();
         // 2. 模板未配置：抛出运行时异常，避免后续无效操作
         if (digitalEmployeePrompt == null) {
-            log.error("requestId: {} formatSystemPrompt 数字员工提示词模板未配置", context.getRequestId());
+            log.error("requestId: {} formatSystemPrompt 数字员工提示词模板未配置", currentRequestId());
             throw new IllegalStateException("System prompt is not configured");
         }
 

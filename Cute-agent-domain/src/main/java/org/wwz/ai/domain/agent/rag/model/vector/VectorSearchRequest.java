@@ -23,8 +23,15 @@ public final class VectorSearchRequest {
                                Map<String, Object> filters,
                                 List<String> payloads,
                                 Long timeoutMillis) {
+        if (vector == null || vector.isEmpty()) {
+            // 空查询向量不是合法召回条件：不同适配器会给出不可预期的异常或零分结果。
+            throw new IllegalArgumentException("vector must not be null or empty");
+        }
+        if (vector.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalArgumentException("vector must not contain null elements");
+        }
         this.collectionName = collectionName;
-        this.vector = List.copyOf(vector == null ? List.of() : vector);
+        this.vector = List.copyOf(vector);
         this.limit = limit;
         this.scoreThreshold = scoreThreshold;
         this.filters = Map.copyOf(filters == null ? Map.of() : filters);

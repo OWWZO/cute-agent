@@ -45,8 +45,8 @@ public class SessionCapabilityService {
         Map<String, Map<String, Boolean>> overrides = normalizedSessionId == null
                 ? Map.of()
                 : repository.findOverrides(normalizedSessionId);
-        Map<String, Boolean> skillOv = overrides.getOrDefault(KIND_SKILL, Map.of());
-        Map<String, Boolean> mcpOv = overrides.getOrDefault(KIND_MCP, Map.of());
+        Map<String, Boolean> skillOv = overridesFor(overrides, KIND_SKILL);
+        Map<String, Boolean> mcpOv = overridesFor(overrides, KIND_MCP);
 
         List<CapabilityItem> skills = new ArrayList<>();
         if (skillRegistry != null && skillRegistry.isEnabled()) {
@@ -115,17 +115,27 @@ public class SessionCapabilityService {
         Map<String, Map<String, Boolean>> overrides = repository.findOverrides(normalizedSessionId);
         Set<String> disabledSkills = new HashSet<>();
         Set<String> disabledMcps = new HashSet<>();
-        overrides.getOrDefault(KIND_SKILL, Map.of()).forEach((id, en) -> {
+        overridesFor(overrides, KIND_SKILL).forEach((id, en) -> {
             if (Boolean.FALSE.equals(en)) {
                 disabledSkills.add(id);
             }
         });
-        overrides.getOrDefault(KIND_MCP, Map.of()).forEach((id, en) -> {
+        overridesFor(overrides, KIND_MCP).forEach((id, en) -> {
             if (Boolean.FALSE.equals(en)) {
                 disabledMcps.add(id);
             }
         });
         return new DisabledSets(disabledSkills, disabledMcps);
+    }
+
+    /** 仓储契约要求返回非 null；这里仍兜底，避免实现方违约把读取路径打成 NPE。 */
+    private static Map<String, Boolean> overridesFor(Map<String, Map<String, Boolean>> overrides,
+                                                     String kind) {
+        if (overrides == null) {
+            return Map.of();
+        }
+        Map<String, Boolean> nested = overrides.get(kind);
+        return nested == null ? Map.of() : nested;
     }
 
     public record CapabilityItem(String refId, String name, boolean enabled, String source) {

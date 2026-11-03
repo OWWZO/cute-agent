@@ -157,10 +157,13 @@ public class DataAgentQueryServiceImpl implements DataAgentQueryService {
     void enrichNl2Sql(Nl2SqlQuery query) throws IOException {
         List<DataQuerySchema> recalled = recallModelSchema(query);
         Map<String, List<DataQuerySchema>> modelSchemaMap = recalled.stream()
-                .filter(schema -> StringUtils.isNotBlank(schema.getColumnId()))
+                // groupingBy 不接受 null key：远端 tableRag 可能缺少 modelCode，不能拖垮整次查询。
+                .filter(schema -> schema != null
+                        && StringUtils.isNotBlank(schema.getColumnId())
+                        && StringUtils.isNotBlank(schema.getModelCode()))
                 .collect(Collectors.groupingBy(DataQuerySchema::getModelCode, Collectors.toList()));
         for (DataQueryModelDescriptor model : query.getSchemaInfo()) {
-            model.setSchemaList(modelSchemaMap.get(model.getModelCode()));
+            model.setSchemaList(modelSchemaMap.getOrDefault(model.getModelCode(), new ArrayList<>()));
         }
     }
 
@@ -205,6 +208,7 @@ public class DataAgentQueryServiceImpl implements DataAgentQueryService {
             return;
         }
         Map<String, Set<String>> existing = schemas.stream()
+                .filter(schema -> schema != null && StringUtils.isNotBlank(schema.getModelCode()))
                 .collect(Collectors.groupingBy(DataQuerySchema::getModelCode,
                         Collectors.mapping(DataQuerySchema::getColumnId, Collectors.toSet())));
         List<DataQuerySchema> missing = defaults.stream()
@@ -218,8 +222,9 @@ public class DataAgentQueryServiceImpl implements DataAgentQueryService {
     private Nl2SqlQuery buildBaseQuery(String query) {
         Nl2SqlQuery nl2SqlQuery = new Nl2SqlQuery();
         nl2SqlQuery.setQuery(query);
-        nl2SqlQuery.setUseElastic(settings.getEsConfig().getEnable());
-        nl2SqlQuery.setUseVector(settings.getQdrantConfig().getEnable());
+        // enable 未配置时为 null（见 CloudVectorConfigBindingTest），不能直接拆箱给 primitive setter。
+        nl2SqlQuery.setUseElastic(Boolean.TRUE.equals(settings.getEsConfig().getEnable()));
+        nl2SqlQuery.setUseVector(Boolean.TRUE.equals(settings.getQdrantConfig().getEnable()));
 
         String week = LocalDate.now().getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.CHINA);
         nl2SqlQuery.setCurrentDateInfo(String.format(nl2SqlQuery.getCurrentDateInfo(), LocalDate.now(), week));
