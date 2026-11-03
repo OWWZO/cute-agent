@@ -13,6 +13,10 @@ import org.wwz.ai.domain.agent.browser.model.BrowserRelayInboundMessage;
  * {@code BrowserRelayApplicationService}. It receives typed commands and
  * decoded messages only; WebSocket sessions and JSON frames stay at the
  * protocol boundary.</p>
+ *
+ * <p>{@link #register} and {@link #unregister} are invoked from concurrent
+ * WebSocket open/close callbacks and heartbeats; implementations must keep the
+ * per-user connection registry thread-safe.</p>
  */
 public interface BrowserRelaySocketPort {
 

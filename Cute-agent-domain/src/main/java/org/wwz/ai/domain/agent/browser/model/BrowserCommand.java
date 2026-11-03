@@ -10,6 +10,9 @@ import java.util.Map;
  *
  * <p>The parameters are business data for the browser action. Transport
  * framing, JSON, and generated RPC ids are deliberately outside this model.</p>
+ *
+ * <p>The parameter map is defensively copied but only shallowly: nested
+ * mutable values are shared with the caller and must be treated as immutable.</p>
  */
 public record BrowserCommand(String userId,
                              BrowserAction action,
