@@ -394,9 +394,10 @@ public class AgentContext {
     }
 
     // ---- 白名单 setter：仅 run 内确实需要演化的字段 ----
-    // 这里刻意不提供 requestId / query / basePrompt / dateInfo / agentType /
+    // 这里刻意不提供 query / basePrompt / dateInfo / agentType /
     // disabledSkillNames / disabledMcpIds / toolDispatchWhitelist 等构造期字段的 setter：
     // 它们在装配完成后不应再被改写。
+    // requestId 是唯一例外：resume 路径必须换成续跑 requestId，见下方 setRequestId。
     // 新增字段若确需运行期可变，必须先确认其生命周期归属，再在此登记。
 
     /** 装配期绑定主工具池（builder 之后，工具池构造依赖 context 自身，无法在 builder 内完成）。 */

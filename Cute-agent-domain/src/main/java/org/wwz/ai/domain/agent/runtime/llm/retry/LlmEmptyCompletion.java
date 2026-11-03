@@ -4,7 +4,7 @@ package org.wwz.ai.domain.agent.runtime.llm.retry;
  * 空补全（空 completion）重试。
  *
  * <p>移植自 ZCode 的 {@code empty-completion-retry.ts}。场景：provider 返回 200 但既没有正文、
- * 也没有 tool call、也没有 usage —— 上游偶发抖动，重发一次通常就有内容。
+ * 也没有推理内容、也没有 tool call（usage / finishReason 不参与判定）—— 上游偶发抖动，重发一次通常就有内容。
  *
  * <p>约束：{@link #MAX_RETRIES} 是独立于主重试预算的<b>单次</b>上限，避免把「模型真的返回空」
  * 拖成无限重试；且不得在用户已取消时重试。
@@ -18,7 +18,7 @@ public final class LlmEmptyCompletion {
     public static final int MAX_RETRIES = 1;
 
     public static final String MESSAGE =
-            "Model returned no text, no tool calls, and no usage before completing the turn.";
+            "Model returned no text, no reasoning content, and no tool calls before completing the turn.";
 
     private LlmEmptyCompletion() {
     }

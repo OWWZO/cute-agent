@@ -32,7 +32,7 @@ public class LlmModelBinding {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     String apiKey;
-    /** 对话补全路径；空则调用方用默认 /v1/chat/completions 或 /chat/completions。 */
+    /** 对话补全路径；空则由 {@link LlmModelCatalog#toSettings(LlmModelBinding)} 回落到默认 /chat/completions。 */
     String completionsPath;
     /** 上下文窗口（输入侧 token 上限）。 */
     Integer contextWindow;

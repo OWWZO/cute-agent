@@ -13,6 +13,8 @@ import java.util.Map;
  * 供应商无关的 LLM completion 请求。
  * <p>
  * 不可变契约：所有字段 final，集合与 map 做防御性复制；需要变体时用 {@code toBuilder()}。
+ * <p>{@code messages} / {@code tools} / {@code metadata} 为 null 时保持 null（不归一化为空集合），
+ * 列表内元素也不做 null 过滤，消费方须自行判空。
  */
 @Getter
 @Builder(toBuilder = true)
