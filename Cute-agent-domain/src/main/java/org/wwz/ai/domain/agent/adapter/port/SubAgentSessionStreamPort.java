@@ -19,6 +19,15 @@ import org.wwz.ai.domain.agent.runtime.printer.Printer;
  *       传入 null 或非本实现产生的 Printer 时按 sessionId 兜底清理该会话的全部活动投影，
  *       因此调用方不得用旧 Printer 去关闭新一次 open。</li>
  * </ul>
+ * <p><b>隔离要求（安全契约）</b>：{@code childSessionId} 是确定性 ID（{@code sub_{agentId}}），
+ * 可被猜测/观察，<b>不能单独作为订阅凭证</b>。实现必须保证：</p>
+ * <ul>
+ *   <li>投影注册信息带上 {@code userId}（注册键或投影字段均可），使订阅方能够校验归属；</li>
+ *   <li>SSE 订阅路径（{@code GET /api/agent/session/{childSessionId}/stream}）必须先校验
+ *       调用者身份与投影记录中的 {@code userId} 一致；当前由
+ *       {@code AgentRunFollowApplicationService#authorizeAndAttach} 在 attach 前完成会话归属校验，
+ *       任何新增订阅入口不得绕过该校验。</li>
+ * </ul>
  */
 public interface SubAgentSessionStreamPort {
 

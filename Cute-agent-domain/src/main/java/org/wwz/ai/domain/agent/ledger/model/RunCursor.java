@@ -66,4 +66,13 @@ public class RunCursor {
             return validated(sessionId, createTime, id);
         });
     }
+
+    /**
+     * cursor 是否属于指定 session。
+     * <p>编码值未签名，{@code sessionId} 完全由调用方控制；任何消费 cursor 的查询路径
+     * 都必须先调用本方法，否则会把另一个会话的 keyset 应用到当前会话，造成跳页/重复页。</p>
+     */
+    public boolean matchesSession(String sessionId) {
+        return this.sessionId.equals(sessionId);
+    }
 }

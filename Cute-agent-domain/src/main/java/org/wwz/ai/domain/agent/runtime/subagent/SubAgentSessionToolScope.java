@@ -20,36 +20,67 @@ import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 @RequiredArgsConstructor
 public class SubAgentSessionToolScope {
 
+    /**
+     * 类型解析结果。
+     * <p>{@link Status#NOT_APPLICABLE} 才表示「保留全量工具池」（主会话/历史会话无类型记录）；
+     * {@link Status#UNRESOLVABLE} 表示会话明确记录了类型但注册表已找不到，调用方必须 fail-closed，
+     * 不能因为后台停用/删除定义反而给老会话扩权。</p>
+     */
+    public enum Status {
+        NOT_APPLICABLE,
+        RESOLVED,
+        UNRESOLVABLE
+    }
+
+    public record Resolution(Status status, SubAgentDefinition definition) {
+
+        public static Resolution notApplicable() {
+            return new Resolution(Status.NOT_APPLICABLE, null);
+        }
+
+        public static Resolution resolved(SubAgentDefinition definition) {
+            return new Resolution(Status.RESOLVED, definition);
+        }
+
+        public static Resolution unresolvable() {
+            return new Resolution(Status.UNRESOLVABLE, null);
+        }
+
+        public boolean isUnresolvable() {
+            return status == Status.UNRESOLVABLE;
+        }
+
+        public boolean isResolved() {
+            return status == Status.RESOLVED && definition != null;
+        }
+    }
+
     private final SubAgentRegistry subAgentRegistry;
     private final IExecutionLedgerReadRepository executionLedgerReadRepository;
 
-    /**
-     * 解析该会话应使用的子 Agent 定义。
-     *
-     * @return 子会话且类型可解析时返回定义；主会话、历史会话未记录类型、
-     *         或类型已下架时返回 {@code null}，调用方据此保留全量工具池
-     */
-    public SubAgentDefinition resolve(String sessionId) {
+    public Resolution resolve(String sessionId) {
         if (StringUtils.isBlank(sessionId)) {
-            return null;
+            return Resolution.notApplicable();
         }
         DialogueSession session = executionLedgerReadRepository.querySessionEntity(sessionId);
         if (session == null || !SessionKind.SUBAGENT.code().equals(session.getSessionKind())) {
-            return null;
+            return Resolution.notApplicable();
         }
         String agentType = StringUtils.trimToNull(session.getSubAgentType());
         if (agentType == null) {
             // 2026-10 之前落库的子会话没有这一列，无从得知类型；回退全量工具池，
             // 与它们历史行为一致，不因缺少类型而丢掉能力。
             log.debug("subagent session without type, keep full tool pool sessionId={}", sessionId);
-            return null;
+            return Resolution.notApplicable();
         }
         SubAgentDefinition definition = subAgentRegistry.find(agentType).orElse(null);
         if (definition == null) {
-            // 定义被删除/停用：继续用全量工具池，避免一个后台配置动作让老会话无法续聊。
-            log.warn("subagent type not found in registry, keep full tool pool sessionId={} type={}",
+            // 定义被删除/停用：明确记录过类型就不能再保留全量工具池，
+            // 否则一次后台配置动作会让老会话拿到比定义允许更多的工具。
+            log.warn("subagent type not found in registry, deny tools fail-closed sessionId={} type={}",
                     sessionId, agentType);
+            return Resolution.unresolvable();
         }
-        return definition;
+        return Resolution.resolved(definition);
     }
 }

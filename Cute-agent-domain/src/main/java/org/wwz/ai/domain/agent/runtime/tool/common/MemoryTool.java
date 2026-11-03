@@ -100,11 +100,14 @@ public class MemoryTool implements BaseTool {
         if (store == null) {
             return resultPayload(false, false, "curated memory store unavailable", 0, 0);
         }
-        LtmOwner owner = context != null && context.getLtmOwner() != null
-                ? context.getLtmOwner()
-                : LtmOwnerResolver.resolve(null, null);
         String sessionId = context == null ? null : context.getSessionId();
         String requestId = context == null ? null : context.getRequestId();
+        LtmOwner owner = context != null && context.getLtmOwner() != null
+                ? context.getLtmOwner()
+                : LtmOwnerResolver.resolve(null, null, sessionId);
+        if (owner == null) {
+            return resultPayload(false, false, "memory owner unavailable", 0, 0);
+        }
 
         Map<String, Object> args = normalizeInput(input);
         Object ops = args.get("operations");

@@ -28,6 +28,16 @@ public class LtmOwner {
         return of(LtmOwnerType.USER, userId);
     }
 
+    /** ERP 身份单独成类：{@code user:<id>} 与 {@code erp:<id>} 不再映射到同一个 owner key。 */
+    public static LtmOwner erp(String erp) {
+        return of(LtmOwnerType.ERP, erp);
+    }
+
+    /** 无用户身份时的会话级兜底，避免所有匿名调用共享同一个全局 owner。 */
+    public static LtmOwner session(String sessionId) {
+        return of(LtmOwnerType.SESSION, sessionId);
+    }
+
     public String asOwnerKey() {
         return type.name().toLowerCase(Locale.ROOT) + ":" + id;
     }

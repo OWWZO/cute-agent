@@ -29,10 +29,12 @@ public class ConversationSessionAuthorizationService {
     private final ObjectProvider<LtmManager> ltmManagerProvider;
 
     /**
-     * IM 渠道绑定的 owner 判定。渠道模块未启用时容器里没有实现，保持原有「只认会话本人」行为。
+     * IM 渠道绑定的 owner 判定。渠道模块未启用时容器里没有实现，
+     * 通过 {@link ObjectProvider} 显式回退到 {@link ChannelBindingOwnershipPort#deniesAll()}，
+     * 保持原有「只认会话本人」行为，而不是依赖缺失 bean 的隐性注入失败。
      */
-    @Autowired(required = false)
-    private ChannelBindingOwnershipPort channelBindingOwnershipPort;
+    @Autowired
+    private ObjectProvider<ChannelBindingOwnershipPort> channelBindingOwnershipPortProvider;
 
     /**
      * 交互入口：校验归属，且会话必须是可交互的用户会话。
@@ -116,10 +118,9 @@ public class ConversationSessionAuthorizationService {
         if (session == null || session.getBindingId() == null || StringUtils.isBlank(userId)) {
             return false;
         }
-        ChannelBindingOwnershipPort port = channelBindingOwnershipPort;
-        if (port == null) {
-            return false;
-        }
+        ChannelBindingOwnershipPort port = channelBindingOwnershipPortProvider == null
+                ? ChannelBindingOwnershipPort.deniesAll()
+                : channelBindingOwnershipPortProvider.getIfAvailable(ChannelBindingOwnershipPort::deniesAll);
         return port.isOwner(session.getBindingId(), userId);
     }
 

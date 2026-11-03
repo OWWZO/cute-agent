@@ -201,12 +201,15 @@ public class ConversationSessionAuthorizationServiceTest {
         Assert.assertEquals("intruder", service.resolveRunUserId("intruder", channelSession));
     }
 
+    @SuppressWarnings("unchecked")
     private static void bindChannelOwnership(ConversationSessionAuthorizationService service,
                                              long bindingId,
                                              String ownerUserId) {
-        ReflectionTestUtils.setField(service, "channelBindingOwnershipPort",
-                (ChannelBindingOwnershipPort) (id, userId) ->
-                        id != null && id == bindingId && ownerUserId.equals(userId));
+        ChannelBindingOwnershipPort port = (id, userId) ->
+                id != null && id == bindingId && ownerUserId.equals(userId);
+        ObjectProvider<ChannelBindingOwnershipPort> provider = Mockito.mock(ObjectProvider.class);
+        Mockito.when(provider.getIfAvailable(Mockito.any())).thenReturn(port);
+        ReflectionTestUtils.setField(service, "channelBindingOwnershipPortProvider", provider);
     }
 
     private static void seedChannelSession(ExecutionLedgerFixtureFactory.LedgerTestContext ctx,

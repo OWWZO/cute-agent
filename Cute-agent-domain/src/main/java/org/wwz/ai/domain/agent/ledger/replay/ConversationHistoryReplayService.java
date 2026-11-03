@@ -57,10 +57,34 @@ public class ConversationHistoryReplayService {
         if (session == null) {
             return null;
         }
+        return buildConversationHistoryPage(session, limit, after);
+    }
 
+    /**
+     * 归属校验通过后读取会话摘要；非 owner 返回 {@code null}。
+     * <p>面向用户入口应使用本重载；无 userId 的版本仅供已完成归属校验的内部调用方。</p>
+     */
+    public ConversationHistoryPage queryConversationHistoryPage(String userId,
+                                                                 String sessionId,
+                                                                 Integer limit,
+                                                                 String after) {
+        if (StringUtils.isBlank(sessionId) || executionLedgerQueryService == null) {
+            return null;
+        }
+        DialogueSessionView session = executionLedgerQueryService.querySessionHistorySummary(userId, sessionId);
+        if (session == null) {
+            return null;
+        }
+        return buildConversationHistoryPage(session, limit, after);
+    }
+
+    private ConversationHistoryPage buildConversationHistoryPage(DialogueSessionView session,
+                                                                 Integer limit,
+                                                                 String after) {
+        String sessionId = session.getSessionId();
         int pageSize = normalizeHistoryPageSize(limit);
         RunCursor cursor = StringUtils.isBlank(after) ? null : RunCursor.decode(after);
-        if (cursor != null && !StringUtils.equals(sessionId, cursor.getSessionId())) {
+        if (cursor != null && !cursor.matchesSession(sessionId)) {
             throw new IllegalArgumentException("cursor 不属于当前 session");
         }
 
@@ -107,7 +131,20 @@ public class ConversationHistoryReplayService {
         if (StringUtils.isBlank(requestId) || executionLedgerQueryService == null) {
             return null;
         }
-        ExecutionRunDetail runDetail = executionLedgerQueryService.queryRunDetail(requestId);
+        return buildRunReplay(executionLedgerQueryService.queryRunDetail(requestId));
+    }
+
+    /**
+     * 归属校验通过后回放单个 run；非 owner 返回 {@code null}。
+     */
+    public ConversationRunReplay queryRunReplay(String userId, String requestId) {
+        if (StringUtils.isBlank(requestId) || executionLedgerQueryService == null) {
+            return null;
+        }
+        return buildRunReplay(executionLedgerQueryService.queryRunDetail(userId, requestId));
+    }
+
+    private ConversationRunReplay buildRunReplay(ExecutionRunDetail runDetail) {
         if (runDetail == null || runDetail.getRun() == null) {
             return null;
         }

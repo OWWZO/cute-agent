@@ -13,6 +13,12 @@ import java.util.List;
 
 /**
  * 执行账本内部查询契约。
+ *
+ * <p><b>归属要求</b>：带 {@code userId} 的重载会在实现层校验会话归属
+ * （会话本人，或该会话绑定的 IM 渠道 owner），不匹配时返回 {@code null}/空列表。
+ * 不带 {@code userId} 的重载<b>仅供已在上层完成归属校验的内部调用方</b>使用
+ * （如 trigger 先调用 {@code ConversationSessionAuthorizationService}），
+ * 新增调用方必须先完成同等校验，不能仅凭 sessionId/requestId 直接读取。</p>
  */
 public interface ExecutionLedgerQueryService {
 
@@ -24,14 +30,26 @@ public interface ExecutionLedgerQueryService {
     int MAX_RECENT_SESSION_PAGE_SIZE = 100;
     /** 会话树查询返回节点数的硬上限。 */
     int MAX_SESSION_TREE_SIZE = 100;
+    /** 最近工具调用查询的硬上限，与其它台账分页保持一致。 */
+    int MAX_RECENT_TOOL_INVOCATION_PAGE_SIZE = 100;
 
+    /** 已授权调用方使用：调用方必须先完成归属校验。 */
     ExecutionRunDetail queryRunDetail(String requestId);
+
+    /** 归属校验通过后返回 run 详情；非 owner 返回 {@code null}。 */
+    ExecutionRunDetail queryRunDetail(String userId, String requestId);
 
     /** 只读取当前会话可见的输入/输出 artifact，不展开 run 回放明细。 */
     List<ArtifactView> querySessionArtifacts(String sessionId);
 
+    /** 归属校验通过后返回会话产物；非 owner 返回空列表。 */
+    List<ArtifactView> querySessionArtifacts(String userId, String sessionId);
+
     /** 只读取 run 主表字段，用于 ownership 校验和轻量摘要。 */
     DialogueRunView queryRunSummary(String requestId);
+
+    /** 归属校验通过后返回 run 摘要；非 owner 返回 {@code null}。 */
+    DialogueRunView queryRunSummary(String userId, String requestId);
 
     /**
      * 批量加载已经定位好的 run 明细，避免历史回放按 run 重复查询账本事实。
@@ -40,9 +58,18 @@ public interface ExecutionLedgerQueryService {
      */
     List<ExecutionRunDetail> queryRunDetails(List<DialogueRunView> runs);
 
-    List<ToolInvocationView> queryRecentToolInvocations(String toolName, int limit);
+    /**
+     * 按工具名查询当前用户最近的调用（倒序：{@code create_time DESC, id DESC}）。
+     * <p>{@code limit <= 0} 取默认值，任何情况下不超过
+     * {@link #MAX_RECENT_TOOL_INVOCATION_PAGE_SIZE}；{@code userId} 为空时返回空列表，
+     * 实现必须把用户条件下推到 SQL，不能返回全量用户数据。</p>
+     */
+    List<ToolInvocationView> queryRecentToolInvocations(String userId, String toolName, int limit);
 
     List<DialogueRunView> queryRecentSessionRuns(String sessionId, int limit);
+
+    /** 归属校验通过后返回最近 run；非 owner 返回空列表。 */
+    List<DialogueRunView> queryRecentSessionRuns(String userId, String sessionId, int limit);
 
     /** 按创建时间正序读取 session run 页面，limit 会在实现层强制限制。 */
     List<DialogueRunView> querySessionRuns(String sessionId, int offset, int limit);
@@ -59,6 +86,9 @@ public interface ExecutionLedgerQueryService {
 
     /** 只读取会话元数据和截断后的最新摘要，供 UI 历史摘要页使用。 */
     DialogueSessionView querySessionHistorySummary(String sessionId);
+
+    /** 归属校验通过后返回会话摘要；非 owner 返回 {@code null}。 */
+    DialogueSessionView querySessionHistorySummary(String userId, String sessionId);
 
     List<DialogueSessionView> queryRecentSessions(int limit);
 
@@ -78,4 +108,7 @@ public interface ExecutionLedgerQueryService {
      * 因此畸形/成环的 {@code parentSessionId} 不会导致无界遍历。</p>
      */
     List<DialogueSessionView> querySessionTree(String sessionId, int limit);
+
+    /** 归属校验通过后返回会话树；非 owner 返回空列表。 */
+    List<DialogueSessionView> querySessionTree(String userId, String sessionId, int limit);
 }

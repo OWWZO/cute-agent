@@ -179,6 +179,7 @@
         ) a ON a.tool_invocation_id = t.id
         WHERE t.tool_name = #{toolName}
           AND t.deleted = 0
+          AND r.user_id = #{userId}
         ORDER BY t.create_time DESC, t.id DESC
         LIMIT #{limit}
     </select>

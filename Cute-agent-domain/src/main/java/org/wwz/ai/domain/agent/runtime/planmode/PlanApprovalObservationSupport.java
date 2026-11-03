@@ -89,7 +89,10 @@ public final class PlanApprovalObservationSupport {
         map.put("requestId", record.getSourceRequestId());
         map.put("toolCallId", record.getToolCallId());
         map.put("planContent", record.getPlanContent());
-        map.put("planFilePath", record.getPlanFilePath());
+        // 客户端只暴露逻辑文件名：record 里存的是服务器落盘路径，不能回传浏览器。
+        map.put("planFilePath", StringUtils.isBlank(record.getPlanFilePath())
+                ? null
+                : PlanArtifactStore.RELATIVE_PLAN_PATH);
         map.put("status", toClientStatus(record.getStatus()));
         map.put("persistenceStatus", record.getStatus());
         if (record.getExpiresAt() != null) {

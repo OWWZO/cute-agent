@@ -27,7 +27,8 @@ public class SkillPathGuard {
         Path normalizedRoot = rootPath.toAbsolutePath().normalize();
         Path normalizedCandidate = candidatePath.toAbsolutePath().normalize();
         if (!normalizedCandidate.startsWith(normalizedRoot)) {
-            throw new SkillLoadException("path escapes registered skill root: " + normalizedCandidate);
+            // 异常文本会回给模型/日志：只说明越界，不暴露具体服务器路径。
+            throw new SkillLoadException("path escapes registered skill root");
         }
         // 词法检查通过后，再比对真实路径，防止 root 内放一个指向外部的符号链接。
         // 目标尚不存在时也要判定：取最近的已存在祖先解析真实路径，再把缺失段拼回去；
@@ -35,8 +36,8 @@ public class SkillPathGuard {
         Path realRoot = resolveRealPath(normalizedRoot);
         Path realCandidate = resolveRealPath(normalizedCandidate);
         if (realRoot == null || realCandidate == null || !realCandidate.startsWith(realRoot)) {
-            throw new SkillLoadException(
-                    "path escapes registered skill root via symlink: " + normalizedCandidate);
+            // 异常文本会回给模型/日志：不嵌入候选路径，避免泄漏服务器目录结构。
+            throw new SkillLoadException("path escapes registered skill root via symlink");
         }
         return normalizedCandidate;
     }

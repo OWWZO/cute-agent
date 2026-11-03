@@ -30,7 +30,7 @@ public class ChannelBindingQrServiceTest {
         }
 
         @Override
-        public ChannelQrGateway.PollOutcome poll(String taskId) {
+        public ChannelQrGateway.PollOutcome poll(String ownerUserId, String taskId) {
             if (cursor >= script.size()) {
                 return ChannelQrGateway.PollOutcome.pending();
             }

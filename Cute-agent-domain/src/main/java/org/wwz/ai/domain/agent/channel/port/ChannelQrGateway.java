@@ -35,8 +35,20 @@ public interface ChannelQrGateway {
     /** 创建 QQ 绑定任务并记住 owner，返回 task_id。 */
     String createTask(String ownerUserId);
 
-    /** 轮询一次；COMPLETED 时必须已完成落库并返回 bindingId。 */
-    PollOutcome poll(String taskId);
+    /**
+     * 轮询一次；COMPLETED 时必须已完成落库并返回 bindingId。
+     *
+     * <p><b>安全/幂等契约（所有实现必须遵守）</b>：</p>
+     * <ul>
+     *   <li>{@code ownerUserId} 必须与 {@link #createTask} 时记录的 owner 一致；不一致、
+     *       任务不存在或已失效时 fail-closed，不得推进任务状态。仅有 {@code taskId}
+     *       不足以证明调用方是任务发起者。</li>
+     *   <li>重复/并发轮询到 COMPLETED 必须返回<b>同一个</b> {@code bindingId}：
+     *       按 QQ 身份 upsert/去重，不能为同一身份插入多条绑定。</li>
+     *   <li>{@code PollOutcome} 的 {@code bindingId} 只在 COMPLETED 时非空。</li>
+     * </ul>
+     */
+    PollOutcome poll(String ownerUserId, String taskId);
 
     /** 二维码内容 URL。 */
     String buildQrUrl(String taskId);

@@ -5,7 +5,7 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
-import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactFormatter;
+import org.wwz.ai.domain.agent.runtime.artifact.WorkspaceRelativePath;
 
 import java.util.Map;
 
@@ -22,11 +22,13 @@ public final class ArtifactRelativePath {
         if (artifact == null) {
             return "";
         }
-        String fromMeta = readMetadataPath(artifact.getMetadataJson());
+        // 元数据来自 artifact JSON，不可信：归一化后仍无法证明落在工作区内就直接丢弃，
+        // 回退到文件名；不再把 ../../ 或盘符路径原样带进回放载荷。
+        String fromMeta = WorkspaceRelativePath.sanitize(readMetadataPath(artifact.getMetadataJson()));
         if (StringUtils.isNotBlank(fromMeta)) {
-            return ToolArtifactFormatter.normalizeWorkspacePath(fromMeta);
+            return fromMeta;
         }
-        return ToolArtifactFormatter.normalizeWorkspacePath(artifact.getFileName());
+        return WorkspaceRelativePath.sanitize(artifact.getFileName());
     }
 
     public static void putOn(Map<String, Object> target, ArtifactView artifact) {

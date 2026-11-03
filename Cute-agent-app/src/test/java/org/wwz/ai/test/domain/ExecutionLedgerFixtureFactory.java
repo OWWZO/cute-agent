@@ -991,9 +991,13 @@ public final class ExecutionLedgerFixtureFactory {
         }
 
         @Override
-        public List<ToolInvocationView> queryRecentByToolName(String toolName, int limit) {
+        public List<ToolInvocationView> queryRecentByToolName(String userId, String toolName, int limit) {
             return store.toolInvocations.values().stream()
                     .filter(item -> item.getDeleted() == 0 && item.getToolName().equals(toolName))
+                    .filter(item -> {
+                        DialogueRun run = store.runs.get(item.getRunId());
+                        return run != null && userId != null && userId.equals(run.getUserId());
+                    })
                     .sorted(Comparator.comparing(ToolInvocation::getCreateTime, Comparator.reverseOrder())
                             .thenComparing(ToolInvocation::getId, Comparator.reverseOrder()))
                     .limit(limit)

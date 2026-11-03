@@ -39,6 +39,11 @@ public class ArtifactView {
 
     private String fileName;
 
+    /**
+     * 不透明的资源标识，不是服务器存储路径/前缀。
+     * <p>生产方必须保证写入的是 resourceKey、对象存储 URL、文件服务 URL 或展示文件名，
+     * 不得写入本地绝对路径、bucket/目录布局等内部信息；客户端只应把它当作不可解析的 key。</p>
+     */
     private String storageKey;
 
     private String downloadUrl;

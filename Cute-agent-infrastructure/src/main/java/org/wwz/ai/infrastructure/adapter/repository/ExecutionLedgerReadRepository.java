@@ -78,9 +78,10 @@ public class ExecutionLedgerReadRepository implements IExecutionLedgerReadReposi
     }
 
     @Override
-    public List<ToolInvocationView> queryRecentToolInvocations(String toolName, int limit) {
+    public List<ToolInvocationView> queryRecentToolInvocations(String userId, String toolName, int limit) {
         // recent 查询直接返回投影所需视图，仓储不在这里拼装前端事件或改变账本事实。
-        return toolInvocationLedgerDao.queryRecentByToolName(toolName, limit);
+        // 用户条件下推到 SQL，避免先查全量再在内存过滤。
+        return toolInvocationLedgerDao.queryRecentByToolName(userId, toolName, limit);
     }
 
     @Override

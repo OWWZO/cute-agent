@@ -342,11 +342,20 @@ public class AgentToolCollectionFactory {
         if (agentContext == null || agentContext.isSubAgent() || subAgentSessionToolScope == null) {
             return toolCollection;
         }
-        SubAgentDefinition definition = subAgentSessionToolScope.resolve(agentContext.getSessionId());
-        if (definition == null) {
+        SubAgentSessionToolScope.Resolution resolution =
+                subAgentSessionToolScope.resolve(agentContext.getSessionId());
+        if (resolution.isUnresolvable()) {
+            // 记录过类型但定义已下架：fail-closed，给空工具池而不是回退全量。
+            ToolCollection denied = new ToolCollection();
+            denied.setMcpToolExecutor(toolCollection.getMcpToolExecutor());
+            denied.restoreTaskScopedState(toolCollection.snapshotTaskScopedState());
+            denied.setAgentContext(agentContext);
+            return denied;
+        }
+        if (!resolution.isResolved()) {
             return toolCollection;
         }
-        ToolCollection scoped = SubAgentToolFilter.filter(toolCollection, definition);
+        ToolCollection scoped = SubAgentToolFilter.filter(toolCollection, resolution.definition());
         scoped.setAgentContext(agentContext);
         return scoped;
     }

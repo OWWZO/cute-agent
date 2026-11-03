@@ -86,7 +86,7 @@ public class AgentConversationHistoryController {
                     sessionId
             );
             ConversationSessionBootstrap bootstrap = conversationSessionBootstrapApplicationService
-                    .queryBootstrap(sessionId, limit, after);
+                    .queryBootstrap(UserRequestContext.requireUserId(), sessionId, limit, after);
             return Response.<ConversationSessionBootstrapRespVO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -181,7 +181,7 @@ public class AgentConversationHistoryController {
                     sessionId
             );
             List<ConversationSessionRespVO> tree = executionLedgerQueryService
-                    .querySessionTree(sessionId, limit)
+                    .querySessionTree(UserRequestContext.requireUserId(), sessionId, limit)
                     .stream()
                     .map(this::toSessionRespVO)
                     .collect(Collectors.toList());
@@ -234,7 +234,7 @@ public class AgentConversationHistoryController {
                     sessionId
             );
             List<ArtifactReferenceRespVO> files = executionLedgerQueryService
-                    .querySessionArtifacts(sessionId)
+                    .querySessionArtifacts(UserRequestContext.requireUserId(), sessionId)
                     .stream()
                     .map(this::toArtifactReferenceRespVO)
                     .collect(Collectors.toList());
@@ -255,16 +255,13 @@ public class AgentConversationHistoryController {
     public Response<ConversationRunReplayRespVO> replay(
             @PathVariable("requestId") String requestId) {
         try {
-            DialogueRunView run = executionLedgerQueryService.queryRunSummary(requestId);
+            String userId = UserRequestContext.requireUserId();
+            // 归属校验内聚到读契约：非 owner 直接视为 run 不存在，不泄漏 sessionId。
+            DialogueRunView run = executionLedgerQueryService.queryRunSummary(userId, requestId);
             if (run == null || run.getSessionId() == null) {
                 throw new IllegalArgumentException("requestId 对应的 run 不存在");
             }
-            // 先由 requestId 定位 session，再校验当前 userId，最后才加载 replay 明细。
-            conversationSessionAuthorizationService.ensureExistingSessionAccessible(
-                    UserRequestContext.requireUserId(),
-                    run.getSessionId()
-            );
-            ConversationRunReplay replay = conversationHistoryReplayService.queryRunReplay(requestId);
+            ConversationRunReplay replay = conversationHistoryReplayService.queryRunReplay(userId, requestId);
             if (replay == null) {
                 throw new IllegalArgumentException("run replay 不可用");
             }

@@ -729,6 +729,14 @@ public class AgentContext {
                 .executionRecorder(executionRecorder)
                 .agentRunState(agentRunState)
                 .planModeState(planModeState)
+                // 安全门禁必须从父上下文继承：fork 出来的并行任务不能因为重新 build
+                // 就丢掉工具白名单、禁用 skill/MCP、skipMemory 与记忆作用域。
+                .toolDispatchWhitelist(toolDispatchWhitelist)
+                .disabledSkillNames(disabledSkillNames)
+                .disabledMcpIds(disabledMcpIds)
+                .skipMemory(skipMemory)
+                .ltmSideEffectsDisabled(ltmSideEffectsDisabled)
+                .memoryScope(memoryScope)
                 // run 级控制面必须独立：fork 是并发子任务，它的 finishRun 不得关闭父回合，
                 // 也不得与父共用 inject 队列（否则并发子任务的步进边界会互相吃掉对方的指导）。
                 // 父的取消令牌经 parentCancellation 只读透传：/stop 仍杀得到并发子任务。

@@ -110,10 +110,14 @@ public class BashTool implements BaseTool {
                 }
             }
 
+            String ownerKey = resolveOwnerKey(context);
+            if (ownerKey == null) {
+                return ToolResultPayload.failureFrom("缺少用户身份，无法执行命令", null);
+            }
             Map<String, Object> request = new LinkedHashMap<>();
             request.put("requestId", sessionId);
             request.put("sessionId", sessionId);
-            request.put("ownerKey", resolveOwnerKey(context));
+            request.put("ownerKey", ownerKey);
             request.put("command", command);
             request.put("workspaceRoot", workspaceRoot);
             if (skillLibraryRoot != null) {
@@ -252,9 +256,9 @@ public class BashTool implements BaseTool {
     private String resolveOwnerKey(AgentContext context) {
         LtmOwner owner = context.getLtmOwner();
         if (owner == null) {
-            owner = LtmOwnerResolver.resolve(context.getUserId(), null);
+            owner = LtmOwnerResolver.resolve(context.getUserId(), null, context.getSessionId());
         }
-        return owner.asOwnerKey();
+        return owner == null ? null : owner.asOwnerKey();
     }
 
     private List<String> disabledSkillNames(AgentContext context) {

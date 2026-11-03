@@ -83,10 +83,15 @@ public final class ToolObservationBudget {
             return null;
         }
         try {
-            Path dir = Path.of(context.getWorkspaceRoot()).resolve(OBSERVATION_DIR);
+            Path dir = Path.of(context.getWorkspaceRoot()).resolve(OBSERVATION_DIR).normalize();
             Files.createDirectories(dir);
-            Path file = dir.resolve(toolName + "-" + System.currentTimeMillis()
-                    + "-" + PERSIST_SEQ.incrementAndGet() + ".txt");
+            Path file = dir.resolve(safeToolName(toolName) + "-" + System.currentTimeMillis()
+                    + "-" + PERSIST_SEQ.incrementAndGet() + ".txt").normalize();
+            // 纵深防御：即使上面的清洗未来被放宽，也不允许最终路径逃出 observation 目录。
+            if (!file.startsWith(dir)) {
+                log.warn("persist oversized observation rejected: path escapes observation dir, tool={}", toolName);
+                return null;
+            }
             Files.writeString(file, observation, StandardCharsets.UTF_8);
             pruneOldObservations(dir, file);
             return file;
@@ -94,6 +99,19 @@ public final class ToolObservationBudget {
             log.warn("persist oversized observation failed, tool={}", toolName, e);
             return null;
         }
+    }
+
+    /**
+     * 工具名来自 MCP / Python / 外部工具注册，不可信：只保留安全字符集，
+     * 去掉首尾的点与横线，避免 {@code ..} 或绝对路径参与文件名拼接。
+     */
+    static String safeToolName(String toolName) {
+        String cleaned = toolName == null ? "" : toolName.trim().replaceAll("[^A-Za-z0-9._-]+", "-");
+        cleaned = cleaned.replaceAll("^[.-]+|[.-]+$", "");
+        if (cleaned.isBlank()) {
+            return "tool";
+        }
+        return cleaned.length() <= 80 ? cleaned : cleaned.substring(0, 80);
     }
 
     /**

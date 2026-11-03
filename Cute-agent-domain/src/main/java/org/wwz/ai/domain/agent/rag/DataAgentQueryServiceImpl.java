@@ -133,7 +133,10 @@ public class DataAgentQueryServiceImpl implements DataAgentQueryService {
 
     @Override
     public SqlExecutionResult testQuery(DataAgentChatQuery request) {
-        return dataQueryExecutionPort.query(request.content());
+        // 入参 SQL 完全由调用方提供：执行前必须挡住 DDL/DML 与多语句，
+        // 不能只依赖端点鉴权或数据库账号权限。
+        String sql = SqlReadOnlyGuard.requireReadOnly(request == null ? null : request.content());
+        return dataQueryExecutionPort.query(sql);
     }
 
     @Override

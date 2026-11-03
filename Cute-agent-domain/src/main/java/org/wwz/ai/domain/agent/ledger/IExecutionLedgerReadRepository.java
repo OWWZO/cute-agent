@@ -16,6 +16,11 @@ import java.util.List;
 /**
  * Phase 1 执行账本读仓储端口。
  * 仅暴露查询服务当前需要的聚合读能力。
+ *
+ * <p><b>归属要求</b>：本端口同时提供 {@code userId} 过滤与「只按 sessionId/requestId」的
+ * 两组读方法。后者不做归属校验，<b>调用方必须已经通过
+ * {@link #querySessionOwnership(String)}（或上层授权服务）确认归属</b>后才能使用；
+ * 面向跨用户入口的新代码应优先使用带 userId 的变体，或先做同等的 ownership 校验。</p>
  */
 public interface IExecutionLedgerReadRepository {
 
@@ -53,7 +58,11 @@ public interface IExecutionLedgerReadRepository {
      */
     List<ArtifactRecord> queryArtifactsByRunIdWithSubagentFold(Long runId);
 
-    List<ToolInvocationView> queryRecentToolInvocations(String toolName, int limit);
+    /**
+     * 按用户 + 工具名读取最近调用，倒序（{@code create_time DESC, id DESC}）。
+     * <p>实现必须把 {@code user_id} 条件下推到 SQL；{@code userId} 为空时返回空列表。</p>
+     */
+    List<ToolInvocationView> queryRecentToolInvocations(String userId, String toolName, int limit);
 
     List<DialogueRunView> queryRecentRunsBySessionId(String sessionId, int limit);
 

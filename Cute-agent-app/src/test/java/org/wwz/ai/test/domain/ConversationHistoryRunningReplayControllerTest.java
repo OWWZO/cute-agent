@@ -82,8 +82,8 @@ public class ConversationHistoryRunningReplayControllerTest {
                 .build();
 
         ExecutionLedgerQueryService queryService = Mockito.mock(ExecutionLedgerQueryService.class);
-        Mockito.when(queryService.queryRunSummary(requestId)).thenReturn(run);
-        Mockito.when(queryService.queryRunDetail(requestId)).thenReturn(ExecutionRunDetail.builder()
+        Mockito.when(queryService.queryRunSummary("user-test", requestId)).thenReturn(run);
+        Mockito.when(queryService.queryRunDetail("user-test", requestId)).thenReturn(ExecutionRunDetail.builder()
                 .run(run)
                 .llmInvocations(List.of(llmInvocation))
                 .toolInvocations(List.of(toolInvocation))
@@ -110,7 +110,7 @@ public class ConversationHistoryRunningReplayControllerTest {
         Assert.assertFalse(replayFrames.isEmpty());
         Assert.assertTrue(replayFrames.stream().anyMatch(
                 frame -> "tool_result".equals(nestedResultMap(frame).get("messageType"))));
-        Mockito.verify(queryService).queryRunDetail(requestId);
+        Mockito.verify(queryService).queryRunDetail("user-test", requestId);
     }
 
     @SuppressWarnings("unchecked")

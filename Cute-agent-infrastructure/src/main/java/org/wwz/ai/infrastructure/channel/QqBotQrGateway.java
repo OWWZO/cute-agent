@@ -22,6 +22,11 @@ public class QqBotQrGateway implements ChannelQrGateway {
     /** taskId → 本地生成的 AES key，只在任务存活期间保留。 */
     private final Map<String, String> bindKeyByTaskId = new ConcurrentHashMap<>();
     private final Map<String, String> ownerByTaskId = new ConcurrentHashMap<>();
+    /** taskId → 已完成的绑定快照，用于重复/并发轮询返回同一 bindingId。 */
+    private final Map<String, CompletedTask> completedByTaskId = new ConcurrentHashMap<>();
+
+    private record CompletedTask(String ownerUserId, Long bindingId) {
+    }
 
     public QqBotQrGateway(QqBotOnboardClient onboardClient,
                           ChannelBindingRepository bindingRepository) {
@@ -40,22 +45,51 @@ public class QqBotQrGateway implements ChannelQrGateway {
     }
 
     @Override
-    public ChannelQrGateway.PollOutcome poll(String taskId) {
+    public ChannelQrGateway.PollOutcome poll(String ownerUserId, String taskId) {
+        if (ownerUserId == null || ownerUserId.isBlank() || taskId == null || taskId.isBlank()) {
+            return ChannelQrGateway.PollOutcome.expired("扫码任务已失效，请重新生成");
+        }
+        // 归属判定在调用远程之前完成：只有任务发起者能推进状态。
+        String knownOwner = ownerByTaskId.get(taskId);
+        CompletedTask completed = completedByTaskId.get(taskId);
+        if (knownOwner == null && completed == null) {
+            return ChannelQrGateway.PollOutcome.expired("扫码任务已失效，请重新生成");
+        }
+        if (completed != null) {
+            return ownerUserId.equals(completed.ownerUserId())
+                    ? ChannelQrGateway.PollOutcome.completed(completed.bindingId())
+                    : ChannelQrGateway.PollOutcome.expired("扫码任务已失效，请重新生成");
+        }
+        if (!ownerUserId.equals(knownOwner)) {
+            return ChannelQrGateway.PollOutcome.expired("扫码任务已失效，请重新生成");
+        }
+
         QqBotOnboardClient.PollResult result = onboardClient.pollBindResult(taskId);
         switch (result.status()) {
             case COMPLETED -> {
-                String bindKey = bindKeyByTaskId.remove(taskId);
-                String owner = ownerByTaskId.remove(taskId);
-                if (bindKey == null || owner == null) {
-                    return ChannelQrGateway.PollOutcome.expired("扫码任务已失效，请重新生成");
+                // 并发 COMPLETED：同一任务只允许一次落库，其余轮询复用同一个 bindingId。
+                synchronized (this) {
+                    CompletedTask done = completedByTaskId.get(taskId);
+                    if (done != null) {
+                        return ownerUserId.equals(done.ownerUserId())
+                                ? ChannelQrGateway.PollOutcome.completed(done.bindingId())
+                                : ChannelQrGateway.PollOutcome.expired("扫码任务已失效，请重新生成");
+                    }
+                    String bindKey = bindKeyByTaskId.remove(taskId);
+                    String owner = ownerByTaskId.remove(taskId);
+                    if (bindKey == null || owner == null || !ownerUserId.equals(owner)) {
+                        return ChannelQrGateway.PollOutcome.expired("扫码任务已失效，请重新生成");
+                    }
+                    String secret = QqBotCrypto.decryptSecret(result.encryptedSecret(), bindKey);
+                    ChannelBinding binding = saveBinding(owner, result.botAppId(), secret, result.userOpenid());
+                    completedByTaskId.put(taskId, new CompletedTask(owner, binding.getId()));
+                    return ChannelQrGateway.PollOutcome.completed(binding.getId());
                 }
-                String secret = QqBotCrypto.decryptSecret(result.encryptedSecret(), bindKey);
-                ChannelBinding binding = saveBinding(owner, result.botAppId(), secret, result.userOpenid());
-                return ChannelQrGateway.PollOutcome.completed(binding.getId());
             }
             case EXPIRED -> {
                 bindKeyByTaskId.remove(taskId);
                 ownerByTaskId.remove(taskId);
+                completedByTaskId.remove(taskId);
                 return ChannelQrGateway.PollOutcome.expired("二维码已过期，请重新生成");
             }
             default -> {

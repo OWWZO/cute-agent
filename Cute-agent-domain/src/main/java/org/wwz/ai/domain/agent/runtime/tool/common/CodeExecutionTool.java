@@ -76,10 +76,14 @@ public class CodeExecutionTool implements BaseTool {
             if (source.isBlank()) return ToolResultPayload.failure("source 不能为空", "source 不能为空", null, "missing source");
             ToolArtifactSource artifactSource = context.requireCurrentToolArtifactSource(getName());
             CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
+            String ownerKey = resolveOwnerKey(context);
+            if (ownerKey == null) {
+                return ToolResultPayload.failureFrom("缺少用户身份，无法执行代码", null);
+            }
             Map<String, Object> request = new LinkedHashMap<>(params);
             request.put("requestId", context.getSessionId());
             request.put("sessionId", context.getSessionId());
-            request.put("ownerKey", resolveOwnerKey(context));
+            request.put("ownerKey", ownerKey);
             request.put("workspaceRoot", WorkspacePaths.resolveSandboxRoot(
                     context.getWorkspaceRoot(), context.getSessionId()).toString());
             request.put("permissionProfile", "workspace");
@@ -156,8 +160,8 @@ public class CodeExecutionTool implements BaseTool {
     private String resolveOwnerKey(AgentContext context) {
         LtmOwner owner = context.getLtmOwner();
         if (owner == null) {
-            owner = LtmOwnerResolver.resolve(context.getUserId(), null);
+            owner = LtmOwnerResolver.resolve(context.getUserId(), null, context.getSessionId());
         }
-        return owner.asOwnerKey();
+        return owner == null ? null : owner.asOwnerKey();
     }
 }

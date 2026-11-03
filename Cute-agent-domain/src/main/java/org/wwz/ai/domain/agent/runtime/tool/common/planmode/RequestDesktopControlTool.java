@@ -82,6 +82,10 @@ public class RequestDesktopControlTool implements BaseTool {
         try {
             CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
             String sessionId = StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId());
+            String ownerKey = resolveOwnerKey(context);
+            if (ownerKey == null) {
+                return fail("缺少用户身份，无法请求桌面控制");
+            }
             DesktopSessionRemote.OpenResult opened = DesktopSessionRemote.open(
                     context.getRuntimeDependencies().requireRemoteHttpPort(),
                     config,
@@ -104,7 +108,7 @@ public class RequestDesktopControlTool implements BaseTool {
     private String resolveOwnerKey(AgentContext context) {
         LtmOwner owner = context.getLtmOwner();
         if (owner == null) {
-            owner = LtmOwnerResolver.resolve(context.getUserId(), null);
+            owner = LtmOwnerResolver.resolve(context.getUserId(), null, context.getSessionId());
         }
         if (owner == null || LtmOwnerResolver.ANONYMOUS_OWNER_ID.equals(owner.getId())) {
             throw new IllegalStateException("无法识别当前用户，已拒绝打开共享桌面会话");

@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,7 +48,10 @@ public class PendingPlanApproval {
         payload.put("requestId", requestId);
         payload.put("toolCallId", toolCallId);
         payload.put("planContent", planContent);
-        payload.put("planFilePath", planFilePath);
+        // 客户端只需要知道计划属于哪个逻辑文件；不回传服务器绝对/相对路径，避免泄漏目录结构。
+        payload.put("planFilePath", StringUtils.isBlank(planFilePath)
+                ? null
+                : PlanArtifactStore.RELATIVE_PLAN_PATH);
         payload.put("status", status);
         payload.put("createdAtMs", createdAtMs);
         payload.put("timeoutMs", timeoutMs);

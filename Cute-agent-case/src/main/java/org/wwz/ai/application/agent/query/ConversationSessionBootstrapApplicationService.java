@@ -59,15 +59,19 @@ public class ConversationSessionBootstrapApplicationService {
     /**
      * 聚合查询会话 bootstrap 数据。
      *
+     * @param userId    当前登录用户；读取层会再次校验会话归属
      * @param sessionId 会话 ID（调用方已完成鉴权）
      * @param limit     历史 run 分页大小，null 用 replay 服务默认值
      * @param after     历史 run 游标
      */
-    public ConversationSessionBootstrap queryBootstrap(String sessionId, Integer limit, String after) {
+    public ConversationSessionBootstrap queryBootstrap(String userId,
+                                                       String sessionId,
+                                                       Integer limit,
+                                                       String after) {
         ConversationHistoryPage page = conversationHistoryReplayService.queryConversationHistoryPage(
-                sessionId, limit, after);
-        List<ArtifactView> artifacts = executionLedgerQueryService.querySessionArtifacts(sessionId);
-        InlineReplays inlineReplays = loadTailTurnReplays(page);
+                userId, sessionId, limit, after);
+        List<ArtifactView> artifacts = executionLedgerQueryService.querySessionArtifacts(userId, sessionId);
+        InlineReplays inlineReplays = loadTailTurnReplays(userId, page);
         return ConversationSessionBootstrap.builder()
                 .detail(page)
                 .files(artifacts == null ? List.of() : artifacts)
@@ -91,7 +95,7 @@ public class ConversationSessionBootstrapApplicationService {
      * 超预算整段降级而不截断：否则前端会同时面对「部分内联、部分补拉」的混合来源，
      * 合并逻辑要处理两种来源的交错，复杂度不值得。
      */
-    private InlineReplays loadTailTurnReplays(ConversationHistoryPage page) {
+    private InlineReplays loadTailTurnReplays(String userId, ConversationHistoryPage page) {
         if (page == null || page.getRuns() == null || page.getRuns().isEmpty()) {
             return InlineReplays.skipped();
         }
@@ -108,7 +112,8 @@ public class ConversationSessionBootstrapApplicationService {
             if (isRunning(run) || !Boolean.TRUE.equals(run.getHasReplay())) {
                 continue;
             }
-            ConversationRunReplay replay = conversationHistoryReplayService.queryRunReplay(run.getRequestId());
+            ConversationRunReplay replay = conversationHistoryReplayService.queryRunReplay(
+                    userId, run.getRequestId());
             if (replay == null) {
                 continue;
             }
