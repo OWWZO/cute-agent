@@ -21,6 +21,9 @@ public interface ChannelIdentityRepository {
      * 定义（{@code ch_{bindingId}_{sha256(platformUserId) 前 16 位}}），实现必须复用它，
      * 不得自行拼装，否则同一平台身份会推导出不同 userId。</p>
      * <p>该方法是写路径：已有身份也会触发一次 touch 更新，调用方需自行考虑写放大与事务/行锁开销。</p>
+     * <p><b>并发契约：</b>实现必须依赖 {@code (binding_id, platform, platform_user_id, deleted)}
+     * 唯一索引，插入冲突时捕获并回查已有行（原子 upsert 语义），不得把「先查后插」的
+     * 竞争异常直接抛给调用方；否则同一平台用户会落出两条 userId 不同的身份行。</p>
      */
     ChannelIdentity findOrCreate(Long bindingId, String platform, String platformUserId, String displayName);
 }

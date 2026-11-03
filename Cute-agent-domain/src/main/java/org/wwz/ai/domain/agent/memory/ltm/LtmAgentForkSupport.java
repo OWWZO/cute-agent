@@ -131,9 +131,18 @@ public final class LtmAgentForkSupport {
         final LtmForkParity forkParity = parity;
         final String forkRequestId = StringUtils.defaultIfBlank(reqId, "ltm") + "-" + label;
 
-        Map<String, CuratedMemoryEntry> beforeMap = snapshotActiveEntries(forkStore, forkOwner);
-        int before = beforeMap.size();
         long startedAt = System.currentTimeMillis();
+        Map<String, CuratedMemoryEntry> beforeMap;
+        try {
+            beforeMap = snapshotActiveEntries(forkStore, forkOwner);
+        } catch (Exception e) {
+            // 快照失败不能继续跑：否则 after 成功时会把所有既有条目误判成「本轮新增」。
+            return LtmForkRunResult.failed(forkRequestId, label, 0,
+                    System.currentTimeMillis() - startedAt,
+                    "memory snapshot failed: " + e.getClass().getSimpleName()
+                            + ": " + StringUtils.left(String.valueOf(e.getMessage()), 300));
+        }
+        int before = beforeMap.size();
         Callable<LtmForkRunResult> task = () -> {
             AgentExecutionCommand fake = new AgentExecutionCommand();
             fake.setRequestId(forkRequestId);
@@ -253,26 +262,23 @@ public final class LtmAgentForkSupport {
         if (store == null || owner == null) {
             return out;
         }
-        try {
-            for (CuratedMemoryScope scope : List.of(CuratedMemoryScope.USER, CuratedMemoryScope.CURATED)) {
-                List<CuratedMemoryEntry> rows = store.listActive(owner, scope);
-                if (rows == null) {
+        // 失败必须上抛：部分快照会让 buildWrittenEntriesJson/countAdded 产出错误的 diff。
+        for (CuratedMemoryScope scope : List.of(CuratedMemoryScope.USER, CuratedMemoryScope.CURATED)) {
+            List<CuratedMemoryEntry> rows = store.listActive(owner, scope);
+            if (rows == null) {
+                continue;
+            }
+            if (rows.size() >= CuratedMemoryStore.DEFAULT_LIST_LIMIT) {
+                log.warn("ltm fork snapshot reached limit owner={} scope={} limit={}",
+                        owner, scope, CuratedMemoryStore.DEFAULT_LIST_LIMIT);
+            }
+            for (CuratedMemoryEntry e : rows) {
+                if (e == null || StringUtils.isBlank(e.getContent())) {
                     continue;
                 }
-                if (rows.size() >= CuratedMemoryStore.DEFAULT_LIST_LIMIT) {
-                    log.warn("ltm fork snapshot reached limit owner={} scope={} limit={}",
-                            owner, scope, CuratedMemoryStore.DEFAULT_LIST_LIMIT);
-                }
-                for (CuratedMemoryEntry e : rows) {
-                    if (e == null || StringUtils.isBlank(e.getContent())) {
-                        continue;
-                    }
-                    String scopeCode = e.getScope() == null ? scope.getCode() : e.getScope().getCode();
-                    out.put(scopeCode + "\u0001" + e.getContent().trim(), e);
-                }
+                String scopeCode = e.getScope() == null ? scope.getCode() : e.getScope().getCode();
+                out.put(scopeCode + "\u0001" + e.getContent().trim(), e);
             }
-        } catch (Exception ignored) {
-            // keep partial
         }
         return out;
     }

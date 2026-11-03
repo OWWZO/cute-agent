@@ -153,6 +153,26 @@ public class LlmModelCatalogTest {
     }
 
     @Test
+    public void ymlSettingsAreDefensiveCopiesPerResolve() {
+        org.wwz.ai.domain.agent.cute.config.CuteConfig config =
+                new org.wwz.ai.domain.agent.cute.config.CuteConfig();
+        config.setLLMSettingsMap("{\"m-copy\":{\"model\":\"m-copy\","
+                + "\"base_url\":\"https://example.com/v1\",\"reasoning_effort\":\"high\"}}");
+        CuteRuntimeDependencies dependencies = CuteRuntimeDependencies.builder()
+                .environment(Mockito.mock(Environment.class))
+                .cuteConfig(config)
+                .build();
+
+        LLMSettings first = dependencies.resolveLlmSettings("m-copy");
+        first.setReasoningEffort(null);
+
+        LLMSettings second = dependencies.resolveLlmSettings("m-copy");
+        Assert.assertNotSame("每次解析必须返回独立副本", first, second);
+        Assert.assertEquals("单轮 thinking 覆盖不得污染 yml 全局配置",
+                "high", second.getReasoningEffort());
+    }
+
+    @Test
     public void runtimeKeepsDatabaseContextWindowWhenMergingYmlDefaults() {
         LlmModelCatalog catalog = Mockito.mock(LlmModelCatalog.class);
         Mockito.when(catalog.resolve("m-grok")).thenReturn(Optional.of(

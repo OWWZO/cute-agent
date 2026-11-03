@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelInfo;
 import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelSchema;
 import org.wwz.ai.domain.agent.rag.port.IChatModelMetadataRepository;
@@ -56,6 +57,13 @@ public class ChatModelMetadataRepository implements IChatModelMetadataRepository
     @Override
     public void deleteModelInfoByCode(String modelCode) {
         chatModelInfoMapper.deletePhysicalByCode(modelCode);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteByModelCode(String modelCode) {
+        chatModelInfoMapper.deletePhysicalByCode(modelCode);
+        chatModelSchemaMapper.deletePhysicalByModelCode(modelCode);
     }
 
     @Override

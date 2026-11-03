@@ -15,7 +15,7 @@ import java.util.Map;
  * 与 application-dev.yml 中 llm.settings 的 JSON 键一致：使用 snake_case（base_url 等），通过 @JSONField 映射到 camelCase 字段。
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class LLMSettings {

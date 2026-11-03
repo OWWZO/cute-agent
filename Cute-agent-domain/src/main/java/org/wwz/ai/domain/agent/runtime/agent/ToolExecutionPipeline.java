@@ -363,19 +363,20 @@ final class ToolExecutionPipeline {
         return orderedOutcomes(commands, collected);
     }
 
-    private void completeToolOutcome(Map<String, ToolExecutionOutcome> result,
-                                     ToolCall toolCall,
-                                     Map<String, ToolDispatch> dispatches,
-                                     ToolExecutionOutcome outcome,
-                                     Map<String, Integer> dispatchIndexMapping,
-                                     boolean recordArtifacts) {
+    void completeToolOutcome(Map<String, ToolExecutionOutcome> result,
+                             ToolCall toolCall,
+                             Map<String, ToolDispatch> dispatches,
+                             ToolExecutionOutcome outcome,
+                             Map<String, Integer> dispatchIndexMapping,
+                             boolean recordArtifacts) {
         if (toolCall == null || StringUtils.isBlank(toolCall.getId()) || outcome == null) {
             return;
         }
-        if (result.containsKey(toolCall.getId())) {
+        // handler 回写与超时/取消兜底会并发收口同一 toolCallId：只有原子占位成功的线程
+        // 才能 settle，否则会重复写账本终态、重复发 SSE finished。
+        if (result.putIfAbsent(toolCall.getId(), outcome) != null) {
             return;
         }
-        result.put(toolCall.getId(), outcome);
         ToolDispatch dispatch = dispatches == null ? null : dispatches.get(toolCall.getId());
         settle(toolCall, dispatch, dispatchIndexMapping.get(toolCall.getId()), outcome, recordArtifacts);
     }
@@ -465,15 +466,21 @@ final class ToolExecutionPipeline {
     }
 
     private Object parseToolArguments(String toolName, String arguments) throws Exception {
-        String normalizedPayload = ToolCallJson.normalize(arguments);
+        String rawPayload = StringUtils.defaultString(arguments);
+        // 先解析原始参数：normalize 会把非法 JSON 静默变成 "{}"，先归一等于让抢救路径永远走不到。
         try {
-            return ToolCallJson.MAPPER.readValue(normalizedPayload, Object.class);
+            return ToolCallJson.MAPPER.readValue(rawPayload, Object.class);
         } catch (Exception parseError) {
-            Map<String, Object> salvaged = trySalvageToolArguments(toolName, normalizedPayload, parseError);
+            Map<String, Object> salvaged = trySalvageToolArguments(toolName, rawPayload, parseError);
             if (salvaged != null) {
                 return salvaged;
             }
-            throw parseError;
+            String normalizedPayload = ToolCallJson.normalize(arguments);
+            try {
+                return ToolCallJson.MAPPER.readValue(normalizedPayload, Object.class);
+            } catch (Exception ignored) {
+                throw parseError;
+            }
         }
     }
 

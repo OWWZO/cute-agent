@@ -191,6 +191,18 @@
           AND deleted = 0
     </update>
 
+    <!-- 摘要读取失败时的结算：只改状态/计数，绝不覆盖 latest_summary_text -->
+    <update id="updateSessionRunFinishKeepingSummary">
+        UPDATE ai_agent_dialogue_session
+        SET status = #{status},
+            finished_run_count = finished_run_count + #{finishedDelta},
+            failed_run_count = failed_run_count + #{failedDelta},
+            last_active_at = #{lastActiveAt},
+            update_time = NOW()
+        WHERE session_id = #{sessionId}
+          AND deleted = 0
+    </update>
+
     <select id="queryBySessionId" resultMap="DialogueSessionMap">
         SELECT <include refid="dialogueSessionColumns"/>
         FROM ai_agent_dialogue_session

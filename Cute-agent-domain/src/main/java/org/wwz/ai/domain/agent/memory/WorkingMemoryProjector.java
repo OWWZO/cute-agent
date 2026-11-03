@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.memory;
 
 import com.alibaba.fastjson.JSON;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
@@ -13,6 +14,7 @@ import java.util.List;
 /**
  * Memory Message 与 working_memory 行表互转。
  */
+@Slf4j
 public class WorkingMemoryProjector {
 
     public List<WorkingMemoryMessage> project(List<Message> messages, String sessionId, String requestId, Long runId) {
@@ -72,6 +74,12 @@ public class WorkingMemoryProjector {
                 continue;
             }
             RoleType role = parseRole(row.getRole());
+            if (role == null) {
+                // 未来/损坏的 role 不能猜成 USER：那会把历史内容当成用户输入塞回 prompt。
+                log.warn("working_memory row skipped: unknown role={} sessionId={} seqNo={}",
+                        row.getRole(), row.getSessionId(), row.getSeqNo());
+                continue;
+            }
             List<ToolCall> toolCalls = parseToolCalls(row.getToolCallsJson());
             if (role == RoleType.TOOL) {
                 messages.add(Message.toolMessage(row.getContent(), row.getToolCallId(), row.getBase64Image()));
@@ -105,7 +113,7 @@ public class WorkingMemoryProjector {
         try {
             return RoleType.valueOf(role.trim().toUpperCase());
         } catch (Exception e) {
-            return RoleType.USER;
+            return null;
         }
     }
 

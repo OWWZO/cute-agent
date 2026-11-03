@@ -335,7 +335,9 @@ public class CuteRuntimeDependencies {
         if (config.getLlmSettingsMap() != null && !normalizedModelName.isBlank()) {
             LLMSettings settings = config.getLlmSettingsMap().get(normalizedModelName);
             if (settings != null) {
-                return settings;
+                // yml 配置是全局共享实例；调用方（AgentBootstrap 的 thinking 覆盖）会写 setter，
+                // 直接返回会让一次请求永久改掉所有后续请求的默认值。
+                return settings.toBuilder().build();
             }
         }
 

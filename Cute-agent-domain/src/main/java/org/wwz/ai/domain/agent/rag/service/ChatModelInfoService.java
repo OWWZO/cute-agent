@@ -10,6 +10,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.wwz.ai.domain.agent.rag.DataQueryException;
 import org.wwz.ai.domain.agent.rag.model.config.DataQueryModelConfig;
 import org.wwz.ai.domain.agent.rag.model.config.DataQuerySettings;
@@ -57,11 +59,18 @@ public class ChatModelInfoService {
     private final ColumnValueIndexAdminPort columnValueIndexAdminPort;
     private final ColumnValueSyncPort columnValueSyncPort;
 
+    /**
+     * 初始化模型元数据。事务边界必须落在公开入口：私有重载经 {@code this} 调用，
+     * 代理不生效，只给 {@link #saveModelInfo} 标注事务等于没有事务。
+     * <p>向量/ES 同步通过 {@code afterCommit} 移到提交后，不占着 DB 连接做 embedding。</p>
+     */
+    @Transactional(rollbackFor = Exception.class)
     public void initModelInfo() throws Exception {
         // 初始化顺序先建立模型和 schema 元数据，再同步检索索引，保证向量数据有稳定的 modelCode/columnId。
         initModelInfo(false);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void refreshModelInfo() throws Exception {
         initModelInfo(true);
     }
@@ -120,10 +129,10 @@ public class ChatModelInfoService {
 
     /**
      * 清理同一模型编码下的历史元数据，避免重复初始化。
+     * <p>模型行与字段行必须原子删除：两次独立删除之间失败会留下仍参与召回的孤儿 schema 行。</p>
      */
     public void cleanModelMetadata(String modelCode) {
-        chatModelMetadataRepository.deleteModelInfoByCode(modelCode);
-        chatModelSchemaService.cleanModelSchema(modelCode);
+        chatModelMetadataRepository.deleteByModelCode(modelCode);
     }
 
     public void cleanStaleModelMetadata(Set<String> activeModelCodes) {
@@ -191,6 +200,42 @@ public class ChatModelInfoService {
         log.info("model info save success:{}", modelCode);
         List<ChatModelSchema> chatModelSchemas = chatModelSchemaService.saveModelSchema(modelCode, modelConfig, tableSchema, fewShotMap);
         log.info("model schema save success {},size:{}", modelCode, chatModelSchemas.size());
+        // DB 回滚撤不掉外部索引：只在事务提交后同步，避免「元数据回滚、向量已被删」的半初始化状态。
+        runAfterCommit(() -> syncExternalIndexes(modelInfo, modelConfig, chatModelSchemas));
+        return modelInfo;
+    }
+
+    /** 事务提交后再执行的检查型任务。 */
+    @FunctionalInterface
+    private interface CheckedSync {
+        void run() throws Exception;
+    }
+
+    private void runAfterCommit(CheckedSync sync) {
+        Runnable task = () -> {
+            try {
+                sync.run();
+            } catch (Exception e) {
+                throw new IllegalStateException("问数索引同步失败", e);
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    task.run();
+                }
+            });
+            return;
+        }
+        // 非事务调用（测试/一次性脚本）保持原有的即时同步语义。
+        task.run();
+    }
+
+    private void syncExternalIndexes(ChatModelInfo modelInfo,
+                                     DataQueryModelConfig modelConfig,
+                                     List<ChatModelSchema> chatModelSchemas) throws Exception {
+        String modelCode = modelInfo.getCode();
         if (Boolean.TRUE.equals(dataQuerySettings.getQdrantConfig().getEnable())) {
             vectorIndexAdminPort.deleteByFilter(
                     DataQuerySettings.SCHEMA_COLLECTION_NAME,
@@ -208,7 +253,6 @@ public class ChatModelInfoService {
             List<ChatModelSchema> syncValueList = chatModelSchemas.stream().filter(f -> syncColumn.contains(f.getColumnId().toUpperCase())).collect(Collectors.toList());
             columnValueSyncPort.syncColumnValues(modelInfo, syncValueList);
         }
-        return modelInfo;
     }
 
     private int syncVectorInfo(List<ChatModelSchema> chatModelSchemas) throws Exception {

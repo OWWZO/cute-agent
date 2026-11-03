@@ -19,6 +19,7 @@ public class QqBotQrGateway implements ChannelQrGateway {
 
     private final QqBotOnboardClient onboardClient;
     private final ChannelBindingRepository bindingRepository;
+    private final int maxBindings;
     /** taskId → 本地生成的 AES key，只在任务存活期间保留。 */
     private final Map<String, String> bindKeyByTaskId = new ConcurrentHashMap<>();
     private final Map<String, String> ownerByTaskId = new ConcurrentHashMap<>();
@@ -29,9 +30,11 @@ public class QqBotQrGateway implements ChannelQrGateway {
     }
 
     public QqBotQrGateway(QqBotOnboardClient onboardClient,
-                          ChannelBindingRepository bindingRepository) {
+                          ChannelBindingRepository bindingRepository,
+                          int maxBindings) {
         this.onboardClient = onboardClient;
         this.bindingRepository = bindingRepository;
+        this.maxBindings = maxBindings;
     }
 
     @Override
@@ -119,7 +122,10 @@ public class QqBotQrGateway implements ChannelQrGateway {
                 .botOpenid(botOpenid)
                 .status(ChannelBinding.STATUS_PENDING)
                 .build();
-        bindingRepository.insert(binding);
+        // 上限校验必须和插入原子完成：扫码场景下「先 count 再 insert」会被并发扫码突破。
+        if (!bindingRepository.insertIfBelowLimit(binding, maxBindings)) {
+            throw new IllegalStateException("已达绑定上限（" + maxBindings + "），请联系管理员");
+        }
         // 刻意不打印 secret，也不打印 openid 全量。
         log.info("[channel] binding created bindingId={} appId={}", binding.getId(), appId);
         return binding;

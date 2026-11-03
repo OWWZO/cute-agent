@@ -467,5 +467,10 @@ public class BackgroundStreamSettleTest {
         public void completeWithError(Throwable throwable) {
             completed.set(true);
         }
+
+        @Override
+        public void onAbort(Runnable abortHandler) {
+            // 本 fake 不模拟下游断开
+        }
     }
 }

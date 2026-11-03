@@ -32,7 +32,7 @@ public class QqBotQrGatewaySecurityTest {
     @Test
     public void pollRejectsUnknownTaskWithoutCallingRemote() {
         QqBotOnboardClient onboard = Mockito.mock(QqBotOnboardClient.class);
-        QqBotQrGateway gateway = new QqBotQrGateway(onboard, Mockito.mock(ChannelBindingRepository.class));
+        QqBotQrGateway gateway = new QqBotQrGateway(onboard, Mockito.mock(ChannelBindingRepository.class), 10);
 
         ChannelQrGateway.PollOutcome outcome = gateway.poll(OWNER, "task-unknown");
 
@@ -43,7 +43,7 @@ public class QqBotQrGatewaySecurityTest {
     @Test
     public void pollRejectsNonOwnerWithoutCallingRemote() throws Exception {
         QqBotOnboardClient onboard = Mockito.mock(QqBotOnboardClient.class);
-        QqBotQrGateway gateway = new QqBotQrGateway(onboard, Mockito.mock(ChannelBindingRepository.class));
+        QqBotQrGateway gateway = new QqBotQrGateway(onboard, Mockito.mock(ChannelBindingRepository.class), 10);
         seedTask(gateway, QqBotCrypto.generateBindKey(), OWNER);
 
         ChannelQrGateway.PollOutcome outcome = gateway.poll("attacker", TASK_ID);
@@ -62,13 +62,14 @@ public class QqBotQrGatewaySecurityTest {
         ChannelBindingRepository repository = Mockito.mock(ChannelBindingRepository.class);
         Mockito.when(repository.findByOwner(OWNER, ChannelBinding.PLATFORM_QQBOT))
                 .thenReturn(Optional.empty());
-        Mockito.doAnswer(invocation -> {
-            ChannelBinding binding = invocation.getArgument(0);
-            binding.setId(77L);
-            return null;
-        }).when(repository).insert(Mockito.any());
+        Mockito.when(repository.insertIfBelowLimit(Mockito.any(), Mockito.anyLong()))
+                .thenAnswer(invocation -> {
+                    ChannelBinding binding = invocation.getArgument(0);
+                    binding.setId(77L);
+                    return true;
+                });
 
-        QqBotQrGateway gateway = new QqBotQrGateway(onboard, repository);
+        QqBotQrGateway gateway = new QqBotQrGateway(onboard, repository, 10);
         seedTask(gateway, bindKey, OWNER);
 
         ChannelQrGateway.PollOutcome first = gateway.poll(OWNER, TASK_ID);
@@ -77,7 +78,7 @@ public class QqBotQrGatewaySecurityTest {
         Assert.assertEquals(ChannelQrGateway.Status.COMPLETED, first.status());
         Assert.assertEquals(ChannelQrGateway.Status.COMPLETED, second.status());
         Assert.assertEquals(first.bindingId(), second.bindingId());
-        Mockito.verify(repository, Mockito.times(1)).insert(Mockito.any());
+        Mockito.verify(repository, Mockito.times(1)).insertIfBelowLimit(Mockito.any(), Mockito.anyLong());
         // 非 owner 在任务完成后也不能拿到 bindingId。
         Assert.assertEquals(ChannelQrGateway.Status.EXPIRED, gateway.poll("attacker", TASK_ID).status());
     }

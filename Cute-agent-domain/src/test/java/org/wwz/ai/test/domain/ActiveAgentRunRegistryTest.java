@@ -7,10 +7,20 @@ import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+
 /**
  * 活跃 Agent run 与观察流绑定关系的回归测试。
  */
 public class ActiveAgentRunRegistryTest {
+
+    @Test
+    public void onAbortMustBeImplementedExplicitly() throws Exception {
+        Method onAbort = AgentMessageStream.class.getMethod("onAbort", Runnable.class);
+        Assert.assertTrue("onAbort 不得再有静默空默认实现，否则漏实现会永久挂住已断开的流",
+                Modifier.isAbstract(onAbort.getModifiers()));
+    }
 
     @Test
     public void shouldDetachStreamWithoutCancellingRunWhenClientDisconnects() {
