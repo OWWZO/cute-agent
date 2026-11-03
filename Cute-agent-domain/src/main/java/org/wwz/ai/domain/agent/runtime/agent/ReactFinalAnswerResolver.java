@@ -31,14 +31,18 @@ public final class ReactFinalAnswerResolver {
 
     public static String resolve(ReActAgent executor, String runResult) {
         String fromMemory = findLastUserFacingAssistantText(executor);
-        if (StringUtils.isNotBlank(fromMemory)) {
-            return sanitize(fromMemory);
+        String sanitizedMemory = sanitize(fromMemory);
+        if (StringUtils.isNotBlank(sanitizedMemory)) {
+            return sanitizedMemory;
         }
 
         if (executor != null
                 && executor.getState() == AgentState.FINISHED
                 && isPlausibleUserFacingRunResult(runResult)) {
-            return sanitize(runResult);
+            String sanitizedRunResult = sanitize(runResult);
+            if (StringUtils.isNotBlank(sanitizedRunResult)) {
+                return sanitizedRunResult;
+            }
         }
 
         log.warn("final answer missing user-facing assistant text, request may have stopped mid-tools");
@@ -52,7 +56,9 @@ public final class ReactFinalAnswerResolver {
         String text = raw.trim();
         Matcher whole = FINISH_BRACKET.matcher(text);
         if (whole.matches()) {
-            return whole.group(1).trim();
+            String inner = whole.group(1).trim();
+            // Finish[] / Finish[ ] 没有正文，返回空串让 resolve 继续走后续兜底。
+            return StringUtils.isNotBlank(inner) ? inner : "";
         }
         Matcher inline = FINISH_INLINE.matcher(text);
         if (inline.find() && text.length() < 500) {

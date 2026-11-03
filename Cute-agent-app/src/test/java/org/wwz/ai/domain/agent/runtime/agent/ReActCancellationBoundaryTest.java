@@ -27,7 +27,7 @@ public class ReActCancellationBoundaryTest {
     }
 
     @Test
-    public void shouldRecordSkipWhenCancelledAfterThinkBeforeAct() {
+    public void shouldShortCircuitWhenCancelledAfterThinkBeforeAct() {
         AtomicInteger acts = new AtomicInteger();
         ProbeAgent agent = new ProbeAgent(true, acts);
         RunCancellation cancellation = new RunCancellation();
@@ -38,7 +38,7 @@ public class ReActCancellationBoundaryTest {
         cancellation.cancel(RunCancellation.REASON_USER_STOP);
 
         Assert.assertEquals("Terminated: User stopped", agent.step());
-        Assert.assertEquals("工具尚未开始时仍要走 act 写取消结果", 1, acts.get());
+        Assert.assertEquals("取消后禁止执行 act() 的副作用", 0, acts.get());
         Assert.assertEquals(AgentState.FINISHED, agent.getState());
     }
 

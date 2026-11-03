@@ -1,7 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.cancel;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 单轮 Agent run 的协作式取消标志（用户主动点击停止）。
@@ -11,17 +11,20 @@ public class RunCancellation {
 
     public static final String REASON_USER_STOP = "user_stop";
 
-    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+    /** 取消标记与元数据作为一个不可变整体发布，读者不会看到「已取消但原因为空」。 */
+    private record State(boolean cancelled, String reason, long cancelledAtMs) {
+    }
+
+    private static final State ACTIVE = new State(false, null, 0L);
+
+    private final AtomicReference<State> state = new AtomicReference<>(ACTIVE);
     private final ConcurrentLinkedQueue<Runnable> abortHooks = new ConcurrentLinkedQueue<>();
-    private volatile String reason;
-    private volatile long cancelledAtMs;
 
     public boolean cancel(String reason) {
-        if (!cancelled.compareAndSet(false, true)) {
+        State cancelledState = new State(true, reason == null ? REASON_USER_STOP : reason, System.currentTimeMillis());
+        if (!state.compareAndSet(ACTIVE, cancelledState)) {
             return false;
         }
-        this.reason = reason == null ? REASON_USER_STOP : reason;
-        this.cancelledAtMs = System.currentTimeMillis();
         Runnable hook;
         while ((hook = abortHooks.poll()) != null) {
             runAbort(hook);
@@ -63,14 +66,14 @@ public class RunCancellation {
     }
 
     public boolean isCancelled() {
-        return cancelled.get();
+        return state.get().cancelled();
     }
 
     public String getReason() {
-        return reason;
+        return state.get().reason();
     }
 
     public long getCancelledAtMs() {
-        return cancelledAtMs;
+        return state.get().cancelledAtMs();
     }
 }

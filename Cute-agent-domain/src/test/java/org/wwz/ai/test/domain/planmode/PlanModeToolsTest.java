@@ -68,6 +68,31 @@ public class PlanModeToolsTest {
     }
 
     @Test
+    public void exitOutsidePlanModeDoesNotDowngradeCurrentMode() {
+        PlanModeState state = PlanModeState.builder()
+                .mode(PlanModeState.MODE_ACCEPT_EDITS)
+                .prePlanMode(PlanModeState.MODE_DEFAULT)
+                .build();
+
+        Assert.assertEquals(PlanModeState.MODE_ACCEPT_EDITS, state.exitPlanMode());
+        Assert.assertEquals(PlanModeState.MODE_ACCEPT_EDITS, state.getMode());
+        Assert.assertFalse(state.isHasExitedPlanMode());
+        Assert.assertFalse(state.isNeedsPlanModeExitAttachment());
+    }
+
+    @Test
+    public void planModeIsNotAValidRestoreTarget() {
+        PlanModeState state = PlanModeState.builder()
+                .mode(PlanModeState.MODE_PLAN)
+                .prePlanMode(PlanModeState.MODE_PLAN)
+                .build();
+
+        Assert.assertEquals(PlanModeState.MODE_DEFAULT, state.exitPlanMode());
+        Assert.assertEquals(PlanModeState.MODE_DEFAULT, state.getMode());
+        Assert.assertTrue(state.isHasExitedPlanMode());
+    }
+
+    @Test
     public void exitWhenAlreadyDefaultIsIdempotentEnter() {
         PlanModeState state = PlanModeState.builder().build();
         state.enterPlanMode();

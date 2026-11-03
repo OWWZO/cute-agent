@@ -4,10 +4,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.dto.File;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -18,8 +18,8 @@ public class ToolArtifactRegistry {
 
     // 核心存储：所有工具-文件绑定关系（唯一可信数据源）
     private final List<ToolArtifactBinding> bindings = new ArrayList<>();
-    /** 去重键索引：注册从 O(n) 线性扫描降为 O(1)，批量登记不再退化成 O(n²)。 */
-    private final Set<String> bindingKeys = new HashSet<>();
+    /** 去重键 → 已登记实例：注册 O(1)，且重复登记必须返回注册表内的同一对象。 */
+    private final Map<String, ToolArtifactBinding> bindingsByKey = new HashMap<>();
 
     /**
      * 登记一个生成的文件
@@ -38,10 +38,14 @@ public class ToolArtifactRegistry {
             .file(file)
             .build();
 
-        // 核心存储去重：相同绑定不重复添加
-        if (bindingKeys.add(dedupeKey(binding))) {
-            bindings.add(binding);
+        // 核心存储去重：相同绑定不重复添加，并返回登记表内的既有实例。
+        String key = dedupeKey(binding);
+        ToolArtifactBinding existing = bindingsByKey.get(key);
+        if (existing != null) {
+            return existing;
         }
+        bindingsByKey.put(key, binding);
+        bindings.add(binding);
         return binding;
     }
 

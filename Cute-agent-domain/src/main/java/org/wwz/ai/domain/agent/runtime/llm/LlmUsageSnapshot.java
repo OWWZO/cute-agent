@@ -162,7 +162,11 @@ public class LlmUsageSnapshot {
             return snapshot;
         }
         try {
-            Object parsed = JSON.parse(JSON.toJSONString(raw));
+            // 字符串本身就是 JSON 文本时直接解析；先 toJSONString 会给它加引号，
+            // 解析结果又变回 String，永远进不了 Map 分支。
+            Object parsed = raw instanceof String text
+                    ? JSON.parse(text)
+                    : JSON.parse(JSON.toJSONString(raw));
             if (parsed instanceof Map<?, ?> || parsed instanceof JsonNode) {
                 return fromObject(parsed);
             }
@@ -314,9 +318,15 @@ public class LlmUsageSnapshot {
             return null;
         }
         for (String key : keys) {
-            if (map.containsKey(key)) {
-                return map.get(key);
+            if (!map.containsKey(key)) {
+                continue;
             }
+            Object value = map.get(key);
+            // 显式 null/空白别名不能遮蔽后续真实别名（如 input_tokens）。
+            if (value == null || (value instanceof String text && text.isBlank())) {
+                continue;
+            }
+            return value;
         }
         return null;
     }
@@ -343,9 +353,14 @@ public class LlmUsageSnapshot {
             return null;
         }
         for (String key : keys) {
-            if (node.has(key)) {
-                return node.get(key);
+            if (!node.has(key)) {
+                continue;
             }
+            JsonNode value = node.get(key);
+            if (value == null || value.isNull() || (value.isTextual() && value.asText().isBlank())) {
+                continue;
+            }
+            return value;
         }
         return null;
     }

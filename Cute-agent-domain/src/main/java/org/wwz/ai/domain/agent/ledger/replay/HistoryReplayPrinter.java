@@ -42,11 +42,25 @@ public class HistoryReplayPrinter {
                 continue;
             }
             Object messageType = nestedMap.get("messageType");
-            if ("result".equals(messageType) || "task_summary".equals(messageType)) {
-                return true;
+            if (!"result".equals(messageType) && !"task_summary".equals(messageType)) {
+                continue;
             }
+            // 子 Agent 的嵌套 result 不能冒充主会话结论，否则底部的 fallback 会被吞掉。
+            if (hasNestedSubAgentParent(eventDataMap) || hasNestedSubAgentParent(nestedMap)) {
+                continue;
+            }
+            // 显式 isFinal=false 的是过程帧，同样不能作为最终结论。
+            if (nestedMap.containsKey("isFinal") && !Boolean.TRUE.equals(nestedMap.get("isFinal"))) {
+                continue;
+            }
+            return true;
         }
         return false;
+    }
+
+    private boolean hasNestedSubAgentParent(Map<?, ?> resultMap) {
+        Object parentToolUseId = resultMap.get("parentToolUseId");
+        return parentToolUseId != null && StringUtils.isNotBlank(String.valueOf(parentToolUseId));
     }
 
     private AgentStreamResult buildFallbackConclusion(DialogueRunView run) {

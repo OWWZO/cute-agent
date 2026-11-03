@@ -4,7 +4,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 import java.util.Map;
@@ -22,9 +21,20 @@ import java.util.Map;
  */
 @Data
 @Builder
-@NoArgsConstructor
 @AllArgsConstructor
 public class AgentStreamResult {
+
+    /**
+     * 无参构造必须显式补默认值：{@code @Builder.Default} 只对 builder 生效，
+     * 字段初始化器会被 Lombok 移到 {@code $default$xxx()}，直接 new 的实时帧会得到 null。
+     */
+    public AgentStreamResult() {
+        this.status = "running";
+        this.contentDelta = "";
+        this.content = "";
+        this.contentType = "markdown";
+        this.frameType = "result";
+    }
 
     @Builder.Default
     private String status = "running";

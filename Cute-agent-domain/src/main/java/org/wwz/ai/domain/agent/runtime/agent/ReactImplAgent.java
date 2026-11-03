@@ -185,6 +185,12 @@ public class ReactImplAgent extends ReActAgent {
 
         for (ToolCall command : toolCalls) {
             ToolExecutionOutcome outcome = toolOutcomes.get(command.getId());
+            if (outcome == null) {
+                // 空/重复 toolCallId 不会写入 outcome 表；这里必须补一个显式失败结果，
+                // 否则 function_call 模式会在写 observation 时 NPE，且失败原因被吞掉。
+                String message = "工具执行结果缺失: " + StringUtils.defaultIfBlank(command.getId(), "<no-id>");
+                outcome = ToolExecutionOutcome.failure(message, message, null, "TOOL_RESULT_MISSING");
+            }
 
             sendToolResult(command, outcome);
 

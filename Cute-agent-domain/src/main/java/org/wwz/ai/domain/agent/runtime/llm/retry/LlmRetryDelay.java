@@ -27,7 +27,8 @@ public final class LlmRetryDelay {
         double uncapped = policy.baseDelayMs() * Math.pow(policy.backoffFactor(), Math.max(0, attempt - 1));
         long capped = (long) Math.min(uncapped, policy.maxDelayMs());
 
-        if (isReasonableRetryAfterMs(retryAfterMs, uncapped)) {
+        // 与「已封顶」的本地退避比较：用未封顶值做逃生口会让 Retry-After 绕过 maxDelayMs。
+        if (isReasonableRetryAfterMs(retryAfterMs, capped)) {
             return retryAfterMs;
         }
         if (!policy.jitter() || capped == 0) {

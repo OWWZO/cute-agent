@@ -335,7 +335,8 @@ public class CuteRuntimeDependencies {
         if (config.getLlmSettingsMap() != null && !normalizedModelName.isBlank()) {
             LLMSettings settings = config.getLlmSettingsMap().get(normalizedModelName);
             if (settings != null) {
-                return settings;
+                // yml 中的实例是全局共享配置；调用方会就地改写 reasoningEffort 等字段，必须返回副本。
+                return copyLlmSettings(settings);
             }
         }
 
@@ -344,6 +345,23 @@ public class CuteRuntimeDependencies {
             defaultConfig.setModel(normalizedModelName);
         }
         return defaultConfig;
+    }
+
+    private LLMSettings copyLlmSettings(LLMSettings source) {
+        return LLMSettings.builder()
+                .model(source.getModel())
+                .maxTokens(source.getMaxTokens())
+                .temperature(source.getTemperature())
+                .apiType(source.getApiType())
+                .apiKey(source.getApiKey())
+                .apiVersion(source.getApiVersion())
+                .baseUrl(source.getBaseUrl())
+                .interfaceUrl(source.getInterfaceUrl())
+                .functionCallType(source.getFunctionCallType())
+                .maxInputTokens(source.getMaxInputTokens())
+                .reasoningEffort(source.getReasoningEffort())
+                .extParams(source.getExtParams() == null ? null : new HashMap<>(source.getExtParams()))
+                .build();
     }
 
     /**

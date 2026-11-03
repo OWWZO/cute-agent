@@ -126,11 +126,15 @@ public final class PlanSolvePrompt {
             if (!base.contains(legacy)) {
                 continue;
             }
-            int start = base.indexOf("# Plan-Execute 主代理职责");
-            if (start < 0) {
-                start = base.indexOf(legacy);
+            int markerIndex = base.indexOf(legacy);
+            if (markerIndex < 0) {
+                continue;
             }
+            int start = headingForMarker(base, legacy, markerIndex);
             if (start < 0) {
+                // 找不到与 legacy 标记真正对应的标题时，只删标记本身，
+                // 避免从当前 V7 标题一路切断无关内容。
+                base = (base.substring(0, markerIndex) + base.substring(markerIndex + legacy.length())).trim();
                 continue;
             }
             int end = base.indexOf("\n# ", start + 1);
@@ -140,6 +144,30 @@ public final class PlanSolvePrompt {
             base = (base.substring(0, start) + base.substring(end)).trim();
         }
         return base;
+    }
+
+    /**
+     * 找到 legacy 标记真正所属的最近标题。
+     * <p>prompt 可能同时包含当前 V7 标题和一段游离的旧 marker；必须从 marker 向前找
+     * 「标题行本身含该 marker」的标题，找不到返回 -1，避免从无关标题开始整段删除。</p>
+     */
+    private static int headingForMarker(String base, String legacy, int markerIndex) {
+        int searchEnd = markerIndex;
+        while (searchEnd > 0) {
+            int heading = base.lastIndexOf("# Plan-Execute 主代理职责", searchEnd);
+            if (heading < 0) {
+                return -1;
+            }
+            int lineEnd = base.indexOf('\n', heading);
+            if (lineEnd < 0 || lineEnd > markerIndex) {
+                lineEnd = markerIndex;
+            }
+            if (base.substring(heading, lineEnd).contains(legacy)) {
+                return heading;
+            }
+            searchEnd = heading - 1;
+        }
+        return -1;
     }
 
     /** 从当前 marker 推导版本号，升级 marker 时 legacy 清理范围随之扩展。 */

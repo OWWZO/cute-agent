@@ -110,11 +110,28 @@ public class AgentStreamAccumulator {
         List<Object> tasks = getResultMapTask();
         if (tasks == null) {
             tasks = new ArrayList<>();
-            tasks.add(new ArrayList<>());
             resultMap.put("tasks", tasks);
         }
-        List<Object> subTasks = (List<Object>) tasks.get(tasks.size() - 1);
+        if (tasks.isEmpty()) {
+            tasks.add(new ArrayList<>());
+        }
+        Object last = tasks.get(tasks.size() - 1);
+        if (last instanceof List<?> existing) {
+            try {
+                ((List<Object>) existing).add(subTask);
+                return;
+            } catch (UnsupportedOperationException ignored) {
+                // 外部传入不可变列表时替换成可变副本，不能把异常抛给流式链路。
+            }
+            List<Object> mutable = new ArrayList<>(existing);
+            mutable.add(subTask);
+            tasks.set(tasks.size() - 1, mutable);
+            return;
+        }
+        // 最后一个 task 不是列表（例如 setResultMapTask 放了非列表载荷）时重建子任务容器。
+        List<Object> subTasks = new ArrayList<>();
         subTasks.add(subTask);
+        tasks.set(tasks.size() - 1, subTasks);
     }
 
     public synchronized String getPlannerRoundId() {

@@ -15,6 +15,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
@@ -133,7 +135,31 @@ public final class AgentExecutorSupport {
             workExecutor.execute(task, scene, requestId);
             return;
         }
+        // 丢弃策略会吞掉任务且不回调，Future 将永久不完成；与其静默挂起，不如显式报忙。
+        if (silentlyDiscards(required)) {
+            throw new RejectedExecutionException(
+                    scene + " 执行器使用 DiscardPolicy/DiscardOldestPolicy，无法保证任务完成");
+        }
         required.execute(task);
+    }
+
+    private static boolean silentlyDiscards(Executor executor) {
+        return executor instanceof ThreadPoolExecutor pool
+                && isDiscardHandler(pool.getRejectedExecutionHandler());
+    }
+
+    private static boolean isDiscardHandler(RejectedExecutionHandler handler) {
+        if (handler instanceof ThreadPoolExecutor.DiscardPolicy
+                || handler instanceof ThreadPoolExecutor.DiscardOldestPolicy) {
+            return true;
+        }
+        // 生产配置可能在外层包装（如计数装饰器），沿 getDelegate() 继续判断。
+        try {
+            Object delegate = handler.getClass().getMethod("getDelegate").invoke(handler);
+            return delegate instanceof RejectedExecutionHandler nested && isDiscardHandler(nested);
+        } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
     }
 
     private static Executor requireExecutor(Executor executor, String scene) {

@@ -79,9 +79,13 @@ public final class SessionBackgroundTaskHub {
         return StringUtils.defaultIfBlank(sessionId, "default").trim();
     }
 
+    /**
+     * 与 {@link #getOrCreate(String, TasklistPersistencePort)} 使用同一 key。
+     * <p>以前这里在 sessionId 为空时回退到 requestId，导致创建（"default"）与查询
+     * （requestId）落在不同 registry，运行中的后台任务被误报为不存在。</p>
+     */
     public static String keyFor(String sessionId, String requestId) {
-        return StringUtils.defaultIfBlank(sessionId,
-                StringUtils.defaultIfBlank(requestId, "default")).trim();
+        return keyFor(sessionId);
     }
 
     /** 测试或会话清理用 */

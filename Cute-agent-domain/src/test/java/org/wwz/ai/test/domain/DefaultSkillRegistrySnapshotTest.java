@@ -48,6 +48,22 @@ public class DefaultSkillRegistrySnapshotTest {
     }
 
     @Test
+    public void initLoadsSkillsWithoutExplicitRefresh() throws Exception {
+        DefaultSkillRegistry registry = registry(options(skillRoot("boot")));
+        Assert.assertFalse("构造后尚未扫描", registry.isEnabled());
+
+        registry.init();
+
+        Assert.assertTrue(registry.isEnabled());
+        Assert.assertEquals(List.of("boot"),
+                registry.listSkills().stream()
+                        .map(org.wwz.ai.domain.agent.runtime.tool.skill.SkillDefinition::getName)
+                        .toList());
+        Assert.assertNotNull("启动钩子必须存在",
+                DefaultSkillRegistry.class.getMethod("init").getAnnotation(jakarta.annotation.PostConstruct.class));
+    }
+
+    @Test
     public void concurrentRefreshNeverPublishesMixedIndexes() throws Exception {
         Path rootAlpha = skillRoot("alpha");
         Path rootBeta = skillRoot("beta");

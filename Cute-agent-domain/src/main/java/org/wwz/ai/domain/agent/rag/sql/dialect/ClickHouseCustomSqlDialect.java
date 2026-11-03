@@ -18,7 +18,9 @@ public class ClickHouseCustomSqlDialect extends ClickHouseSqlDialect {
     @Override
     public void quoteStringLiteral(StringBuilder buf, @Nullable String charsetName, String val) {
         buf.append(literalQuoteString);
-        buf.append(val.replace(literalEndQuoteString, literalEscapedQuote));
+        // ClickHouse 反斜杠是转义符：先把它自身转义，再处理引号；
+        // 否则 "C:\temp" 会被解析成制表符，尾部反斜杠还会吃掉收尾引号。
+        buf.append(val.replace("\\", "\\\\").replace(literalEndQuoteString, literalEscapedQuote));
         buf.append(literalEndQuoteString);
     }
 }

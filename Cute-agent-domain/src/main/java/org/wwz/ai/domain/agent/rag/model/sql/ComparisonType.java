@@ -35,7 +35,7 @@ public enum ComparisonType {
 
     public static final Set<ComparisonType> ONE_PARAM_TYPE =
             Collections.unmodifiableSet(EnumSet.of(LESS_THAN, GREATER_THAN, LESS_THAN_OR_EQUAL,
-                    GREATER_THAN_OR_EQUAL, EQUALS, NOT_EQUALS, LIKE, SUFFIX_LIKE, LLIKE));
+                    GREATER_THAN_OR_EQUAL, EQUALS, NOT_EQUALS, LIKE, NOT_LIKE, SUFFIX_LIKE, LLIKE));
 
     public static final Set<ComparisonType> MORE_PARAM_TYPE =
             Collections.unmodifiableSet(EnumSet.of(IN, NOT_IN, BETWEEN));

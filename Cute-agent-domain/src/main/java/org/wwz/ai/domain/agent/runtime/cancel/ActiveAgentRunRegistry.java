@@ -8,7 +8,7 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.planmode.PendingPlanApprovalRegistry;
 import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -124,30 +124,44 @@ public class ActiveAgentRunRegistry {
             if (existingRequestId != null
                     && !existingRequestId.equals(rid)
                     && byRequestId.containsKey(existingRequestId)) {
-                ActiveRun existing = byRequestId.get(existingRequestId);
-                String existingSession = existing == null || StringUtils.isBlank(existing.getSessionId())
-                        ? sid
-                        : existing.getSessionId();
-                log.warn("reject concurrent run sessionId={} activeRequestId={} activeSessionId={} newRequestId={}",
-                        sid, existingRequestId, existingSession, rid);
-                throw new AgentConcurrentRunException(
-                        CONCURRENT_RUN_MESSAGE,
-                        existingRequestId,
-                        existingSession);
+                throw concurrentRun(sid, existingRequestId, rid);
+            }
+            if (existingRequestId != null && !existingRequestId.equals(rid)) {
+                // 索引指向的 run 已结束但映射未清掉，允许新 run 接管。
+                bySessionId.remove(sid, existingRequestId);
             }
         }
 
         String vid = StringUtils.trimToNull(userId);
         RunCancellation cancellation = new RunCancellation();
         ActiveRun run = new ActiveRun(rid, sessionId, vid, cancellation);
-        ActiveRun previous = byRequestId.put(rid, run);
+        // 判空与写入必须是同一原子操作，否则并发 begin 会替换掉仍在运行的记录。
+        ActiveRun previous = byRequestId.putIfAbsent(rid, run);
         if (previous != null) {
-            log.warn("replace active run record requestId={}", rid);
+            return previous;
         }
         if (sid != null) {
-            bySessionId.put(sid, rid);
+            String racedRequestId = bySessionId.putIfAbsent(sid, rid);
+            if (racedRequestId != null && !racedRequestId.equals(rid)) {
+                // 回滚 requestId 索引，保持「session 同时只有一个活跃 run」不变量。
+                byRequestId.remove(rid, run);
+                throw concurrentRun(sid, racedRequestId, rid);
+            }
         }
         return run;
+    }
+
+    private AgentConcurrentRunException concurrentRun(String sid, String existingRequestId, String newRequestId) {
+        ActiveRun existing = byRequestId.get(existingRequestId);
+        String existingSession = existing == null || StringUtils.isBlank(existing.getSessionId())
+                ? sid
+                : existing.getSessionId();
+        log.warn("reject concurrent run sessionId={} activeRequestId={} activeSessionId={} newRequestId={}",
+                sid, existingRequestId, existingSession, newRequestId);
+        return new AgentConcurrentRunException(
+                CONCURRENT_RUN_MESSAGE,
+                existingRequestId,
+                existingSession);
     }
 
     public void bindContext(String requestId, AgentContext agentContext) {
@@ -211,10 +225,21 @@ public class ActiveAgentRunRegistry {
             return false;
         }
         log.info("cancel agent run requestId={} reason={}", requestId, reason);
+        // 两条清理路径处理的是不同状态：持久化记录 + 进程内等待中的 Future，
+        // 必须都执行，且任一路异常不能挡住另一条。
         if (planApprovalRepository != null) {
-            planApprovalRepository.cancelBySourceRequestId(requestId, reason);
-        } else if (pendingPlanApprovalRegistry != null) {
-            pendingPlanApprovalRegistry.cancelByRequestId(requestId, reason);
+            try {
+                planApprovalRepository.cancelBySourceRequestId(requestId, reason);
+            } catch (Exception e) {
+                log.warn("cancel persisted plan approval failed requestId={}", requestId, e);
+            }
+        }
+        if (pendingPlanApprovalRegistry != null) {
+            try {
+                pendingPlanApprovalRegistry.cancelByRequestId(requestId, reason);
+            } catch (Exception e) {
+                log.warn("cancel pending plan approval failed requestId={}", requestId, e);
+            }
         }
         // detached 后台子 Agent 不随父 stop 级联；父占用释放后子任务继续。
         return true;

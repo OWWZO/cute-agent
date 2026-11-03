@@ -1,7 +1,9 @@
 package org.wwz.ai.domain.agent.rag.model.sql;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.apache.calcite.sql.JoinConditionType;
 import org.apache.calcite.sql.JoinType;
 
@@ -38,8 +40,12 @@ public class FromTable {
      */
     private String condition;
     /**
-     * 关联表
+     * 关联表。
+     * <p>自引用字段必须排除在生成的 toString/equals/hashCode 之外，否则深 JOIN 链
+     * 或意外环会在日志/比较时递归溢出；链本身的相等性由其余字段描述。</p>
      */
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private FromTable rightTable;
 
     private FromTableType fromTableType;

@@ -15,8 +15,11 @@ public final class TextChunker {
     /** QQ {@code MAX_MESSAGE_LENGTH}。 */
     public static final int MAX_LENGTH = 4000;
 
-    /** 给 {@code (n/N)} 序号预留的余量。 */
+    /** 给 {@code (n/N)} 序号预留的余量（超过时按实际块数动态扩大）。 */
     private static final int SEQ_RESERVE = 12;
+
+    /** 重开 / 闭合代码块的最坏开销：{@code "```\n"} 与 {@code "\n```"} 各 4 字符。 */
+    private static final int FENCE_OVERHEAD = 8;
 
     private static final String FENCE = "```";
 
@@ -35,7 +38,7 @@ public final class TextChunker {
         if (StringUtils.isBlank(text)) {
             return List.of();
         }
-        if (maxLength <= SEQ_RESERVE * 2) {
+        if (maxLength <= SEQ_RESERVE + FENCE_OVERHEAD) {
             throw new IllegalArgumentException("maxLength 过小：" + maxLength);
         }
         String normalized = text.replace("\r\n", "\n").replace('\r', '\n').trim();
@@ -43,7 +46,31 @@ public final class TextChunker {
             return List.of(normalized);
         }
 
-        int budget = maxLength - SEQ_RESERVE;
+        int reserve = SEQ_RESERVE;
+        List<String> raw;
+        while (true) {
+            int budget = maxLength - reserve - FENCE_OVERHEAD;
+            if (budget <= 0) {
+                // 序号预留已占满上限，继续切只会产出越界块。
+                throw new IllegalArgumentException("maxLength 过小：" + maxLength);
+            }
+            raw = splitRaw(normalized, budget);
+            int prefixLength = prefix(raw.size()).length();
+            if (prefixLength <= reserve) {
+                break;
+            }
+            reserve = prefixLength;
+        }
+
+        int total = raw.size();
+        List<String> result = new ArrayList<>(total);
+        for (int i = 0; i < total; i++) {
+            result.add(prefix(total, i + 1) + raw.get(i));
+        }
+        return result;
+    }
+
+    private static List<String> splitRaw(String normalized, int budget) {
         List<String> raw = new ArrayList<>();
         int cursor = 0;
         boolean inFence = false;
@@ -74,13 +101,15 @@ public final class TextChunker {
                 cursor++;
             }
         }
+        return raw;
+    }
 
-        int total = raw.size();
-        List<String> result = new ArrayList<>(total);
-        for (int i = 0; i < total; i++) {
-            result.add("(" + (i + 1) + "/" + total + ")\n" + raw.get(i));
-        }
-        return result;
+    private static String prefix(int total) {
+        return "(" + total + "/" + total + ")\n";
+    }
+
+    private static String prefix(int total, int index) {
+        return "(" + index + "/" + total + ")\n";
     }
 
     /**

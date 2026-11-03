@@ -280,6 +280,9 @@ public class SqlParserUtils {
 
     private static FromTable parseSelectFromTable(SqlNode from) {
         // 递归把 JOIN、子查询和 UNION 统一折叠为 FromTable 链，后续问数逻辑不需要再依赖 Calcite AST。
+        if (from == null) {
+            return null;
+        }
         if (SqlKind.IDENTIFIER.equals(from.getKind())) {
             return singleFromTable(from);
         }
@@ -333,17 +336,24 @@ public class SqlParserUtils {
             }
         });
         Collections.reverse(parseList);
-        return parseList.get(0);
+        // 不认识的 FROM 形态不会命中任何分支；退化为单表描述，避免直接越界。
+        return parseList.isEmpty() ? singleFromTable(from) : parseList.get(0);
     }
 
     private static FromTable parseQueryFromTable(SqlNode queryNode) {
-        return parseQueryFromTable(queryNode, new HashMap<>());
+        return parseQueryFromTable(queryNode, new HashMap<>(), new HashSet<>());
     }
 
     private static FromTable parseQueryFromTable(SqlNode queryNode, Map<String, SqlNode> cteQueries) {
+        return parseQueryFromTable(queryNode, cteQueries, new HashSet<>());
+    }
+
+    private static FromTable parseQueryFromTable(SqlNode queryNode,
+                                                 Map<String, SqlNode> cteQueries,
+                                                 Set<String> expandingCtes) {
         // CTE 的 FROM 可能只指向 CTE 名称，沿引用链回溯到物理模型表，供问数模型匹配使用。
         if (queryNode instanceof SqlOrderBy) {
-            return parseQueryFromTable(((SqlOrderBy) queryNode).query, cteQueries);
+            return parseQueryFromTable(((SqlOrderBy) queryNode).query, cteQueries, expandingCtes);
         }
         if (queryNode instanceof SqlWith) {
             Map<String, SqlNode> nestedCteQueries = new HashMap<>(cteQueries);
@@ -352,23 +362,25 @@ public class SqlParserUtils {
                 SqlWithItem withItem = (SqlWithItem) withItemNode;
                 nestedCteQueries.put(identifierKey(withItem.name), withItem.query);
             }
-            return parseQueryFromTable(with.body, nestedCteQueries);
+            return parseQueryFromTable(with.body, nestedCteQueries, expandingCtes);
         }
         if (queryNode instanceof SqlSelect) {
             SqlSelect select = (SqlSelect) queryNode;
             SqlNode from = select.getFrom();
             if (from instanceof SqlIdentifier) {
-                SqlNode cteQuery = cteQueries.get(identifierKey((SqlIdentifier) from));
+                String key = identifierKey((SqlIdentifier) from);
+                SqlNode cteQuery = cteQueries.get(key);
                 if (cteQuery != null) {
-                    return parseQueryFromTable(cteQuery, cteQueries);
+                    return parseCteQuery(key, cteQuery, cteQueries, expandingCtes, from);
                 }
             }
             if (from instanceof SqlBasicCall && SqlKind.AS.equals(from.getKind())) {
                 SqlNode source = ((SqlBasicCall) from).getOperandList().get(0);
                 if (source instanceof SqlIdentifier) {
-                    SqlNode cteQuery = cteQueries.get(identifierKey((SqlIdentifier) source));
+                    String key = identifierKey((SqlIdentifier) source);
+                    SqlNode cteQuery = cteQueries.get(key);
                     if (cteQuery != null) {
-                        return parseQueryFromTable(cteQuery, cteQueries);
+                        return parseCteQuery(key, cteQuery, cteQueries, expandingCtes, from);
                     }
                 }
             }
@@ -378,10 +390,30 @@ public class SqlParserUtils {
             SqlBasicCall unionNode = (SqlBasicCall) queryNode;
             return parseQueryFromTable(
                     unionNode.getOperandList().get(unionNode.operandCount() - 1),
-                    cteQueries
+                    cteQueries,
+                    expandingCtes
             );
         }
         return null;
+    }
+
+    /**
+     * 展开 CTE 引用。递归 CTE 会再次引用自身，必须记录正在展开的名字并在重入时停止，
+     * 否则同一 map 反复递归会栈溢出。
+     */
+    private static FromTable parseCteQuery(String key,
+                                           SqlNode cteQuery,
+                                           Map<String, SqlNode> cteQueries,
+                                           Set<String> expandingCtes,
+                                           SqlNode fallbackFrom) {
+        if (!expandingCtes.add(key)) {
+            return parseSelectFromTable(fallbackFrom);
+        }
+        try {
+            return parseQueryFromTable(cteQuery, cteQueries, expandingCtes);
+        } finally {
+            expandingCtes.remove(key);
+        }
     }
 
     private static String identifierKey(SqlIdentifier identifier) {

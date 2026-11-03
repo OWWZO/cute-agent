@@ -492,7 +492,13 @@ public final class LlmFailureInspector {
             return false;
         }
         return containsAny(message, CONTEXT_EXCEEDED_MARKERS)
-                || (message.contains("context") && message.contains("exceed"))
+                // 只认「上下文窗口」类措辞："context deadline exceeded"（gRPC 超时）等必须继续重试。
+                || (message.contains("context")
+                        && message.contains("exceed")
+                        && !message.contains("deadline")
+                        && (message.contains("window")
+                        || message.contains("length")
+                        || message.contains("token")))
                 || (message.contains("maximum context length")
                         && message.contains("tokens")
                         && (message.contains("requested") || message.contains("resulted")))
