@@ -7,13 +7,13 @@ public enum AgentType {
     PLAN_SOLVE(3),
     REACT(5);
 
-    private final int value;
+    private final Integer value;
 
-    AgentType(int value) {
+    AgentType(Integer value) {
         this.value = value;
     }
 
-    public int getValue() {
+    public Integer getValue() {
         return value;
     }
 
