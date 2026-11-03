@@ -19,6 +19,7 @@ public class ModelColumn {
 
     private String comment;
 
+    /** 归一化后的标准列类型，用于 schema 输出与数值类型判断。 */
     private StandardColumnType dataType;
 
     private Integer position;
@@ -30,9 +31,8 @@ public class ModelColumn {
 
     private String dateFormat;
 
+    /** 解析期列形态：Calcite {@code SqlKind} 名称（如 IDENTIFIER / LITERAL），供 Nl2SqlQueryService 判类型。 */
     private String columnKind;
-
-    private String type;
 
     private boolean aggregator;
 

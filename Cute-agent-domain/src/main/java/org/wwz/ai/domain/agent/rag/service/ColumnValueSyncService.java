@@ -15,11 +15,8 @@ import java.util.List;
 @Service
 public class ColumnValueSyncService {
 
-    private ColumnValueIndexAdminPort columnValueIndexAdminPort;
-    private ColumnValueSyncPort columnValueSyncPort;
-
-    public ColumnValueSyncService() {
-    }
+    private final ColumnValueIndexAdminPort columnValueIndexAdminPort;
+    private final ColumnValueSyncPort columnValueSyncPort;
 
     @Autowired
     public ColumnValueSyncService(ColumnValueIndexAdminPort columnValueIndexAdminPort,
@@ -64,13 +61,5 @@ public class ColumnValueSyncService {
         if (columnValueIndexAdminPort == null) {
             throw new IllegalStateException("column-value index port is unavailable");
         }
-    }
-
-    public void setColumnValueIndexAdminPort(ColumnValueIndexAdminPort columnValueIndexAdminPort) {
-        this.columnValueIndexAdminPort = columnValueIndexAdminPort;
-    }
-
-    public void setColumnValueSyncPort(ColumnValueSyncPort columnValueSyncPort) {
-        this.columnValueSyncPort = columnValueSyncPort;
     }
 }

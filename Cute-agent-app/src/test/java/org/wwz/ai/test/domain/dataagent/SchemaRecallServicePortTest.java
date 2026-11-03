@@ -34,7 +34,7 @@ public class SchemaRecallServicePortTest {
 
         Assert.assertEquals(1, result.size());
         Assert.assertEquals("Shanghai", result.get(0).get("value"));
-        Assert.assertEquals(0.77F, result.get(0).get("_score"));
+        Assert.assertEquals(0.77F, result.get(0).get("score"));
     }
 
     @Test

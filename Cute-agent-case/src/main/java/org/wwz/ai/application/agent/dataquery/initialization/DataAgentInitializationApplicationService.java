@@ -70,9 +70,9 @@ public class DataAgentInitializationApplicationService {
     private void refreshModelMetadata(boolean forceRefresh) throws Exception {
         try {
             if (forceRefresh) {
-                chatModelInfoService.refreshModelInfo(dataQuerySettings);
+                chatModelInfoService.refreshModelInfo();
             } else {
-                chatModelInfoService.initModelInfo(dataQuerySettings);
+                chatModelInfoService.initModelInfo();
             }
         } catch (Exception e) {
             if (forceRefresh) {

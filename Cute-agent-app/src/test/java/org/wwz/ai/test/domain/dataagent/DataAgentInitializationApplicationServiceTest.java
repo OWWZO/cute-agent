@@ -24,8 +24,8 @@ public class DataAgentInitializationApplicationServiceTest {
 
         Mockito.verify(initializerPort).initializeVectorIndex(true, 768);
         Mockito.verify(initializerPort).initializeColumnValueIndex(true);
-        Mockito.verify(chatModelInfoService).refreshModelInfo(config);
-        Mockito.verify(chatModelInfoService, Mockito.never()).initModelInfo(config);
+        Mockito.verify(chatModelInfoService).refreshModelInfo();
+        Mockito.verify(chatModelInfoService, Mockito.never()).initModelInfo();
     }
 
     @Test
@@ -41,7 +41,7 @@ public class DataAgentInitializationApplicationServiceTest {
         Assert.assertFalse(config.getQdrantConfig().getEnable());
         Assert.assertTrue(config.getEsConfig().getEnable());
         Mockito.verify(initializerPort).initializeColumnValueIndex(false);
-        Mockito.verify(chatModelInfoService).initModelInfo(config);
+        Mockito.verify(chatModelInfoService).initModelInfo();
     }
 
     @Test
@@ -55,7 +55,7 @@ public class DataAgentInitializationApplicationServiceTest {
         service(config, initializerPort, chatModelInfoService).initialize(1024);
 
         Assert.assertFalse(config.getEsConfig().getEnable());
-        Mockito.verify(chatModelInfoService).initModelInfo(config);
+        Mockito.verify(chatModelInfoService).initModelInfo();
     }
 
     @Test
@@ -81,13 +81,13 @@ public class DataAgentInitializationApplicationServiceTest {
         DataAgentInitializerPort initializerPort = Mockito.mock(DataAgentInitializerPort.class);
         ChatModelInfoService chatModelInfoService = Mockito.mock(ChatModelInfoService.class);
         IllegalStateException expected = new IllegalStateException("metadata refresh failed");
-        Mockito.doThrow(expected).when(chatModelInfoService).refreshModelInfo(config);
+        Mockito.doThrow(expected).when(chatModelInfoService).refreshModelInfo();
 
         IllegalStateException actual = Assert.assertThrows(IllegalStateException.class,
                 () -> service(config, initializerPort, chatModelInfoService).initialize(1024));
 
         Assert.assertSame(expected, actual);
-        Mockito.verify(chatModelInfoService, Mockito.never()).initModelInfo(config);
+        Mockito.verify(chatModelInfoService, Mockito.never()).initModelInfo();
     }
 
     private DataAgentInitializationApplicationService service(

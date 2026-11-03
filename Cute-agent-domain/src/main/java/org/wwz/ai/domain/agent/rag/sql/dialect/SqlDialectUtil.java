@@ -10,7 +10,7 @@ public class SqlDialectUtil {
 
     public static SqlDialect fromDialectString(String dialectString) {
         if (StringUtils.equalsIgnoreCase("clickhouse", StringUtils.trimToEmpty(dialectString))) {
-            return ClickHouseSqlDialect2.DEFAULT;
+            return ClickHouseCustomSqlDialect.DEFAULT;
         }
         return MysqlCustomSqlDialect.DEFAULT;
     }

@@ -57,16 +57,17 @@ public class ChatModelInfoService {
     private final ColumnValueIndexAdminPort columnValueIndexAdminPort;
     private final ColumnValueSyncPort columnValueSyncPort;
 
-    public void initModelInfo(DataQuerySettings dataQuerySettings) throws Exception {
+    public void initModelInfo() throws Exception {
         // 初始化顺序先建立模型和 schema 元数据，再同步检索索引，保证向量数据有稳定的 modelCode/columnId。
-        initModelInfo(dataQuerySettings, false);
+        initModelInfo(false);
     }
 
-    public void refreshModelInfo(DataQuerySettings dataQuerySettings) throws Exception {
-        initModelInfo(dataQuerySettings, true);
+    public void refreshModelInfo() throws Exception {
+        initModelInfo(true);
     }
 
-    private void initModelInfo(DataQuerySettings dataQuerySettings, boolean forceRefresh) throws Exception {
+    private void initModelInfo(boolean forceRefresh) throws Exception {
+        // 统一使用注入的配置实例，避免调用方传入另一份配置导致初始化与索引开关不一致。
         List<DataQueryModelConfig> tableList = dataQuerySettings.getModelList();
         if (CollectionUtils.isEmpty(tableList)) {
             log.warn("dataAgent.tableList is empty");
