@@ -11,6 +11,7 @@ import org.wwz.ai.application.agent.stream.AgentSessionStream;
 import org.wwz.ai.domain.agent.adapter.port.AgentMessageStream;
 import org.wwz.ai.domain.agent.rag.DataAgentQueryService;
 import org.wwz.ai.domain.agent.rag.model.query.DataAgentChatQuery;
+import org.wwz.ai.domain.agent.rag.model.query.DataQueryEventType;
 import org.wwz.ai.domain.agent.rag.model.query.DataQueryStreamEvent;
 
 import java.util.ArrayList;
@@ -30,9 +31,9 @@ public class DataAgentApplicationServiceTest {
         RecordingStream stream = new RecordingStream();
         doAnswer(invocation -> {
             AgentMessageStream domainStream = invocation.getArgument(1);
-            domainStream.send(new DataQueryStreamEvent("DEBUG", "request-1"));
-            domainStream.send(new DataQueryStreamEvent("THINK", "thinking"));
-            domainStream.send(new DataQueryStreamEvent("finished_stream", "finished_stream"));
+            domainStream.send(DataQueryStreamEvent.text(DataQueryEventType.DEBUG, "request-1"));
+            domainStream.send(DataQueryStreamEvent.text(DataQueryEventType.THINK, "thinking"));
+            domainStream.send(DataQueryStreamEvent.text(DataQueryEventType.FINISHED_STREAM, "finished_stream"));
             domainStream.complete();
             return null;
         }).when(domainService).chatQuery(any(), any());

@@ -277,16 +277,20 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                 flushService = deps.getOptionalMemoryFlushService();
             }
             if (flushService != null) {
-                int applied = flushService.flushBeforeCompact(
+                MemoryFlushService.FlushResult flushResult = flushService.flushBeforeCompact(
                         sessionId,
                         requestId,
                         parity == null ? null : parity.owner(),
                         working,
                         parity == null ? null : parity.parentSystemPrompt(),
                         parity == null ? null : parity.parentTools());
-                if (applied > 0) {
+                if (flushResult.failed()) {
+                    // flush 失败不阻断压缩，但要与 skip 区分开，便于重试或打点。
+                    log.warn("memory-flush failed before compact sessionId={} error={}",
+                            sessionId, flushResult.error());
+                } else if (flushResult.written() > 0) {
                     log.info("memory-flush wrote {} curated entries before compact sessionId={}",
-                            applied, sessionId);
+                            flushResult.written(), sessionId);
                 }
             } else {
                 int userTurns = MemoryFlushPolicy.countUserTurns(working);

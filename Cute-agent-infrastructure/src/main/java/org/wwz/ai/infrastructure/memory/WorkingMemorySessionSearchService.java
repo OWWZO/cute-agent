@@ -43,6 +43,7 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
     @Override
     public String search(SessionSearchRequest request) {
         if (request == null) {
+            // 有意设计：搜索框允许空条件查询，null 请求等价于「浏览全部」，不是参数错误。
             return browse(null, null, DEFAULT_LIMIT);
         }
         if (request.getLimit() != null && request.getLimit() <= 0) {

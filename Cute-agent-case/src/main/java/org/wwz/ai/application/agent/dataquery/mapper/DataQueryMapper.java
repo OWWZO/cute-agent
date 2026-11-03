@@ -101,6 +101,7 @@ public class DataQueryMapper {
     }
 
     public DataAgentStreamResult mapStreamEvent(DataQueryStreamEvent event) {
-        return new DataAgentStreamResult(event.eventType(), event.data());
+        // 域内类型收窄后，只在 case 边界还原 wire 值，保证 SSE 事件名与 data 形状不变。
+        return new DataAgentStreamResult(event.eventType().wireValue(), event.data().wireValue());
     }
 }

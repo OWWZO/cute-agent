@@ -3,6 +3,8 @@ package org.wwz.ai.test.domain.dataagent;
 import com.alibaba.fastjson.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
+import org.wwz.ai.domain.agent.rag.model.query.DataQueryEventType;
+import org.wwz.ai.domain.agent.rag.model.query.DataQueryStreamEvent;
 import org.wwz.ai.domain.agent.rag.model.query.Nl2SqlQuery;
 import org.wwz.ai.domain.agent.rag.model.query.Nl2SqlResult;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryModelDescriptor;
@@ -55,5 +57,22 @@ public class DataQueryWireContractTest {
         Assert.assertEquals(Long.valueOf(45L), result.getCostTime().get("llm"));
         Assert.assertEquals("脏值按 0 兜底，不能打断整条结果解析",
                 Long.valueOf(0L), result.getCostTime().get("dirty"));
+    }
+
+    @Test
+    public void streamEventEnumKeepsLegacyWireValuesAndRejectsNullType() {
+        Assert.assertEquals("CHART_DATA", DataQueryEventType.CHART_DATA.wireValue());
+        Assert.assertEquals("THINK", DataQueryEventType.THINK.wireValue());
+        Assert.assertEquals("READY", DataQueryEventType.READY.wireValue());
+        Assert.assertEquals("ERROR", DataQueryEventType.ERROR.wireValue());
+        Assert.assertEquals("DEBUG", DataQueryEventType.DEBUG.wireValue());
+        Assert.assertEquals("finished_stream", DataQueryEventType.FINISHED_STREAM.wireValue());
+
+        try {
+            DataQueryStreamEvent.text(null, "boom");
+            Assert.fail("eventType 必须非空");
+        } catch (NullPointerException expected) {
+            // expected
+        }
     }
 }

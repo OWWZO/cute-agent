@@ -11,6 +11,7 @@ import org.wwz.ai.domain.agent.rag.model.column.ColumnValueSearchRequest;
 import org.wwz.ai.domain.agent.rag.model.config.DataQuerySettings;
 import org.wwz.ai.domain.agent.rag.model.query.ColumnSchemaRecallQuery;
 import org.wwz.ai.domain.agent.rag.model.query.DataAgentChatQuery;
+import org.wwz.ai.domain.agent.rag.model.query.DataQueryEventType;
 import org.wwz.ai.domain.agent.rag.model.query.DataQueryResult;
 import org.wwz.ai.domain.agent.rag.model.query.DataQueryStreamEvent;
 import org.wwz.ai.domain.agent.rag.model.query.Nl2SqlQuery;
@@ -24,7 +25,6 @@ import org.wwz.ai.domain.agent.rag.service.ChatModelInfoService;
 import org.wwz.ai.domain.agent.rag.service.ChatModelSchemaService;
 import org.wwz.ai.domain.agent.rag.service.SchemaRecallService;
 import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
-import org.wwz.ai.domain.agent.cute.model.enums.EventTypeEnum;
 import org.wwz.ai.types.agent.config.AgentExecutorNames;
 
 import jakarta.annotation.Resource;
@@ -89,22 +89,22 @@ public class DataAgentQueryServiceImpl implements DataAgentQueryService {
     @Override
     public void chatQuery(DataAgentChatQuery request, AgentMessageStream stream) throws Exception {
         Nl2SqlQuery nl2SqlQuery = prepareNl2SqlQuery(request.content(), null);
-        stream.send(new DataQueryStreamEvent(EventTypeEnum.DEBUG.name(), nl2SqlQuery.getRequestId()));
+        stream.send(DataQueryStreamEvent.text(DataQueryEventType.DEBUG, nl2SqlQuery.getRequestId()));
         AgentExecutorSupport.execute(toolExecutor, "dataAgentChatQuery", () -> {
             try {
                 List<DataQueryResult> result = nl2SqlQueryService.runNL2SQLSse(nl2SqlQuery, stream);
-                stream.send(new DataQueryStreamEvent(EventTypeEnum.CHART_DATA.name(), result));
+                stream.send(DataQueryStreamEvent.chartData(result));
             } catch (Exception e) {
                 log.error("{},{} 智能问数异常：{}", nl2SqlQuery.getTraceId(), nl2SqlQuery.getRequestId(), e.getMessage(), e);
                 try {
-                    stream.send(new DataQueryStreamEvent(EventTypeEnum.ERROR.name(), e.getMessage()));
+                    stream.send(DataQueryStreamEvent.text(DataQueryEventType.ERROR, e.getMessage()));
                 } catch (Exception sendException) {
                     log.warn("{},{} sse 发送异常：{}", nl2SqlQuery.getTraceId(), nl2SqlQuery.getRequestId(),
                             sendException.getMessage(), sendException);
                 }
             } finally {
                 try {
-                    stream.send(new DataQueryStreamEvent(EventTypeEnum.READY.name(), ""));
+                    stream.send(DataQueryStreamEvent.text(DataQueryEventType.READY, ""));
                 } catch (Exception sendException) {
                     log.warn("{},{} sse 发送异常：{}", nl2SqlQuery.getTraceId(), nl2SqlQuery.getRequestId(),
                             sendException.getMessage(), sendException);

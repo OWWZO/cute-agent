@@ -9,6 +9,11 @@ public interface SessionSearchService {
     /**
      * Hermes 风格的消息历史检索。实现根据请求参数选择 discovery、scroll、read 或 browse。
      * <p>
+     * {@code request == null} 与「字段全空的 request」语义一致：浏览当前用户最近的会话，
+     * 不是错误，也不代表「搜索不到」。{@code limit == null} 用实现默认值；
+     * {@code limit == 0} 表示调用方未指定上限，由实现决定（通常回退默认值）；
+     * 显式负数由实现按参数错误处理。
+     * <p>
      * 这是给只实现五参版本的旧适配器用的兜底：五参签名没有 scroll / 角色过滤能力，
      * 遇到这类请求必须显式返回错误，不能静默降级成另一种模式。
      */
@@ -31,11 +36,11 @@ public interface SessionSearchService {
     }
 
     /**
-     * @param sessionId  当前会话（scope=session 时必填；scope=user 时用于排序/标注当前会话）
-     * @param userId  用户归属（scope=user 时优先；可为空则回退本会话）
-     * @param query      关键词
-     * @param limit      最大命中
-     * @param scope      session=仅本会话；user=该 userId 下跨会话
+     * @param sessionId 当前会话（scope=session 时必填；scope=user 时用于排序/标注当前会话）
+     * @param userId    用户归属（scope=user 时优先；可为空则回退本会话）
+     * @param query     关键词；为空时表示不过滤关键词
+     * @param limit     最大命中；{@code 0} 表示未指定，由实现回退默认值
+     * @param scope     session=仅本会话；user=该 userId 下跨会话
      */
     String search(String sessionId, String userId, String query, int limit, String scope);
 
