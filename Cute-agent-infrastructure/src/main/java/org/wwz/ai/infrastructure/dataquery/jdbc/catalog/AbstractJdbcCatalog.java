@@ -55,7 +55,7 @@ public abstract class AbstractJdbcCatalog implements JdbcCatalog {
     public List<DataQueryTable> listTables(Connection connection, String schema) throws CatalogException {
         // ResultSet 由当前方法创建和关闭，调用方只持有连接，不承担元数据游标生命周期。
         try (ResultSet rs = connection.getMetaData().getTables(null,
-                schema, null, null)) {
+                schema, null, new String[]{"TABLE", "VIEW"})) {
             List<DataQueryTable> tables = new ArrayList<>();
             while (rs.next()) {
                 DataQueryTable st = new DataQueryTable();

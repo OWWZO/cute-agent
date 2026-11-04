@@ -10,9 +10,12 @@ import java.sql.ResultSet;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 /** JDBC 列元数据的 LIKE 查询结果必须再按真实表名精确收敛。 */
 public class AbstractJdbcCatalogResultFilteringTest {
@@ -30,6 +33,18 @@ public class AbstractJdbcCatalogResultFilteringTest {
 
         assertEquals(Arrays.asList("id", "total"),
                 columns.stream().map(DataQueryTableColumn::getName).toList());
+    }
+
+    @Test
+    public void tableLookupOnlyRequestsTablesAndViews() {
+        AtomicReference<String[]> capturedTypes = new AtomicReference<>();
+
+        new AbstractJdbcCatalog() {
+        }.listTables(connectionCapturingTableTypes(capturedTypes), "sales");
+
+        assertNotNull(capturedTypes.get());
+        assertEquals(2, capturedTypes.get().length);
+        assertEquals(Set.of("TABLE", "VIEW"), Set.of(capturedTypes.get()));
     }
 
     private static Connection connectionWithColumns(String[][] rows) {
@@ -60,6 +75,36 @@ public class AbstractJdbcCatalogResultFilteringTest {
                 new Class<?>[]{DatabaseMetaData.class},
                 (proxy, method, args) -> {
                     if ("getColumns".equals(method.getName())) {
+                        return resultSet;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
+        return (Connection) Proxy.newProxyInstance(
+                AbstractJdbcCatalogResultFilteringTest.class.getClassLoader(),
+                new Class<?>[]{Connection.class},
+                (proxy, method, args) -> {
+                    if ("getMetaData".equals(method.getName())) {
+                        return metaData;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
+    }
+
+    private static Connection connectionCapturingTableTypes(AtomicReference<String[]> capturedTypes) {
+        ResultSet resultSet = (ResultSet) Proxy.newProxyInstance(
+                AbstractJdbcCatalogResultFilteringTest.class.getClassLoader(),
+                new Class<?>[]{ResultSet.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "next" -> false;
+                    case "close" -> null;
+                    default -> throw new UnsupportedOperationException(method.getName());
+                });
+        DatabaseMetaData metaData = (DatabaseMetaData) Proxy.newProxyInstance(
+                AbstractJdbcCatalogResultFilteringTest.class.getClassLoader(),
+                new Class<?>[]{DatabaseMetaData.class},
+                (proxy, method, args) -> {
+                    if ("getTables".equals(method.getName())) {
+                        capturedTypes.set((String[]) args[3]);
                         return resultSet;
                     }
                     throw new UnsupportedOperationException(method.getName());
