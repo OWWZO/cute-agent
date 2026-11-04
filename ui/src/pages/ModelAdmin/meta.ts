@@ -1,7 +1,9 @@
 /** 模型接入页展示元数据 */
 
+export type ProviderId = "openai" | "deepseek" | "moonshot" | "custom";
+
 export type ProviderPreset = {
-  id: string;
+  id: ProviderId;
   label: string;
   baseUrl: string;
   completionsPath: string;
@@ -42,7 +44,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
 ];
 
-export function matchProviderId(baseUrl?: string): string {
+export function matchProviderId(baseUrl?: string): ProviderId {
   const u = (baseUrl || "").trim().toLowerCase();
   if (!u) return "custom";
   const hit = PROVIDER_PRESETS.find(

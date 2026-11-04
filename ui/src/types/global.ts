@@ -12,7 +12,7 @@ declare global {
 
     type FC<P extends object = object> = React.FC<P & FCProps>;
 
-    type ControlProps<VAL = unknown, P = object> = {
+    type ControlProps<VAL = unknown, P extends object = object> = {
       /** 需要自行加的值 */
       value?: VAL;
       /** 改变值时触发 */
@@ -31,7 +31,7 @@ declare global {
       value: T;
     };
 
-    type Merge<T1, T2> = Omit<T1, keyof T2> & T2;
+    type Merge<T1 extends object, T2 extends object> = Omit<T1, keyof T2> & T2;
   }
 
   const SERVICE_BASE_URL: string;

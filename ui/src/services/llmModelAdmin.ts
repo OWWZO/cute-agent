@@ -122,12 +122,6 @@ export const llmModelAdminApi = {
       `${MODEL_BASE}/test-by-id/${id}`
     ) as unknown as Promise<{ ok: boolean; ms: number; message?: string }>,
 
-  /** 兼容按模型引用测试的接口 */
-  testConnection: (modelId: string) =>
-    api.post<{ ok: boolean; ms: number; message?: string }>(
-      `${MODEL_BASE}/test/${encodeURIComponent(modelId)}`
-    ) as unknown as Promise<{ ok: boolean; ms: number; message?: string }>,
-
   /**
    * 一次提交：写 API 凭据 + 模型绑定。
    * 编辑时若 apiKey 含 • 或为空则先拉旧 API 保留原 key。

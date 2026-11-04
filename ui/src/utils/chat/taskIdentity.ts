@@ -2,7 +2,6 @@ import { isSubAgentParentTask, resolveSubAgentDisplay } from "./subagent";
 import {
   pickFirstText,
   resolveTaskToolCallId,
-  resolveToolCallStreamKey,
 } from "./toolCalls";
 
 export type TaskLike =
@@ -91,10 +90,6 @@ export function identityKeys(identity: TaskIdentity): string[] {
 
 export function taskIdentityKeys(task?: TaskLike): string[] {
   return identityKeys(readTaskIdentity(task));
-}
-
-export function taskIdentityRank(task: TaskLike, key: string): number {
-  return identityRank(readTaskIdentity(task), key);
 }
 
 export function identitiesOverlap(left: TaskLike, right: TaskLike): boolean {
@@ -220,10 +215,6 @@ export function findBestAgentTask(
     walkChatTasks(chat).filter((task) => isSubAgentParentTask(task)),
     key
   );
-}
-
-export function resolvedStreamKey(task?: TaskLike): string {
-  return resolveToolCallStreamKey(task as Partial<CHAT.Task>);
 }
 
 /** 按 toolCallId（或 messageId/id 兜底）在当前会话里找 Agent 父卡 */

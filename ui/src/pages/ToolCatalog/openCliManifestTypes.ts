@@ -1,8 +1,16 @@
 import type { ToolAccess, ToolCategory } from "./toolCatalog";
 
+export type OpenCliArgumentType =
+  | "str"
+  | "string"
+  | "bool"
+  | "boolean"
+  | "int"
+  | "number";
+
 export type OpenCliArgumentDefinition = {
   name: string;
-  type: string;
+  type: OpenCliArgumentType;
   required: boolean;
   help: string;
   default?: string | number | boolean;

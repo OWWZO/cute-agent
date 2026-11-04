@@ -43,7 +43,6 @@ declare global {
         planList?: PlanItem[];
         timeline?: TimelineEntry[];
         metrics?: {
-          event_count?: number;
           status?: RunStatus;
         };
         /** 上下文占用（SSE context_usage） */
@@ -114,20 +113,6 @@ declare global {
       thinkingEffort?: string;
       /** 本轮强制进入 plan mode（PlanExecute 会话的计划按钮） */
       forcePlanMode?: boolean;
-    };
-
-    export type TAbortController = {
-      signal: AbortSignal;
-      abort(reason?: unknown): void;
-    };
-
-    export type FetchEventSourceInit = {
-      onopen: (event: Event) => void;
-      onmessage: (event: unknown) => void;
-      onerror: (event?: Event) => void;
-      onclose: (event?: Event) => void;
-      headers?: Record<string, string>;
-      body?: string;
     };
 
     export type Task = CuteType.Merge<
@@ -231,11 +216,6 @@ declare global {
       historyHasMore?: boolean;
     };
 
-    export type ModelInfo = {
-      modelName: string;
-      modelCode: string;
-      schemaList: { columnComment: string; columnName: string; dataType: string; columnId: string }[];
-    };
     export type ConversationSessionItem = import("@/services/agentConversation").ConversationSessionItem;
     export type ConversationHistoryDetail = import("@/services/agentConversation").ConversationHistoryDetail;
     export type ConversationHistoryPage = import("@/services/agentConversation").ConversationHistoryPage;

@@ -11,8 +11,10 @@ export type DeepSearchCardItem = {
 
 export type DeepSearchStage = "extend" | "search" | "chapter_summary" | "report";
 
+export type DeepSearchPreviewStage = "extend" | "search" | "chapter_summary";
+
 export type DeepSearchPreviewModel = {
-  stage: Exclude<DeepSearchStage, "report">;
+  stage: DeepSearchPreviewStage;
   query: string;
   statusLabel: string;
   description: string;
