@@ -516,7 +516,10 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
         if (value instanceof List<?> list) {
             List<JsonWithInt.Value> values = new ArrayList<>();
             for (Object item : list) {
-                values.add(toQdrantValue(item, depth + 1));
+                JsonWithInt.Value converted = toQdrantValue(item, depth + 1);
+                if (converted != null) {
+                    values.add(converted);
+                }
             }
             return list(values);
         }

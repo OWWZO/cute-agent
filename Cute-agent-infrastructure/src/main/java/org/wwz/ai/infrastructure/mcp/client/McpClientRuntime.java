@@ -4,7 +4,9 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.ToString;
 import org.wwz.ai.infrastructure.mcp.model.McpServerDescriptor;
 
@@ -35,6 +37,19 @@ public class McpClientRuntime {
      * 同一服务上的工具发现与工具执行统一串行，避免客户端复用并发异常。
      */
     @Builder.Default
+    @Setter(lombok.AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
     @ToString.Exclude
     private ReentrantLock lock = new ReentrantLock();
+
+    public ReentrantLock getLock() {
+        if (lock == null) {
+            synchronized (this) {
+                if (lock == null) {
+                    lock = new ReentrantLock();
+                }
+            }
+        }
+        return lock;
+    }
 }

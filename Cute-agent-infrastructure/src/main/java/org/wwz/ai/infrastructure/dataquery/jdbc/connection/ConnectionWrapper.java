@@ -50,12 +50,15 @@ public class ConnectionWrapper implements AutoCloseable {
     public Connection getConnection() {
         // 连接获取失败只在配置的次数内重试；中断时立即转业务异常，不吞掉线程中断原因。
         int maxRetryTime = jdbcConnectionConfig.getMaxRetryTimes();
+        if (maxRetryTime <= 0) {
+            throw new IllegalStateException(
+                    "maxRetryTimes must be positive for poolId: " + jdbcConnectionConfig.getKey());
+        }
         int i = 0;
         Connection connection = null;
         while (i < maxRetryTime) {
             try {
                 connection = datasourceWrapper.getDataSource().getConnection();
-                log.info("获取数据库连接成功 poolId:{}", jdbcConnectionConfig.getKey());
                 break;
             } catch (SQLException e) {
                 if (i < maxRetryTime - 1) {
@@ -74,6 +77,11 @@ public class ConnectionWrapper implements AutoCloseable {
             }
             i++;
         }
+        if (connection == null) {
+            throw new IllegalStateException(
+                    "JDBC datasource returned null connection for poolId: " + jdbcConnectionConfig.getKey());
+        }
+        log.info("获取数据库连接成功 poolId:{}", jdbcConnectionConfig.getKey());
         return connection;
     }
 

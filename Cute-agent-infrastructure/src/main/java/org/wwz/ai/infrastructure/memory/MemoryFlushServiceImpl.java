@@ -133,6 +133,9 @@ public class MemoryFlushServiceImpl implements MemoryFlushService {
             }
             return FlushResult.ofApplied(result.appliedOrZero());
         } finally {
+            if (StringUtils.isNotBlank(reqKey)) {
+                flushedRequests.remove(reqKey);
+            }
             flushedRequests.remove(sessionKey);
         }
     }
