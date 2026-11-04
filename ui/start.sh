@@ -2,7 +2,7 @@
 #!/bin/bash
 
 # Check if Node.js version is 18
-if [ $(node -v | cut -d. -f1,2) -lt 18 ]; then
+if [ $(node -v | cut -d. -f1 | tr -d v) -lt 18 ]; then
   echo "Node.js version 18 is required. Current version: $(node -v)"
   exit 1
 fi
@@ -15,7 +15,7 @@ if ! command -v pnpm &> /dev/null; then
 fi
 
 # Check if pnpm version is 7
-if [ $(pnpm -v | cut -d. -f1,2) -lt 7 ]; then
+if [ $(pnpm -v | cut -d. -f1) -lt 7 ]; then
   echo "pnpm version 7 is required. Current version: $(pnpm -v)"
   exit 1
 fi

@@ -86,20 +86,8 @@ public class ConversationSessionAuthorizationService {
             if (fullSession == null) {
                 throw new SessionOwnershipDeniedException("当前会话不存在");
             }
-            executionLedgerWriteRepository.upsertSession(DialogueSessionUpsertRecord.builder()
-                    .sessionId(fullSession.getSessionId())
-                    .userId(userId)
-                    .title(fullSession.getTitle())
-                    .status(fullSession.getStatus())
-                    .latestRequestId(fullSession.getLatestRequestId())
-                    .latestQueryText(fullSession.getLatestQueryText())
-                    .latestSummaryText(fullSession.getLatestSummaryText())
-                    .runCount(fullSession.getRunCount())
-                    .finishedRunCount(fullSession.getFinishedRunCount())
-                    .failedRunCount(fullSession.getFailedRunCount())
-                    .startedAt(fullSession.getStartedAt())
-                    .lastActiveAt(fullSession.getLastActiveAt())
-                    .build());
+            executionLedgerWriteRepository.upsertSession(
+                    buildOwnedSessionSnapshot(fullSession, userId, fullSession.getTitle()));
             return executionLedgerWriteRepository.querySessionBySessionId(sessionId);
         }
         if (!StringUtils.equals(existing.getUserId(), userId)) {
@@ -154,20 +142,10 @@ public class ConversationSessionAuthorizationService {
         // 只读会话（子智能体隐藏会话）不得作为交互会话继续使用
         assertInteractive(existing);
         if (StringUtils.isBlank(existing.getUserId())) {
-            executionLedgerWriteRepository.upsertSession(DialogueSessionUpsertRecord.builder()
-                    .sessionId(existing.getSessionId())
-                    .userId(userId)
-                    .title(StringUtils.defaultIfBlank(existing.getTitle(), resolveSessionTitle(queryText)))
-                    .status(existing.getStatus())
-                    .latestRequestId(existing.getLatestRequestId())
-                    .latestQueryText(existing.getLatestQueryText())
-                    .latestSummaryText(existing.getLatestSummaryText())
-                    .runCount(existing.getRunCount())
-                    .finishedRunCount(existing.getFinishedRunCount())
-                    .failedRunCount(existing.getFailedRunCount())
-                    .startedAt(existing.getStartedAt())
-                    .lastActiveAt(existing.getLastActiveAt())
-                    .build());
+            executionLedgerWriteRepository.upsertSession(buildOwnedSessionSnapshot(
+                    existing,
+                    userId,
+                    StringUtils.defaultIfBlank(existing.getTitle(), resolveSessionTitle(queryText))));
             return executionLedgerWriteRepository.querySessionBySessionId(sessionId);
         }
         if (!canAccessInteractive(existing, userId)) {
@@ -228,6 +206,41 @@ public class ConversationSessionAuthorizationService {
             return "新对话";
         }
         return normalized.length() <= 30 ? normalized : normalized.substring(0, 30);
+    }
+
+    /**
+     * upsertSession 是整行写入：认领无主会话时必须携带现有身份列和偏好列，
+     * 不能依赖 SQL 对部分列做兜底。尤其 deep_think 会被 VALUES 直接覆盖。
+     */
+    private static DialogueSessionUpsertRecord buildOwnedSessionSnapshot(
+            DialogueSession session,
+            String userId,
+            String title) {
+        return DialogueSessionUpsertRecord.builder()
+                .sessionId(session.getSessionId())
+                .userId(userId)
+                .bindingId(session.getBindingId())
+                .channelChatType(session.getChannelChatType())
+                .channelTargetId(session.getChannelTargetId())
+                .sessionKind(session.getSessionKind())
+                .parentSessionId(session.getParentSessionId())
+                .rootSessionId(session.getRootSessionId())
+                .subAgentType(session.getSubAgentType())
+                .title(title)
+                .status(session.getStatus())
+                .latestRequestId(session.getLatestRequestId())
+                .latestQueryText(session.getLatestQueryText())
+                .latestSummaryText(session.getLatestSummaryText())
+                .runCount(session.getRunCount())
+                .finishedRunCount(session.getFinishedRunCount())
+                .failedRunCount(session.getFailedRunCount())
+                .startedAt(session.getStartedAt())
+                .lastActiveAt(session.getLastActiveAt())
+                .model(session.getModel())
+                .thinking(session.getThinking())
+                .thinkingEffort(session.getThinkingEffort())
+                .deepThink(session.getDeepThink())
+                .build();
     }
 
     private void notifyLtmNewSession(String newSessionId) {

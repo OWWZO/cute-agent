@@ -8,6 +8,7 @@ import {
 } from "./utils";
 import { toast } from "sonner";
 import {
+  buildDeleteKnowledgeBaseConfirm,
   resolveKnowledgeBaseAfterDeletion,
   resolveSelectedKnowledgeBaseId,
   shouldBootstrapKnowledgeBases,
@@ -119,13 +120,8 @@ const WorkspaceMRag: CuteType.FC<WorkspaceMRagProps> = ({ embedded }) => {
         deletingKnowledgeBaseId={catalog.deletingKnowledgeBaseId}
         onDeleteKnowledgeBase={(kbId) => {
           // 删除是跨资源操作：成功后同时刷新目录、重置文件全文和查询结果。
-          confirm({
-            title: "确认删除这个知识库吗？",
-            content: "删除后会同时清理向量数据、文件记录和正文回显记录。",
-            okText: "确认删除",
-            cancelText: "取消",
-            danger: true,
-            async onOk() {
+          confirm(
+            buildDeleteKnowledgeBaseConfirm(async () => {
               const deletedResult = await catalog.deleteKnowledgeBaseById(kbId);
               if (!deletedResult) {
                 return;
@@ -142,8 +138,8 @@ const WorkspaceMRag: CuteType.FC<WorkspaceMRagProps> = ({ embedded }) => {
                   ? `知识库已删除，并清理 ${deletedResult.deletedFileCount} 条资料记录`
                   : "知识库已删除"
               );
-            },
-          });
+            })
+          );
         }}
         createKnowledgeBaseName={catalog.createKnowledgeBaseName}
         createKnowledgeBaseDesc={catalog.createKnowledgeBaseDesc}

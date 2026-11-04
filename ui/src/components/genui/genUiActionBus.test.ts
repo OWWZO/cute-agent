@@ -78,4 +78,63 @@ describe("genUiActionBus", () => {
     const result = await dispatchGenUiAction("bare-string");
     expect(result).toEqual({ ok: false, reason: "invalid" });
   });
+
+  it.each([
+    "javascript:alert(document.cookie)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///C:/Windows/System32/drivers/etc/hosts",
+    "vbscript:msgbox(1)",
+    "java\nscript:alert(1)",
+    "java\tscript:alert(1)",
+    "//evil.example/path",
+    "\\\\evil.example\\path",
+  ])("rejects unsafe navigate scheme %s before dispatch", async (route) => {
+    const navigate = vi.fn();
+    registerGenUiActionAdapters({ navigate });
+
+    const result = await dispatchGenUiAction({
+      type: "navigate",
+      payload: { route },
+    });
+
+    expect(result).toEqual({ ok: false, reason: "invalid" });
+    expect(normalizeAction({ type: "navigate", payload: { route } })).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("allows http, https and relative navigate routes", () => {
+    for (const route of [
+      "https://example.com/path?q=1",
+      "http://example.com/path",
+      "/workspace/chat",
+      "./settings",
+      "../history",
+    ]) {
+      expect(normalizeAction({ type: "navigate", payload: { route } })).toEqual({
+        type: "navigate",
+        payload: { route },
+      });
+    }
+  });
+
+  it("does not send an unsafe route to the window.location fallback", async () => {
+    const fakeWindow = {
+      location: {
+        href: "https://app.example/",
+      },
+    };
+    vi.stubGlobal("window", fakeWindow);
+
+    try {
+      const result = await dispatchGenUiAction({
+        type: "navigate",
+        payload: { route: "javascript:alert(1)" },
+      });
+
+      expect(result).toEqual({ ok: false, reason: "invalid" });
+      expect(fakeWindow.location.href).toBe("https://app.example/");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

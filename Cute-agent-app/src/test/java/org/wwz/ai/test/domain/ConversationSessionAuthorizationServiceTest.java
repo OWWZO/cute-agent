@@ -2,6 +2,7 @@ package org.wwz.ai.test.domain;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -9,6 +10,8 @@ import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizati
 import org.wwz.ai.application.agent.authorization.SessionNotInteractiveException;
 import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
 import org.wwz.ai.domain.agent.channel.port.ChannelBindingOwnershipPort;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
@@ -28,6 +31,19 @@ public class ConversationSessionAuthorizationServiceTest {
         return new ConversationSessionAuthorizationService(
                 ctx.readRepository,
                 ctx.writeRepository,
+                ltm
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ConversationSessionAuthorizationService newService(
+            IExecutionLedgerReadRepository readRepository,
+            IExecutionLedgerWriteRepository writeRepository) {
+        ObjectProvider<LtmManager> ltm = Mockito.mock(ObjectProvider.class);
+        Mockito.when(ltm.getIfAvailable()).thenReturn(null);
+        return new ConversationSessionAuthorizationService(
+                readRepository,
+                writeRepository,
                 ltm
         );
     }
@@ -57,6 +73,92 @@ public class ConversationSessionAuthorizationServiceTest {
         Assert.assertNotNull(session);
         Assert.assertEquals("user-001", session.getUserId());
         Assert.assertEquals("session-001", session.getSessionId());
+    }
+
+    @Test
+    public void rebindingOwnerlessSessionKeepsIdentityColumns() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx =
+                ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        ctx.writeRepository.upsertSession(DialogueSessionUpsertRecord.builder()
+                .sessionId("session-orphan")
+                .bindingId(12L)
+                .sessionKind(SessionKind.SUBAGENT.code())
+                .parentSessionId("parent-001")
+                .rootSessionId("root-001")
+                .title("待认领会话")
+                .status(ExecutionLedgerConstants.STATUS_RUNNING)
+                .runCount(0)
+                .finishedRunCount(0)
+                .failedRunCount(0)
+                .startedAt(now)
+                .lastActiveAt(now)
+                .build());
+        ConversationSessionAuthorizationService service = newService(ctx);
+
+        service.ensureSessionAccessible("user-001", "session-orphan", "继续");
+
+        DialogueSession persisted = ctx.readRepository.querySessionEntity("session-orphan");
+        Assert.assertEquals("user-001", persisted.getUserId());
+        Assert.assertEquals(Long.valueOf(12L), persisted.getBindingId());
+        Assert.assertEquals(SessionKind.SUBAGENT.code(), persisted.getSessionKind());
+        Assert.assertEquals("parent-001", persisted.getParentSessionId());
+        Assert.assertEquals("root-001", persisted.getRootSessionId());
+    }
+
+    @Test
+    public void rebindingOwnerlessSessionPassesCompleteRowToUpsert() {
+        IExecutionLedgerReadRepository readRepository =
+                Mockito.mock(IExecutionLedgerReadRepository.class);
+        IExecutionLedgerWriteRepository writeRepository =
+                Mockito.mock(IExecutionLedgerWriteRepository.class);
+        java.time.LocalDateTime startedAt = java.time.LocalDateTime.of(2026, 11, 4, 10, 0);
+        java.time.LocalDateTime lastActiveAt = java.time.LocalDateTime.of(2026, 11, 4, 10, 5);
+        DialogueSession existing = DialogueSession.builder()
+                .sessionId("session-full")
+                .bindingId(12L)
+                .channelChatType("GROUP")
+                .channelTargetId("group-001")
+                .sessionKind(SessionKind.SUBAGENT.code())
+                .parentSessionId("parent-001")
+                .rootSessionId("root-001")
+                .subAgentType("researcher")
+                .title("待认领会话")
+                .status(ExecutionLedgerConstants.STATUS_SUCCESS)
+                .latestRequestId("request-001")
+                .latestQueryText("旧问题")
+                .latestSummaryText("旧摘要")
+                .runCount(3)
+                .finishedRunCount(2)
+                .failedRunCount(1)
+                .startedAt(startedAt)
+                .lastActiveAt(lastActiveAt)
+                .model("gpt-test")
+                .thinking(true)
+                .thinkingEffort("high")
+                .deepThink(1)
+                .build();
+        Mockito.when(readRepository.querySessionEntity("session-full")).thenReturn(existing);
+        ConversationSessionAuthorizationService service =
+                newService(readRepository, writeRepository);
+
+        service.ensureSessionAccessible("user-001", "session-full", "继续");
+
+        ArgumentCaptor<DialogueSessionUpsertRecord> captor =
+                ArgumentCaptor.forClass(DialogueSessionUpsertRecord.class);
+        Mockito.verify(writeRepository).upsertSession(captor.capture());
+        DialogueSessionUpsertRecord record = captor.getValue();
+        Assert.assertEquals(Long.valueOf(12L), record.getBindingId());
+        Assert.assertEquals("GROUP", record.getChannelChatType());
+        Assert.assertEquals("group-001", record.getChannelTargetId());
+        Assert.assertEquals(SessionKind.SUBAGENT.code(), record.getSessionKind());
+        Assert.assertEquals("parent-001", record.getParentSessionId());
+        Assert.assertEquals("root-001", record.getRootSessionId());
+        Assert.assertEquals("researcher", record.getSubAgentType());
+        Assert.assertEquals("gpt-test", record.getModel());
+        Assert.assertEquals(Boolean.TRUE, record.getThinking());
+        Assert.assertEquals("high", record.getThinkingEffort());
+        Assert.assertEquals(Integer.valueOf(1), record.getDeepThink());
     }
 
     @Test(expected = SessionOwnershipDeniedException.class)
