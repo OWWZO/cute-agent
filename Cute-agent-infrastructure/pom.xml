@@ -22,6 +22,8 @@
             <groupId>com.google.auto.service</groupId>
             <artifactId>auto-service</artifactId>
             <version>1.0.1</version>
+            <!-- AutoService 只在编译期生成 META-INF/services 注册文件，运行时不需要。 -->
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
