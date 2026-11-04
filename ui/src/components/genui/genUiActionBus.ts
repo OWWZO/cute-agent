@@ -1,3 +1,5 @@
+import { isSafeBrowserUrl } from "@/utils/fileUrl";
+
 /**
  * GenUI action dispatcher.
  * Renderer stays store-free; ChatView wires adapters via GenUiActionBridge.
@@ -77,12 +79,7 @@ export function resetGenUiActionAdapters(): void {
 }
 
 function isSafeHref(url: string): boolean {
-  const t = url.trim().toLowerCase();
-  if (!t) return false;
-  if (t.startsWith("javascript:") || t.startsWith("data:") || t.startsWith("vbscript:")) {
-    return false;
-  }
-  return true;
+  return isSafeBrowserUrl(url, ["http:", "https:", "mailto:"]);
 }
 
 /**

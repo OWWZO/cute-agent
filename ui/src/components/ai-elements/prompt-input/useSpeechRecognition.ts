@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 
 interface PromptInputSpeechRecognition extends EventTarget {
   continuous: boolean;
@@ -67,6 +68,28 @@ type UseSpeechRecognitionOptions = {
   lang?: string;
 };
 
+export function nextSpeechRecognitionCommand(
+  isListening: boolean,
+  pending: boolean
+): "start" | "stop" | null {
+  if (pending) {
+    return null;
+  }
+  return isListening ? "stop" : "start";
+}
+
+export function trySpeechRecognitionCommand(
+  recognition: Pick<PromptInputSpeechRecognition, "start" | "stop">,
+  command: "start" | "stop"
+): Error | null {
+  try {
+    recognition[command]();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+}
+
 /**
  * 语音识别能力探测、事件绑定和启停控制统一放到 Hook 中。
  */
@@ -75,6 +98,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions) {
   const [isListening, setIsListening] = useState(false);
   const [recognition, setRecognition] = useState<PromptInputSpeechRecognition | null>(null);
   const recognitionRef = useRef<PromptInputSpeechRecognition | null>(null);
+  const listeningRef = useRef(false);
+  const pendingRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -94,10 +119,14 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions) {
     speechRecognition.lang = lang ?? navigator.language;
 
     speechRecognition.onstart = () => {
+      listeningRef.current = true;
+      pendingRef.current = false;
       setIsListening(true);
     };
 
     speechRecognition.onend = () => {
+      listeningRef.current = false;
+      pendingRef.current = false;
       setIsListening(false);
     };
 
@@ -125,7 +154,10 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions) {
 
     speechRecognition.onerror = (event) => {
       console.error("Speech recognition error:", event.error);
+      listeningRef.current = false;
+      pendingRef.current = false;
       setIsListening(false);
+      toast.error(`语音识别失败：${event.error || "未知错误"}`);
     };
 
     recognitionRef.current = speechRecognition;
@@ -133,8 +165,10 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions) {
 
     return () => {
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        trySpeechRecognitionCommand(recognitionRef.current, "stop");
       }
+      listeningRef.current = false;
+      pendingRef.current = false;
     };
   }, [lang, onTranscriptionChange, textareaRef]);
 
@@ -143,12 +177,27 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions) {
       return;
     }
 
-    if (isListening) {
-      recognition.stop();
-    } else {
-      recognition.start();
+    const command = nextSpeechRecognitionCommand(
+      listeningRef.current,
+      pendingRef.current
+    );
+    if (!command) {
+      return;
     }
-  }, [isListening, recognition]);
+
+    pendingRef.current = true;
+    const error = trySpeechRecognitionCommand(recognition, command);
+    if (error) {
+      pendingRef.current = false;
+      listeningRef.current = false;
+      setIsListening(false);
+      toast.error(
+        command === "start"
+          ? `无法启动语音识别：${error.message}`
+          : `无法停止语音识别：${error.message}`
+      );
+    }
+  }, [recognition]);
 
   return {
     isListening,
