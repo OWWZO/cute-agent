@@ -48,6 +48,8 @@ public class CuteMapperNamespaceBindingTest {
         // "Invalid bound statement (not found)"，所以在这里锁住。
         Assert.assertTrue(configuration.hasStatement(
                 "org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryMessageDao.selectHistoryBySession"));
+        Assert.assertTrue(configuration.hasStatement(
+                "org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryMessageDao.selectSessionSummaries"));
     }
 
     private DataSource testDataSource() {

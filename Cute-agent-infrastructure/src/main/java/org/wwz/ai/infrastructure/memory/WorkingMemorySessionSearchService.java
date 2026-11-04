@@ -144,9 +144,10 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         }
         boolean excludeLiveCurrent = !"session".equals(normalizedScope);
         List<WorkingMemorySearchMessage> hits = deduplicate(matched, limit, currentSessionId, excludeLiveCurrent);
+        Map<String, Map<String, Object>> sessionMetadata = loadSessionMetadata(hits);
         List<Map<String, Object>> results = new ArrayList<>();
         for (WorkingMemorySearchMessage hit : hits) {
-            results.add(lightweightResult(hit, query, tokens));
+            results.add(lightweightResult(hit, query, tokens, sessionMetadata));
         }
         return discoverPayload(query, roles, results, backend);
     }
@@ -235,7 +236,8 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
 
     private Map<String, Object> lightweightResult(WorkingMemorySearchMessage hit,
                                                   String query,
-                                                  List<String> tokens) {
+                                                  List<String> tokens,
+                                                  Map<String, Map<String, Object>> sessionMetadata) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("session_id", hit.getSessionId());
         result.put("match_message_id", hit.getId());
@@ -247,7 +249,7 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         if (hit.getSearchScore() != null) {
             result.put("search_score", hit.getSearchScore());
         }
-        addSessionMetadata(result, hit.getSessionId());
+        addSessionMetadata(result, hit.getSessionId(), sessionMetadata);
         return result;
     }
 
@@ -411,8 +413,16 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
     }
 
     private void addSessionMetadata(Map<String, Object> target, String sessionId) {
+        addSessionMetadata(target, sessionId, null);
+    }
+
+    private void addSessionMetadata(Map<String, Object> target,
+                                    String sessionId,
+                                    Map<String, Map<String, Object>> loadedMetadata) {
         try {
-            Map<String, Object> row = workingMemoryMessageDao.selectSessionSummary(sessionId);
+            Map<String, Object> row = loadedMetadata == null
+                    ? workingMemoryMessageDao.selectSessionSummary(sessionId)
+                    : loadedMetadata.get(sessionId);
             if (row == null || row.isEmpty()) {
                 return;
             }
@@ -422,6 +432,49 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         } catch (Exception e) {
             log.debug("session metadata lookup failed sessionId={}: {}", sessionId, e.toString());
         }
+    }
+
+    private Map<String, Map<String, Object>> loadSessionMetadata(List<WorkingMemorySearchMessage> hits) {
+        List<String> sessionIds = hits.stream()
+                .map(WorkingMemorySearchMessage::getSessionId)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .toList();
+        if (sessionIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Map<String, Object>> rows;
+        try {
+            rows = workingMemoryMessageDao.selectSessionSummaries(sessionIds);
+        } catch (Exception e) {
+            log.debug("batch session metadata lookup failed: {}", e.toString());
+            rows = null;
+        }
+        if (rows == null) {
+            // 保留单条查询回退，兼容未实现批量语句的测试替身与旧装配。
+            List<Map<String, Object>> fallbackRows = new ArrayList<>(sessionIds.size());
+            for (String sessionId : sessionIds) {
+                try {
+                    Map<String, Object> row = workingMemoryMessageDao.selectSessionSummary(sessionId);
+                    if (row != null && !row.isEmpty()) {
+                        fallbackRows.add(row);
+                    }
+                } catch (Exception e) {
+                    log.debug("session metadata fallback lookup failed sessionId={}: {}", sessionId, e.toString());
+                }
+            }
+            rows = fallbackRows;
+        }
+
+        Map<String, Map<String, Object>> metadata = new LinkedHashMap<>();
+        for (Map<String, Object> row : safeMapList(rows)) {
+            String sessionId = value(row, "sessionId", "session_id");
+            if (StringUtils.isNotBlank(sessionId)) {
+                metadata.putIfAbsent(sessionId, row);
+            }
+        }
+        return metadata;
     }
 
     private List<WorkingMemorySearchMessage> applyViewFilter(List<WorkingMemorySearchMessage> messages,

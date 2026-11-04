@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -190,6 +191,33 @@ public class WorkingMemorySessionSearchServiceTest {
         Assert.assertEquals(0, payload.getIntValue("count"));
         Assert.assertEquals(0, payload.getJSONArray("results").size());
         verify(dao, never()).selectHistoryBySession(any());
+    }
+
+    @Test
+    public void discoveryLoadsSessionMetadataInOneBatch() {
+        IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
+        WorkingMemorySearchMessage first = message(
+                "session-a", 2L, "request-a", 1, "billing decision a", "USER", 2);
+        WorkingMemorySearchMessage second = message(
+                "session-b", 3L, "request-b", 1, "billing decision b", "USER", 2);
+        when(dao.searchFullTextByUserId(eq("user-1"), eq("billing"), eq(8), anyList()))
+                .thenReturn(List.of(first, second));
+        when(dao.selectSessionSummaries(List.of("session-a", "session-b"))).thenReturn(List.of(
+                Map.of("sessionId", "session-a", "title", "A"),
+                Map.of("sessionId", "session-b", "title", "B")));
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .query("billing")
+                        .limit(2)
+                        .build()));
+
+        Assert.assertEquals(2, payload.getIntValue("count"));
+        Assert.assertEquals("A", payload.getJSONArray("results").getJSONObject(0).getString("title"));
+        Assert.assertEquals("B", payload.getJSONArray("results").getJSONObject(1).getString("title"));
+        verify(dao, times(1)).selectSessionSummaries(anyList());
+        verify(dao, never()).selectSessionSummary(any());
     }
 
     @Test
