@@ -97,19 +97,22 @@ def discover_cjk_font_file(*, is_bold: bool) -> str | None:
         root = Path(base)
         if not root.is_dir():
             continue
+        nested_matches: dict[str, Path] = {}
+        try:
+            for path in root.rglob("*"):
+                if path.name in names and path.is_file() and path.name not in nested_matches:
+                    nested_matches[path.name] = path
+        except OSError:
+            pass
         for n in names:
             direct = root / n
             if direct.is_file():
                 _DISCOVERY_CACHE[is_bold] = str(direct)
                 return str(direct)
-            try:
-                matches = root.rglob(n)
-                for p in matches:
-                    if p.is_file():
-                        _DISCOVERY_CACHE[is_bold] = str(p)
-                        return str(p)
-            except OSError:
-                continue
+            nested = nested_matches.get(n)
+            if nested is not None:
+                _DISCOVERY_CACHE[is_bold] = str(nested)
+                return str(nested)
     _DISCOVERY_CACHE[is_bold] = None
     return None
 

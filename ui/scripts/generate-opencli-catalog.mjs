@@ -254,5 +254,13 @@ const generatedContent = [
   "",
 ].join("\n");
 
-writeFileSync(outputPath, generatedContent, "utf8");
+let unchanged = false;
+try {
+  unchanged = readFileSync(outputPath, "utf8") === generatedContent;
+} catch {
+  // Missing output is the normal first-run path; generate it below.
+}
+if (!unchanged) {
+  writeFileSync(outputPath, generatedContent, "utf8");
+}
 console.log(`Generated ${sites.length} OpenCLI sites and ${duplicateCommands.length} commands.`);

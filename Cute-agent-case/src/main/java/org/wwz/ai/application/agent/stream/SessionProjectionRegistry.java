@@ -60,7 +60,11 @@ public class SessionProjectionRegistry {
         if (StringUtils.isBlank(sessionId)) {
             return List.of();
         }
-        CopyOnWriteArrayList<AgentStreamProjection> streams = bySession.get(sessionId.trim());
+        String key = sessionId.trim();
+        CopyOnWriteArrayList<AgentStreamProjection> streams = bySession.computeIfPresent(key, (ignored, current) -> {
+            current.removeIf(stream -> stream == null || stream.isClosed());
+            return current.isEmpty() ? null : current;
+        });
         if (streams == null || streams.isEmpty()) {
             return List.of();
         }

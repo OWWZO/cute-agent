@@ -181,37 +181,50 @@ const isSkipped = (file) => SKIP_PATH.some((prefix) => file.startsWith(prefix));
 const isAllowed = (file, line) =>
   ALLOW.some((rule) => rule.file === file && rule.match.test(line));
 
+const scanFile = async (file) => {
+  const name = rel(file);
+  if (name.endsWith(".test.ts") || name.endsWith(".test.tsx")) return null;
+  if (name === "global.css") return null; // token 定义处
+  if (isSkipped(name)) return null;
+
+  const violations = [];
+  const lines = (await readFile(file, "utf8")).split("\n");
+  lines.forEach((line, i) => {
+    if (isAllowed(name, line)) return;
+    // 注释里常引用第三方库源码片段（如 `background-color:#0000`），
+    // 那是文档证据，不是本项目的样式声明。
+    const code = line.trim();
+    if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) {
+      return;
+    }
+    const collect = (re, hint = "") => {
+      for (const hit of line.matchAll(re)) {
+        violations.push({ file: name, line: i + 1, text: hit[0], hint });
+      }
+    };
+    collect(PALETTE_RE);
+    collect(HEX_RE);
+    for (const rule of MOTION_HARDCODED) collect(rule.re, rule.hint);
+    for (const rule of TYPO_HARDCODED) collect(rule.re, rule.hint);
+  });
+  return violations;
+};
+
 const main = async () => {
   const files = await walk(ROOT);
   const violations = [];
   let scanned = 0;
 
-  for (const file of files) {
-    const name = rel(file);
-    if (name.endsWith(".test.ts") || name.endsWith(".test.tsx")) continue;
-    if (name === "global.css") continue; // token 定义处
-    if (isSkipped(name)) continue;
-
-    scanned++;
-    const lines = (await readFile(file, "utf8")).split("\n");
-    lines.forEach((line, i) => {
-      if (isAllowed(name, line)) return;
-      // 注释里常引用第三方库源码片段（如 `background-color:#0000`），
-      // 那是文档证据，不是本项目的样式声明。
-      const code = line.trim();
-      if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) {
-        return;
-      }
-      const collect = (re, hint = "") => {
-        for (const hit of line.matchAll(re)) {
-          violations.push({ file: name, line: i + 1, text: hit[0], hint });
-        }
-      };
-      collect(PALETTE_RE);
-      collect(HEX_RE);
-      for (const rule of MOTION_HARDCODED) collect(rule.re, rule.hint);
-      for (const rule of TYPO_HARDCODED) collect(rule.re, rule.hint);
-    });
+  // Keep bounded concurrency while preserving file and line order in diagnostics.
+  const scanConcurrency = 16;
+  for (let offset = 0; offset < files.length; offset += scanConcurrency) {
+    const chunk = files.slice(offset, offset + scanConcurrency);
+    const results = await Promise.all(chunk.map(scanFile));
+    for (const fileViolations of results) {
+      if (fileViolations == null) continue;
+      scanned++;
+      violations.push(...fileViolations);
+    }
   }
 
   if (violations.length === 0) {

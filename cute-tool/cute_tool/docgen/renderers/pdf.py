@@ -429,16 +429,23 @@ def render_pdf(spec: DocumentSpec, output_path: Path) -> dict[str, Any]:
     # inline-vector fragment, so inline fragments are embedded as high-DPI
     # (440) transparent images — crisp at print sizes and only a few px tall.
 
+    inline_math_cache: dict[str, str | None] = {}
+
     def _inline_math(latex: str) -> str | None:
+        if latex in inline_math_cache:
+            return inline_math_cache[latex]
         rendered = render_math_png(latex, font_size=body_size, color=c.text, dpi=440)
         if rendered is None:
+            inline_math_cache[latex] = None
             return None
         png, w_pt, h_pt, d_pt = rendered
         b64 = base64.b64encode(png).decode("ascii")
-        return (
+        markup = (
             f'<img src="data:image/png;base64,{b64}" width="{w_pt:.2f}" '
             f'height="{h_pt:.2f}" valign="{-d_pt:.2f}"/>'
         )
+        inline_math_cache[latex] = markup
+        return markup
 
     def _markup(text: str, *, mono_font: str) -> str:  # shadows module fn
         nonlocal _emoji_seen

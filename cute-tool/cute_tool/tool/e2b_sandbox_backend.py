@@ -263,7 +263,6 @@ class E2BPythonSandboxExecutor:
                 rel = local_path.resolve().relative_to(self._local_workspace).as_posix()
             except ValueError:
                 continue
-            data = local_path.read_bytes()
             record_uploaded(
                 self._local_workspace,
                 rel,
@@ -278,7 +277,7 @@ class E2BPythonSandboxExecutor:
                     "file_path": str(local_path),
                     "relative_path": rel,
                     "name": local_path.name,
-                    "size": len(data),
+                    "size": local_path.stat().st_size,
                     "mime_type": mime_type or "application/octet-stream",
                 }
             )

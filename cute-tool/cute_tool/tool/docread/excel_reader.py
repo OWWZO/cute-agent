@@ -164,7 +164,8 @@ class ExcelReaderTool(SyncTool):
 
         # .xlsx/.xlsm are ZIP packages; corrupt downloads often fail with
         # "Bad offset for central directory".
-        head = file_path.read_bytes()[:8]
+        with file_path.open("rb") as file:
+            head = file.read(8)
         if head[:2] == b"PK":
             # OOXML 文件必须先通过 ZIP 魔数检查，避免把 HTML 错误页或旧 OLE 文件交给 openpyxl。
             pass  # zip-based OOXML
