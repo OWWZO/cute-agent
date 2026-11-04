@@ -77,7 +77,7 @@ public class ElasticsearchColumnValueAdapter implements ColumnValueSearchPort, C
 
     @Override
     public ColumnValueSearchResult search(ColumnValueSearchRequest request) throws IOException {
-        if (client == null || request == null) {
+        if (client == null || !isValidRequest(request)) {
             return ColumnValueSearchResult.empty();
         }
         SearchSourceBuilder sourceBuilder = new SearchSourceBuilder()
@@ -100,6 +100,14 @@ public class ElasticsearchColumnValueAdapter implements ColumnValueSearchPort, C
             result.add(new ColumnValueHit(fields, hit.getScore()));
         }
         return new ColumnValueSearchResult(result);
+    }
+
+    static boolean isValidRequest(ColumnValueSearchRequest request) {
+        return request != null
+                && StringUtils.isNotBlank(request.getQuery())
+                && request.getModelCodes() != null
+                && !request.getModelCodes().isEmpty()
+                && request.getLimit() > 0;
     }
 
     @Override

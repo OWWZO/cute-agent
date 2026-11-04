@@ -80,12 +80,13 @@ public class DatasourceWrapper implements AutoCloseable {
 
     private void closeIfUnused() {
         if (retired.get() && leases.get() == 0 && closed.compareAndSet(false, true)) {
-            if (dataSource instanceof AutoCloseable closeable) {
-                try {
+            try {
+                if (dataSource instanceof AutoCloseable closeable) {
                     closeable.close();
-                } catch (Exception e) {
-                    throw new IllegalStateException("关闭 JDBC 数据源失败", e);
                 }
+            } catch (Exception e) {
+                closed.set(false);
+                throw new IllegalStateException("关闭 JDBC 数据源失败", e);
             }
         }
     }

@@ -5,6 +5,7 @@ Provides SQL interface for querying tabular data with safe query validation.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from typing import Any
 
@@ -250,24 +251,25 @@ class SQLQueryTool(SyncTool):
 
         # 表名先转成安全 SQLite 标识符，再只替换 SQL 中的表引用，避免非法名称破坏执行。
         try:
+            # 连接必须在 SQL 改写、to_sql 或查询任一阶段失败时也释放。
             conn = sqlite3.connect(":memory:")
             name_map: dict[str, str] = {}
-            for table_name, df in dataframes.items():
-                safe = _safe_table_name(table_name)
-                name_map[table_name] = safe
-                df.to_sql(safe, conn, index=False, if_exists="replace")
-            # rewrite FROM/JOIN table names when sanitized
-            exec_query = query
-            for original, safe in name_map.items():
-                if original != safe:
-                    exec_query = re.sub(
-                        rf"\b{re.escape(original)}\b",
-                        safe,
-                        exec_query,
-                        flags=re.IGNORECASE,
-                    )
-            result_df = pd.read_sql_query(exec_query, conn)
-            conn.close()
+            with contextlib.closing(conn):
+                for table_name, df in dataframes.items():
+                    safe = _safe_table_name(table_name)
+                    name_map[table_name] = safe
+                    df.to_sql(safe, conn, index=False, if_exists="replace")
+                # rewrite FROM/JOIN table names when sanitized
+                exec_query = query
+                for original, safe in name_map.items():
+                    if original != safe:
+                        exec_query = re.sub(
+                            rf"\b{re.escape(original)}\b",
+                            safe,
+                            exec_query,
+                            flags=re.IGNORECASE,
+                        )
+                result_df = pd.read_sql_query(exec_query, conn)
         except Exception as e:
             error_msg = str(e)
             if "no such table" in error_msg.lower():

@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.adapter.repository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
@@ -25,6 +26,7 @@ import java.util.List;
  */
 @Repository
 @RequiredArgsConstructor
+@Slf4j
 public class ExecutionLedgerReconcileRepository implements IExecutionLedgerReconcileRepository {
 
     private final IDialogueRunLedgerDao dialogueRunLedgerDao;
@@ -51,6 +53,10 @@ public class ExecutionLedgerReconcileRepository implements IExecutionLedgerRecon
         List<OrphanBackgroundTaskRow> result = new ArrayList<>(rows.size());
         for (BackgroundTaskPO row : rows) {
             if (row == null) {
+                continue;
+            }
+            if (row.getSessionId() == null || row.getSessionId().isBlank()) {
+                log.warn("skip orphan background task with blank sessionId taskId={}", row.getTaskId());
                 continue;
             }
             RuntimeBackgroundTask task = MyBatisTasklistPersistence.toBackgroundTask(row);

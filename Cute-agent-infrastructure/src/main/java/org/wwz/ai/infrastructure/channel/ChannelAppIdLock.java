@@ -36,23 +36,35 @@ public class ChannelAppIdLock {
         if (held.containsKey(appId)) {
             return true;
         }
+        FileChannel channel = null;
         try {
             Files.createDirectories(lockDir);
             Path lockPath = lockDir.resolve("qq_" + sanitize(appId) + ".lock");
-            FileChannel channel = FileChannel.open(lockPath,
+            channel = FileChannel.open(lockPath,
                     StandardOpenOption.CREATE, StandardOpenOption.WRITE);
             FileLock lock = channel.tryLock();
             if (lock == null) {
-                channel.close();
                 log.warn("appId lock held by another process appId={}", appId);
                 return false;
             }
             held.put(appId, new LockHandle(channel, lock));
+            channel = null;
             log.info("appId lock acquired appId={}", appId);
             return true;
         } catch (IOException e) {
             log.warn("appId lock failed appId={}", appId, e);
             return false;
+        } catch (RuntimeException e) {
+            log.warn("appId lock failed appId={}", appId, e);
+            return false;
+        } finally {
+            if (channel != null) {
+                try {
+                    channel.close();
+                } catch (IOException e) {
+                    log.debug("appId lock channel close failed appId={}", appId, e);
+                }
+            }
         }
     }
 

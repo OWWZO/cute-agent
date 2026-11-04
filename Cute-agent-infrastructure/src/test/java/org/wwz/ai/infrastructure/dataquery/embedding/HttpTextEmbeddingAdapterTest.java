@@ -22,4 +22,19 @@ public class HttpTextEmbeddingAdapterTest {
         Assert.assertTrue(result.isAvailable());
         Assert.assertEquals(List.of(List.of(1.5F, 2F, 3.25F)), result.getVectors());
     }
+
+    @Test
+    public void shouldKeepUnavailableFallbackWhenRemoteRequestFails() {
+        DataQueryEmbeddingProperties properties = new DataQueryEmbeddingProperties();
+        properties.setAgentUrl("http://embedding.local");
+        RemoteHttpPort remoteHttpPort = request -> {
+            throw new IllegalStateException("connection refused");
+        };
+        HttpTextEmbeddingAdapter adapter = new HttpTextEmbeddingAdapter(properties, remoteHttpPort);
+
+        TextEmbeddingResult result = adapter.embed(new TextEmbeddingRequest(List.of("hello"), true));
+
+        Assert.assertFalse(result.isAvailable());
+        Assert.assertTrue(result.getVectors().isEmpty());
+    }
 }

@@ -42,6 +42,9 @@ public class QqBotAdapter implements ChannelAdapter {
         if (target == null) {
             return ChannelPushResult.fail("target 为空", false);
         }
+        if (StringUtils.isBlank(text)) {
+            return ChannelPushResult.fail("正文为空", false);
+        }
         String plain = MarkdownToPlainText.convert(text);
         if (StringUtils.isBlank(plain)) {
             return ChannelPushResult.fail("正文为空", false);

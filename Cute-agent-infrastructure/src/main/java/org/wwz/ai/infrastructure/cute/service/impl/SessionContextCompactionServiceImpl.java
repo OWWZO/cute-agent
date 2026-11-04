@@ -130,7 +130,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
         int extraFixedTokens = initialEstimate.getSystemTokens() + initialEstimate.getToolTokens();
 
         // 永久失败必须回到入口快照，忽略后续 micro/LTM/reminder 改写。
-        List<Message> originalSnapshot = List.copyOf(messages);
+        List<Message> originalSnapshot = copyMessagesAllowingNulls(messages);
         int originalTokens = initialEstimate.getEstimatedTokens();
         List<Message> current = messages;
 
@@ -373,6 +373,10 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                 tools);
         ContextTokenTracker.Snapshot snapshot = forceLocal ? null : TOKEN_SNAPSHOT.get();
         return ContextTokenTracker.estimateCurrent(snapshot, effective, new TokenCounter());
+    }
+
+    static List<Message> copyMessagesAllowingNulls(List<Message> messages) {
+        return new ArrayList<>(messages);
     }
 
     private static final int MAX_COMPACT_PTL_RETRIES = 3;

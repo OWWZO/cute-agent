@@ -3,6 +3,7 @@ import asyncio
 import unittest
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from cute_tool.tool.docread.paths import resolve_input_path, resolve_output_path
 
@@ -67,6 +68,31 @@ class DocreadPathSecurityTest(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertIn("File not found", result["message"])
+
+    def test_tool_runner_should_return_failure_for_unexpected_path_error(self):
+        from cute_tool.tool.docread.service import _run_sync_tool
+
+        class OutputTool:
+            path_params = ("file_path",)
+            output_path_params = ("file_path",)
+
+        with tempfile.TemporaryDirectory() as workspace_dir:
+            with patch(
+                "cute_tool.tool.docread.service.resolve_output_path",
+                side_effect=PermissionError("workspace directory is not writable"),
+            ):
+                result = _run_sync_tool(
+                    OutputTool(),
+                    {
+                        "operation": "write",
+                        "file_path": "report.txt",
+                        "workspace_root": workspace_dir,
+                    },
+                    "session-path-error",
+                )
+
+        self.assertFalse(result["success"])
+        self.assertIn("not writable", result["message"])
 
 
 if __name__ == "__main__":

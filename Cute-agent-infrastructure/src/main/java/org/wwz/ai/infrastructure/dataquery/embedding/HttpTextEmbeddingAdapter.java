@@ -29,8 +29,9 @@ public class HttpTextEmbeddingAdapter implements TextEmbeddingPort {
 
     @Override
     public TextEmbeddingResult embed(TextEmbeddingRequest request) {
+        String embeddingUrl = null;
         try {
-            String embeddingUrl = resolveEmbeddingUrl();
+            embeddingUrl = resolveEmbeddingUrl();
             if (StringUtils.isBlank(embeddingUrl) || request == null || request.getTexts() == null) {
                 return TextEmbeddingResult.unavailable();
             }
@@ -46,7 +47,7 @@ public class HttpTextEmbeddingAdapter implements TextEmbeddingPort {
             List<List<Float>> vectors = parseEmbeddingResponse(response);
             return vectors == null ? TextEmbeddingResult.unavailable() : TextEmbeddingResult.available(vectors);
         } catch (Exception e) {
-            log.warn("embedding proxy unavailable: {}", e.getMessage(), e);
+            log.warn("embedding proxy request failed url={}: {}", embeddingUrl, e.toString());
             return TextEmbeddingResult.unavailable();
         }
     }
