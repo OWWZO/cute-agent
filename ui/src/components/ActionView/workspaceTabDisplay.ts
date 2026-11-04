@@ -1,4 +1,8 @@
-import { fileKindBadge, resolveFileKind } from "@/utils/fileKind";
+import {
+  fileKindBadge,
+  resolveFileExtension,
+  resolveFileKind,
+} from "@/utils/fileKind";
 import {
   formatDiffStats,
   patchDiffStats,
@@ -126,7 +130,7 @@ export function resolveWorkspaceTabDisplay(tab: WorkspaceTab): WorkspaceTabDispl
       badge: fileKindBadge(kind),
     },
     hint: file.relativePath || file.originFileName,
-    typeHint: (file.type || file.name?.split(".").pop() || "").toLowerCase(),
+    typeHint: resolveFileExtension(file.type, file.name),
     diffBadge: "",
   };
 }

@@ -234,6 +234,21 @@ export function walkShadowRoots(root: ParentNode, callback: (root: ShadowRoot) =
   }
 }
 
+function findInShadowRoots<T>(
+  root: ParentNode,
+  findInRoot: (root: ParentNode) => T | null
+): T | null {
+  const target = findInRoot(root);
+  if (target) return target;
+
+  for (const element of root.querySelectorAll<HTMLElement>("*")) {
+    if (!element.shadowRoot) continue;
+    const shadowTarget = findInShadowRoots(element.shadowRoot, findInRoot);
+    if (shadowTarget) return shadowTarget;
+  }
+  return null;
+}
+
 /**
  * 穿透 shadow root 找某一行的 DOM 节点。
  *
@@ -244,33 +259,25 @@ export function findCodeViewerLineElement(
   root: ParentNode,
   lineNumber: number
 ): HTMLElement | null {
-  const target = root.querySelector<HTMLElement>(`[data-line="${lineNumber}"]`);
-  if (target) return target;
-
-  for (const element of root.querySelectorAll<HTMLElement>("*")) {
-    if (!element.shadowRoot) continue;
-    const shadowTarget = findCodeViewerLineElement(element.shadowRoot, lineNumber);
-    if (shadowTarget) return shadowTarget;
-  }
-  return null;
+  return findInShadowRoots(root, (currentRoot) =>
+    currentRoot.querySelector<HTMLElement>(`[data-line="${lineNumber}"]`)
+  );
 }
 
 export function findCodeViewerCommentElement(
   root: ParentNode,
   commentId: string
 ): HTMLElement | null {
-  for (const element of root.querySelectorAll<HTMLElement>("[data-code-comment-id]")) {
-    if (element.dataset.codeCommentId === commentId) {
-      return element;
+  return findInShadowRoots(root, (currentRoot) => {
+    for (const element of currentRoot.querySelectorAll<HTMLElement>(
+      "[data-code-comment-id]"
+    )) {
+      if (element.dataset.codeCommentId === commentId) {
+        return element;
+      }
     }
-  }
-
-  for (const element of root.querySelectorAll<HTMLElement>("*")) {
-    if (!element.shadowRoot) continue;
-    const shadowTarget = findCodeViewerCommentElement(element.shadowRoot, commentId);
-    if (shadowTarget) return shadowTarget;
-  }
-  return null;
+    return null;
+  });
 }
 
 export type { BundledTheme };

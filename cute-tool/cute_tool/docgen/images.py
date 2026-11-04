@@ -40,9 +40,6 @@ _FILE_API_RE = re.compile(
 _BARE_UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
-_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp"}
-
-
 class ResolvedImage:
     """Container for a resolved image ready for embedding."""
 
@@ -199,17 +196,9 @@ def _resolve_managed_file(file_id: str) -> tuple[bytes, str, str] | None:
             if not path.is_file():
                 continue
             # Prefer real image files over sidecar text (e.g. base64 dumps).
-            if (
-                path.suffix.lower() not in _IMAGE_SUFFIXES
-                and path.suffix.lower()
-                not in {
-                    "",
-                    ".bin",
-                }
-            ):
-                # Still allow extensionless / odd names if PIL can open them later.
-                if path.suffix.lower() in {".txt", ".json", ".md", ".csv"}:
-                    continue
+            # Extensionless and unknown suffixes still go through PIL sniffing later.
+            if path.suffix.lower() in {".txt", ".json", ".md", ".csv"}:
+                continue
             data = path.read_bytes()
             mime = mimetypes.guess_type(str(path))[0] or "image/png"
             return data, mime, f"file_id:{file_id}:{path.name}"

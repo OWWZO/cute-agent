@@ -13,13 +13,13 @@ export type FileKind =
 /** 文件类型角标底色/字色。走语义 token，避免写死 hex。 */
 export const FILE_KIND_TONE = "bg-hover text-foreground-subtle";
 
-function resolveKindExt(type?: string, name?: string): string {
+export function resolveFileExtension(type?: string, name?: string): string {
   return (type || name?.split(".").pop() || "").toLowerCase();
 }
 
 // 优先使用后端提供的类型，缺失时才从文件名后缀推断，保证展示和下载协议一致。
 export function resolveFileKind(type?: string, name?: string): FileKind {
-  const ext = resolveKindExt(type, name);
+  const ext = resolveFileExtension(type, name);
   if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"].includes(ext)) {
     return "img";
   }
@@ -38,7 +38,7 @@ export function resolveFileKind(type?: string, name?: string): FileKind {
 
 export function fileKindLabel(type?: string, name?: string) {
   const kind = resolveFileKind(type, name);
-  const ext = resolveKindExt(type, name).toUpperCase();
+  const ext = resolveFileExtension(type, name).toUpperCase();
   switch (kind) {
     case "img":
       return `Image · ${ext}`;
