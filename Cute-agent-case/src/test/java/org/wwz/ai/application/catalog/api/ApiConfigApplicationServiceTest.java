@@ -50,6 +50,20 @@ public class ApiConfigApplicationServiceTest {
         Assert.assertNull(repository.inserted);
     }
 
+    @Test
+    public void shouldRejectMissingCommandAndBlankApiIdBeforeInsert() {
+        InMemoryApiRepository repository = new InMemoryApiRepository();
+        ApiConfigApplicationService service = new ApiConfigApplicationService(repository, new RecordingRuntime());
+
+        ApplicationResult<Boolean> nullCommand = service.create(null);
+        ApplicationResult<Boolean> blankApiId = service.create(new ApiConfigCommand(
+                null, " ", "https://example.test", "secret", null, null, 1));
+
+        Assert.assertEquals("0002", nullCommand.code());
+        Assert.assertEquals("0002", blankApiId.code());
+        Assert.assertNull(repository.inserted);
+    }
+
     private static final class RecordingRuntime implements ICatalogModelRuntimePort {
         private int invalidations;
 

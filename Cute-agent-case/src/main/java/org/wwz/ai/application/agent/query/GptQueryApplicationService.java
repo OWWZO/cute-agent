@@ -215,19 +215,33 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
      * <p>不要另写一套异步派发——那会绕开 gate 的延迟启动语义。</p>
      */
     private void scheduleDispatch(AgentExecutionCommand agentRequest, String userId) {
-        AgentStreamProjection projectingStream =
-                new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus, sessionEventClock)
-                        .bindRegistry(sessionProjectionRegistry);
-        agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {
-            try {
-                AgentExecutorSupport.execute(dispatchExecutor, "dispatch", agentRequest.getRequestId(),
-                        () -> dispatchOnExecutor(agentRequest, projectingStream));
-            } catch (AgentExecutorBusyException e) {
-                log.warn("{} deferred dispatch busy", agentRequest.getRequestId(), e);
-                activeAgentRunRegistry.end(agentRequest.getRequestId());
+        AgentStreamProjection projectingStream = null;
+        try {
+            projectingStream =
+                    new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus, sessionEventClock)
+                            .bindRegistry(sessionProjectionRegistry);
+            AgentStreamProjection deferredStream = projectingStream;
+            agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {
+                try {
+                    AgentExecutorSupport.execute(dispatchExecutor, "dispatch", agentRequest.getRequestId(),
+                            () -> dispatchOnExecutor(agentRequest, deferredStream));
+                } catch (AgentExecutorBusyException e) {
+                    log.warn("{} deferred dispatch busy", agentRequest.getRequestId(), e);
+                    activeAgentRunRegistry.end(agentRequest.getRequestId());
+                    deferredStream.completeWithError(e);
+                } catch (RuntimeException e) {
+                    log.error("{} deferred dispatch failed", agentRequest.getRequestId(), e);
+                    activeAgentRunRegistry.end(agentRequest.getRequestId());
+                    deferredStream.completeWithError(e);
+                }
+            });
+        } catch (RuntimeException e) {
+            activeAgentRunRegistry.end(agentRequest.getRequestId());
+            if (projectingStream != null) {
                 projectingStream.completeWithError(e);
             }
-        });
+            throw e;
+        }
     }
 
     private static String newRequestId() {

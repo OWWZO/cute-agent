@@ -124,6 +124,18 @@ public class DesktopControlResumeApplicationService {
                 activeAgentRunRegistry.end(agentRequest.getRequestId());
                 desktopControlRepository.markStatus(record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
                 projectingStream.completeWithError(e);
+            } catch (RuntimeException e) {
+                log.error("{} deferred desktop-control resume failed", agentRequest.getRequestId(), e);
+                activeAgentRunRegistry.end(agentRequest.getRequestId());
+                try {
+                    desktopControlRepository.markStatus(
+                            record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
+                } catch (RuntimeException resetError) {
+                    log.error("{} desktop-control resume status reset failed controlId={}",
+                            agentRequest.getRequestId(), record.getControlId(), resetError);
+                    e.addSuppressed(resetError);
+                }
+                projectingStream.completeWithError(e);
             }
         });
         return accepted(record);

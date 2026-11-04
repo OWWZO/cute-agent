@@ -37,13 +37,20 @@ public class WorkspaceArchiveApplicationService {
             if (!Files.isDirectory(root)) {
                 return;
             }
+            Path realRoot = root.toRealPath();
             try (Stream<Path> walk = Files.walk(root)) {
-                var files = walk.filter(Files::isRegularFile).iterator();
+                var files = walk
+                        .filter(Files::isRegularFile)
+                        .filter(path -> !Files.isSymbolicLink(path))
+                        .iterator();
                 while (files.hasNext()) {
                     Path file = files.next();
                     Path relative = root.relativize(file);
                     String entryName = relative.toString().replace('\\', '/');
-                    if (StringUtils.isBlank(entryName) || entryName.contains("..")) {
+                    if (StringUtils.isBlank(entryName)
+                            || relative.isAbsolute()
+                            || relative.startsWith("..")
+                            || !file.toRealPath().startsWith(realRoot)) {
                         continue;
                     }
                     zip.putNextEntry(new ZipEntry(entryName));

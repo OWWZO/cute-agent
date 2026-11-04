@@ -27,6 +27,9 @@ public class ApiConfigApplicationService {
     private final ICatalogModelRuntimePort modelRuntimePort;
 
     public ApplicationResult<Boolean> create(ApiConfigCommand command) {
+        if (command == null || StringUtils.isBlank(command.apiId())) {
+            return ApplicationResult.failure(ResponseCode.ILLEGAL_PARAMETER, "API ID不能为空", false);
+        }
         try {
             assertApiIdAvailable(command);
             LocalDateTime now = LocalDateTime.now();

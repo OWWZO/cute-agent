@@ -109,30 +109,69 @@ public class AskUserResumeApplicationService {
                     "claim 失败或续跑已被认领", record.getResumeRequestId(), record.getSessionId());
         }
 
-        AgentExecutionCommand agentRequest = buildContinuationRequest(record, userId);
+        AgentExecutionCommand agentRequest;
+        try {
+            agentRequest = buildContinuationRequest(record, userId);
+        } catch (RuntimeException e) {
+            log.error("{} ask-user resume context parse failed questionId={}",
+                    record.getResumeRequestId(), record.getQuestionId(), e);
+            resetResumeStatus(record, record.getResumeRequestId(), e);
+            throw e;
+        }
         try {
             activeAgentRunRegistry.begin(
                     agentRequest.getRequestId(), agentRequest.getSessionId(), userId);
-        } catch (AgentConcurrentRunException e) {
-            userQuestionRepository.markStatus(record.getQuestionId(), UserQuestionStatuses.RESUME_PENDING);
+        } catch (RuntimeException e) {
+            resetResumeStatus(record, agentRequest.getRequestId(), e);
             throw e;
         }
 
-        AgentStreamProjection projectingStream =
-                new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus, sessionEventClock)
-                        .bindRegistry(sessionProjectionRegistry);
-        agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {
-            try {
-                AgentExecutorSupport.execute(dispatchExecutor, "askUserResume", agentRequest.getRequestId(),
-                        () -> dispatchContinuation(record, agentRequest, projectingStream));
-            } catch (AgentExecutorBusyException e) {
-                log.warn("{} deferred ask-user resume busy", agentRequest.getRequestId(), e);
-                activeAgentRunRegistry.end(agentRequest.getRequestId());
-                userQuestionRepository.markStatus(record.getQuestionId(), UserQuestionStatuses.RESUME_PENDING);
+        AgentStreamProjection projectingStream = null;
+        try {
+            projectingStream =
+                    new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus, sessionEventClock)
+                            .bindRegistry(sessionProjectionRegistry);
+            AgentStreamProjection deferredStream = projectingStream;
+            agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {
+                try {
+                    AgentExecutorSupport.execute(dispatchExecutor, "askUserResume", agentRequest.getRequestId(),
+                            () -> dispatchContinuation(record, agentRequest, deferredStream));
+                } catch (AgentExecutorBusyException e) {
+                    log.warn("{} deferred ask-user resume busy", agentRequest.getRequestId(), e);
+                    cleanupFailedResume(record, agentRequest, deferredStream, e);
+                } catch (RuntimeException e) {
+                    log.error("{} deferred ask-user resume failed", agentRequest.getRequestId(), e);
+                    cleanupFailedResume(record, agentRequest, deferredStream, e);
+                }
+            });
+            return accepted(record);
+        } catch (RuntimeException e) {
+            activeAgentRunRegistry.end(agentRequest.getRequestId());
+            if (projectingStream != null) {
                 projectingStream.completeWithError(e);
             }
-        });
-        return accepted(record);
+            resetResumeStatus(record, agentRequest.getRequestId(), e);
+            throw e;
+        }
+    }
+
+    private void cleanupFailedResume(UserQuestionRecord record,
+                                     AgentExecutionCommand agentRequest,
+                                     AgentStreamProjection projectingStream,
+                                     RuntimeException error) {
+        activeAgentRunRegistry.end(agentRequest.getRequestId());
+        resetResumeStatus(record, agentRequest.getRequestId(), error);
+        projectingStream.completeWithError(error);
+    }
+
+    private void resetResumeStatus(UserQuestionRecord record, String requestId, RuntimeException error) {
+        try {
+            userQuestionRepository.markStatus(record.getQuestionId(), UserQuestionStatuses.RESUME_PENDING);
+        } catch (RuntimeException resetError) {
+            log.error("{} ask-user resume status reset failed questionId={}",
+                    requestId, record.getQuestionId(), resetError);
+            error.addSuppressed(resetError);
+        }
     }
 
     private static AgentQuerySubmitResult accepted(UserQuestionRecord record) {
