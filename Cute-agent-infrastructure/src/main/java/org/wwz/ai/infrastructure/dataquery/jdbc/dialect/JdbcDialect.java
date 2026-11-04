@@ -82,8 +82,8 @@ public interface JdbcDialect {
     }
 
     default String formatPagingSql(int start, int pageSize, String sql) {
-        // 外部页码按 1 开始，方言片段统一使用 0 开始的偏移量。
-        if (start < 0) {
+        // 外部页码按 1 开始；0 或负数都收敛到第 1 页，避免拼出 LIMIT -N。
+        if (start < 1) {
             start = 1;
         }
         return pagingHead(start - 1, pageSize)
