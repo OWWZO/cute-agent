@@ -89,7 +89,7 @@ type PhotoProps = {
 
 /** A photo from src, or, without one or when it fails, the best search result for query. */
 function Photo(props: PhotoProps) {
-  const alt = typeof props.query === "string" ? props.query.trim() : "";
+  const alt = props.query.trim();
   const src = webUrl(props.src);
   const [failed, setFailed] = useState<string[]>([]);
   const [loaded, setLoaded] = useState<string | null>(null);
