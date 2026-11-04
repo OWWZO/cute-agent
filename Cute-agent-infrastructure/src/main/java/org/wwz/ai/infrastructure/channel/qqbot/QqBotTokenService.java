@@ -8,6 +8,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -68,7 +69,8 @@ public class QqBotTokenService {
                 .post(RequestBody.create(body.toJSONString(), JSON_MEDIA_TYPE))
                 .build();
         try (Response response = httpClient.newCall(request).execute()) {
-            String text = response.body() == null ? "" : response.body().string();
+            ResponseBody responseBody = response.body();
+            String text = responseBody == null ? "" : responseBody.string();
             if (!response.isSuccessful()) {
                 throw new IllegalStateException("获取 access_token 失败 HTTP " + response.code());
             }

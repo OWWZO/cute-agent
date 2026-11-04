@@ -124,7 +124,6 @@ public class GraalJsCodeModeExecutor implements CodeModeExecutorPort {
             bindings = CodeModeJsBindings.bind(
                     context,
                     budget,
-                    this.properties,
                     new WorkspaceCodeCapability(agentContext, budget, workspaceService, this.properties.getWorkspace()),
                     new BrowserCodeCapability(agentContext, budget, this.properties.getMaxOutputChars()),
                     new HostCodeCapability(agentContext, budget, this.properties.getMaxOutputChars(),

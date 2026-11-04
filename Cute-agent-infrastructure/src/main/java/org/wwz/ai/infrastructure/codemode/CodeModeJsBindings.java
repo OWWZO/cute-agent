@@ -5,7 +5,6 @@ import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Value;
 import org.graalvm.polyglot.proxy.ProxyExecutable;
 import org.graalvm.polyglot.proxy.ProxyObject;
-import org.wwz.ai.types.agent.config.CodeModeProperties;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -74,7 +73,6 @@ public final class CodeModeJsBindings {
 
     public static CodeModeJsBindings bind(Context context,
                                           CodeModeExecutionBudget budget,
-                                          CodeModeProperties properties,
                                           WorkspaceCodeCapability workspaceCapability,
                                           BrowserCodeCapability browserCapability,
                                           HostCodeCapability hostCapability,

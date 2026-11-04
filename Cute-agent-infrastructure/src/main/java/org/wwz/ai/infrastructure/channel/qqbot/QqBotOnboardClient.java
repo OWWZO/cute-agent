@@ -2,7 +2,6 @@ package org.wwz.ai.infrastructure.channel.qqbot;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -14,7 +13,6 @@ import okhttp3.Response;
  * <p>两个端点：{@code create_bind_task} 拿 task_id，{@code poll_bind_result} 轮询扫码结果。
  * 轮询循环由 case 层驱动，这里只做单次调用。</p>
  */
-@Slf4j
 public class QqBotOnboardClient {
 
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");

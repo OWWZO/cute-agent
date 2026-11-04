@@ -20,9 +20,9 @@ public class CatalogMcpConfigRepository implements IAiClientToolMcpConfigReposit
     public boolean updateById(AiClientToolMcpConfig c) { return dao.updateById(toPO(c)) > 0; }
     public boolean updateByMcpId(AiClientToolMcpConfig c) { return dao.updateByMcpId(toPO(c)) > 0; }
     public boolean deleteById(Long id) { return dao.deleteById(id) > 0; }
-    public boolean deleteByMcpId(String id) { return dao.deleteByMcpId(id) > 0; }
+    public boolean deleteByMcpId(String mcpId) { return dao.deleteByMcpId(mcpId) > 0; }
     public Optional<AiClientToolMcpConfig> findById(Long id) { return Optional.ofNullable(toModel(dao.queryById(id))); }
-    public Optional<AiClientToolMcpConfig> findByMcpId(String id) { return Optional.ofNullable(toModel(dao.queryByMcpId(id))); }
+    public Optional<AiClientToolMcpConfig> findByMcpId(String mcpId) { return Optional.ofNullable(toModel(dao.queryByMcpId(mcpId))); }
     public List<AiClientToolMcpConfig> findAll() { return toModels(dao.queryAll()); }
     public List<AiClientToolMcpConfig> findByStatus(Integer status) { return toModels(dao.queryByStatus(status)); }
     public List<AiClientToolMcpConfig> findByTransportType(String type) { return toModels(dao.queryByTransportType(type)); }

@@ -14,6 +14,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SessionCapabilityRepository implements ISessionCapabilityRepository {
 
+    private static final int ENABLED = 1;
+
     private final IAiAgentSessionCapabilityDao dao;
 
     @Override
@@ -31,7 +33,7 @@ public class SessionCapabilityRepository implements ISessionCapabilityRepository
                 continue;
             }
             root.computeIfAbsent(row.getKind(), k -> new HashMap<>())
-                    .put(row.getRefId(), row.getEnabled() != null && row.getEnabled() == 1);
+                    .put(row.getRefId(), isEnabled(row.getEnabled()));
         }
         return root;
     }
@@ -56,7 +58,11 @@ public class SessionCapabilityRepository implements ISessionCapabilityRepository
                 .map(r -> new SessionCapabilityRow(
                         r.getKind(),
                         r.getRefId(),
-                        r.getEnabled() != null && r.getEnabled() == 1))
+                        isEnabled(r.getEnabled())))
                 .toList();
+    }
+
+    private static boolean isEnabled(Integer enabled) {
+        return enabled != null && enabled == ENABLED;
     }
 }

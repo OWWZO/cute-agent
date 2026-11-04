@@ -22,16 +22,16 @@ public interface IAiClientApiConfigDao {
     int updateByApiId(AiClientApiPO po);
 
     /** 按主键物理删除 API 配置。 */
-    int deleteById(Long id);
+    int deleteById(@Param("id") Long id);
 
     /** 按业务键 apiId 物理删除 API 配置；可能影响多行。 */
-    int deleteByApiId(String apiId);
+    int deleteByApiId(@Param("apiId") String apiId);
 
     /** 按主键查询；不存在时返回 null。 */
-    AiClientApiPO queryById(Long id);
+    AiClientApiPO queryById(@Param("id") Long id);
 
     /** 按业务键 apiId 查询；不存在时返回 null。 */
-    AiClientApiPO queryByApiId(String apiId);
+    AiClientApiPO queryByApiId(@Param("apiId") String apiId);
 
     List<AiClientApiPO> queryEnabled();
 

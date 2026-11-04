@@ -56,19 +56,6 @@ public final class QqBotConstants {
     /** token 提前刷新的余量（秒）。 */
     public static final long TOKEN_REFRESH_SKEW_SECONDS = 60;
 
-    public static final long DEFAULT_API_TIMEOUT_SECONDS = 30;
-
-    public static final long CONNECT_TIMEOUT_SECONDS = 20;
-
-    /** 扫码轮询间隔（秒）。 */
-    public static final long ONBOARD_POLL_INTERVAL_SECONDS = 2;
-
-    /** 扫码总超时（秒）。 */
-    public static final long ONBOARD_TIMEOUT_SECONDS = 600;
-
-    /** 二维码过期后重建任务的最大次数。 */
-    public static final int ONBOARD_MAX_REFRESHES = 3;
-
     private QqBotConstants() {
     }
 }
