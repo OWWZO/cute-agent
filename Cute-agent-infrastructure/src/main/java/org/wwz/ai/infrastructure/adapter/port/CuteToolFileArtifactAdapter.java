@@ -23,6 +23,7 @@ import org.wwz.ai.domain.agent.runtime.dto.FileResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -147,7 +148,7 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
         try (Response response = client.newCall(httpRequest).execute()) {
             String responseText = response.body() == null
                     ? ""
-                    : new String(readBody(response.body(), DEFAULT_MAX_RESPONSE_BYTES), StandardCharsets.UTF_8);
+                    : readTextBody(response.body(), DEFAULT_MAX_RESPONSE_BYTES);
             if (!response.isSuccessful()) {
                 throw new IOException("file upload failed, code=" + response.code()
                         + ", url=" + httpRequest.url() + ", body=" + responseText);
@@ -217,7 +218,7 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
             if (!response.isSuccessful()) {
                 String err;
                 try {
-                    err = body == null ? "" : new String(readBody(body, maxBytes), StandardCharsets.UTF_8);
+                    err = body == null ? "" : readTextBody(body, maxBytes);
                 } catch (IOException e) {
                     throw new IOException("HTTP download failed, code=" + response.code()
                             + ", url=" + url + ", body=" + e.getMessage(), e);
@@ -250,6 +251,13 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
             }
             return output.toByteArray();
         }
+    }
+
+    private String readTextBody(ResponseBody body, long maxBytes) throws IOException {
+        Charset charset = body.contentType() == null
+                ? StandardCharsets.UTF_8
+                : body.contentType().charset(StandardCharsets.UTF_8);
+        return new String(readBody(body, maxBytes), charset);
     }
 
     /**
