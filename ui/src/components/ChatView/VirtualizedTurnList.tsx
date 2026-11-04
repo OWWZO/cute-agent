@@ -10,6 +10,21 @@ import {
 /** 视口外预渲染的行数。8 与 ZCode `ROW_OVERSCAN` 一致。 */
 const ROW_OVERSCAN = 8;
 
+export function virtualRowOffset(start: number, scrollMargin: number): number {
+  return start - scrollMargin;
+}
+
+export function deliverViewerReady(
+  onReady: ((api: { scrollToIndex: (index: number) => void }) => void) | undefined,
+  scrollToIndex: (index: number) => void
+): boolean {
+  if (!onReady) {
+    return false;
+  }
+  onReady({ scrollToIndex });
+  return true;
+}
+
 /** tanstack 默认测量的竖向复刻：优先 ResizeObserver entry（不触发同步布局）。 */
 function measureRowHeight(
   element: Element,
@@ -89,6 +104,8 @@ export function VirtualizedTurnList<T>({
   onReady,
 }: VirtualizedTurnListProps<T>) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const headerSlotRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const heightCacheRef = useRef(new TimelineRowHeightCache());
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -117,6 +134,22 @@ export function VirtualizedTurnList<T>({
    */
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const getScrollElement = useCallback(() => scrollElementRef.current, []);
+
+  useLayoutEffect(() => {
+    const header = headerSlotRef.current;
+    if (!header) {
+      setHeaderHeight(0);
+      return;
+    }
+    const update = () => setHeaderHeight(header.getBoundingClientRect().height);
+    update();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [headerSlot]);
 
   useLayoutEffect(() => {
     const contentDiv = scrollRef.current?.parentElement ?? null;
@@ -195,6 +228,7 @@ export function VirtualizedTurnList<T>({
     overscan: ROW_OVERSCAN,
     getItemKey: getItemKeyStable,
     measureElement,
+    scrollMargin: headerHeight,
   });
 
   const virtualRows = virtualizer.getVirtualItems();
@@ -215,17 +249,12 @@ export function VirtualizedTurnList<T>({
     );
   }, [virtualRows, totalSize]);
 
-  // 对外暴露「滚到第 N 行」。用 ref 读回调，避免它变化就重跑 effect。
-  const onReadyRef = useRef(onReady);
-  onReadyRef.current = onReady;
+  // 对外暴露「滚到第 N 行」。onReady 晚到时也必须重新交付句柄。
   useEffect(() => {
-    if (!onReadyRef.current) return;
-    onReadyRef.current({
-      scrollToIndex: (index: number) => {
-        virtualizer.scrollToIndex(index, { align: "start" });
-      },
+    deliverViewerReady(onReady, (index) => {
+      virtualizer.scrollToIndex(index, { align: "start" });
     });
-  }, [virtualizer]);
+  }, [onReady, virtualizer]);
 
   /**
    * 还没拿到滚动容器时（首帧、SSR、无 DOM 环境）**全量渲染**。
@@ -238,7 +267,7 @@ export function VirtualizedTurnList<T>({
   return (
     <div ref={scrollRef} data-virtualized-turns="true">
       {headerSlot ? (
-        <div data-virtualized-header-slot="true">
+        <div ref={headerSlotRef} data-virtualized-header-slot="true">
           {headerSlot}
         </div>
       ) : null}
@@ -260,7 +289,12 @@ export function VirtualizedTurnList<T>({
                 ref={virtualizer.measureElement}
                 data-index={virtualRow.index}
                 className="absolute left-0 top-0 w-full"
-                style={{ transform: `translateY(${virtualRow.start}px)` }}
+                style={{
+                  transform: `translateY(${virtualRowOffset(
+                    virtualRow.start,
+                    headerHeight
+                  )}px)`,
+                }}
               >
                 {renderItem(item)}
               </div>

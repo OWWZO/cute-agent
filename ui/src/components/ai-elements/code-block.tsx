@@ -9,6 +9,8 @@ import {
   type ComponentProps,
   createContext,
   type HTMLAttributes,
+  type MouseEvent,
+  type MouseEventHandler,
   useContext,
   useEffect,
   useState,
@@ -151,12 +153,22 @@ export type CodeBlockCopyButtonProps = ComponentProps<typeof Button> & {
   timeout?: number;
 };
 
+export function invokeCodeBlockClick(
+  event: MouseEvent<HTMLButtonElement>,
+  handleCopy: () => void | Promise<void>,
+  onClick?: MouseEventHandler<HTMLButtonElement>
+): void {
+  void handleCopy();
+  onClick?.(event);
+}
+
 export const CodeBlockCopyButton = ({
   onCopy,
   onError,
   timeout = 2000,
   children,
   className,
+  onClick,
   ...props
 }: CodeBlockCopyButtonProps) => {
   const [isCopied, setIsCopied] = useState(false);
@@ -193,10 +205,10 @@ export const CodeBlockCopyButton = ({
         isCopied && "text-[var(--success)]",
         className
       )}
-      onClick={handleCopy}
       size="icon-sm"
       variant="ghost"
       {...props}
+      onClick={(event) => invokeCodeBlockClick(event, handleCopy, onClick)}
     >
       {children ?? <Icon className="size-3.5" />}
     </Button>

@@ -21,6 +21,12 @@ type AskUserQuestionCardProps = {
   tool: CHAT.Task;
 };
 
+export function bypassesAskUserEnterShortcut(tagName: string): boolean {
+  return ["input", "textarea", "button", "a", "select"].includes(
+    tagName.toLowerCase()
+  );
+}
+
 function resolveAskUserQuestions(tool: CHAT.Task): unknown {
   const resultMap = (tool.resultMap || {}) as Record<string, unknown>;
   const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
@@ -188,8 +194,9 @@ const AskUserQuestionCard: FC<AskUserQuestionCardProps> = memo(({ tool }) => {
 
       const tag = (document.activeElement?.tagName ?? "").toLowerCase();
       const inField = tag === "input" || tag === "textarea";
+      const enterHandledByControl = bypassesAskUserEnterShortcut(tag);
 
-      if (e.key === "Enter" && !inField) {
+      if (e.key === "Enter" && !enterHandledByControl) {
         e.preventDefault();
         if (step < total - 1 && currentAnswered) {
           setStep((s) => s + 1);

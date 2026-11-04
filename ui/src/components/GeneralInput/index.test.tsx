@@ -1,12 +1,25 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import GeneralInput, { ATTACHMENT_ACCEPT, MAX_QUERY_CHARS } from "./index";
+import GeneralInput, {
+  ATTACHMENT_ACCEPT,
+  MAX_QUERY_CHARS,
+  shouldHandleComposerEnter,
+} from "./index";
 
 describe("GeneralInput", () => {
   it("附件不按扩展名拦截", () => {
     expect(ATTACHMENT_ACCEPT).toBe("");
     expect(MAX_QUERY_CHARS).toBe(8000);
+  });
+
+  it("Shift+Enter 不进入发送快捷键分支", () => {
+    expect(
+      shouldHandleComposerEnter({ key: "Enter", shiftKey: true })
+    ).toBe(false);
+    expect(
+      shouldHandleComposerEnter({ key: "Enter", shiftKey: false })
+    ).toBe(true);
   });
 
   it("上传按钮直接打开可多选的文件选择器", () => {

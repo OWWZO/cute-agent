@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractExecuteCommand,
+  extractToolFilePath,
   normalizeToolName,
   toolChip,
   toolLabel,
@@ -32,6 +33,13 @@ describe("toolMeta", () => {
   it("hides empty object in collapsed header", () => {
     expect(toolSummary("bash", "{}")).toBe("");
     expect(toolSummary("bash", "{}", true)).toBe("{}");
+  });
+
+  it("treats missing arguments as empty instead of throwing", () => {
+    expect(toolSummary("read", undefined)).toBe("");
+    expect(toolSummary("read", null)).toBe("");
+    expect(extractToolFilePath(undefined)).toBeUndefined();
+    expect(extractToolFilePath(null)).toBeUndefined();
   });
 
   it("summarizes bash command", () => {
