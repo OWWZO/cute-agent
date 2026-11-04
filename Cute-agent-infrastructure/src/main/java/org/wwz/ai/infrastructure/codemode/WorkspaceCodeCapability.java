@@ -21,6 +21,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -360,12 +361,7 @@ public final class WorkspaceCodeCapability {
     private static String version(byte[] bytes) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(bytes == null ? new byte[0] : bytes);
-            StringBuilder builder = new StringBuilder("sha256:");
-            for (byte b : hash) {
-                builder.append(String.format("%02x", b));
-            }
-            return builder.toString();
+            return formatVersion(digest.digest(bytes == null ? new byte[0] : bytes));
         } catch (NoSuchAlgorithmException e) {
             throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_RUNTIME_ERROR,
                     "SHA-256 不可用：" + e.getMessage(), e);
@@ -382,15 +378,15 @@ public final class WorkspaceCodeCapability {
                     digest.update(buffer, 0, read);
                 }
             }
-            StringBuilder builder = new StringBuilder("sha256:");
-            for (byte b : digest.digest()) {
-                builder.append(String.format("%02x", b));
-            }
-            return builder.toString();
+            return formatVersion(digest.digest());
         } catch (NoSuchAlgorithmException e) {
             throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_RUNTIME_ERROR,
                     "SHA-256 不可用：" + e.getMessage(), e);
         }
+    }
+
+    private static String formatVersion(byte[] hash) {
+        return "sha256:" + HexFormat.of().formatHex(hash);
     }
 
     private static String requirePath(Map<String, Object> params) {

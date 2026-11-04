@@ -123,7 +123,7 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
                     .status(WorkingMemoryTurn.STATUS_READY)
                     .schemaVersion(1)
                     .messageCount(rows.size())
-                    .tokenEstimate(estimateTokens(projectableMessages(turnMessages)))
+                    .tokenEstimate(estimateProjectableTokens(turnMessages))
                     .startedAt(now)
                     .finishedAt(now)
                     .deleted(0)
@@ -177,7 +177,7 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
                     .status(WorkingMemoryTurn.STATUS_READY)
                     .schemaVersion(1)
                     .messageCount(rows.size())
-                    .tokenEstimate(estimateTokens(projectableMessages(compactedMessages)))
+                    .tokenEstimate(estimateProjectableTokens(compactedMessages))
                     .startedAt(now)
                     .finishedAt(now)
                     .deleted(0)
@@ -199,19 +199,21 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
         }
     }
 
-    private int estimateTokens(List<Message> messages) {
+    private int estimateProjectableTokens(List<Message> messages) {
         if (messages == null || messages.isEmpty()) {
             return 0;
         }
-        return tokenCounter.estimateMessages(messages);
-    }
-
-    private List<Message> projectableMessages(List<Message> messages) {
-        if (messages == null || messages.isEmpty()) {
-            return List.of();
+        int total = 0;
+        int projectableCount = 0;
+        for (Message message : messages) {
+            if (message != null && message.getRole() != null) {
+                total += tokenCounter.estimateOneMessage(message);
+                projectableCount++;
+            }
         }
-        return messages.stream()
-                .filter(message -> message != null && message.getRole() != null)
-                .toList();
+        if (projectableCount == 0) {
+            return 0;
+        }
+        return tokenCounter.estimateMessages(List.of()) + total;
     }
 }
