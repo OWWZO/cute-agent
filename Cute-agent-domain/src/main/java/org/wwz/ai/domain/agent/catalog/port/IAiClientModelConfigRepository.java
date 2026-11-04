@@ -28,8 +28,10 @@ public interface IAiClientModelConfigRepository {
 
     Optional<AiClientModelConfig> findById(Long id);
 
+    /** 返回至多一条 {@code modelId} 匹配配置；需要全部候选时使用 {@link #findAllByModelId(String)}。 */
     Optional<AiClientModelConfig> findByModelId(String modelId);
 
+    /** 返回全部 {@code modelId} 匹配配置；{@code modelId} 不保证唯一。 */
     List<AiClientModelConfig> findAllByModelId(String modelId);
 
     List<AiClientModelConfig> findByApiId(String apiId);

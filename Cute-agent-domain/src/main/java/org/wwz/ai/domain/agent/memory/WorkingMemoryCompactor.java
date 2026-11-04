@@ -163,10 +163,8 @@ public final class WorkingMemoryCompactor {
         List<Message> keep = keepRecentTail(body, budget);
         // 已包装的 notes 再清洗一次，防止历史轮次残留 <analysis>/<summary> 污染主 Agent。
         String reinject;
-        if (notes.contains(CompactionPrompt.CONTEXT_COMPACTION_PREFIX)) {
-            reinject = CompactionPrompt.wrapSummaryForReinject(
-                    CompactionPrompt.unwrapHandoffBody(notes), !keep.isEmpty());
-        } else if (notes.contains(CompactionPrompt.LEGACY_CONTINUATION)) {
+        if (notes.contains(CompactionPrompt.CONTEXT_COMPACTION_PREFIX)
+                || notes.contains(CompactionPrompt.LEGACY_CONTINUATION)) {
             reinject = CompactionPrompt.wrapSummaryForReinject(
                     CompactionPrompt.unwrapHandoffBody(notes), !keep.isEmpty());
         } else {

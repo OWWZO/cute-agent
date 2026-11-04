@@ -60,10 +60,6 @@ public class ToolCallTool implements BaseTool {
             if (!result.ok()) {
                 return result.errorPayload();
             }
-            if (collection == null) {
-                return ToolResultPayload.failure("ToolCall 失败：无 ToolCollection",
-                        "ToolCall 失败：无 ToolCollection", null, "no collection");
-            }
             return collection.executeResolved(result.name(), result.arguments(), context);
         } catch (Exception e) {
             log.warn("ToolCall failed", e);
