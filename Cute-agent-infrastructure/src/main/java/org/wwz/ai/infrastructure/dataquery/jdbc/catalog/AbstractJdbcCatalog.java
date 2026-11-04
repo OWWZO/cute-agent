@@ -87,7 +87,7 @@ public abstract class AbstractJdbcCatalog implements JdbcCatalog {
             while (rs.next()) {
                 String name = rs.getString("COLUMN_NAME");
                 int intDataType = rs.getInt("DATA_TYPE");
-                JDBCType jdbcType = JDBCType.valueOf(intDataType);
+                JDBCType jdbcType = toJdbcType(intDataType);
                 String dataType = typeConvert(jdbcType);
 
                 DataQueryTableColumn column = DataQueryTableColumn.builder().name(name)
@@ -105,6 +105,21 @@ public abstract class AbstractJdbcCatalog implements JdbcCatalog {
         } catch (Exception e) {
             throw new CatalogException(
                     String.format("Failed getting table %s", tablePath), e);
+        }
+    }
+
+    /**
+     * 把驱动返回的 JDBC 类型码映射为枚举。
+     *
+     * <p>驱动可能返回方言私有类型码（如 PostgreSQL 的 uuid、MySQL 的 JSON），
+     * {@link JDBCType#valueOf} 对这些值会抛 {@link IllegalArgumentException}，
+     * 一旦发生整张表的列元数据都会查询失败。未知类型统一降级为 {@link JDBCType#OTHER}。</p>
+     */
+    public static JDBCType toJdbcType(int typeCode) {
+        try {
+            return JDBCType.valueOf(typeCode);
+        } catch (IllegalArgumentException e) {
+            return JDBCType.OTHER;
         }
     }
 

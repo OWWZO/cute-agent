@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.wwz.ai.infrastructure.dataquery.jdbc.catalog.AbstractJdbcCatalog.typeConvert;
+import static org.wwz.ai.infrastructure.dataquery.jdbc.catalog.AbstractJdbcCatalog.toJdbcType;
 
 
 /**
@@ -60,7 +61,7 @@ public class JdbcDataMetaProvider implements DataMetaProvider<JdbcQueryRequest> 
                 for (int i = 1; i <= columnCount; i++) {
                     String name = metaData.getColumnLabel(i);
                     int intDataType = metaData.getColumnType(i);
-                    JDBCType jdbcType = JDBCType.valueOf(intDataType);
+                    JDBCType jdbcType = toJdbcType(intDataType);
                     String dataType = typeConvert(jdbcType);
                     DataQueryTableColumn column = DataQueryTableColumn.builder().name(name)
                             .comment(name)
