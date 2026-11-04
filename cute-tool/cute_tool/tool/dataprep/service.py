@@ -15,6 +15,7 @@ from loguru import logger
 
 from cute_tool.tool.docread._compat import ToolContext
 from cute_tool.tool.docread.paths import resolve_input_path, resolve_output_path
+from cute_tool.util.blocking_executor import run_blocking
 from cute_tool.util.file_util import upload_file_by_path
 
 _MAX_JSON_CHARS = 200_000
@@ -182,25 +183,31 @@ async def _maybe_upload_spill(request_id: str, data: dict[str, Any]) -> dict[str
     return data
 
 
-def _run_tool(tool: Any, params: dict[str, Any], request_id: str) -> dict[str, Any]:
+async def _run_tool(
+    tool: Any, params: dict[str, Any], request_id: str
+) -> dict[str, Any]:
     # 工具执行统一收敛成 success/message/data 三段式结果，避免每个 runner 重复处理异常协议。
     # 所有工具共享同一异常到 success/message/data 的转换，避免路由层出现协议分叉。
-    clean, context = _prepare_params(params, request_id)
-    try:
-        result = tool.execute_sync(clean, context)
-        return _ok(result if isinstance(result, dict) else {"result": result})
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            f"dataprep tool={getattr(tool, 'name', type(tool).__name__)} failed: {exc}"
-        )
-        return _fail(str(exc))
+    def execute_tool() -> dict[str, Any]:
+        clean, context = _prepare_params(params, request_id)
+        try:
+            result = tool.execute_sync(clean, context)
+            return _ok(result if isinstance(result, dict) else {"result": result})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"dataprep tool={getattr(tool, 'name', type(tool).__name__)} failed: {exc}"
+            )
+            return _fail(str(exc))
+
+    # pandas 计算、本地/MinIO I/O 都是阻塞操作，必须在共享阻塞池执行。
+    return await run_blocking(execute_tool)
 
 
 async def run_data_aggregate(request_id: str, params: dict[str, Any]) -> dict[str, Any]:
     from cute_tool.tool.dataprep.data_aggregate import DataAggregateTool
 
     # 聚合、清洗、合并和变换可能产生 spill 文件，因此执行后统一做上传和 fileInfo 提升。
-    result = _run_tool(DataAggregateTool(), params, request_id)
+    result = await _run_tool(DataAggregateTool(), params, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
         result["data"] = await _maybe_upload_spill(request_id, result["data"])
         if "fileInfo" in result["data"]:
@@ -211,7 +218,7 @@ async def run_data_aggregate(request_id: str, params: dict[str, Any]) -> dict[st
 async def run_data_clean(request_id: str, params: dict[str, Any]) -> dict[str, Any]:
     from cute_tool.tool.dataprep.data_clean import DataCleanTool
 
-    result = _run_tool(DataCleanTool(), params, request_id)
+    result = await _run_tool(DataCleanTool(), params, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
         result["data"] = await _maybe_upload_spill(request_id, result["data"])
         if "fileInfo" in result["data"]:
@@ -222,7 +229,7 @@ async def run_data_clean(request_id: str, params: dict[str, Any]) -> dict[str, A
 async def run_data_merge(request_id: str, params: dict[str, Any]) -> dict[str, Any]:
     from cute_tool.tool.dataprep.data_merge import DataMergeTool
 
-    result = _run_tool(DataMergeTool(), params, request_id)
+    result = await _run_tool(DataMergeTool(), params, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
         result["data"] = await _maybe_upload_spill(request_id, result["data"])
         if "fileInfo" in result["data"]:
@@ -233,7 +240,7 @@ async def run_data_merge(request_id: str, params: dict[str, Any]) -> dict[str, A
 async def run_data_transform(request_id: str, params: dict[str, Any]) -> dict[str, Any]:
     from cute_tool.tool.dataprep.data_transform import DataTransformTool
 
-    result = _run_tool(DataTransformTool(), params, request_id)
+    result = await _run_tool(DataTransformTool(), params, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
         result["data"] = await _maybe_upload_spill(request_id, result["data"])
         if "fileInfo" in result["data"]:
@@ -244,13 +251,13 @@ async def run_data_transform(request_id: str, params: dict[str, Any]) -> dict[st
 async def run_data_validate(request_id: str, params: dict[str, Any]) -> dict[str, Any]:
     from cute_tool.tool.dataprep.data_validate import DataValidateTool
 
-    return _run_tool(DataValidateTool(), params, request_id)
+    return await _run_tool(DataValidateTool(), params, request_id)
 
 
 async def run_sql_query(request_id: str, params: dict[str, Any]) -> dict[str, Any]:
     from cute_tool.tool.dataprep.sql_query import SQLQueryTool
 
-    result = _run_tool(SQLQueryTool(), params, request_id)
+    result = await _run_tool(SQLQueryTool(), params, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
         result["data"] = await _maybe_upload_spill(request_id, result["data"])
         if "fileInfo" in result["data"]:

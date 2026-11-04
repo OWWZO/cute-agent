@@ -256,14 +256,16 @@ class OutstandingLastInsightType(InsightType):
         # 计算 p-value
         residuals = y-pred
         loc, scale = norm.fit(residuals[:-1])
-        p_value = norm.sf(residuals[0], loc=loc, scale=scale)
+        p_value = norm.sf(residuals[-1], loc=loc, scale=scale)
         return InsightType(
             type="OutstandingLast",
             insight={
                 "description": f"{data.filters or ''} {data.breakdown.name} = {df.iloc[y.size-1][data.breakdown.name]} 时，{data.measure.name} 最低为 {y[-1]}",
                 "min_value" : {
                     data.measure.name: np_type_trans(y[-1]),
-                    data.breakdown.name: np_type_trans(df.iloc[0][data.breakdown.name])
+                    data.breakdown.name: np_type_trans(
+                        df.iloc[y.size - 1][data.breakdown.name]
+                    )
                 },
             },
             impact=data.impact,

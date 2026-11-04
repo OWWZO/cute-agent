@@ -59,7 +59,7 @@ class Measure(BaseModel):
 
 
 class DataModel(BaseModel):
-    id: str = Field(str(uuid.uuid4()), description="")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="")
     measure: Measure = Field(None, description="度量")
     data: pd.DataFrame = Field(exclude=True)
     columns: List[Column] = Field(
@@ -108,7 +108,7 @@ class DataModel(BaseModel):
         return self.id == other.id and str(self.measure) == str(other.measure) and str(self.columns) == str(other.columns)
 
     def __hash__(self):
-        return f"{self.id}_{hash(str(self.measure) + str(self.columns))}"
+        return hash((self.id, str(self.measure), str(self.columns)))
 
     def __str__(self):
         return f"{self.__class__.__name__}(id={self.id}, measure={self.measure}, columns={self.columns})"

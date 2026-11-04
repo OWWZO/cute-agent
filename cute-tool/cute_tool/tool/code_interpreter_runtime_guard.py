@@ -6,7 +6,10 @@
 """
 import contextlib
 import contextvars
+import builtins
+import io
 import json
+import os
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
@@ -32,6 +35,9 @@ _GUARD_BYPASS_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
     default=0,
 )
 _PATCHES_INSTALLED = False  # 全局 patch 只安装一次
+_ORIGINAL_OPEN = builtins.open
+_ORIGINAL_IO_OPEN = io.open
+_ORIGINAL_OS_OPEN = os.open
 
 
 @contextlib.contextmanager
@@ -119,6 +125,10 @@ def _ensure_runtime_patches_installed() -> None:
     _patch_path_method("rename", _guard_path_move_method("rename"))
     _patch_path_method("replace", _guard_path_move_method("replace"))
 
+    _patch_builtin_open()
+    _patch_io_open()
+    _patch_os_open()
+
     _patch_pandas_function("read_csv", access_mode="read", keyword_names=("filepath_or_buffer", "path"))
     _patch_pandas_function("read_excel", access_mode="read", keyword_names=("io", "path"))
     _patch_pandas_function("read_html", access_mode="read", keyword_names=("io", "path"))
@@ -145,8 +155,80 @@ def _patch_path_method(method_name: str, guard_factory: Callable[[Callable[..., 
     setattr(Path, method_name, guarded)
 
 
+def _normalize_open_target(value: Any, *, access_mode: str) -> Any:
+    if not _is_pathlike(value):
+        return value
+    return _normalize_path(value, access_mode=access_mode)
+
+
+def _open_access_mode(mode: Any) -> str:
+    return "write" if any(flag in str(mode or "r") for flag in ("w", "a", "x", "+")) else "read"
+
+
+def _patch_builtin_open() -> None:
+    original = builtins.open
+    if getattr(original, "__ci_guard_patched__", False):
+        return
+
+    def guarded(file, mode="r", *args, **kwargs):
+        if _should_bypass_guard():
+            return original(file, mode, *args, **kwargs)
+        normalized = _normalize_open_target(file, access_mode=_open_access_mode(mode))
+        return original(normalized, mode, *args, **kwargs)
+
+    _strip_unwrapped(guarded, original, "open")
+    guarded.__ci_guard_patched__ = True
+    builtins.open = guarded
+
+
+def _patch_io_open() -> None:
+    original = io.open
+    if getattr(original, "__ci_guard_patched__", False):
+        return
+
+    def guarded(file, mode="r", *args, **kwargs):
+        if _should_bypass_guard():
+            return original(file, mode, *args, **kwargs)
+        normalized = _normalize_open_target(file, access_mode=_open_access_mode(mode))
+        return original(normalized, mode, *args, **kwargs)
+
+    _strip_unwrapped(guarded, original, "open")
+    guarded.__ci_guard_patched__ = True
+    io.open = guarded
+
+
+def _patch_os_open() -> None:
+    original = os.open
+    if getattr(original, "__ci_guard_patched__", False):
+        return
+
+    def guarded(path, flags, *args, **kwargs):
+        if _should_bypass_guard():
+            return original(path, flags, *args, **kwargs)
+        write_flags = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
+        normalized = _normalize_open_target(
+            path,
+            access_mode="write" if int(flags) & write_flags else "read",
+        )
+        return original(normalized, flags, *args, **kwargs)
+
+    _strip_unwrapped(guarded, original, "open")
+    guarded.__ci_guard_patched__ = True
+    os.open = guarded
+
+
+def _strip_unwrapped(
+    guarded: Callable[..., Any], original: Callable[..., Any], name: str | None = None
+) -> Callable[..., Any]:
+    """Copy safe metadata without preserving functools.wraps' escape hatch."""
+    guarded.__module__ = original.__module__
+    guarded.__qualname__ = getattr(original, "__qualname__", guarded.__name__)
+    guarded.__name__ = name or original.__name__
+    guarded.__doc__ = original.__doc__
+    return guarded
+
+
 def _guard_path_open(original: Callable[..., Any]) -> Callable[..., Any]:
-    @wraps(original)
     def guarded(self, *args, **kwargs):
         if _should_bypass_guard():
             return original(self, *args, **kwargs)
@@ -160,12 +242,11 @@ def _guard_path_open(original: Callable[..., Any]) -> Callable[..., Any]:
         normalized_self = Path(_normalize_path(self, access_mode=access_mode))
         return original(normalized_self, *args, **kwargs)
 
-    return guarded
+    return _strip_unwrapped(guarded, original)
 
 
 def _guard_path_read_method(method_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def guard_factory(original: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(original)
         def guarded(self, *args, **kwargs):
             if _should_bypass_guard():
                 return original(self, *args, **kwargs)
@@ -173,14 +254,13 @@ def _guard_path_read_method(method_name: str) -> Callable[[Callable[..., Any]], 
             return original(normalized_self, *args, **kwargs)
 
         guarded.__name__ = method_name
-        return guarded
+        return _strip_unwrapped(guarded, original, method_name)
 
     return guard_factory
 
 
 def _guard_path_write_method(method_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def guard_factory(original: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(original)
         def guarded(self, *args, **kwargs):
             if _should_bypass_guard():
                 return original(self, *args, **kwargs)
@@ -188,14 +268,13 @@ def _guard_path_write_method(method_name: str) -> Callable[[Callable[..., Any]],
             return original(normalized_self, *args, **kwargs)
 
         guarded.__name__ = method_name
-        return guarded
+        return _strip_unwrapped(guarded, original, method_name)
 
     return guard_factory
 
 
 def _guard_path_move_method(method_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def guard_factory(original: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(original)
         def guarded(self, target, *args, **kwargs):
             if _should_bypass_guard():
                 return original(self, target, *args, **kwargs)
@@ -204,7 +283,7 @@ def _guard_path_move_method(method_name: str) -> Callable[[Callable[..., Any]], 
             return original(normalized_self, normalized_target, *args, **kwargs)
 
         guarded.__name__ = method_name
-        return guarded
+        return _strip_unwrapped(guarded, original, method_name)
 
     return guard_factory
 
@@ -214,7 +293,6 @@ def _patch_pandas_function(function_name: str, *, access_mode: str, keyword_name
     if original is None or getattr(original, "__ci_guard_patched__", False):
         return
 
-    @wraps(original)
     def guarded(*args, **kwargs):
         if _should_bypass_guard():
             return original(*args, **kwargs)
@@ -226,6 +304,7 @@ def _patch_pandas_function(function_name: str, *, access_mode: str, keyword_name
         )
         return original(*normalized_args, **normalized_kwargs)
 
+    _strip_unwrapped(guarded, original, function_name)
     guarded.__ci_guard_patched__ = True
     setattr(pd, function_name, guarded)
 
@@ -235,7 +314,6 @@ def _patch_dataframe_method(method_name: str, *, access_mode: str, keyword_names
     if original is None or getattr(original, "__ci_guard_patched__", False):
         return
 
-    @wraps(original)
     def guarded(self, *args, **kwargs):
         if _should_bypass_guard():
             return original(self, *args, **kwargs)
@@ -247,6 +325,7 @@ def _patch_dataframe_method(method_name: str, *, access_mode: str, keyword_names
         )
         return original(self, *normalized_args, **normalized_kwargs)
 
+    _strip_unwrapped(guarded, original, method_name)
     guarded.__ci_guard_patched__ = True
     setattr(pd.DataFrame, method_name, guarded)
 
@@ -257,13 +336,13 @@ def _patch_excel_writer_init() -> None:
     if original is None or getattr(original, "__ci_guard_patched__", False):
         return
 
-    @wraps(original)
     def guarded(self, path, *args, **kwargs):
         if _should_bypass_guard():
             return original(self, path, *args, **kwargs)
         normalized_path = _normalize_if_pathlike(path, access_mode="write")
         return original(self, normalized_path, *args, **kwargs)
 
+    _strip_unwrapped(guarded, original, "__init__")
     guarded.__ci_guard_patched__ = True
     setattr(excel_writer, "__init__", guarded)
 
@@ -280,7 +359,6 @@ def _patch_matplotlib_savefig() -> None:
         if original is None or getattr(original, "__ci_guard_patched__", False):
             continue
 
-        @wraps(original)
         def guarded(*args, __original=original, __owner=owner, **kwargs):
             if _should_bypass_guard():
                 return __original(*args, **kwargs)
@@ -295,6 +373,7 @@ def _patch_matplotlib_savefig() -> None:
             )
             return __original(*normalized_args, **normalized_kwargs)
 
+        _strip_unwrapped(guarded, original, "savefig")
         guarded.__ci_guard_patched__ = True
         setattr(owner, "savefig", guarded)
 
@@ -356,6 +435,10 @@ def _normalize_path(value: Any, *, access_mode: str) -> str:
     if policy is None:
         return str(value)
     try:
+        if isinstance(value, os.PathLike):
+            value = os.fspath(value)
+        if not isinstance(value, str):
+            return str(value)
         # 守卫内部调用 validate_authorized_path 会再次访问 Path，必须暂时绕过 patch，避免递归进入自身。
         with _bypass_runtime_guard():
             return validate_authorized_path(str(value), policy=policy, access_mode=access_mode)
@@ -364,7 +447,7 @@ def _normalize_path(value: Any, *, access_mode: str) -> str:
 
 
 def _is_pathlike(value: Any) -> bool:
-    return isinstance(value, (str, Path))
+    return isinstance(value, (str, os.PathLike))
 
 
 def _should_bypass_guard() -> bool:

@@ -6,6 +6,7 @@ range validation, and required field verification.
 
 from __future__ import annotations
 
+import numbers
 import re
 from typing import Any
 
@@ -259,7 +260,7 @@ class DataValidateTool(SyncTool):
                     errors.append({
                         "type": "unique_together_violation",
                         "columns": col_group,
-                        "row_indices": dup_indices[:10],
+                        "row_indices": dup_indices,
                         "total_violations": len(dup_indices),
                         "message": f"Duplicate values found for column combination {col_group}",
                     })
@@ -283,7 +284,7 @@ class DataValidateTool(SyncTool):
                 errors.append({
                     "type": "null_violation",
                     "column": col_name,
-                    "row_indices": null_indices[:10],
+                    "row_indices": null_indices,
                     "total_violations": int(null_mask.sum()),
                     "message": f"Column '{col_name}' contains null values but is not nullable",
                 })
@@ -316,7 +317,7 @@ class DataValidateTool(SyncTool):
                 errors.append({
                     "type": "unique_violation",
                     "column": col_name,
-                    "row_indices": dup_indices[:10],
+                    "row_indices": dup_indices,
                     "total_violations": len(dup_indices),
                     "message": f"Column '{col_name}' contains duplicate values",
                 })
@@ -343,14 +344,14 @@ class DataValidateTool(SyncTool):
 
         elif expected_type == "integer":
             for idx, val in non_null.items():
-                if not isinstance(val, (int, float)):
+                if not isinstance(val, numbers.Integral) and not isinstance(val, float):
                     invalid_indices.append(idx)
                 elif isinstance(val, float) and not val.is_integer():
                     invalid_indices.append(idx)
 
         elif expected_type == "number":
             for idx, val in non_null.items():
-                if not isinstance(val, (int, float)):
+                if not isinstance(val, numbers.Real):
                     try:
                         float(val)
                     except (ValueError, TypeError):
@@ -373,7 +374,7 @@ class DataValidateTool(SyncTool):
                 "type": "type_violation",
                 "column": col_name,
                 "expected_type": expected_type,
-                "row_indices": invalid_indices[:10],
+                "row_indices": invalid_indices,
                 "total_violations": len(invalid_indices),
                 "message": f"Column '{col_name}' contains values not matching type '{expected_type}'",
             })
@@ -405,7 +406,7 @@ class DataValidateTool(SyncTool):
                     "column": col_name,
                     "constraint": "min",
                     "limit": min_val,
-                    "row_indices": below_min.index.tolist()[:10],
+                    "row_indices": below_min.index.tolist(),
                     "total_violations": len(below_min),
                     "message": f"Column '{col_name}' has {len(below_min)} values below minimum {min_val}",
                 })
@@ -419,7 +420,7 @@ class DataValidateTool(SyncTool):
                     "column": col_name,
                     "constraint": "max",
                     "limit": max_val,
-                    "row_indices": above_max.index.tolist()[:10],
+                    "row_indices": above_max.index.tolist(),
                     "total_violations": len(above_max),
                     "message": f"Column '{col_name}' has {len(above_max)} values above maximum {max_val}",
                 })
@@ -445,7 +446,7 @@ class DataValidateTool(SyncTool):
                     "column": col_name,
                     "constraint": "min_length",
                     "limit": min_len,
-                    "row_indices": too_short.index.tolist()[:10],
+                    "row_indices": too_short.index.tolist(),
                     "total_violations": len(too_short),
                     "message": f"Column '{col_name}' has {len(too_short)} values shorter than {min_len}",
                 })
@@ -459,7 +460,7 @@ class DataValidateTool(SyncTool):
                     "column": col_name,
                     "constraint": "max_length",
                     "limit": max_len,
-                    "row_indices": too_long.index.tolist()[:10],
+                    "row_indices": too_long.index.tolist(),
                     "total_violations": len(too_long),
                     "message": f"Column '{col_name}' has {len(too_long)} values longer than {max_len}",
                 })
@@ -496,7 +497,7 @@ class DataValidateTool(SyncTool):
                 "type": "pattern_violation",
                 "column": col_name,
                 "pattern": pattern,
-                "row_indices": non_matching[:10],
+                "row_indices": non_matching,
                 "total_violations": len(non_matching),
                 "message": f"Column '{col_name}' has {len(non_matching)} values not matching pattern",
             })
@@ -520,7 +521,7 @@ class DataValidateTool(SyncTool):
                 "column": col_name,
                 "allowed_values": allowed_values,
                 "invalid_values": list(invalid_values.unique())[:10],
-                "row_indices": invalid_values.index.tolist()[:10],
+                "row_indices": invalid_values.index.tolist(),
                 "total_violations": len(invalid_values),
                 "message": f"Column '{col_name}' has {len(invalid_values)} values not in allowed set",
             })
