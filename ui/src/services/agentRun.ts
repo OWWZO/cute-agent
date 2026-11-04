@@ -8,6 +8,20 @@ import { emitAuthSessionExpired } from "@/services/authSessionExpired";
 const customHost = resolveServiceBaseUrl(SERVICE_BASE_URL);
 const AGENT_RUN_API_PREFIX = "/api/agent/run";
 
+function resolveTrustedOrigin(): string {
+  const currentOrigin =
+    typeof window === "undefined" ? "http://localhost" : window.location.origin;
+  return new URL(customHost, currentOrigin).origin;
+}
+
+export function isTrustedAgentRunUrl(url: string): boolean {
+  try {
+    return new URL(url, resolveTrustedOrigin()).origin === resolveTrustedOrigin();
+  } catch {
+    return false;
+  }
+}
+
 export const AGENT_QUERY_SUBMIT_URL = `${customHost}/web/api/v1/gpt/queryAgentStreamIncr`;
 
 export function buildAgentSessionStreamUrl(params: {
@@ -54,6 +68,10 @@ export async function submitAcceptedCommand(
   url: string,
   body: unknown
 ): Promise<AgentQuerySubmitResult> {
+  if (!isTrustedAgentRunUrl(url)) {
+    throw new Error("拒绝向非受信地址提交 Agent 请求");
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
