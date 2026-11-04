@@ -38,7 +38,7 @@ public class SubAgentDefinitionAdminApplicationService {
     }
 
     public boolean create(SubAgentDefinitionUpsertCommand command) {
-        validateUpsert(command, true);
+        validateUpsert(command);
         String key = command.getAgentKey().trim();
         if (subAgentDefinitionRepository.findByAgentKey(key).isPresent()) {
             throw new IllegalArgumentException("agentKey 已存在: " + key);
@@ -51,7 +51,7 @@ public class SubAgentDefinitionAdminApplicationService {
     }
 
     public boolean update(SubAgentDefinitionUpsertCommand command) {
-        validateUpsert(command, false);
+        validateUpsert(command);
         String key = command.getAgentKey().trim();
         if (subAgentDefinitionRepository.findByAgentKey(key).isEmpty()) {
             throw new IllegalArgumentException("agentKey 不存在: " + key);
@@ -97,7 +97,7 @@ public class SubAgentDefinitionAdminApplicationService {
                 .build();
     }
 
-    private void validateUpsert(SubAgentDefinitionUpsertCommand command, boolean create) {
+    private void validateUpsert(SubAgentDefinitionUpsertCommand command) {
         if (command == null || StringUtils.isBlank(command.getAgentKey())) {
             throw new IllegalArgumentException("agentKey 不能为空");
         }
@@ -120,9 +120,6 @@ public class SubAgentDefinitionAdminApplicationService {
         if (!SubAgentDefinition.TOOL_POLICY_INHERIT.equals(toolPolicyMode)
                 && !SubAgentDefinition.TOOL_POLICY_CUSTOM.equals(toolPolicyMode)) {
             throw new IllegalArgumentException("toolPolicyMode 只能是 inherit 或 custom");
-        }
-        if (!create && StringUtils.isBlank(key)) {
-            throw new IllegalArgumentException("agentKey 不能为空");
         }
     }
 

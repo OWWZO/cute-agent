@@ -18,6 +18,9 @@ type Props = {
   triggerClassName?: (active?: boolean, disabled?: boolean) => string;
 };
 
+const matchesSelectedModel = (model: CatalogModelRecord, value: string) =>
+  model.modelId === value || model.modelName === value;
+
 const ModelPicker: CuteType.FC<Props> = ({
   models,
   value,
@@ -29,8 +32,7 @@ const ModelPicker: CuteType.FC<Props> = ({
 }) => {
   const isEmpty = models.length === 0;
   const current =
-    models.find((m) => m.modelId === value || m.modelName === value) ??
-    models[0];
+    models.find((model) => matchesSelectedModel(model, value)) ?? models[0];
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
@@ -64,8 +66,7 @@ const ModelPicker: CuteType.FC<Props> = ({
         </div>
         <div className="space-y-0.5">
           {models.map((m) => {
-            const active =
-              m.modelId === value || m.modelName === value;
+            const active = matchesSelectedModel(m, value);
             return (
               <button
                 key={m.modelId}
