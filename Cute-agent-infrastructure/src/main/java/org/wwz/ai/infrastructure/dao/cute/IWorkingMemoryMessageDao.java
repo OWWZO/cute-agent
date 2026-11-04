@@ -67,5 +67,8 @@ public interface IWorkingMemoryMessageDao {
     List<Map<String, Object>> selectRecentSessions(@Param("userId") String userId,
                                                    @Param("limit") int limit);
 
+    /** 批量读取会话摘要，用于 session_search discover 的轻量结果补齐。 */
+    List<Map<String, Object>> selectSessionSummaries(@Param("sessionIds") List<String> sessionIds);
+
     Map<String, Object> selectSessionSummary(@Param("sessionId") String sessionId);
 }

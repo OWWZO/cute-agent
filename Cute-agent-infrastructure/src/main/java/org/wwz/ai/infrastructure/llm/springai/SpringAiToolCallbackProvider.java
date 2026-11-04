@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 public class SpringAiToolCallbackProvider {
 
     private static final int MAX_SESSION_CACHE = 256;
+    private static final int MAX_SIGNATURE_CACHE_PER_SESSION = 32;
     private final ConcurrentHashMap<String, ConcurrentHashMap<String, List<ToolCallback>>> sessionCache =
             new ConcurrentHashMap<>();
 
@@ -37,6 +38,7 @@ public class SpringAiToolCallbackProvider {
         }
         List<ToolCallback> frozen = List.copyOf(buildSorted(definitions));
         bySignature.put(signature, frozen);
+        trimSignatureCache(bySignature);
         trimSessionCache();
         return frozen;
     }
@@ -58,6 +60,19 @@ public class SpringAiToolCallbackProvider {
         }
         names.sort(String.CASE_INSENSITIVE_ORDER);
         return String.join("|", names);
+    }
+
+    private void trimSignatureCache(ConcurrentHashMap<String, List<ToolCallback>> bySignature) {
+        if (bySignature.size() <= MAX_SIGNATURE_CACHE_PER_SESSION) {
+            return;
+        }
+        int remove = bySignature.size() - MAX_SIGNATURE_CACHE_PER_SESSION;
+        for (String key : bySignature.keySet()) {
+            bySignature.remove(key);
+            if (--remove <= 0) {
+                break;
+            }
+        }
     }
 
     private void trimSessionCache() {

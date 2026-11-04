@@ -308,4 +308,18 @@
           AND deleted = 0
         LIMIT 1
     </select>
+
+    <select id="selectSessionSummaries" resultType="map">
+        SELECT session_id AS sessionId,
+               user_id AS userId,
+               title AS title,
+               started_at AS startedAt,
+               last_active_at AS lastActiveAt
+        FROM ai_agent_dialogue_session
+        WHERE session_id IN
+        <foreach collection="sessionIds" item="sessionId" open="(" separator="," close=")">
+            #{sessionId}
+        </foreach>
+          AND deleted = 0
+    </select>
 </mapper>
