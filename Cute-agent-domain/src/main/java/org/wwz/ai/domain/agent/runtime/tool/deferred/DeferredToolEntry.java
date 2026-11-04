@@ -157,21 +157,6 @@ public final class DeferredToolEntry {
         return source == DeferredToolSource.MCP;
     }
 
-    public DeferredToolEntry withLocalTool(BaseTool tool) {
-        if (!isLocal()) {
-            return this;
-        }
-        return new DeferredToolEntry(
-                name,
-                description,
-                parameters,
-                source,
-                sourceName,
-                tool,
-                null,
-                searchHint);
-    }
-
     @SuppressWarnings("unchecked")
     private static Map<String, Object> immutableCopy(Map<String, Object> source) {
         Map<String, Object> copy = new LinkedHashMap<>();
