@@ -66,8 +66,19 @@ public interface JdbcDialect {
         return "";
     }
 
+    static String stripTrailingSemicolon(String sql) {
+        if (sql == null) {
+            return "";
+        }
+        String stripped = sql.strip();
+        while (stripped.endsWith(";")) {
+            stripped = stripped.substring(0, stripped.length() - 1).strip();
+        }
+        return stripped;
+    }
+
     default String pagingEnd(int start, int pageSize) {
-        return " LIMIT " + (start * pageSize) + "," + pageSize;
+        return " LIMIT " + ((long) start * pageSize) + "," + pageSize;
     }
 
     default String formatPagingSql(int start, int pageSize, String sql) {
@@ -75,7 +86,9 @@ public interface JdbcDialect {
         if (start < 0) {
             start = 1;
         }
-        return pagingHead(start - 1, pageSize) + sql + pagingEnd(start - 1, pageSize);
+        return pagingHead(start - 1, pageSize)
+                + stripTrailingSemicolon(sql)
+                + pagingEnd(start - 1, pageSize);
     }
 
     default Properties defaultProperties() {
