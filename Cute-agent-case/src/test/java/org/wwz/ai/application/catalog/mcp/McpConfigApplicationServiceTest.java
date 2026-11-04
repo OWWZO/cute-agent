@@ -42,6 +42,34 @@ public class McpConfigApplicationServiceTest {
         Assert.assertEquals("MCP 配置已写入，但运行时刷新失败", result.info());
     }
 
+    @Test
+    public void shouldRejectNullAndBlankMcpIdBeforeInsert() {
+        Repository repository = new Repository();
+        McpConfigApplicationService service = new McpConfigApplicationService(repository,
+                reloadSupport(McpRuntimeReloadResult::succeeded));
+
+        ApplicationResult<Boolean> nullCommand = service.create(null);
+        ApplicationResult<Boolean> blankId = service.create(new McpConfigCommand(
+                null, " ", "MCP", "streamable_http", "{}", 5, 1));
+
+        Assert.assertEquals("0002", nullCommand.code());
+        Assert.assertEquals("0002", blankId.code());
+        Assert.assertNull(repository.inserted);
+    }
+
+    @Test
+    public void shouldTrimMcpIdOnCreate() {
+        Repository repository = new Repository();
+        McpConfigApplicationService service = new McpConfigApplicationService(repository,
+                reloadSupport(McpRuntimeReloadResult::succeeded));
+
+        ApplicationResult<Boolean> result = service.create(new McpConfigCommand(
+                null, " mcp-1 ", "MCP", "streamable_http", "{}", 5, 1));
+
+        Assert.assertEquals("0000", result.code());
+        Assert.assertEquals("mcp-1", repository.inserted.getMcpId());
+    }
+
     private static McpWriteReloadSupport reloadSupport(IMcpRuntimeReloadPort port) {
         return new McpWriteReloadSupport(port);
     }

@@ -7,11 +7,21 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Resolves the JWT signing secret without requiring local development setup.
@@ -53,13 +63,7 @@ public class JwtSecretProvider {
 
             String generatedSecret = generateSecret();
             try {
-                Files.writeString(
-                        secretFile,
-                        generatedSecret + System.lineSeparator(),
-                        StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE_NEW,
-                        StandardOpenOption.WRITE
-                );
+                createOwnerOnlySecretFile(generatedSecret);
                 return generatedSecret;
             } catch (FileAlreadyExistsException ignored) {
                 return readSecret();
@@ -71,6 +75,60 @@ public class JwtSecretProvider {
                     e
             );
         }
+    }
+
+    private void createOwnerOnlySecretFile(String generatedSecret) throws IOException {
+        Set<PosixFilePermission> ownerOnly =
+                PosixFilePermissions.fromString("rw-------");
+        boolean created = false;
+        try {
+            try {
+                Files.createFile(secretFile, PosixFilePermissions.asFileAttribute(ownerOnly));
+                created = true;
+            } catch (UnsupportedOperationException e) {
+                Files.createFile(secretFile);
+                created = true;
+                restrictToOwner(secretFile, ownerOnly);
+            }
+            Files.writeString(
+                    secretFile,
+                    generatedSecret + System.lineSeparator(),
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE
+            );
+        } catch (IOException | RuntimeException e) {
+            if (created) {
+                try {
+                    Files.deleteIfExists(secretFile);
+                } catch (IOException cleanupError) {
+                    e.addSuppressed(cleanupError);
+                }
+            }
+            throw e;
+        }
+    }
+
+    private static void restrictToOwner(Path file, Set<PosixFilePermission> ownerOnly) throws IOException {
+        FileStore store = Files.getFileStore(file);
+        if (store.supportsFileAttributeView("posix")) {
+            Files.setPosixFilePermissions(file, ownerOnly);
+            return;
+        }
+        if (store.supportsFileAttributeView("acl")) {
+            AclFileAttributeView view = Files.getFileAttributeView(file, AclFileAttributeView.class);
+            if (view == null) {
+                throw new IOException("ACL view unavailable for JWT secret file: " + file);
+            }
+            AclEntry ownerAccess = AclEntry.newBuilder()
+                    .setType(AclEntryType.ALLOW)
+                    .setPrincipal(view.getOwner())
+                    .setPermissions(EnumSet.allOf(AclEntryPermission.class))
+                    .build();
+            view.setAcl(List.of(ownerAccess));
+            return;
+        }
+        throw new IOException("Owner-only permissions are unavailable for JWT secret file: " + file);
     }
 
     private String readSecret() throws IOException {
