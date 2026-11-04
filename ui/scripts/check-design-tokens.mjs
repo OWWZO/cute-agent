@@ -13,7 +13,7 @@
  *   - 品牌色映射表（如欢迎页推荐问题的平台品牌色）
  *   - 测试文件与 global.css 本身（token 定义处）
  *
- * 用法：node scripts/check-design-tokens.mjs [--fix-hint]
+ * 用法：node scripts/check-design-tokens.mjs
  * 退出码 1 表示存在违规，可直接接 CI / pre-commit。
  */
 import { readdir, readFile } from "node:fs/promises";

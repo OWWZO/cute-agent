@@ -33,7 +33,7 @@ const toSet = (list: string): ReadonlySet<string> =>
 /** Markdown 文档。 */
 export const MARKDOWN_EXTENSIONS = toSet("md markdown mdx");
 /** SVG —— 单独成类：支持「图形 / 源码」双模式，不能当普通位图处理。 */
-export const SVG_EXTENSIONS = toSet("svg svg+xml");
+export const SVG_EXTENSIONS = toSet("svg");
 /** 位图。 */
 export const IMAGE_EXTENSIONS = toSet("png jpg jpeg gif webp bmp ico avif apng");
 /** 视频。 */

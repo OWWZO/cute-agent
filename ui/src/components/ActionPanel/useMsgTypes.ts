@@ -168,7 +168,6 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
     }
     const { messageType } = taskItem;
     const { resultMap, toolResult, toolResultText } = parsedTask;
-    const rawToolName = String(toolResult?.toolName || "").toLowerCase();
     const primaryFile = getPrimaryTaskFile(taskItem);
     // 类型判定统一走 resolveFilePreviewKind，不再各自维护扩展名表。
     const primaryKind = primaryFile
@@ -187,8 +186,6 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
     let isHtml = false;
     if (messageType === 'code' && resultMap.codeOutput) {
       isHtml = isHTML(resultMap.codeOutput);
-    } else if (messageType === 'tool_result' && rawToolName === 'code_interpreter' && toolResultText) {
-      isHtml = isHTML(toolResultText);
     }
     const useHtml = messageType === 'html' || primaryKind === 'html';
     const usePpt = messageType === 'ppt' || (!!primaryFile && isPptFileLike(primaryFile));

@@ -27,8 +27,7 @@ const Layout: CuteType.FC = memo(() => {
       const detail = (event as CustomEvent<AuthSessionExpiredDetail>).detail;
       const returnUrl =
         detail?.returnUrl ||
-        `${location.pathname}${location.search}${location.hash}` ||
-        ROUTES.HOME;
+        `${location.pathname}${location.search}${location.hash}`;
       navigate(buildLoginPath(returnUrl), { replace: true });
     };
 

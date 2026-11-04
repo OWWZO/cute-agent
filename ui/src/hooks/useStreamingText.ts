@@ -66,14 +66,6 @@ export function useStreamingText(text: string, isStreaming: boolean): string {
         return;
       }
 
-      if (!targetValue.startsWith(currentValue)) {
-        const common = commonPrefixLength(currentValue, targetValue);
-        displayedRef.current = targetValue.slice(0, Math.max(common, 0));
-        setDisplayedText(displayedRef.current);
-        frameRef.current = requestAnimationFrame(tick);
-        return;
-      }
-
       const remaining = targetValue.length - currentValue.length;
       // 积压远超一帧可追的量（例如标签页恢复 / 后端突发），逐帧追赶会让文字长时间
       // 落后于真实输出，这里直接对齐。
