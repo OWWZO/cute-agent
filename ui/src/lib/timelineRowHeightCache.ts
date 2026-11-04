@@ -29,6 +29,7 @@ export class TimelineRowHeightCache {
 
   /** 记录一次真实测量。重复写入会刷新淘汰顺序（活跃行不被淘汰）。 */
   set(key: TimelineRowHeightCacheKey, heightPx: number): void {
+    // 非法高度不覆盖该 key 上一次的有效测量，避免折叠/不可见时的 0 污染缓存。
     if (!Number.isFinite(heightPx) || heightPx <= 0) {
       return;
     }

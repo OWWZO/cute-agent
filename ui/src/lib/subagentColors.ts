@@ -25,10 +25,6 @@ export const SUBAGENT_COLORS = [
 
 export type SubagentColor = (typeof SUBAGENT_COLORS)[number];
 
-export function isSubagentColor(value: string): value is SubagentColor {
-  return (SUBAGENT_COLORS as readonly string[]).includes(value);
-}
-
 export function resolveSubagentColorFromName(name: string): SubagentColor {
   let hash = 0;
   for (let index = 0; index < name.length; index += 1) {
