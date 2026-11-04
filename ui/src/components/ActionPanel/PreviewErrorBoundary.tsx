@@ -40,7 +40,7 @@ export class PreviewErrorBoundary extends Component<
       console.error(
         `[PreviewErrorBoundary] ${label}组件渲染失败`,
         error,
-        info.componentStack ?? ""
+        info.componentStack
       );
       return;
     }

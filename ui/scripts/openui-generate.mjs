@@ -1,12 +1,13 @@
 /**
- * 一次性构建脚本：把 library.ts 的组件库固化成三个静态产物。
+ * 一次性构建脚本：把 library.ts 的组件库固化成四个静态产物。
  *
  *   src/generated/openui/prompt-resident.txt    常驻提示词（注入主 agent system prompt）
  *   src/generated/openui/components-extended.txt 扩展目录（get_ui_components 工具的返回值）
  *   src/generated/openui/spec.json               组件 schema（前端做渲染校验）
+ *   src/generated/openui/openui-cloud-config.txt 云端渲染配置
  *
  * 运行期不依赖 Node：产物提交进仓库，Java 读 classpath、前端 import json。
- * 改了 library.ts（增删组件、改签名、改 prompt-options）才需要重跑 `pnpm openui:build`。
+ * 改了 library.ts（增删组件、改签名、改 prompt-options）才需要重跑 `npm run openui:build`。
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -268,12 +269,12 @@ function checkFreshness() {
   try {
     firstLine = readFileSync(file, 'utf8').split('\n', 1)[0];
   } catch {
-    throw new Error(`缺少产物 ${file}，先跑 pnpm openui:build`);
+    throw new Error(`缺少产物 ${file}，先跑 npm run openui:build`);
   }
   const recorded = /library\.ts@([0-9a-f]{12})/.exec(firstLine)?.[1];
   if (recorded !== expected) {
     throw new Error(
-      `openui 产物已过期：library.ts 现在是 @${expected}，产物是 @${recorded ?? 'unknown'}。跑 pnpm openui:build 并同步到 Java resources。`
+      `openui 产物已过期：library.ts 现在是 @${expected}，产物是 @${recorded ?? 'unknown'}。跑 npm run openui:build 并同步到 Java resources。`
     );
   }
   console.log(`[openui] 产物与 library.ts@${expected} 一致`);
