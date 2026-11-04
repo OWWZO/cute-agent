@@ -44,6 +44,7 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
 
     private final Map<Long, QqBotWsClient> connections = new ConcurrentHashMap<>();
     private final Map<Long, ChannelAdapter> adapters = new ConcurrentHashMap<>();
+    private final Map<Long, Object> bindingMonitors = new ConcurrentHashMap<>();
     private final ExecutorService connectExecutor = Executors.newFixedThreadPool(4, runnable -> {
         Thread thread = new Thread(runnable, "channel-connect");
         thread.setDaemon(true);
@@ -103,6 +104,23 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
 
     private void doStart(ChannelBinding binding) {
         Long bindingId = binding.getId();
+        // start/stop 对同一绑定串行，避免 appId 锁的归还与建连交错。
+        synchronized (monitorOf(bindingId)) {
+            doStartSerialized(binding);
+        }
+    }
+
+    /**
+     * 每个绑定一把监视器：start/stop 必须串行。
+     * <p>否则 stop 归还 appId 锁的同时 start 仍在校验与建连之间，会出现「锁已释放但连接被
+     * 拉起」的窗口；反过来 stop 会看到 connections 里还没有 client 而提前返回，把锁留在进程里。</p>
+     */
+    private Object monitorOf(Long bindingId) {
+        return bindingMonitors.computeIfAbsent(bindingId, ignored -> new Object());
+    }
+
+    private void doStartSerialized(ChannelBinding binding) {
+        Long bindingId = binding.getId();
         // 文件锁：开发时可能同时跑 IDE 和命令行，两个进程用同一 appId 会双投消息。
         if (!appIdLock.tryLock(binding.getAppId())) {
             String error = "appId 已被另一个进程占用";
@@ -149,19 +167,33 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
         if (bindingId == null) {
             return;
         }
-        QqBotWsClient client = connections.remove(bindingId);
-        adapters.remove(bindingId);
-        if (client == null) {
-            return;
+        synchronized (monitorOf(bindingId)) {
+            QqBotWsClient client = connections.remove(bindingId);
+            adapters.remove(bindingId);
+            try {
+                if (client != null) {
+                    client.stop();
+                }
+            } catch (Exception e) {
+                log.debug("[channel] stop connection failed bindingId={}", bindingId, e);
+            } finally {
+                // client 为空说明这次停的是「没连上或已断开」的绑定；但建连失败、或 stop 与
+                // start 交错时，appId 锁仍由本进程持有。锁必须在任何退出路径上归还，否则该
+                // appId 永远无法再次建立连接（只能重启进程）。
+                releaseAppIdLock(bindingId);
+            }
+            log.info("[channel] binding {} → DISABLED", bindingId);
         }
+    }
+
+    /** 归还绑定占用的 appId 锁；锁未持有时 unlock 是幂等的空操作。 */
+    private void releaseAppIdLock(Long bindingId) {
         try {
-            client.stop();
+            bindingRepository.findById(bindingId)
+                    .ifPresent(binding -> appIdLock.unlock(binding.getAppId()));
         } catch (Exception e) {
-            log.debug("[channel] stop connection failed bindingId={}", bindingId, e);
+            log.warn("[channel] release appId lock failed bindingId={}", bindingId, e);
         }
-        bindingRepository.findById(bindingId).ifPresent(
-                binding -> appIdLock.unlock(binding.getAppId()));
-        log.info("[channel] binding {} → DISABLED", bindingId);
     }
 
     /**
