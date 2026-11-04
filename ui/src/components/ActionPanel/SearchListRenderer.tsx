@@ -5,6 +5,7 @@ import { ExternalLink, Link2, LoaderCircle, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { jumpUrl } from "@/utils";
+import { isSafeBrowserUrl } from "@/utils/fileUrl";
 
 import type { SearchListItem } from "./type";
 
@@ -41,7 +42,8 @@ const SearchListItemComponent: CuteType.FC<SearchListItem & { index: number }> =
   ({ name, pageContent, url, index, kind, interactive, metaLabel }) => {
     const host = hostnameFromUrl(url);
     const snippet = normalizeSnippet(pageContent, name);
-    const clickable = interactive !== false && Boolean(url);
+    const clickable =
+      interactive !== false && isSafeBrowserUrl(url, ["http:", "https:"]);
 
     return (
       <motion.article
@@ -69,7 +71,7 @@ const SearchListItemComponent: CuteType.FC<SearchListItem & { index: number }> =
             jumpUrl(url);
           }
         }}
-        onKeyDown={(e) => {
+        onKeyDown={(e: React.KeyboardEvent<HTMLElement>) => {
           if (!clickable) {
             return;
           }

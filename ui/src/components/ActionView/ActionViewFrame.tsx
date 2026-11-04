@@ -23,8 +23,10 @@ const ActionViewFrame: React.FC<ActionViewFrameProps> = ({
       {titleNode && (
         <div className="flex h-10 shrink-0 items-center gap-1 px-2">
           <button
+            aria-label="返回"
             onClick={onClickTitle}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-surface-hover hover:text-foreground active:scale-[0.97]"
+            type="button"
           >
             <ChevronLeft className="size-4" />
           </button>

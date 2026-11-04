@@ -49,6 +49,18 @@ interface XlsxSheetTabsProps {
   panelId?: string;
 }
 
+export function focusSheetTab(
+  tabButtons: Pick<NodeListOf<HTMLElement>, "item"> | null | undefined,
+  tabIndex: number
+): boolean {
+  const tab = tabButtons?.item(tabIndex);
+  if (!tab) {
+    return false;
+  }
+  tab.focus();
+  return true;
+}
+
 export function XlsxSheetTabs({ controller, label, panelId }: XlsxSheetTabsProps) {
   const { activeTabIndex, setActiveTabIndex, tabs } = controller;
   const idPrefix = useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -75,7 +87,7 @@ export function XlsxSheetTabs({ controller, label, panelId }: XlsxSheetTabsProps
     selectTab(nextTabIndex);
     const tabButtons =
       event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]');
-    tabButtons?.item(nextTabIndex).focus();
+    focusSheetTab(tabButtons, nextTabIndex);
   };
 
   return (

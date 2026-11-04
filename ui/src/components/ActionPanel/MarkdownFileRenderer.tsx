@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CircleAlert, Download } from "lucide-react";
 import { downloadFile } from "@/utils";
-import { normalizeFileUrlForBrowser } from "@/utils/fileUrl";
+import { isSafeBrowserUrl, normalizeFileUrlForBrowser } from "@/utils/fileUrl";
 import { ViewerPanelShell } from "@/components/ui/viewer-panel-shell";
 import MarkdownRenderer from "./MarkdownRenderer";
 import MarkdownSelectionMenu from "./MarkdownSelectionMenu";
@@ -93,6 +93,13 @@ const MarkdownFileRenderer: CuteType.FC<MarkdownFileRendererProps> = React.memo(
     () => normalizeFileUrlForBrowser(downloadUrl || fileUrl || "") || resolvedUrl,
     [downloadUrl, fileUrl, resolvedUrl]
   );
+  const safeDownload = useMemo(
+    () =>
+      isSafeBrowserUrl(resolvedDownload, ["http:", "https:", "blob:"])
+        ? resolvedDownload
+        : "",
+    [resolvedDownload]
+  );
 
   const { data: content, loading, error } = useRequest(
     async () => {
@@ -125,8 +132,8 @@ const MarkdownFileRenderer: CuteType.FC<MarkdownFileRendererProps> = React.memo(
       headerRight={
         <>
           <PreviewModeToggle mode={mode} onChange={setMode} />
-          {resolvedDownload ? (
-            <Button variant="ghost" size="sm" onClick={() => downloadFile(resolvedDownload, fileName)}>
+          {safeDownload ? (
+            <Button variant="ghost" size="sm" onClick={() => downloadFile(safeDownload, fileName)}>
               <Download className="h-3.5 w-3.5" />
               下载
             </Button>

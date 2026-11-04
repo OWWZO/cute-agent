@@ -319,7 +319,7 @@ const AttachmentList: CuteType.FC<Props> = (props) => {
             {remove ? (
               <button
                 type="button"
-                className="absolute -right-1.5 -top-1.5 hidden size-5 items-center justify-center rounded-full border border-card-border bg-card text-foreground-subtle shadow-sm group-hover:flex hover:text-foreground"
+                className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-card-border bg-card text-foreground-subtle opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-foreground [@media(hover:none)]:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
                   remove(index);

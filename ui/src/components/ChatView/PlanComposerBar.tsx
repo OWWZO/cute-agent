@@ -25,6 +25,10 @@ type PlanComposerBarProps = {
   loading?: boolean;
 };
 
+export function hasApprovablePlan(editedPlan: string): boolean {
+  return editedPlan.trim().length > 0;
+}
+
 /**
  * 依附在输入框上方的计划条（ExitPlanMode / PlanSolve stages）。
  * plan_approval 源对齐 ApprovalCard plan_review 视觉。
@@ -82,7 +86,7 @@ const PlanComposerBarInner: FC<{
     model.source === "plan_approval" &&
     Boolean(model.approvalId) &&
     status === "pending" &&
-    Boolean((editedPlan || model.planContent).trim());
+    hasApprovablePlan(editedPlan);
   const showActions =
     model.source === "plan_approval" &&
     status === "pending" &&
@@ -239,7 +243,7 @@ const PlanComposerBarInner: FC<{
                   </>
                 ) : (
                   <MarkdownRenderer
-                    markDownContent={editedPlan || model.planContent || "(空计划)"}
+                    markDownContent={hasApprovablePlan(editedPlan) ? editedPlan : "(空计划)"}
                   />
                 )}
               </div>

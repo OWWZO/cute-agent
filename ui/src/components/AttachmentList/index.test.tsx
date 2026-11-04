@@ -34,4 +34,14 @@ describe("AttachmentList workspace entry", () => {
     expect(html).toContain("预览");
     expect(html).not.toContain("style.css");
   });
+
+  it("keeps the remove control focusable instead of display:none", () => {
+    const html = renderToStaticMarkup(
+      <AttachmentList files={[htmlFile]} remove={() => undefined} />
+    );
+
+    expect(html).toContain('aria-label="移除附件"');
+    expect(html).toContain("group-focus-within:opacity-100");
+    expect(html).not.toMatch(/class="[^"]*\bhidden\b[^"]*"/);
+  });
 });

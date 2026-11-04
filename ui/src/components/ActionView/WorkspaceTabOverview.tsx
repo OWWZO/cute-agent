@@ -48,6 +48,10 @@ type Props = {
   onCloseTab: (key: string) => void;
 };
 
+export function stopsWorkspaceTabCloseEvent(key: string): boolean {
+  return key === "Enter" || key === " ";
+}
+
 export function WorkspaceTabOverview({
   tabs,
   activeKey,
@@ -156,6 +160,11 @@ export function WorkspaceTabOverview({
                       onPointerDown={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
+                      }}
+                      onKeyDown={(event) => {
+                        if (stopsWorkspaceTabCloseEvent(event.key)) {
+                          event.stopPropagation();
+                        }
                       }}
                       onClick={(event) => {
                         event.preventDefault();

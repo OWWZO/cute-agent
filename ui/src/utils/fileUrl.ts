@@ -7,6 +7,24 @@ const LEGACY_TOOL_HOSTNAMES = new Set([
   "owwzo.cloud",
   "www.owwzo.cloud",
 ]);
+const SAFE_URL_BASE = "https://safe-url.invalid";
+
+/** Validate a browser destination after URL normalization, including obfuscated schemes. */
+export function isSafeBrowserUrl(
+  rawUrl: string | null | undefined,
+  allowedProtocols: readonly string[] = ["http:", "https:"]
+): boolean {
+  const value = (rawUrl || "").trim();
+  if (!value) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value, SAFE_URL_BASE);
+    return allowedProtocols.includes(parsed.protocol.toLowerCase());
+  } catch {
+    return false;
+  }
+}
 
 export function trimTrailingSlash(url: string): string {
   return (url || "").trim().replace(/\/+$/, "");
