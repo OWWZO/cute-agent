@@ -193,7 +193,7 @@ def _run_sync_tool(
                         default_name=Path(val).name,
                     )
                 )
-    except (FileNotFoundError, ValueError) as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"docread path validation failed: {exc}")
         return _fail(str(exc))
 

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import importlib
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -181,6 +182,65 @@ class CodeInterpreterOutputUploadTest(unittest.IsolatedAsyncioTestCase):
         result = next(item for item in outputs if isinstance(item, ActionOutput))
         self.assertEqual("结论仍然可用", result.content)
         self.assertEqual([], result.file_list)
+
+    async def test_should_delete_workspace_when_sandbox_close_fails(self):
+        code_interpreter_module = load_code_interpreter_module()
+        prompt_template = {"task_template": "{{ task }}"}
+
+        class FakeAgent:
+            def run(self, task: str, stream: bool = True, max_steps: int = 10):
+                yield FakeFinalAnswerStep("工作区已清理")
+
+            def get_produced_files(self):
+                return []
+
+            def close_sandbox(self):
+                raise RuntimeError("sandbox close failed")
+
+        with tempfile.TemporaryDirectory() as parent:
+            work_dir = Path(parent) / "work"
+
+            def make_work_dir():
+                work_dir.mkdir()
+                return str(work_dir)
+
+            with (
+                patch(
+                    "cute_tool.tool.code_interpreter.download_all_files_in_path",
+                    new=AsyncMock(return_value=[]),
+                ),
+                patch(
+                    "cute_tool.tool.code_interpreter.get_prompt",
+                    return_value=prompt_template,
+                ),
+                patch(
+                    "cute_tool.tool.code_interpreter.create_ci_agent",
+                    return_value=FakeAgent(),
+                ),
+                patch(
+                    "cute_tool.tool.code_interpreter.upload_file",
+                    new=AsyncMock(return_value={}),
+                ),
+                patch(
+                    "cute_tool.tool.code_interpreter.tempfile.mkdtemp",
+                    side_effect=make_work_dir,
+                ),
+                patch(
+                    "cute_tool.tool.code_interpreter.FinalAnswerStep",
+                    new=FakeFinalAnswerStep,
+                ),
+            ):
+                outputs = [
+                    item
+                    async for item in code_interpreter_module.code_interpreter_agent(
+                        task="验证清理",
+                        request_id="req-close-failure",
+                        stream=True,
+                    )
+                ]
+
+            self.assertTrue(any(isinstance(item, ActionOutput) for item in outputs))
+            self.assertFalse(work_dir.exists())
 
 
 if __name__ == "__main__":

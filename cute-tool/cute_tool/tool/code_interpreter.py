@@ -429,7 +429,10 @@ async def code_interpreter_agent(
     finally:
         # 无论成功、权限拒绝还是执行异常，都要关闭 runner 并删除临时工作区，避免进程与敏感输入泄漏。
         if "agent" in locals():
-            agent.close_sandbox()
+            try:
+                agent.close_sandbox()
+            except Exception:
+                logger.exception("[code_interpreter] sandbox close failed")
         if work_dir:
             shutil.rmtree(work_dir, ignore_errors=True)
 
