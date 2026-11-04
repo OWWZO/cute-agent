@@ -4,6 +4,7 @@ package org.wwz.ai.infrastructure.dataquery.jdbc.catalog.clickhouse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryTable;
+import org.wwz.ai.domain.agent.rag.model.schema.DataQueryTableColumn;
 import org.wwz.ai.domain.agent.rag.model.schema.StandardColumnType;
 import org.wwz.ai.infrastructure.dataquery.jdbc.catalog.AbstractJdbcCatalog;
 import org.wwz.ai.infrastructure.dataquery.jdbc.catalog.CatalogException;
@@ -41,6 +42,21 @@ public class ClickhouseCatalog extends AbstractJdbcCatalog {
             throw new CatalogException(
                     String.format("获取数据库表失败 %s ", schema), e);
         }
+    }
+
+
+    @Override
+    public List<DataQueryTableColumn> getTableColumns(Connection connection, String tablePath, String schema)
+            throws CatalogException {
+        int separator = tablePath == null ? -1 : tablePath.lastIndexOf('.');
+        if (separator < 0) {
+            return super.getTableColumns(connection, tablePath, schema);
+        }
+        String database = tablePath.substring(0, separator);
+        String table = tablePath.substring(separator + 1);
+        // listTables 返回 database.name；ClickHouse 的 database 等价于 JDBC catalog，
+        // 不拆开会把 db.table 当成表名去匹配，永远查不到列。
+        return super.getTableColumns(connection, table, database);
     }
 
 

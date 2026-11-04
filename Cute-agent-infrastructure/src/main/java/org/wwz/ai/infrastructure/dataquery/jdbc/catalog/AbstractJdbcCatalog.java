@@ -23,6 +23,23 @@ public abstract class AbstractJdbcCatalog implements JdbcCatalog {
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]{0,63}$");
 
     /**
+     * 列查询使用的 JDBC catalog 过滤值。
+     *
+     * <p>本项目支持的方言（MySQL / H2 / ClickHouse）都以「库」这一层作为 schema，
+     * 因此默认把 schema 当 catalog 传入。若将来接入 PostgreSQL 这类 catalog 与
+     * schema 分离的数据库，应覆盖本方法返回 null，并让 {@link #columnSchemaPattern}
+     * 返回 schema。</p>
+     */
+    protected String columnCatalog(String schema) {
+        return StringUtils.isBlank(schema) ? null : schema;
+    }
+
+    /** 列查询使用的 JDBC schemaPattern 过滤值；默认不过滤，过滤交给 catalog 承担。 */
+    protected String columnSchemaPattern(String schema) {
+        return null;
+    }
+
+    /**
      * 目录 SQL 中不能使用绑定参数的位置（如 system.columns / INFORMATION_SCHEMA 的
      * schema、table 过滤）必须先经过同一标识符白名单，避免单引号、注释符或反引号
      * 从调用方拼入 SQL。合法标识符不含特殊字符，因此后续仍可安全加引号。
@@ -62,8 +79,9 @@ public abstract class AbstractJdbcCatalog implements JdbcCatalog {
     @Override
     public List<DataQueryTableColumn> getTableColumns(Connection connection, String tablePath, String schema) throws CatalogException {
         // 列元数据同时保留原始 JDBC 类型和统一类型，前者用于展示，后者用于问数推理。
-        try (ResultSet rs = connection.getMetaData().getColumns(null,
-                null, tablePath, null)) {
+        // 不再写死 catalog/schema 为 null，否则同名表会混入其他库的列。
+        try (ResultSet rs = connection.getMetaData().getColumns(columnCatalog(schema),
+                columnSchemaPattern(schema), tablePath, null)) {
 
             List<DataQueryTableColumn> columnList = new ArrayList<>();
             while (rs.next()) {
