@@ -75,7 +75,7 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
         log.info("[channel] loaded {} active bindings", active.size());
         // 并发建连：每个绑定要 1-2 秒，串行会拖慢启动。
         CompletableFuture<?>[] futures = active.stream()
-                .map(binding -> CompletableFuture.runAsync(() -> doStart(binding), connectExecutor))
+                .map(binding -> CompletableFuture.runAsync(() -> startConnectionOnCurrentThread(binding), connectExecutor))
                 .toArray(CompletableFuture[]::new);
         CompletableFuture.allOf(futures).whenComplete((ignored, error) -> {
             if (error != null) {
@@ -86,6 +86,10 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
 
     @Override
     public void startConnection(ChannelBinding binding) {
+        connectExecutor.execute(() -> startConnectionOnCurrentThread(binding));
+    }
+
+    private void startConnectionOnCurrentThread(ChannelBinding binding) {
         if (binding == null || binding.getId() == null) {
             return;
         }
@@ -94,7 +98,7 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
             log.debug("[channel] connection already exists bindingId={}", bindingId);
             return;
         }
-        connectExecutor.execute(() -> doStart(binding));
+        doStart(binding);
     }
 
     private void doStart(ChannelBinding binding) {
