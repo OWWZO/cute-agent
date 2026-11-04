@@ -36,6 +36,30 @@ describe("genUiActionBus", () => {
     expect(action?.type).toBe("patch_ui");
   });
 
+  it.each([
+    "javascript:alert(1)",
+    "java\nscript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///C:/Windows/win.ini",
+    "blob:https://example.com/id",
+    "vbscript:msgbox(1)",
+  ])("rejects unsafe open_url protocols: %s", (url) => {
+    expect(normalizeAction({ type: "open_url", payload: { url } })).toBeNull();
+  });
+
+  it("allows http, https, mailto and same-origin relative open_url values", () => {
+    for (const url of [
+      "https://example.com/path",
+      "http://example.com/path",
+      "mailto:hello@example.com",
+      "/workspace/chat",
+    ]) {
+      expect(normalizeAction({ type: "open_url", payload: { url } })?.type).toBe(
+        "open_url"
+      );
+    }
+  });
+
   it("dispatches patch_ui to adapter, not sendMessage", async () => {
     const patchUi = vi.fn();
     const sendMessage = vi.fn();

@@ -2,7 +2,13 @@
 
 import { cn } from "@/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
-import type { ComponentProps, HTMLAttributes, ReactNode } from "react";
+import type {
+  ComponentProps,
+  HTMLAttributes,
+  MouseEvent as ReactMouseEvent,
+  MouseEventHandler,
+  ReactNode,
+} from "react";
 import { useCallback } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 
@@ -72,9 +78,19 @@ export type ConversationScrollButtonProps = HTMLAttributes<HTMLButtonElement> & 
   label?: string;
 };
 
+export function invokeConversationScrollClick(
+  event: ReactMouseEvent<HTMLButtonElement>,
+  onClick: MouseEventHandler<HTMLButtonElement> | undefined,
+  scrollToBottom: () => void
+): void {
+  onClick?.(event);
+  scrollToBottom();
+}
+
 export const ConversationScrollButton = ({
   className,
   label = "有新消息",
+  onClick,
   ...props
 }: ConversationScrollButtonProps) => {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
@@ -89,13 +105,15 @@ export const ConversationScrollButton = ({
 
   return (
     <button
+      {...props}
       type="button"
       className={cn(
         "kimi-newmsg-pill absolute bottom-4 left-1/2 z-10 -translate-x-1/2",
         className
       )}
-      onClick={handleScrollToBottom}
-      {...props}
+      onClick={(event) =>
+        invokeConversationScrollClick(event, onClick, handleScrollToBottom)
+      }
     >
       <ArrowDownIcon className="size-3.5" />
       {label}

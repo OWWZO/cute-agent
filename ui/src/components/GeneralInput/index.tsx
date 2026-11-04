@@ -135,6 +135,13 @@ export const ATTACHMENT_ACCEPT = "";
 /** 单条 query 最大字符数（前端硬限制） */
 export const MAX_QUERY_CHARS = 8000;
 
+export function shouldHandleComposerEnter(event: {
+  key: string;
+  shiftKey: boolean;
+}): boolean {
+  return event.key === "Enter" && !event.shiftKey;
+}
+
 const getModeKey = (_productType?: string, deepThink = false): InputModeKey => {
   return deepThink ? "research" : "think";
 };
@@ -472,7 +479,7 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
       }
     }
 
-    if (event.key !== "Enter") return;
+    if (!shouldHandleComposerEnter(event)) return;
     if (tempData.current.compositing || event.nativeEvent.isComposing) return;
 
     if (event.metaKey || event.ctrlKey) {

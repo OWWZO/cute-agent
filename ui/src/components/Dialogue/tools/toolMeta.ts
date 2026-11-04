@@ -93,7 +93,7 @@ const TOOL_LABELS: Record<string, string> = {
 
 export type ToolChipInput = {
   name: string;
-  arg: string;
+  arg?: string;
   output?: string[];
   timing?: string;
   status?: string;
@@ -114,15 +114,20 @@ function clip(s: string, max = SUMMARY_MAX): string {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 
-function isEmptyArg(arg: string, d: Record<string, unknown> | null): boolean {
-  const s = arg.trim();
+function isEmptyArg(
+  arg: string | null | undefined,
+  d: Record<string, unknown> | null
+): boolean {
+  const s = (arg ?? "").trim();
   if (s === "" || s === "{}" || s === "[]" || s === "null") return true;
   if (d && Object.keys(d).length === 0) return true;
   return false;
 }
 
-function parseArg(arg: string): Record<string, unknown> | null {
-  const s = arg.trim();
+function parseArg(
+  arg: string | null | undefined
+): Record<string, unknown> | null {
+  const s = (arg ?? "").trim();
   if (!s.startsWith("{")) return null;
   try {
     const v = JSON.parse(s);
@@ -172,7 +177,9 @@ export function filePath(d: Record<string, unknown>): string | undefined {
  * 与 `toolSummary` 的区别：这里只认路径字段，不拼 offset/limit 之类的行号后缀，
  * 供右侧预览定位文件用。
  */
-export function extractToolFilePath(arg: string): string | undefined {
+export function extractToolFilePath(
+  arg?: string | null
+): string | undefined {
   const d = parseArg(arg);
   if (!d) return undefined;
   return filePath(d);
@@ -201,7 +208,7 @@ function commandText(d: Record<string, unknown>): string | undefined {
  * 与 `toolSummary` 的区别：summary 会 clip 到 72 字符用于摘要行，这里要完整命令，
  * 且要认 ZCode 的几种入参形态（字符串命令 / `["bash","-lc","<cmd>"]` 数组 / 对象字段）。
  */
-export function extractExecuteCommand(arg: string): string {
+export function extractExecuteCommand(arg?: string | null): string {
   const raw = (arg ?? "").trim();
   if (!raw) return "";
 
@@ -231,13 +238,18 @@ export function extractExecuteCommand(arg: string): string {
   return (shellMatch ? shellMatch[1] : raw).replace(/^·\s*/, "").trim();
 }
 
-export function toolSummary(name: string, arg: string, full = false): string {
+export function toolSummary(
+  name: string,
+  arg?: string | null,
+  full = false
+): string {
+  const raw = arg ?? "";
   const c = (s: string, max = SUMMARY_MAX): string =>
     full ? s.trim() : clip(s, max);
   try {
     const d = parseArg(arg);
     if (!full && isEmptyArg(arg, d)) return "";
-    const fallback = () => c(arg.replace(/^·\s*/, ""));
+    const fallback = () => c(raw.replace(/^·\s*/, ""));
     if (!d) return fallback();
 
     switch (normalizeToolName(name)) {
@@ -332,7 +344,7 @@ export function toolSummary(name: string, arg: string, full = false): string {
         return fallback();
     }
   } catch {
-    return arg;
+    return raw;
   }
 }
 

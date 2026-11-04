@@ -53,6 +53,16 @@ function parseNumber(value: unknown, fallback: number, min: number, max: number)
   return Math.min(max, Math.max(min, n));
 }
 
+export function runCleanupSteps(steps: Array<() => void>): void {
+  for (const step of steps.splice(0).reverse()) {
+    try {
+      step();
+    } catch (error) {
+      console.error("清理 Three.js 资源失败", error);
+    }
+  }
+}
+
 const GenUiModel3D: FC<Props> = memo(
   ({ src, height, background, autoRotate, rotateSpeed, wireframe, caption }) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
@@ -108,6 +118,14 @@ const GenUiModel3D: FC<Props> = memo(
       let disposed = false;
 
       let cleanup: (() => void) | undefined;
+      const cleanupSteps: Array<() => void> = [];
+      let cleanupRan = false;
+      const runCleanup = () => {
+        if (cleanupRan) return;
+        cleanupRan = true;
+        runCleanupSteps(cleanupSteps);
+      };
+      cleanup = runCleanup;
       const initialize = async () => {
         try {
           const [three, controlsModule, loaderModule, environmentModule] =
@@ -137,11 +155,25 @@ const GenUiModel3D: FC<Props> = memo(
           renderer.domElement.style.width = "100%";
           renderer.domElement.style.height = "100%";
           host.appendChild(renderer.domElement);
+          cleanupSteps.push(() => {
+            if (renderer.domElement.parentNode === host) {
+              host.removeChild(renderer.domElement);
+            }
+            renderer.dispose();
+          });
 
           const pmremGenerator = new three.PMREMGenerator(renderer);
+          let pmremDisposed = false;
+          cleanupSteps.push(() => {
+            if (pmremDisposed) return;
+            pmremDisposed = true;
+            pmremGenerator.dispose();
+          });
           const environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+          cleanupSteps.push(() => environment.dispose());
           scene.environment = environment;
           pmremGenerator.dispose();
+          pmremDisposed = true;
 
           const controls = new OrbitControls(camera, renderer.domElement);
           controls.enableDamping = true;
@@ -149,6 +181,10 @@ const GenUiModel3D: FC<Props> = memo(
           controls.autoRotate = controlOptionsRef.current.autoRotate;
           controls.autoRotateSpeed = controlOptionsRef.current.rotateSpeed * 2;
           controlsRef.current = controls;
+          cleanupSteps.push(() => {
+            controls.dispose();
+            controlsRef.current = null;
+          });
 
           scene.add(new three.AmbientLight(0xffffff, 0.85));
           scene.add(new three.HemisphereLight(0xffffff, 0x334155, 0.7));
@@ -160,6 +196,25 @@ const GenUiModel3D: FC<Props> = memo(
           scene.add(rim);
 
           let modelRoot: Three.Object3D | null = null;
+          cleanupSteps.push(() => {
+            if (!modelRoot) return;
+            // 纹理可能被多个材质共享，跨材质共用同一个 Set 去重。
+            const disposedTextures: Set<{ dispose?: () => void }> = new Set();
+            modelRoot.traverse((child) => {
+              const mesh = child as Three.Mesh;
+              mesh.geometry?.dispose?.();
+              const mat = mesh.material as Three.Material | Three.Material[] | undefined;
+              const disposeMaterial = (m: Three.Material) => {
+                disposeMaterialTextures(
+                  m as unknown as Record<string, unknown>,
+                  disposedTextures
+                );
+                m.dispose();
+              };
+              if (Array.isArray(mat)) mat.forEach(disposeMaterial);
+              else if (mat) disposeMaterial(mat);
+            });
+          });
 
           const loader = new GLTFLoader();
           loader.load(
@@ -196,12 +251,17 @@ const GenUiModel3D: FC<Props> = memo(
             },
             undefined,
             () => {
+              runCleanup();
               if (!disposed) setStatus("error");
             }
           );
 
           let frameId: number | null = null;
           let resizeFrameId: number | null = null;
+          cleanupSteps.push(() => {
+            if (frameId !== null) cancelAnimationFrame(frameId);
+            if (resizeFrameId !== null) cancelAnimationFrame(resizeFrameId);
+          });
           let visible = true;
           let resizing = false;
           const resize = () => {
@@ -267,10 +327,16 @@ const GenUiModel3D: FC<Props> = memo(
           document.addEventListener(WORKSPACE_RESIZE_START_EVENT, onResizeStart);
           document.addEventListener(WORKSPACE_RESIZE_END_EVENT, onResizeEnd);
           document.addEventListener("visibilitychange", onVisibilityChange);
+          cleanupSteps.push(() => {
+            document.removeEventListener(WORKSPACE_RESIZE_START_EVENT, onResizeStart);
+            document.removeEventListener(WORKSPACE_RESIZE_END_EVENT, onResizeEnd);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+          });
 
           resize();
           const resizeObserver = new ResizeObserver(scheduleResize);
           resizeObserver.observe(host);
+          cleanupSteps.push(() => resizeObserver.disconnect());
           const intersectionObserver =
             typeof IntersectionObserver === "undefined"
               ? null
@@ -286,42 +352,12 @@ const GenUiModel3D: FC<Props> = memo(
                 }
               });
           intersectionObserver?.observe(host);
+          if (intersectionObserver) {
+            cleanupSteps.push(() => intersectionObserver.disconnect());
+          }
           tick();
-
-          cleanup = () => {
-            // React effect 重跑或卸载时阻止异步回调继续写状态，并释放 WebGL 资源。
-            document.removeEventListener(WORKSPACE_RESIZE_START_EVENT, onResizeStart);
-            document.removeEventListener(WORKSPACE_RESIZE_END_EVENT, onResizeEnd);
-            document.removeEventListener("visibilitychange", onVisibilityChange);
-            resizeObserver.disconnect();
-            intersectionObserver?.disconnect();
-            if (frameId !== null) cancelAnimationFrame(frameId);
-            if (resizeFrameId !== null) cancelAnimationFrame(resizeFrameId);
-            controls.dispose();
-            controlsRef.current = null;
-            if (modelRoot) {
-              // 纹理可能被多个材质共享，跨材质共用同一个 Set 去重。
-              const disposedTextures: Set<{ dispose?: () => void }> = new Set();
-              modelRoot.traverse((child) => {
-                const mesh = child as Three.Mesh;
-                mesh.geometry?.dispose?.();
-                const mat = mesh.material as Three.Material | Three.Material[] | undefined;
-                const disposeMaterial = (m: Three.Material) => {
-                  disposeMaterialTextures(
-                    m as unknown as Record<string, unknown>,
-                    disposedTextures
-                  );
-                  m.dispose();
-                };
-                if (Array.isArray(mat)) mat.forEach(disposeMaterial);
-                else if (mat) disposeMaterial(mat);
-              });
-            }
-            environment.dispose();
-            if (renderer.domElement.parentNode === host) host.removeChild(renderer.domElement);
-            renderer.dispose();
-          };
         } catch (error) {
+          runCleanup();
           if (!disposed) {
             console.error("加载 Three.js 资源失败", error);
             setStatus("error");

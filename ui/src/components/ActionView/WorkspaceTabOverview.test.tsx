@@ -2,7 +2,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { WorkspaceTabOverview } from "./WorkspaceTabOverview";
+import {
+  WorkspaceTabOverview,
+  stopsWorkspaceTabCloseEvent,
+} from "./WorkspaceTabOverview";
 import { WorkspaceTabIcon } from "./WorkspaceTabIcon";
 import type { WorkspaceTab } from "./workspaceFiles";
 
@@ -25,6 +28,12 @@ function agentTab(): WorkspaceTab {
 }
 
 describe("WorkspaceTabOverview", () => {
+  it("stops row activation keys from the close button", () => {
+    expect(stopsWorkspaceTabCloseEvent("Enter")).toBe(true);
+    expect(stopsWorkspaceTabCloseEvent(" ")).toBe(true);
+    expect(stopsWorkspaceTabCloseEvent("ArrowRight")).toBe(false);
+  });
+
   it("渲染最左的标签页列表触发器", () => {
     const html = renderToStaticMarkup(
       createElement(WorkspaceTabOverview, {

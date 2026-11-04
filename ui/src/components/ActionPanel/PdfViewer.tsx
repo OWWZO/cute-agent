@@ -123,6 +123,17 @@ export interface PdfViewerProps {
 
 type PdfDocumentFile = string | Blob | { data: Uint8Array };
 
+export function createInitialPdfViewerState() {
+  return {
+    numPages: null,
+    currentPage: 1,
+    pageInput: "1",
+    scale: DEFAULT_SCALE,
+    committedScale: DEFAULT_SCALE,
+    pageSizes: {} as Record<number, PdfPageSize>,
+  };
+}
+
 function normalizePdfSource(source: PdfViewerSource): PdfDocumentFile {
   if (typeof source === "string" || source instanceof Blob) {
     return source;
@@ -427,6 +438,23 @@ export function PdfViewer({
   const railElementsRef = useRef(new Map<number, HTMLButtonElement>());
   const pendingZoomAnchorRef = useRef<{ page: number; ratio: number } | null>(null);
   const didInitialFitRef = useRef(false);
+
+  useEffect(() => {
+    const initial = createInitialPdfViewerState();
+    didInitialFitRef.current = false;
+    pendingZoomAnchorRef.current = null;
+    pageOffsetsRef.current = [];
+    slotElementsRef.current.clear();
+    railElementsRef.current.clear();
+    setNumPages(initial.numPages);
+    setCurrentPage(initial.currentPage);
+    setPageInput(initial.pageInput);
+    setScale(initial.scale);
+    setCommittedScale(initial.committedScale);
+    setPageSizes(initial.pageSizes);
+    if (scrollEl) scrollEl.scrollTop = 0;
+    if (railScrollEl) railScrollEl.scrollTop = 0;
+  }, [file]);
 
   const pageNumbers = useMemo(
     () => (numPages ? Array.from({ length: numPages }, (_, index) => index + 1) : []),

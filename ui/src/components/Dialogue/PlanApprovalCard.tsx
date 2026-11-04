@@ -1,4 +1,4 @@
-import { FC, memo, useEffect, useState } from "react";
+import { FC, memo, useEffect, useRef, useState } from "react";
 import {
   ChevronUpIcon,
   LoaderCircleIcon,
@@ -26,6 +26,41 @@ type PlanApprovalCardProps = {
  */
 const REJECT_AND_EXIT = "Reject and Exit";
 const REVISE = "Revise";
+
+export function shouldHandlePlanApprovalShortcut(
+  container: Pick<HTMLElement, "contains"> | null,
+  activeElement: Element | null
+): boolean {
+  return Boolean(container && activeElement && container.contains(activeElement));
+}
+
+export function buildPlanApprovalApprovePayload({
+  approvalId,
+  planContent,
+  editedPlan,
+  feedback,
+}: {
+  approvalId: string;
+  planContent: string;
+  editedPlan: string;
+  feedback: string;
+}) {
+  return {
+    approvalId,
+    editedPlanContent: editedPlan !== planContent ? editedPlan : undefined,
+    feedback: feedback.trim() || undefined,
+  };
+}
+
+export function resolvePlanApprovalSessionId(
+  responseSessionId: string | undefined,
+  resultMap: Record<string, unknown>
+): string {
+  const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
+  return String(
+    responseSessionId || nested.sessionId || resultMap.sessionId || ""
+  );
+}
 
 /**
  * ExitPlanMode 挂起卡片（对标 Kimi ApprovalCard plan_review）。
@@ -90,6 +125,7 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
   const [decision, setDecision] = useState<"approved" | "rejected" | null>(
     resolveDecision(status, approved)
   );
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setEditedPlan(editedPlanContent || planContent);
@@ -123,12 +159,9 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
     setDecision(kind);
     const resumeRequestId = String(res?.resumeRequestId || "");
     if (resumeRequestId) {
-      const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
       dispatchPlanApprovalResume({
         resumeRequestId,
-        sessionId: String(
-          res?.sessionId || nested.sessionId || resultMap.sessionId || ""
-        ),
+        sessionId: resolvePlanApprovalSessionId(res?.sessionId, resultMap),
         approvalId,
         approved: kind === "approved",
       });
@@ -145,11 +178,12 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
     setSubmitting(true);
     setPendingAction("approvePlan");
     try {
-      const res = await planApprovalApi.approve({
+      const res = await planApprovalApi.approve(buildPlanApprovalApprovePayload({
         approvalId,
-        editedPlanContent: editedPlan !== planContent ? editedPlan : undefined,
-        feedback: feedback.trim() || undefined,
-      });
+        planContent,
+        editedPlan,
+        feedback,
+      }));
       afterDecide("approved", res);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "批准失败");
@@ -178,26 +212,36 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
     }
   };
 
+  const decisionActionsRef = useRef({ approve, reject });
+  decisionActionsRef.current = { approve, reject };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (submitted || submitting || minimized || feedbackOpen) return;
+      if (
+        !shouldHandlePlanApprovalShortcut(
+          containerRef.current,
+          document.activeElement
+        )
+      ) {
+        return;
+      }
       const tag = (document.activeElement?.tagName ?? "").toLowerCase();
       if (tag === "input" || tag === "textarea") return;
       if (e.key === "1") {
         e.preventDefault();
-        void approve();
+        void decisionActionsRef.current.approve();
       } else if (e.key === "2") {
         e.preventDefault();
         setFeedbackOpen(true);
       } else if (e.key === "3") {
         e.preventDefault();
-        void reject(REJECT_AND_EXIT);
+        void decisionActionsRef.current.reject(REJECT_AND_EXIT);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted, submitting, minimized, feedbackOpen, approvalId, editedPlan, feedback]);
+  }, [submitted, submitting, minimized, feedbackOpen]);
 
   if (decision === "approved" || isPlanApprovalApproved(status, approved)) {
     return null;
@@ -218,7 +262,10 @@ const PlanApprovalCard: FC<PlanApprovalCardProps> = memo(({ tool }) => {
   const title = decision === "rejected" ? "计划已拒绝" : "按这份计划开始执行？";
 
   return (
-    <div className={cn("kimi-ui-card kimi-appr", minimized && "is-minimized")}>
+    <div
+      ref={containerRef}
+      className={cn("kimi-ui-card kimi-appr", minimized && "is-minimized")}
+    >
       <div className="kimi-ui-card__head">
         <span className="kimi-appr-ic">!</span>
         <span className="kimi-appr-title">{title}</span>

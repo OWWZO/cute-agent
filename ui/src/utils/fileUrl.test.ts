@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { normalizeFileUrlForBrowser, toFilePreviewUrl } from "./fileUrl";
+import {
+  isSafeBrowserUrl,
+  normalizeFileUrlForBrowser,
+  toFilePreviewUrl,
+} from "./fileUrl";
 
 describe("normalizeFileUrlForBrowser", () => {
   afterEach(() => {
@@ -36,5 +40,25 @@ describe("normalizeFileUrlForBrowser", () => {
     expect(toFilePreviewUrl("https://example.com/article")).toBe(
       "https://example.com/article"
     );
+  });
+});
+
+describe("isSafeBrowserUrl", () => {
+  it("allows web, relative and explicitly allowed protocols", () => {
+    expect(isSafeBrowserUrl("https://example.com/file.pdf")).toBe(true);
+    expect(isSafeBrowserUrl("/tool/v1/file_tool/preview/req/a.md")).toBe(true);
+    expect(isSafeBrowserUrl("blob:https://example.com/id", ["blob:"])).toBe(true);
+    expect(isSafeBrowserUrl("mailto:hello@example.com", ["mailto:"])).toBe(true);
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "java\nscript:alert(1)",
+    "\u0000javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///C:/Windows/win.ini",
+    "vbscript:msgbox(1)",
+  ])("rejects unsafe schemes after URL parsing: %s", (url) => {
+    expect(isSafeBrowserUrl(url, ["http:", "https:", "blob:"])).toBe(false);
   });
 });
