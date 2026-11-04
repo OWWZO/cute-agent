@@ -23,9 +23,11 @@ public class ClickhouseCatalog extends AbstractJdbcCatalog {
     @Override
     public List<DataQueryTable> listTables(Connection connection, String schema) throws CatalogException {
         // ClickHouse 的系统表以 database/name 组合标识表，返回值保留该完整路径。
-        String sql = "SELECT concat(database,'.',name) as name FROM system.tables WHERE database = '" + schema + "'";
-        try (Statement prepared = connection.createStatement();
-             ResultSet rs = prepared.executeQuery(sql)) {
+        String safeSchema = requireSafeIdentifier(schema, "schema");
+        String sql = "SELECT concat(database,'.',name) as name FROM system.tables WHERE database = '"
+                + safeSchema + "'";
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(sql)) {
             List<DataQueryTable> tables = new ArrayList<>();
             while (rs.next()) {
                 DataQueryTable st = new DataQueryTable();

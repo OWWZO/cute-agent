@@ -143,6 +143,25 @@
             update_time = NOW()
     </insert>
 
+    <!-- 身份建行：仅插入，不更新任何既有列。并发重复派发由 uk_dialogue_session_id 收敛，
+         冲突时只写回相同 session_id，保证 run_count / 身份列保持首次落库值。 -->
+    <insert id="insertSessionIfAbsent" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">
+        INSERT INTO ai_agent_dialogue_session (
+            session_id, user_id, binding_id, channel_chat_type, channel_target_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+            latest_query_text, latest_summary_text,
+            run_count, finished_run_count, failed_run_count, started_at, last_active_at,
+            model, thinking, thinking_effort, deep_think,
+            create_time, update_time, deleted
+        ) VALUES (
+            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
+            #{title}, #{status}, #{latestRequestId}, #{latestQueryText}, #{latestSummaryText},
+            #{runCount}, #{finishedRunCount}, #{failedRunCount}, #{startedAt}, #{lastActiveAt},
+            #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{deepThink}, 0),
+            NOW(), NOW(), 0
+        )
+        ON DUPLICATE KEY UPDATE session_id = VALUES(session_id)
+    </insert>
+
     <!-- run 启动：已存在则 run_count 原子 +1，保留 started_at 与 finished/failed 计数，避免读-改-写丢更新。
          会话偏好四列同样走「未传不清空」：主链路每轮都会带上用户当前选择，未带时保留库里原值。 -->
     <insert id="upsertSessionOnRunStart" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">

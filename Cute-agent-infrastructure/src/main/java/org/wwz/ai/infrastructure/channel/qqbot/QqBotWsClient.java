@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -66,6 +67,7 @@ public class QqBotWsClient {
     private volatile Integer lastSeq;
     private volatile long heartbeatIntervalMillis = 30_000L;
     private volatile int reconnectAttempts;
+    private volatile ScheduledFuture<?> heartbeatFuture;
 
     public QqBotWsClient(Long bindingId,
                          String appId,
@@ -112,6 +114,7 @@ public class QqBotWsClient {
             return;
         }
         scheduler.shutdownNow();
+        heartbeatFuture = null;
         WebSocket current = socket;
         socket = null;
         if (current != null) {
@@ -211,7 +214,11 @@ public class QqBotWsClient {
     }
 
     private void startHeartbeat() {
-        scheduler.scheduleAtFixedRate(() -> {
+        ScheduledFuture<?> previous = heartbeatFuture;
+        if (previous != null) {
+            previous.cancel(false);
+        }
+        heartbeatFuture = scheduler.scheduleAtFixedRate(() -> {
             if (!running.get() || socket == null) {
                 return;
             }
@@ -312,6 +319,8 @@ public class QqBotWsClient {
             }
             case "RESUMED" -> {
                 reconnectAttempts = 0;
+                // Resume 复用了 session，但旧 socket 的心跳任务已随连接失效；必须重新挂载。
+                startHeartbeat();
                 log.info("qqbot session resumed bindingId={}", bindingId);
             }
             case "C2C_MESSAGE_CREATE" -> emitC2c(d);

@@ -607,6 +607,49 @@ public final class ExecutionLedgerFixtureFactory {
         }
 
         @Override
+        public int insertSessionIfAbsent(DialogueSessionUpsertRecord record) {
+            if (record == null || isBlank(record.getSessionId())) {
+                return 0;
+            }
+            DialogueSession existing = store.sessions.values().stream()
+                    .filter(item -> item.getDeleted() == 0 && record.getSessionId().equals(item.getSessionId()))
+                    .findFirst()
+                    .orElse(null);
+            if (existing != null) {
+                return 0;
+            }
+            DialogueSession session = DialogueSession.builder()
+                    .id(store.nextSessionId++)
+                    .sessionId(record.getSessionId())
+                    .userId(record.getUserId())
+                    .bindingId(record.getBindingId())
+                    .sessionKind(defaultSessionKind(record.getSessionKind()))
+                    .parentSessionId(record.getParentSessionId())
+                    .rootSessionId(record.getRootSessionId())
+                    .subAgentType(record.getSubAgentType())
+                    .title(record.getTitle())
+                    .status(record.getStatus())
+                    .latestRequestId(record.getLatestRequestId())
+                    .latestQueryText(record.getLatestQueryText())
+                    .latestSummaryText(record.getLatestSummaryText())
+                    .runCount(defaultCount(record.getRunCount()))
+                    .finishedRunCount(defaultCount(record.getFinishedRunCount()))
+                    .failedRunCount(defaultCount(record.getFailedRunCount()))
+                    .startedAt(record.getStartedAt())
+                    .lastActiveAt(record.getLastActiveAt())
+                    .model(record.getModel())
+                    .thinking(record.getThinking())
+                    .thinkingEffort(record.getThinkingEffort())
+                    .deepThink(record.getDeepThink() == null ? 0 : record.getDeepThink())
+                    .createTime(LocalDateTime.now())
+                    .updateTime(LocalDateTime.now())
+                    .deleted(0)
+                    .build();
+            store.sessions.put(session.getId(), session);
+            return 1;
+        }
+
+        @Override
         public int upsertSessionOnRunStart(DialogueSessionUpsertRecord record) {
             if (record == null || isBlank(record.getSessionId())) {
                 return 0;

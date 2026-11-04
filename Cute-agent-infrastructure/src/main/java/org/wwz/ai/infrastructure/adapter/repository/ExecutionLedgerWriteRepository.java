@@ -77,6 +77,11 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
         dialogueSessionLedgerDao.upsertSession(record);
     }
 
+    @Override
+    public void insertSessionIfAbsent(DialogueSessionUpsertRecord record) {
+        dialogueSessionLedgerDao.insertSessionIfAbsent(record);
+    }
+
     /**
      * run 启动时的会话 upsert：已有行只原子递增 run_count，并保留既有 finished/failed 计数与 started_at。
      */

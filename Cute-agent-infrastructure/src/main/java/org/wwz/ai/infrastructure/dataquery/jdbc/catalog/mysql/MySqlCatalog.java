@@ -50,8 +50,10 @@ public class MySqlCatalog extends AbstractJdbcCatalog {
     @Override
     public List<DataQueryTableColumn> getTableColumns(Connection connection, String tablePath, String schema) throws CatalogException {
         // INFORMATION_SCHEMA 同时提供字段注释、可空性和原始类型，是模型上下文的主要来源。
+        String safeSchema = requireSafeIdentifier(schema, "schema");
+        String safeTable = requireSafeIdentifier(tablePath, "table");
         String sql = String.format(
-                SELECT_COLUMNS_SQL_TEMPLATE, schema, tablePath);
+                SELECT_COLUMNS_SQL_TEMPLATE, safeSchema, safeTable);
 
         try (Statement prepared = connection.createStatement();
              ResultSet rs = prepared.executeQuery(sql)) {

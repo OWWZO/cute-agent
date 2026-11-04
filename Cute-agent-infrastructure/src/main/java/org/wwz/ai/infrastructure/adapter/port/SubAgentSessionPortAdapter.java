@@ -31,13 +31,10 @@ public class SubAgentSessionPortAdapter implements SubAgentSessionPort {
     public void ensureChildSession(SubAgentSessionIdentity identity) {
         String childSessionId = identity.getChildSessionId();
         String parentSessionId = identity.getParentSessionId();
-        DialogueSession existing = executionLedgerWriteRepository.querySessionBySessionId(childSessionId);
-        if (existing != null) {
-            // 身份行已存在（重复派发 / 续跑）：保持原样，不覆盖 run 计数与身份列。
-            return;
-        }
         LocalDateTime now = LocalDateTime.now();
-        executionLedgerWriteRepository.upsertSession(DialogueSessionUpsertRecord.builder()
+        // 单条 INSERT ... ON DUPLICATE KEY UPDATE 完成「不存在才建行」；不能先查再插，
+        // 否则并发派发都可能在查询时看到空行，后一次全量 upsert 会重置 run_count。
+        executionLedgerWriteRepository.insertSessionIfAbsent(DialogueSessionUpsertRecord.builder()
                 .sessionId(childSessionId)
                 .userId(identity.getUserId())
                 .sessionKind(SessionKind.SUBAGENT.code())
