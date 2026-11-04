@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { conversationHistoryApi } from "@/services/agentConversation";
 import {
@@ -14,24 +14,29 @@ import {
  * `/sessions/{id}/tree`。不做缓存——子会话是执行期产物，缓存只会让展开后看到过期结果，
  * 一次点击一次请求反而更简单也更新鲜。
  */
+export function toggleExpandedSessionId(previous: ReadonlySet<string>, sessionId: string) {
+  const next = new Set(previous);
+  const expanding = !next.has(sessionId);
+  if (expanding) {
+    next.add(sessionId);
+  } else {
+    next.delete(sessionId);
+  }
+  return { next, expanding };
+}
+
 export function useSessionTree() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const expandedIdsRef = useRef<Set<string>>(new Set());
   const [childrenByParent, setChildrenByParent] = useState<
     Record<string, SessionTreeNode[]>
   >({});
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
 
   const toggle = useCallback((sessionId: string) => {
-    const expanding = !expandedIds.has(sessionId);
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-        return next;
-      }
-      next.add(sessionId);
-      return next;
-    });
+    const { next, expanding } = toggleExpandedSessionId(expandedIdsRef.current, sessionId);
+    expandedIdsRef.current = next;
+    setExpandedIds(next);
     if (!expanding) {
       return;
     }
@@ -65,7 +70,7 @@ export function useSessionTree() {
           return next;
         });
       });
-  }, [expandedIds]);
+  }, []);
 
   return {
     isExpanded: (sessionId: string) => expandedIds.has(sessionId),

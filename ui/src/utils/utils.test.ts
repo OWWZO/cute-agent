@@ -117,9 +117,12 @@ describe("copyToClipboard", () => {
   });
 
   it("execCommand 抛错时返回 false，不把异常抛给调用方", async () => {
-    installFakeDocument(() => {
+    const { removed } = installFakeDocument(() => {
       throw new Error("boom");
     });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     await expect(copyToClipboard("x")).resolves.toBe(false);
+    expect(removed).toHaveLength(1);
+    expect(warning).toHaveBeenCalledOnce();
   });
 });

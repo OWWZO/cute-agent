@@ -15,10 +15,51 @@ export const ROUTES = {
   NOT_FOUND: "*",
 } as const;
 
+const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/u;
+
+function decodePathRepeatedly(path: string): string | null {
+  let decoded = path;
+  for (let index = 0; index < 8; index += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) {
+        return decoded;
+      }
+      decoded = next;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export function normalizeReturnUrl(value: string | null | undefined) {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
     return ROUTES.HOME;
   }
+
+  const path = value.split(/[?#]/u, 1)[0] ?? "";
+  const decodedPath = decodePathRepeatedly(path);
+  if (
+    decodedPath === null ||
+    decodedPath.startsWith("//") ||
+    decodedPath.includes("\\") ||
+    CONTROL_CHAR_RE.test(decodedPath)
+  ) {
+    return ROUTES.HOME;
+  }
+
+  try {
+    const currentOrigin =
+      typeof window === "undefined" ? "http://localhost" : window.location.origin;
+    const resolved = new URL(value, currentOrigin);
+    if (resolved.origin !== new URL(currentOrigin).origin) {
+      return ROUTES.HOME;
+    }
+  } catch {
+    return ROUTES.HOME;
+  }
+
   return value;
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { hasCanvasDrawing } from "./utils";
+import { findImageInText, hasCanvasDrawing } from "./utils";
 
 describe("hasCanvasDrawing", () => {
   it("零尺寸画布返回 false，不读取像素", () => {
@@ -60,5 +60,28 @@ describe("hasCanvasDrawing", () => {
     expect(hasCanvasDrawing(canvas)).toBe(false);
     expect(warning).toHaveBeenCalledOnce();
     warning.mockRestore();
+  });
+});
+
+describe("findImageInText", () => {
+  it("不再把任意长 base64 字母串误判为图片", () => {
+    expect(findImageInText("A".repeat(300))).toBeNull();
+  });
+
+  it("识别图片 magic prefix 后只截取连续 base64 字符", () => {
+    const base64 = `iVBOR${"A".repeat(300)}`;
+
+    expect(findImageInText(`${base64}","summary":"not-image-data`)).toMatchObject({
+      dataUrl: `data:image/png;base64,${base64}`,
+    });
+  });
+
+  it("Data URL 在首个非 base64 字符处停止，不吞掉后续 JSON 字段", () => {
+    const base64 = `R0lGOD${"B".repeat(300)}`;
+    const result = findImageInText(
+      `data:image/gif;base64,${base64}","next":"secret`
+    );
+
+    expect(result).toEqual({ dataUrl: `data:image/gif;base64,${base64}` });
   });
 });

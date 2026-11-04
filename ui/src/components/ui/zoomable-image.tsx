@@ -39,7 +39,7 @@ export function ZoomableImage({
         className={cn("group relative block cursor-zoom-in", className)}
         style={style}
         onClick={() => setOpen(true)}
-        aria-label={maskText}
+        aria-label={maskText || alt}
       >
         {/* 宽度由外层 button 的 style 决定（Retina 素材要按物理像素折算），
             这里只兜底不溢出 —— 写 `w-full` 会把 style.width 盖掉。 */}

@@ -39,7 +39,8 @@ async function createEditorImageItem(file: File): Promise<EditorImageItem> {
       naturalHeight: size.height,
       maskDataUrl: null,
     };
-  } catch {
+  } catch (error) {
+    console.error("[useImageEditor] 图片尺寸读取失败，使用占位尺寸", error);
     return {
       id: createLocalId("img"),
       file,
@@ -49,6 +50,38 @@ async function createEditorImageItem(file: File): Promise<EditorImageItem> {
       maskDataUrl: null,
     };
   }
+}
+
+export async function loadEditorImageItems(
+  files: File[],
+  createItem: (file: File) => Promise<EditorImageItem> = createEditorImageItem
+): Promise<EditorImageItem[]> {
+  const results = await Promise.allSettled(
+    files.map((file) => Promise.resolve().then(() => createItem(file)))
+  );
+  const items: EditorImageItem[] = [];
+  results.forEach((result) => {
+    if (result.status === "fulfilled") {
+      items.push(result.value);
+    } else {
+      console.error("[useImageEditor] 图片加载失败", result.reason);
+    }
+  });
+  return items;
+}
+
+export async function resolveLoadedEditorImages(
+  files: File[],
+  isMounted: () => boolean,
+  createItem: (file: File) => Promise<EditorImageItem> = createEditorImageItem,
+  revoke: (items: EditorImageItem[]) => void = revokeEditorImageObjectUrls
+): Promise<EditorImageItem[] | null> {
+  const items = await loadEditorImageItems(files, createItem);
+  if (!isMounted()) {
+    revoke(items);
+    return null;
+  }
+  return items;
 }
 
 /**
@@ -68,6 +101,7 @@ export function useImageEditor() {
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const imagesRef = useRef<EditorImageItem[]>([]);
+  const mountedRef = useRef(true);
 
   const editingImage = images.find((item) => item.id === editingImageId) || null;
 
@@ -76,7 +110,9 @@ export function useImageEditor() {
   }, [images]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       revokeEditorImageObjectUrls(imagesRef.current);
     };
   }, []);
@@ -87,10 +123,18 @@ export function useImageEditor() {
       return;
     }
 
-    const nextItems = await Promise.all(
-      selectedFiles.map((file) => createEditorImageItem(file))
-    );
-    setImages((previous) => [...previous, ...nextItems]);
+    try {
+      const nextItems = await resolveLoadedEditorImages(
+        selectedFiles,
+        () => mountedRef.current
+      );
+      if (!nextItems) {
+        return;
+      }
+      setImages((previous) => [...previous, ...nextItems]);
+    } catch (error) {
+      console.error("[useImageEditor] 添加图片失败", error);
+    }
   }, []);
 
   useEffect(() => {

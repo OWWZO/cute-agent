@@ -35,6 +35,10 @@ export interface UseHtmlElementPickerResult {
   togglePicking: () => Promise<void>;
 }
 
+export function shouldCancelPickerOnDisable(enabled: boolean, isPicking: boolean): boolean {
+  return !enabled && isPicking;
+}
+
 /**
  * HTML 预览「选择网页元素加入聊天」。
  *
@@ -110,6 +114,12 @@ export function useHtmlElementPicker({
     window.addEventListener("keydown", handleWindowKeyDown, true);
     return () => window.removeEventListener("keydown", handleWindowKeyDown, true);
   }, [cancelPicking, isPicking]);
+
+  useEffect(() => {
+    if (shouldCancelPickerOnDisable(enabled, isPicking)) {
+      void cancelPicking();
+    }
+  }, [cancelPicking, enabled, isPicking]);
 
   useEffect(() => {
     return () => {

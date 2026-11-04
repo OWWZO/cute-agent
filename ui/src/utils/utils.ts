@@ -99,21 +99,28 @@ export async function copyToClipboard(text?: string | number): Promise<boolean> 
 }
 
 function copyViaExecCommand(value: string): boolean {
+  let input: HTMLTextAreaElement | null = null;
+  let appended = false;
   try {
-    const input = document.createElement("textarea");
+    input = document.createElement("textarea");
     input.value = value;
     // readonly + 移出视口：iOS Safari 等环境下，可编辑且可见的 textarea
     // 获得焦点会弹出系统菜单，盖住页面。
     input.setAttribute("readonly", "");
     input.style.cssText = "position:fixed;top:-9999px;opacity:0;pointer-events:none";
     document.body.appendChild(input);
+    appended = true;
     input.focus();
     input.select();
     const ok = document.execCommand("copy");
-    document.body.removeChild(input);
     return ok;
-  } catch {
+  } catch (error) {
+    console.warn("[utils] execCommand 复制失败", error);
     return false;
+  } finally {
+    if (appended && input) {
+      document.body.removeChild(input);
+    }
   }
 }
 

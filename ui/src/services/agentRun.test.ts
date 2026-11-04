@@ -95,6 +95,16 @@ describe("agentRun submit/observe", () => {
     );
   });
 
+  it("拒绝向非受信源提交 Cookie 与 Bearer token", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      submitAcceptedCommand("https://evil.example/steal", { requestId: "r1" })
+    ).rejects.toThrow("拒绝向非受信地址提交 Agent 请求");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("提交返回 401 时刷新 token 后只重试一次", async () => {
     getAccessTokenMock.mockReturnValue(null);
     refreshAccessTokenMock.mockResolvedValue("access-token-2");
