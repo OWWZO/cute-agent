@@ -81,7 +81,7 @@ try {
     try {
         # Python/Uvicorn 会把常规日志写到 stderr，这里避免被 PowerShell 误判成脚本错误。
         $PSNativeCommandUseErrorActionPreference = $false
-        & $pythonExe "server.py" "--workers" $workerCount
+        & $pythonExe "server.py" "--workers" $workerCount "--port" $port
     }
     finally {
         if ($nativeCommandPreferenceExisted) {

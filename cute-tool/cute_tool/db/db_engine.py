@@ -9,12 +9,10 @@
 文件服务元数据默认落在 SQLITE_DB_PATH（默认 autobots.db）。
 """
 import os
-from typing import Callable
 
 from loguru import logger
 from sqlalchemy import AsyncAdaptedQueuePool, create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
 
@@ -33,7 +31,7 @@ async_engine = create_async_engine(
     echo=False,
 )
 
-async_session_local: Callable[..., AsyncSession] = sessionmaker(bind=async_engine, class_=AsyncSession)
+async_session_local = async_sessionmaker(async_engine)
 
 
 def init_db():
