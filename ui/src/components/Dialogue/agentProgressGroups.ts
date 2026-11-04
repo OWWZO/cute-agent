@@ -67,7 +67,6 @@ export function formatAgentElapsed(display: {
 }): string {
   return (
     formatSubAgentDuration(display.totalDurationMs) ||
-    formatSubAgentDuration(display.elapsedMs) ||
-    ""
+    formatSubAgentDuration(display.elapsedMs)
   );
 }

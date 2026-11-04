@@ -2346,11 +2346,6 @@ export function useConversationStream(
           return;
         }
 
-        if (status === "RUNNING" && planFollowIdleReplay(status) === "stop") {
-          settleResumeReplay(history, hydrated, "RUNNING", "");
-          return;
-        }
-
         // 未知状态不能擅自判定成功，继续观察同一个 Run B。
         parkResumeStream();
       } catch (error) {
