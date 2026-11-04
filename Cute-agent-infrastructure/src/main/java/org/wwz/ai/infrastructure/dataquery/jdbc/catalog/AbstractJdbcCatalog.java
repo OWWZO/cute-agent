@@ -9,6 +9,7 @@ import org.wwz.ai.domain.agent.rag.model.schema.StandardColumnType;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * 基于 JDBC {@link DatabaseMetaData} 的通用目录实现。
@@ -18,6 +19,20 @@ import java.util.List;
  * 覆盖方法。</p>
  */
 public abstract class AbstractJdbcCatalog implements JdbcCatalog {
+
+    private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]{0,63}$");
+
+    /**
+     * 目录 SQL 中不能使用绑定参数的位置（如 system.columns / INFORMATION_SCHEMA 的
+     * schema、table 过滤）必须先经过同一标识符白名单，避免单引号、注释符或反引号
+     * 从调用方拼入 SQL。合法标识符不含特殊字符，因此后续仍可安全加引号。
+     */
+    protected static String requireSafeIdentifier(String value, String fieldName) {
+        if (value == null || !SAFE_IDENTIFIER.matcher(value).matches()) {
+            throw new CatalogException("非法" + fieldName + "标识符");
+        }
+        return value;
+    }
 
     @Override
     public List<DataQueryTable> listTables(Connection connection, String schema) throws CatalogException {

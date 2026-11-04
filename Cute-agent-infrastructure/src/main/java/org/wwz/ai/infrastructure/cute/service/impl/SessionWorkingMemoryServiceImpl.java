@@ -3,6 +3,7 @@ package org.wwz.ai.infrastructure.cute.service.impl;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.wwz.ai.domain.agent.memory.SessionWorkingMemoryService;
 import org.wwz.ai.domain.agent.memory.WorkingMemoryMessage;
 import org.wwz.ai.domain.agent.memory.WorkingMemoryProjector;
@@ -145,6 +146,7 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void replaceReadyProjection(String sessionId,
                                        String memoryScope,
                                        String compactRequestId,
@@ -196,6 +198,8 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
         } catch (Exception e) {
             log.warn("replaceReadyProjection failed sessionId={} scope={} compactRequestId={}",
                     sessionId, scope, compactRequestId, e);
+            // 接口契约要求失败必须上抛，让事务边界回滚；调用方自行决定是否降级。
+            throw e;
         }
     }
 

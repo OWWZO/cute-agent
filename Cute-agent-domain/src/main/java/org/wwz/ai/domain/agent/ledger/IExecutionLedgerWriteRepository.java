@@ -42,6 +42,14 @@ public interface IExecutionLedgerWriteRepository {
     void upsertSession(DialogueSessionUpsertRecord record);
 
     /**
+     * 仅当会话行不存在时插入；已存在时保持原行完全不变。
+     * <p>用于子会话身份建行：调用方不能先查询再插入，否则并发派发会在两次查询之间
+     * 都判定“不存在”，后续全量 upsert 会覆盖 run_count 与身份列。实现必须依赖
+     * {@code session_id} 唯一键做原子插入，冲突时 no-op。</p>
+     */
+    void insertSessionIfAbsent(DialogueSessionUpsertRecord record);
+
+    /**
      * 只更新会话偏好四列（model / thinking / thinking_effort / deep_think）。
      * <p>与 {@link #upsertSession} 的区别：那个会整行覆盖 title/status/run_count 等列，
      * 传入 null 就把库里的值清空；本方法只碰偏好列，null 表示「不清空」。</p>
