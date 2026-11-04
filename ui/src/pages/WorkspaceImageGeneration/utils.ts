@@ -12,9 +12,13 @@ import {
 export { trimTrailingSlash };
 
 const DATA_URL_RE = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i;
+const DATA_URL_IN_TEXT_RE =
+  /data:image\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/]+={0,2})/i;
 const MARKDOWN_IMAGE_RE = /!\[[^\]]*]\((https?:\/\/[^)\s]+)\)/i;
 const HTTP_IMAGE_RE = /https?:\/\/[^\s"'<>)]*\.(?:png|jpe?g|gif|webp|bmp|svg)(?:\?[^\s"'<>)]*)?/i;
-const BASE64_IMAGE_RE = /[A-Za-z0-9+/=\s]{200,}/;
+const IMAGE_MAGIC_PREFIX_RE = /^(?:iVBOR|\/9j\/|R0lGOD|UklGR)/;
+const BASE64_IMAGE_RE =
+  /(?<![A-Za-z0-9+/])(?:iVBOR[A-Za-z0-9+/]{195,}={0,2}|\/9j\/[A-Za-z0-9+/]{196,}={0,2}|R0lGOD[A-Za-z0-9+/]{194,}={0,2}|UklGR[A-Za-z0-9+/]{195,}={0,2})/;
 
 const MIME_EXTENSION_MAP: Record<string, string> = {
   "image/png": "png",
@@ -247,8 +251,8 @@ export function findImageInText(text: string): ExtractedImageHit | null {
     return null;
   }
 
-  const dataUrlMatch = text.match(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+/i);
-  if (dataUrlMatch) {
+  const dataUrlMatch = DATA_URL_IN_TEXT_RE.exec(text);
+  if (dataUrlMatch?.[1] && IMAGE_MAGIC_PREFIX_RE.test(dataUrlMatch[1])) {
     try {
       return { dataUrl: normalizeToDataUrl(dataUrlMatch[0]).dataUrl };
     } catch {

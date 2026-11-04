@@ -309,10 +309,7 @@ function webElementPickerScript(options: WebElementPickerScriptOptions) {
     if (!(clone instanceof Element)) {
       return "";
     }
-    clone.querySelectorAll("script, style, noscript, template").forEach((node) => {
-      node.remove();
-    });
-    clone.querySelectorAll("input, textarea").forEach((node) => {
+    const sanitizeFormValue = (node: Element) => {
       if (node instanceof HTMLInputElement) {
         node.removeAttribute("value");
         if (node.type.toLowerCase() === "password") {
@@ -322,7 +319,12 @@ function webElementPickerScript(options: WebElementPickerScriptOptions) {
       if (node instanceof HTMLTextAreaElement) {
         node.textContent = "";
       }
+    };
+    clone.querySelectorAll("script, style, noscript, template").forEach((node) => {
+      node.remove();
     });
+    sanitizeFormValue(clone);
+    clone.querySelectorAll("input, textarea").forEach(sanitizeFormValue);
     return truncate(clone.outerHTML, options.maxHtmlChars);
   };
 
@@ -373,7 +375,6 @@ function webElementPickerScript(options: WebElementPickerScriptOptions) {
 
   document.documentElement.append(overlay, label);
 
-  let hoveredElement: Element | null = null;
   let settled = false;
   let finishPicker: ((result: WebElementPickerScriptResult) => void) | null = null;
 
@@ -576,7 +577,6 @@ function webElementPickerScript(options: WebElementPickerScriptOptions) {
     if (!(target instanceof Element)) {
       return;
     }
-    hoveredElement = target;
     updateOverlay(target);
   }
 
@@ -604,14 +604,20 @@ function webElementPickerScript(options: WebElementPickerScriptOptions) {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    if (!hoveredElement) {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.isConnected) {
       finishPicker?.({ status: "cancelled" });
       return;
     }
-    finishPicker?.({
-      status: "selected",
-      element: collectElement(hoveredElement),
-    });
+    try {
+      finishPicker?.({
+        status: "selected",
+        element: collectElement(target),
+      });
+    } catch (error) {
+      console.error("网页元素采集失败", error);
+      finishPicker?.({ status: "cancelled" });
+    }
   }
 
   function handleKeyDown(event: KeyboardEvent) {
