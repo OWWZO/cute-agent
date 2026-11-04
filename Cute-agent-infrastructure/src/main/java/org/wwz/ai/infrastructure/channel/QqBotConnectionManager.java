@@ -42,6 +42,8 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
     private final ChannelAppIdLock appIdLock;
     private final OkHttpClient httpClient;
 
+    /** bindingId → appId：建连时缓存，避免绑定行被删后无法归还文件锁。 */
+    private final Map<Long, String> bindingAppIds = new ConcurrentHashMap<>();
     private final Map<Long, QqBotWsClient> connections = new ConcurrentHashMap<>();
     private final Map<Long, ChannelAdapter> adapters = new ConcurrentHashMap<>();
     private final Map<Long, Object> bindingMonitors = new ConcurrentHashMap<>();
@@ -128,6 +130,7 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
             markError(bindingId, error);
             return;
         }
+        bindingAppIds.put(bindingId, binding.getAppId());
         try {
             ChannelAdapter adapter = new QqBotBoundAdapter(restClient, properties, binding);
             adapters.put(bindingId, adapter);
@@ -145,7 +148,7 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
                         // 重连次数耗尽：标记 ERROR，等 owner 手动重试。
                         connections.remove(bindingId);
                         adapters.remove(bindingId);
-                        appIdLock.unlock(binding.getAppId());
+                        releaseAppIdLock(bindingId);
                         markError(bindingId, "连接多次失败，请重试");
                     });
             connections.put(bindingId, client);
@@ -157,7 +160,7 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
             log.warn("[channel] start connection failed bindingId={}", bindingId, e);
             connections.remove(bindingId);
             adapters.remove(bindingId);
-            appIdLock.unlock(binding.getAppId());
+            releaseAppIdLock(bindingId);
             markError(bindingId, e.getMessage());
         }
     }
@@ -188,11 +191,18 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
 
     /** 归还绑定占用的 appId 锁；锁未持有时 unlock 是幂等的空操作。 */
     private void releaseAppIdLock(Long bindingId) {
-        try {
-            bindingRepository.findById(bindingId)
-                    .ifPresent(binding -> appIdLock.unlock(binding.getAppId()));
-        } catch (Exception e) {
-            log.warn("[channel] release appId lock failed bindingId={}", bindingId, e);
+        String appId = bindingAppIds.remove(bindingId);
+        if (appId == null) {
+            // 兼容：进程重启后未建连就被 stop 的绑定，只能回查库
+            try {
+                appId = bindingRepository.findById(bindingId)
+                        .map(ChannelBinding::getAppId).orElse(null);
+            } catch (Exception e) {
+                log.warn("[channel] lookup appId failed bindingId={}", bindingId, e);
+            }
+        }
+        if (appId != null) {
+            appIdLock.unlock(appId);
         }
     }
 
