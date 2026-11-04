@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shlex
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -33,6 +34,9 @@ _SKIP_DIR_NAMES = frozenset(
 _E2B_MAX_NAME_BYTES = 200
 _E2B_MAX_PATH_BYTES = 1000
 _FINGERPRINT_REL = ".cute/e2b-sync.json"
+_SAFE_REMOTE_RELATIVE_PATH = re.compile(
+    r"^(?!\.\.)(?!/)(?!\\)(?:[^\x00-\x1f:*?\"<>|\\]+/)*[^\x00-\x1f:*?\"<>|\\]+$"
+)
 
 
 @dataclass
@@ -149,6 +153,17 @@ def e2b_remote_path_ok(remote_path: str) -> bool:
         if not e2b_path_component_ok(part):
             return False
     return True
+
+
+def _is_safe_remote_relative_path(rel: Any) -> bool:
+    text = str(rel)
+    if not text or "\x00" in text or "\\" in text:
+        return False
+    if not _SAFE_REMOTE_RELATIVE_PATH.fullmatch(text):
+        return False
+    if any(part in {"", ".", ".."} for part in text.split("/")):
+        return False
+    return all(e2b_path_component_ok(part) for part in text.split("/"))
 
 
 def should_skip_rel(rel: Path, *, skip_top: set[str] | None = None) -> bool:
@@ -418,6 +433,9 @@ def download_changed_files(
     for rel, signature in sorted(after.items()):
         if before.get(rel) == signature:
             continue
+        if not _is_safe_remote_relative_path(rel):
+            logger.warning("[e2b_sync] rejected unsafe remote relative path: {}", rel)
+            continue
         remote_path = f"{remote_root}/{rel}"
         try:
             try:
@@ -427,7 +445,15 @@ def download_changed_files(
             data = (
                 content.encode("utf-8") if isinstance(content, str) else bytes(content)
             )
-            local_path = workspace / rel
+            workspace_root = workspace.resolve()
+            local_path = (workspace_root / rel).resolve()
+            try:
+                local_path.relative_to(workspace_root)
+            except ValueError:
+                logger.warning(
+                    "[e2b_sync] rejected local path outside workspace: {}", rel
+                )
+                continue
             local_path.parent.mkdir(parents=True, exist_ok=True)
             local_path.write_bytes(data)
             if produced_paths is not None:
