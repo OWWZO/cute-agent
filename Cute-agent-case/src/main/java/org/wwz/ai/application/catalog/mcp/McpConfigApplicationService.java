@@ -24,9 +24,20 @@ public class McpConfigApplicationService {
     private final McpWriteReloadSupport writeReloadSupport;
 
     public ApplicationResult<Boolean> create(McpConfigCommand command) {
+        if (command == null || StringUtils.isBlank(command.mcpId())) {
+            return ApplicationResult.failure(ResponseCode.ILLEGAL_PARAMETER, "MCP ID不能为空", false);
+        }
+        McpConfigCommand normalized = new McpConfigCommand(
+                command.id(),
+                command.mcpId().trim(),
+                command.mcpName(),
+                command.transportType(),
+                command.transportConfig(),
+                command.requestTimeout(),
+                command.status());
         try {
-            assertMcpIdAvailable(command);
-            AiClientToolMcpConfig config = toConfig(command);
+            assertMcpIdAvailable(normalized);
+            AiClientToolMcpConfig config = toConfig(normalized);
             LocalDateTime now = LocalDateTime.now();
             config.setCreateTime(now);
             config.setUpdateTime(now);

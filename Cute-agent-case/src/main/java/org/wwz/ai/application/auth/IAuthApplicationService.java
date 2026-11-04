@@ -11,6 +11,7 @@ import org.wwz.ai.application.auth.result.AuthAccountResult;
 import org.wwz.ai.application.auth.result.AuthResult;
 import org.wwz.ai.application.auth.result.IssuedAuthToken;
 import org.wwz.ai.application.auth.JwtTokenService.AuthenticatedAccount;
+import org.springframework.lang.Nullable;
 
 /**
  * Authentication application service.
@@ -36,5 +37,6 @@ public interface IAuthApplicationService {
 
     AuthResult<Boolean> changePassword(AuthChangePasswordCommand command);
 
+    @Nullable
     AuthenticatedAccount verifyAccessToken(String accessToken);
 }

@@ -1,8 +1,6 @@
 package org.wwz.ai.domain.agent.ledger.model.tooloutput;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,13 +10,19 @@ import java.util.List;
  * deep_search 单个查询结果。
  */
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
 public class DeepSearchQueryResult {
 
     private String query;
 
     private List<DeepSearchDoc> docs = new ArrayList<>();
+
+    public DeepSearchQueryResult() {
+    }
+
+    public DeepSearchQueryResult(String query, List<DeepSearchDoc> docs) {
+        this.query = query;
+        setDocs(docs);
+    }
 
     /**
      * 统一工厂，避免运行时依赖 Lombok Builder 内部类。
@@ -32,5 +36,9 @@ public class DeepSearchQueryResult {
      */
     public List<DeepSearchDoc> getDocs() {
         return docs == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(docs));
+    }
+
+    public void setDocs(List<DeepSearchDoc> docs) {
+        this.docs = docs == null ? new ArrayList<>() : new ArrayList<>(docs);
     }
 }

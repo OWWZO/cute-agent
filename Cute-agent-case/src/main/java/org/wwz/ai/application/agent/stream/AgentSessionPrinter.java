@@ -273,8 +273,9 @@ public class AgentSessionPrinter implements Printer {
                         response.setResult(summary != null ? summary.toString() : null);
                     } else {
                         Map<String, Object> taskResult = JSON.parseObject(JSON.toJSONString(message));
-                        response.setResultMap(taskResult);
-                        response.setResult(taskResult.get("taskSummary").toString());
+                        response.setResultMap(taskResult == null ? new HashMap<>() : taskResult);
+                        Object summary = taskResult == null ? null : taskResult.get("taskSummary");
+                        response.setResult(summary == null ? null : summary.toString());
                     }
                     if (response.getResultMap() == null) {
                         response.setResultMap(new HashMap<>());

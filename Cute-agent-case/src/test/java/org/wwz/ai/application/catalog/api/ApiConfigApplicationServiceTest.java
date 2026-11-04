@@ -50,6 +50,38 @@ public class ApiConfigApplicationServiceTest {
         Assert.assertNull(repository.inserted);
     }
 
+    @Test
+    public void shouldRejectMissingCommandAndBlankApiIdBeforeInsert() {
+        InMemoryApiRepository repository = new InMemoryApiRepository();
+        ApiConfigApplicationService service = new ApiConfigApplicationService(repository, new RecordingRuntime());
+
+        ApplicationResult<Boolean> nullCommand = service.create(null);
+        ApplicationResult<Boolean> blankApiId = service.create(new ApiConfigCommand(
+                null, " ", "https://example.test", "secret", null, null, 1));
+
+        Assert.assertEquals("0002", nullCommand.code());
+        Assert.assertEquals("0002", blankApiId.code());
+        Assert.assertNull(repository.inserted);
+    }
+
+    @Test
+    public void queryListHandlesNullCommandAndNullEntityFields() {
+        InMemoryApiRepository repository = new InMemoryApiRepository();
+        repository.all = List.of(
+                AiClientApiConfig.builder().apiId("dashscope").baseUrl("https://example.test").status(1).build(),
+                AiClientApiConfig.builder().build());
+        ApiConfigApplicationService service = new ApiConfigApplicationService(repository, new RecordingRuntime());
+
+        ApplicationResult<List<AiClientApiConfig>> nullCommand = service.queryList(null);
+        ApplicationResult<List<AiClientApiConfig>> nullFields =
+                service.queryList(new ApiConfigQueryCommand("dashscope", null, null, 1, 10));
+
+        Assert.assertEquals("0002", nullCommand.code());
+        Assert.assertEquals("0000", nullFields.code());
+        Assert.assertEquals(1, nullFields.data().size());
+        Assert.assertEquals("dashscope", nullFields.data().get(0).getApiId());
+    }
+
     private static final class RecordingRuntime implements ICatalogModelRuntimePort {
         private int invalidations;
 
@@ -67,6 +99,7 @@ public class ApiConfigApplicationServiceTest {
     private static final class InMemoryApiRepository implements IAiClientApiConfigRepository {
         private AiClientApiConfig inserted;
         private AiClientApiConfig existing;
+        private List<AiClientApiConfig> all = List.of();
 
         @Override
         public boolean insert(AiClientApiConfig config) {
@@ -116,7 +149,7 @@ public class ApiConfigApplicationServiceTest {
 
         @Override
         public List<AiClientApiConfig> findAll() {
-            return List.of();
+            return all;
         }
     }
 }

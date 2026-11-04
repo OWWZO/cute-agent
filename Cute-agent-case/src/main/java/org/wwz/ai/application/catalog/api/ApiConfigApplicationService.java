@@ -14,6 +14,7 @@ import org.wwz.ai.types.enums.ResponseCode;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * API 配置管理用例。
@@ -27,6 +28,9 @@ public class ApiConfigApplicationService {
     private final ICatalogModelRuntimePort modelRuntimePort;
 
     public ApplicationResult<Boolean> create(ApiConfigCommand command) {
+        if (command == null || StringUtils.isBlank(command.apiId())) {
+            return ApplicationResult.failure(ResponseCode.ILLEGAL_PARAMETER, "API ID不能为空", false);
+        }
         try {
             assertApiIdAvailable(command);
             LocalDateTime now = LocalDateTime.now();
@@ -142,12 +146,19 @@ public class ApiConfigApplicationService {
     }
 
     public ApplicationResult<List<AiClientApiConfig>> queryList(ApiConfigQueryCommand command) {
+        if (command == null) {
+            return ApplicationResult.failure(ResponseCode.ILLEGAL_PARAMETER, "查询条件不能为空", null);
+        }
         try {
             List<AiClientApiConfig> all = repository.findAll();
             List<AiClientApiConfig> filtered = all.stream()
-                    .filter(api -> StringUtils.isBlank(command.apiId()) || api.getApiId().contains(command.apiId()))
-                    .filter(api -> StringUtils.isBlank(command.baseUrl()) || api.getBaseUrl().contains(command.baseUrl()))
-                    .filter(api -> command.status() == null || api.getStatus().equals(command.status()))
+                    .filter(Objects::nonNull)
+                    .filter(api -> StringUtils.isBlank(command.apiId())
+                            || StringUtils.contains(api.getApiId(), command.apiId()))
+                    .filter(api -> StringUtils.isBlank(command.baseUrl())
+                            || StringUtils.contains(api.getBaseUrl(), command.baseUrl()))
+                    .filter(api -> command.status() == null
+                            || Objects.equals(api.getStatus(), command.status()))
                     .toList();
 
             int pageNum = command.pageNum() != null ? command.pageNum() : 1;
