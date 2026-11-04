@@ -25,8 +25,7 @@ public class DataQueryMetadataAdapter implements DataQueryMetadataPort {
     @Override
     public List<DataQueryTableColumn> queryColumns(String tableName, String schema) {
         // 表结构读取复用同一 JDBC 配置解析，但由 catalog 负责数据库方言差异，适配器不直接访问 JDBC 元数据。
-        JdbcQueryRequest jdbcQueryRequest = new JdbcQueryRequest();
-        jdbcQueryRequest.setJdbcConnectionConfig(JdbcUtils.parseJdbcConnectionConfig(properties));
+        JdbcQueryRequest jdbcQueryRequest = newJdbcQueryRequest();
         try {
             return jdbcDataMetaProvider.queryColumns(jdbcQueryRequest, tableName, schema);
         } catch (SQLException exception) {
@@ -37,8 +36,7 @@ public class DataQueryMetadataAdapter implements DataQueryMetadataPort {
     @Override
     public List<DataQueryTableColumn> getTableColumnsOfSql(String sql, int limit) {
         // executeQuery 会实际执行 SQL；这里只把 ResultSetMetaData 映射为列定义，不把结果行物化到 domain。
-        JdbcQueryRequest jdbcQueryRequest = new JdbcQueryRequest();
-        jdbcQueryRequest.setJdbcConnectionConfig(JdbcUtils.parseJdbcConnectionConfig(properties));
+        JdbcQueryRequest jdbcQueryRequest = newJdbcQueryRequest();
         jdbcQueryRequest.setSql(sql);
         jdbcQueryRequest.setLimit(limit);
         try {
@@ -46,5 +44,11 @@ public class DataQueryMetadataAdapter implements DataQueryMetadataPort {
         } catch (SQLException exception) {
             throw new IllegalStateException("SQL result metadata lookup failed", exception);
         }
+    }
+
+    private JdbcQueryRequest newJdbcQueryRequest() {
+        JdbcQueryRequest jdbcQueryRequest = new JdbcQueryRequest();
+        jdbcQueryRequest.setJdbcConnectionConfig(JdbcUtils.parseJdbcConnectionConfig(properties));
+        return jdbcQueryRequest;
     }
 }

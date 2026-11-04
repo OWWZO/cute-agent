@@ -23,7 +23,7 @@ public class MysqlDialect implements JdbcDialect {
 
     @Override
     public Properties defaultProperties() {
-        // remarks 和 Information Schema 配置保证列注释可被目录层读取。
+        // Information Schema 配置用于目录层读取列注释。
         Properties properties = new Properties();
         properties.setProperty("remarks", "true");
         properties.setProperty("useInformationSchema", "true");
