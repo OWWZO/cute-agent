@@ -23,7 +23,7 @@ public class H2Dialect implements JdbcDialect {
 
     @Override
     public Properties defaultProperties() {
-        // 打开备注和 Information Schema 支持，使测试库返回与生产库相近的列元数据。
+        // H2 的 MySQL 兼容语法由 URL 的 MODE=MySQL 控制；这里的属性沿用连接池元数据配置。
         Properties properties = new Properties();
         properties.setProperty("remarks", "true");
         properties.setProperty("useInformationSchema", "true");

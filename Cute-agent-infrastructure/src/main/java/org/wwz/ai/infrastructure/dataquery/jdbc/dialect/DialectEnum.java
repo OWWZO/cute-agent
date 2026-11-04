@@ -7,6 +7,7 @@ import org.apache.commons.lang3.StringUtils;
 @Getter
 public enum DialectEnum {
     MYSQL("MySql", "jdbc:mysql://", "/", ""),
+    // H2 内存库的 host/port 必须留空，库名由 schema 拼接。
     H2("h2", "jdbc:h2:mem", ":", ";MODE=MySQL"),
     CLICKHOUSE("ClickHouse", "jdbc:clickhouse://", "/", "");
 

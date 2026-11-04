@@ -86,6 +86,9 @@ public interface JdbcDialect {
         return sql;
     }
 
+    /**
+     * 默认方言不追加分页限制；需要该能力的方言应覆盖此方法。
+     */
     default String setLimit(JdbcQueryRequest request) {
         return request.getSql();
     }
