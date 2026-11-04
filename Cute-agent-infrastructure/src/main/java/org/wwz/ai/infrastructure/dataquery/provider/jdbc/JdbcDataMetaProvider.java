@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryTable;
 import org.wwz.ai.domain.agent.rag.model.schema.DataQueryTableColumn;
+import org.wwz.ai.infrastructure.dataquery.jdbc.JdbcConnectionConfig;
 import org.wwz.ai.infrastructure.dataquery.jdbc.connection.ConnectionWrapper;
 import org.wwz.ai.infrastructure.dataquery.jdbc.connection.JdbcConnectionFactory;
 
@@ -45,15 +46,15 @@ public class JdbcDataMetaProvider implements DataMetaProvider<JdbcQueryRequest> 
 
     @Override
     public List<DataQueryTableColumn> getTableColumnsOfSql(JdbcQueryRequest request) throws SQLException {
-        try (ConnectionWrapper wrapper = JdbcConnectionFactory.getConnection(request.getJdbcConnectionConfig())) {
+        try (ConnectionWrapper wrapper = getConnection(request.getJdbcConnectionConfig())) {
             // 元数据查询同样使用方言格式化和 limit，保证字段探测与真正执行 SQL 的约束一致。
-            request.setSql(wrapper.getJdbcDialect().formatSql(request.getSql()));
-            log.info("jdbc meta 执行sql:{}", request.getSql());
+            String formattedSql = wrapper.getJdbcDialect().formatSql(request.getSql());
+            log.info("jdbc meta 执行sql:{}", formattedSql);
             List<DataQueryTableColumn> columnList = new ArrayList<>();
             try (Connection connection = wrapper.getConnection()) {
             try (
                     Statement ps = wrapper.createStatement(connection, request.getLimit());
-                    ResultSet rs = ps.executeQuery(request.getSql())) {
+                    ResultSet rs = ps.executeQuery(formattedSql)) {
                 ResultSetMetaData metaData = rs.getMetaData();
                 int columnCount = metaData.getColumnCount();
 
@@ -67,7 +68,7 @@ public class JdbcDataMetaProvider implements DataMetaProvider<JdbcQueryRequest> 
                             .comment(name)
                             .dataType(dataType)
                             .originDataType(jdbcType.name())
-                            .position(i + 1)
+                            .position(i)
                             .build();
                     columnList.add(column);
                 }
@@ -76,6 +77,11 @@ public class JdbcDataMetaProvider implements DataMetaProvider<JdbcQueryRequest> 
             }
             return columnList;
         }
+    }
+
+    protected ConnectionWrapper getConnection(JdbcConnectionConfig config)
+            throws SQLException {
+        return JdbcConnectionFactory.getConnection(config);
     }
 
 }
