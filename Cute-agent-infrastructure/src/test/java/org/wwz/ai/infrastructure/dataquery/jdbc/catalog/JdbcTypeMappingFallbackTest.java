@@ -58,7 +58,12 @@ public class JdbcTypeMappingFallbackTest {
                 (proxy, method, args) -> {
                     return switch (method.getName()) {
                         case "next" -> hasRow.getAndSet(false);
-                        case "getString" -> "COLUMN_NAME".equals(args[0]) ? "payload" : "json payload";
+                        case "getString" -> switch ((String) args[0]) {
+                            case "TABLE_NAME" -> "orders";
+                            case "COLUMN_NAME" -> "payload";
+                            case "REMARKS" -> "json payload";
+                            default -> throw new UnsupportedOperationException((String) args[0]);
+                        };
                         case "getInt" -> switch ((String) args[0]) {
                             case "DATA_TYPE" -> 2950;
                             case "NULLABLE" -> DatabaseMetaData.columnNullable;
