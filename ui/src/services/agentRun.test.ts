@@ -28,6 +28,7 @@ vi.mock("@/services/authSessionExpired", () => ({
 }));
 
 import {
+  AGENT_QUERY_SUBMIT_URL,
   AgentQuerySubmitError,
   buildAgentSessionStreamUrl,
   submitAcceptedCommand,
@@ -154,9 +155,12 @@ describe("agentRun submit/observe", () => {
     );
 
     await expect(
-      submitAcceptedCommand("http://localhost/api/agent/ask-user/resume", {
-        resumeRequestId: "r-resume",
-      })
+      // submitAcceptedCommand 会拒绝非受信 origin；这里用模块自身的服务地址拼路径，
+      // 保证守卫放行，测试只验证 409 的映射语义。
+      submitAcceptedCommand(
+        new URL("/api/agent/ask-user/resume", AGENT_QUERY_SUBMIT_URL).toString(),
+        { resumeRequestId: "r-resume" }
+      )
     ).rejects.toMatchObject({
       name: "AgentQuerySubmitError",
       status: 409,
