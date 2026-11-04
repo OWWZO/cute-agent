@@ -40,7 +40,7 @@ def init_db():
     """根据 SQLModel 元数据创建表（幂等）。"""
     from cute_tool.db.file_table import FileInfo  # noqa: F401 — 触发表注册
     SQLModel.metadata.create_all(engine)
-    logger.info(f"DB init done")
+    logger.info("DB init done")
 
 
 if __name__ == "__main__":
