@@ -57,7 +57,7 @@ public interface IAiClientModelDao {
     /**
      * 根据模型ID查询一条聊天模型配置。重复模型ID时优先返回主模型配置。
      * @param modelId 模型引用标识
-     * @return 聊天模型配置对象
+     * @return 聊天模型配置对象；可能为 null
      */
     AiClientModel queryByModelId(String modelId);
 

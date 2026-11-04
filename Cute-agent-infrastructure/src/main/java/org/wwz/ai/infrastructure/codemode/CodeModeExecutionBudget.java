@@ -20,6 +20,8 @@ import java.util.concurrent.TimeUnit;
 public final class CodeModeExecutionBudget {
 
     private static final int MAX_LOGS = 200;
+    private static final int DEFAULT_MAX_TOOL_CALLS = 100;
+    private static final long DEFAULT_MAX_TOTAL_WRITE_BYTES = 134_217_728L;
 
     private final long startedNanos;
     private final long deadlineNanos;
@@ -35,8 +37,8 @@ public final class CodeModeExecutionBudget {
         long now = System.nanoTime();
         this.startedNanos = now;
         this.deadlineNanos = now + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, timeoutMs));
-        this.maxToolCalls = maxToolCalls > 0 ? maxToolCalls : 100;
-        this.maxTotalWriteBytes = maxTotalWriteBytes > 0 ? maxTotalWriteBytes : 134_217_728L;
+        this.maxToolCalls = maxToolCalls > 0 ? maxToolCalls : DEFAULT_MAX_TOOL_CALLS;
+        this.maxTotalWriteBytes = maxTotalWriteBytes > 0 ? maxTotalWriteBytes : DEFAULT_MAX_TOTAL_WRITE_BYTES;
     }
 
     /**

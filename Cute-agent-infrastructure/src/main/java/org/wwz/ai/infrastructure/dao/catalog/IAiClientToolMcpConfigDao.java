@@ -10,8 +10,10 @@ import java.util.List;
 public interface IAiClientToolMcpConfigDao {
     int insert(AiClientToolMcpPO po);
     int updateById(AiClientToolMcpPO po);
+    /** 按业务键更新；调用方必须保证 mcpId 非空且全表唯一。 */
     int updateByMcpId(AiClientToolMcpPO po);
     int deleteById(Long id);
+    /** 按业务键删除；调用方必须保证 mcpId 非空且全表唯一。 */
     int deleteByMcpId(String mcpId);
     AiClientToolMcpPO queryById(Long id);
     AiClientToolMcpPO queryByMcpId(String mcpId);

@@ -25,7 +25,7 @@ public final class GraalJsContextFactory {
     }
 
     /** 懒加载共享 Engine；选项不可用时降级为默认 Engine。 */
-    public static Engine sharedEngine() {
+    private static Engine sharedEngine() {
         if (sharedEngine == null) {
             synchronized (GraalJsContextFactory.class) {
                 if (sharedEngine == null) {

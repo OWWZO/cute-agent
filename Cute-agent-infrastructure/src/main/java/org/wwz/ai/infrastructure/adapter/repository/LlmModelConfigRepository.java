@@ -24,6 +24,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class LlmModelConfigRepository implements ILlmModelConfigRepository {
 
+    private static final int STATUS_ENABLED = 1;
+
     private final IAiClientModelDao aiClientModelDao;
     private final IAiClientApiDao aiClientApiDao;
 
@@ -78,6 +80,6 @@ public class LlmModelConfigRepository implements ILlmModelConfigRepository {
     }
 
     private static boolean isEnabled(Integer status) {
-        return status != null && status == 1;
+        return status != null && status == STATUS_ENABLED;
     }
 }
