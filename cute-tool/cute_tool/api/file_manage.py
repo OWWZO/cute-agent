@@ -262,10 +262,13 @@ async def preview_file(file_id: str, file_name: str):
     if not file_info or not os.path.exists(file_info.file_path):
         return Response(content="File not found", status_code=404)
 
-    # 可识别类型以内联方式交给浏览器；未知类型改为附件，避免浏览器误把任意二进制当页面执行。
+    # HTML 是主动内容，必须强制下载；未知类型也改为附件，避免浏览器把任意二进制当页面执行。
     disposition = "inline"
     lower_name = file_name.lower()
-    if lower_name.endswith(".md"):
+    if lower_name.endswith((".html", ".htm")):
+        content_type = "text/html"
+        disposition = "attachment"
+    elif lower_name.endswith(".md"):
         content_type = "text/markdown"
     elif lower_name.endswith(".glb"):
         content_type = "model/gltf-binary"
@@ -285,6 +288,8 @@ async def preview_file(file_id: str, file_name: str):
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
     }
+    if lower_name.endswith((".html", ".htm")):
+        common_headers["Content-Security-Policy"] = "sandbox"
     injected_content = _build_html_preview_content(file_info.file_path, file_name)
     if injected_content is not None:
         return Response(

@@ -63,31 +63,43 @@ async def test_csv_excel_word_pdf_html_md_text_smoke():
     txt_path.write_text("hello world\n", encoding="utf-8")
 
     rid = "test-docread-smoke"
+    workspace = {"workspace_root": str(tmp)}
     assert (
-        await run_csv_processor(rid, {"operation": "read", "file_path": str(csv_path)})
+        await run_csv_processor(
+            rid, {"operation": "read", "file_path": str(csv_path), **workspace}
+        )
     )["success"]
-    excel = await run_excel_reader(rid, {"file_path": str(xlsx)})
+    excel = await run_excel_reader(rid, {"file_path": str(xlsx), **workspace})
     assert excel["success"] and excel["data"]["row_count"] == 1
-    word = await run_word_reader(rid, {"file_path": str(docx_path)})
+    word = await run_word_reader(rid, {"file_path": str(docx_path), **workspace})
     assert word["success"] and word["data"]["heading_count"] == 1
-    pdf = await run_pdf_reader(rid, {"operation": "read", "file_path": str(pdf_path)})
+    pdf = await run_pdf_reader(
+        rid, {"operation": "read", "file_path": str(pdf_path), **workspace}
+    )
     assert pdf["success"]
-    struct = await run_pdf_structure(rid, {"file_path": str(pdf_path)})
+    struct = await run_pdf_structure(rid, {"file_path": str(pdf_path), **workspace})
     assert struct["success"] and struct["data"]["page_count"] == 1
-    cites = await run_citation_extractor(rid, {"file_path": str(pdf_path)})
+    cites = await run_citation_extractor(
+        rid, {"file_path": str(pdf_path), **workspace}
+    )
     assert cites["success"]
     assert (
         await run_html_processor(
-            rid, {"operation": "read", "file_path": str(html_path)}
+            rid,
+            {"operation": "read", "file_path": str(html_path), **workspace},
         )
     )["success"]
     assert (
         await run_markdown_processor(
-            rid, {"operation": "read", "file_path": str(md_path)}
+            rid,
+            {"operation": "read", "file_path": str(md_path), **workspace},
         )
     )["success"]
     assert (
-        await run_text_processor(rid, {"operation": "read", "file_path": str(txt_path)})
+        await run_text_processor(
+            rid,
+            {"operation": "read", "file_path": str(txt_path), **workspace},
+        )
     )["success"]
 
 
@@ -151,7 +163,11 @@ def test_html_processor_accepts_legacy_metadata_operation_name():
     result = asyncio.run(
         run_html_processor(
             "test-html-metadata-alias",
-            {"operation": "metadata", "file_path": str(html_path)},
+            {
+                "operation": "metadata",
+                "file_path": str(html_path),
+                "workspace_root": str(tmp),
+            },
         )
     )
 

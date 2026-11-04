@@ -89,6 +89,33 @@ class _FileDB(object):
 FileDB = _FileDB()
 
 
+def _allowed_local_file_roots() -> list[str]:
+    """Return roots whose existing local files may be registered by the file service."""
+    roots: list[str] = []
+    raw_root = os.getenv("FILE_SAVE_PATH", "file_db_dir")
+    root = os.path.expanduser(raw_root)
+    if not os.path.isabs(root):
+        root = os.path.join(os.getcwd(), root)
+    roots.append(root)
+    roots.append(os.path.join(os.getcwd(), "skilloutput"))
+    for env_name in ("CUTE_DOCGEN_OUTPUT_DIR", "CUTE_DOCGEN_UPLOAD_DIR"):
+        value = os.getenv(env_name)
+        if value:
+            roots.append(value)
+    return [os.path.realpath(os.path.abspath(item)) for item in roots]
+
+
+def _is_path_under_allowed_root(path: str) -> bool:
+    resolved = os.path.realpath(os.path.abspath(path))
+    for root in _allowed_local_file_roots():
+        try:
+            if os.path.commonpath([resolved, root]) == root:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def normalize_stored_relative_path(file_name: str) -> str:
     """保留目录结构的相对路径归一化；拒绝 .. 逃逸。"""
     raw = (file_name or "").strip().replace("\\", "/")
@@ -164,9 +191,13 @@ class FileInfoOp(object):
         """登记已落盘文件：不拷贝内容，file_path 指向已有绝对路径。"""
         # register 与 upload 的区别是只登记引用；因此必须先验证源文件存在，再把绝对路径写入元数据。
         filename = normalize_stored_relative_path(filename)
-        if not local_path or not os.path.isfile(local_path):
+        if not local_path:
+            raise FileNotFoundError("local file not found: empty path")
+        abs_path = os.path.realpath(os.path.abspath(local_path))
+        if not _is_path_under_allowed_root(abs_path):
+            raise PermissionError(f"local file is outside allowed roots: {local_path}")
+        if not os.path.isfile(abs_path):
             raise FileNotFoundError(f"local file not found: {local_path}")
-        abs_path = os.path.abspath(local_path)
         file_info = FileInfo(
             file_id=file_id,
             filename=filename,

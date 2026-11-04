@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Recover tool-call arguments when large data/content breaks JSON escaping."""
-from __future__ import annotations
-
+import json
 import re
 from typing import Any
 
@@ -20,8 +19,9 @@ def recover_doc_tool_args(raw: str, *, content_key: str) -> dict[str, Any] | Non
         key = m.group("key")
         val = m.group("value")
         try:
-            # 优先按 JSON 转义解码；异常输入再走有限替换，保留可诊断的原始文本。
-            decoded = bytes(val, "utf-8").decode("unicode_escape")
+            # \uXXXX 必须按 JSON 的 Unicode 转义解码，unicode_escape 会把
+            # UTF-8 字节重新按 Latin-1 解释成乱码。
+            decoded = json.loads(f'"{val}"')
         except (UnicodeDecodeError, ValueError):
             decoded = val.replace("\\n", "\n").replace("\\t", "\t").replace('\\"', '"')
         if key == "operation":

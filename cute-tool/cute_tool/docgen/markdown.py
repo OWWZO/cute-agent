@@ -145,8 +145,9 @@ def parse_inline(text: str) -> list[InlineSpan]:
     except Exception:  # noqa: BLE001 - never fail rendering over inline syntax
         return [InlineSpan(text=text)]
     spans: list[InlineSpan] = []
-    for tok in tokens:
-        _walk_inline(tok.children or [], spans, _InlineState())
+    # MarkdownIt.parseInline() returns the flat inline token stream; wrapping
+    # each token's (usually absent) children loses all text and style markers.
+    _walk_inline(tokens, spans, _InlineState())
     return spans or [InlineSpan(text=text)]
 
 

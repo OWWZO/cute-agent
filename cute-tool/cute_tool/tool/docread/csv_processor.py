@@ -340,6 +340,7 @@ class CSVProcessorTool(SyncTool):
         if sort_column is not None and sort_column not in headers:
             raise ValueError(f"Unknown sort column: {sort_column!r}")
 
+        if sort_column is not None:
             def sort_key(r: dict[str, Any]) -> tuple[int, str]:
                 v = r.get(sort_column)
                 s = _normalize_cell(v)

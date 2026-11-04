@@ -96,6 +96,49 @@ class CodeInterpreterRuntimeGuardTest(unittest.TestCase):
             self.assertTrue(external_path.exists())
             self.assertEqual("x", external_path.read_text(encoding="utf-8"))
 
+    def test_guard_should_not_expose_unwrapped_callable(self):
+        with activate_runtime_io_guard(self.policy):
+            self.assertFalse(hasattr(pd.read_csv, "__wrapped__"))
+            self.assertFalse(hasattr(Path.write_text, "__wrapped__"))
+
+    def test_guard_should_block_custom_pathlike_outside_workspace(self):
+        class EscapePath(os.PathLike):
+            def __fspath__(self):
+                return str(Path(self.outside))
+
+        with tempfile.TemporaryDirectory() as external_dir:
+            EscapePath.outside = Path(external_dir).joinpath("escape.csv")
+            with self.assertRaises(CodeExecutionPermissionError) as context:
+                with activate_runtime_io_guard(self.policy):
+                    pd.read_csv(EscapePath())
+
+        self.assertEqual("path_outside_allowed_roots", context.exception.blocked_reason)
+
+    def test_guard_should_block_builtin_open_outside_workspace(self):
+        import builtins
+        import io
+
+        with tempfile.TemporaryDirectory() as external_dir:
+            outside = Path(external_dir).joinpath("escape.txt")
+            for opener in (builtins.open, io.open):
+                with self.subTest(opener=opener.__name__):
+                    with self.assertRaises(CodeExecutionPermissionError) as context:
+                        with activate_runtime_io_guard(self.policy):
+                            opener(outside, "w", encoding="utf-8")
+                    self.assertEqual(
+                        "path_outside_allowed_roots", context.exception.blocked_reason
+                    )
+
+    def test_guard_should_block_os_open_outside_workspace(self):
+        with tempfile.TemporaryDirectory() as external_dir:
+            outside = Path(external_dir).joinpath("escape.txt")
+            with self.assertRaises(CodeExecutionPermissionError) as context:
+                with activate_runtime_io_guard(self.policy):
+                    fd = os.open(outside, os.O_WRONLY | os.O_CREAT)
+                    os.close(fd)
+
+        self.assertEqual("path_outside_allowed_roots", context.exception.blocked_reason)
+
 
 if __name__ == "__main__":
     unittest.main()

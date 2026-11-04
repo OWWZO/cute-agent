@@ -96,10 +96,8 @@ def resolve_input_path(
             continue
         if must_exist and not resolved.exists():
             continue
-        # Allow absolute paths that exist (local debug); prefer under roots when possible
-        if resolved.is_absolute() and (not must_exist or resolved.exists()):
-            if any(_is_under(resolved, r) for r in roots) or resolved.exists():
-                return resolved
+        if resolved.is_absolute() and any(_is_under(resolved, r) for r in roots):
+            return resolved
 
     raise FileNotFoundError(f"File not found: {raw}")
 
@@ -120,8 +118,11 @@ def resolve_output_path(
     text = str(raw).strip().replace("\\", "/")
     p = Path(text).expanduser()
     if p.is_absolute():
-        p.parent.mkdir(parents=True, exist_ok=True)
-        return p.resolve()
+        raise ValueError(f"Output path escapes workspace root: {raw}")
     out = (base / text).resolve()
+    try:
+        out.relative_to(base)
+    except ValueError as exc:
+        raise ValueError(f"Output path escapes workspace root: {raw}") from exc
     out.parent.mkdir(parents=True, exist_ok=True)
     return out

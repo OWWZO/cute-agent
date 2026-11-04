@@ -155,6 +155,7 @@ _BLOCKED_CALL_NAMES = {
     "eval",
     "exec",
     "__import__",
+    "getattr",
     "globals",
     "locals",
 }
@@ -520,7 +521,6 @@ def _validate_statement(
 ) -> None:
     # 一条语句同时检查名称劫持、导入和调用；其中路径参数单独解析，避免把普通字符串误判为文件访问。
     _ensure_helper_names_not_overridden(statement, policy)
-
     if isinstance(statement, ast.Import):
         for alias in statement.names:
             _ensure_import_allowed(alias.name, policy)
@@ -528,7 +528,24 @@ def _validate_statement(
         _ensure_import_allowed(statement.module or "", policy)
 
     for node in ast.walk(statement):
-        if isinstance(node, ast.Call):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+            # 简单别名和 ``f = getattr(...)`` 都把高风险能力藏到普通名字后面；
+            # 在赋值/海象表达式处拒绝，避免后续只看到别名而无法识别目标。
+            value = getattr(node, "value", None)
+            if isinstance(value, ast.Name):
+                value_name = value.id
+            elif isinstance(value, ast.Call):
+                value_name = _extract_call_name(value)
+            else:
+                value_name = None
+            if value_name in _BLOCKED_CALL_NAMES:
+                raise CodeExecutionPermissionError(
+                    "blocked_call",
+                    f"禁止通过别名引用高风险函数：{value_name}",
+                    detail=ast.dump(node),
+                    policy=policy,
+                )
+        elif isinstance(node, ast.Call):
             _ensure_call_allowed(node, policy)
             _validate_path_call(
                 node=node,
@@ -613,6 +630,14 @@ def _ensure_call_allowed(
     node: ast.Call, policy: CodeInterpreterPermissionPolicy
 ) -> None:
     function_name = _extract_call_name(node)
+    if function_name == "" and not isinstance(node.func, (ast.Name, ast.Attribute)):
+        # f = eval; f(...) / getattr(...)(...) 这类间接调用无法静态判定目标，必须拒绝。
+        raise CodeExecutionPermissionError(
+            "unresolved_dynamic_call",
+            "无法静态确认调用目标，请直接调用允许的文件 I/O 函数。",
+            detail=ast.dump(node.func),
+            policy=policy,
+        )
     if function_name in _DESTRUCTIVE_CALL_NAMES:
         raise CodeExecutionPermissionError(
             "destructive_operation_denied",
@@ -649,7 +674,7 @@ def _validate_path_call(
     ):
         return
 
-    # 只对已知读写 API 做路径推导；无法静态解析的动态表达式留给运行时二次守卫，避免静态检查误杀合法代码。
+    # 只对已知读写 API 做路径推导；无法静态解析时按最小权限 fail-closed。
     access_mode = _infer_access_mode(node, function_name)
     target_path_node = _extract_path_node(node, function_name)
     if target_path_node is None:
@@ -661,7 +686,12 @@ def _validate_path_call(
         helper_functions=helper_functions,
     )
     if resolved_path is None:
-        return
+        raise CodeExecutionPermissionError(
+            "unresolved_path",
+            "无法静态确认文件访问路径，请改用 build_output_path()/resolve_input_path()/build_workspace_path()。",
+            detail=f"call: {function_name}(...)",
+            policy=policy,
+        )
 
     if isinstance(resolved_path, HelperPathReference):
         _validate_helper_path_reference(
@@ -812,6 +842,21 @@ def _resolve_path_expression(
 
     if isinstance(node, ast.Call):
         helper_name = _extract_call_name(node)
+        if isinstance(node.func, ast.Attribute) and helper_name == "joinpath":
+            base = _resolve_path_expression(
+                node.func.value, resolved_names, helper_functions
+            )
+            if not isinstance(base, str):
+                return None
+            parts = [base]
+            for arg in node.args:
+                part = _resolve_path_expression(
+                    arg, resolved_names, helper_functions
+                )
+                if not isinstance(part, str):
+                    return None
+                parts.append(part)
+            return str(Path(*parts))
         if helper_name in {"Path", "str"}:
             return (
                 _resolve_path_expression(node.args[0], resolved_names, helper_functions)
