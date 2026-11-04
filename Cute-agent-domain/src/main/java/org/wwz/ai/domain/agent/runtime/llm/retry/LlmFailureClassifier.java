@@ -339,10 +339,6 @@ public final class LlmFailureClassifier {
                     error.getProviderRequestId());
         }
 
-        LlmFailureReason fallbackReason = effectiveStatus != null && effectiveStatus >= 500
-                ? LlmFailureReason.SERVER_ERROR
-                : LlmFailureReason.NETWORK_ERROR;
-
         if (effectiveStatus != null && (effectiveStatus == 401 || effectiveStatus == 403)) {
             return new LlmFailureClassification(
                     LlmErrorCode.PROVIDER_NOT_CONFIGURED, message, LlmFailureReason.AUTH_FAILED, false,

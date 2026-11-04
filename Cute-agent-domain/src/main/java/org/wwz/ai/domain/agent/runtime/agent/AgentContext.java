@@ -462,7 +462,8 @@ public class AgentContext {
 
     /**
      * React 主 Agent 在未显式设置时兜底为 {@code agent_stream}。
-     * 只在 blank 时写入，子 Agent / LTM fork 预先设的值不会被覆盖。
+     * 本 setter 会直接替换当前值；调用方只能在需要设置该帧类型时调用，
+     * 子 Agent / LTM fork 已预置的值不得再被无条件覆盖。
      */
     public void setStreamMessageType(String streamMessageType) {
         this.streamMessageType = streamMessageType;

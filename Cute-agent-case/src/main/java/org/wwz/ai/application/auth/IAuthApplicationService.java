@@ -12,6 +12,12 @@ import org.wwz.ai.application.auth.result.AuthResult;
 import org.wwz.ai.application.auth.result.IssuedAuthToken;
 import org.wwz.ai.application.auth.JwtTokenService.AuthenticatedAccount;
 
+/**
+ * Authentication application service.
+ * <p>Command arguments are nullable at this boundary: implementations convert missing command
+ * data into failure results instead of throwing. {@code logout(null)} is a no-op success, and
+ * {@link #verifyAccessToken(String)} returns {@code null} for a null or invalid token.</p>
+ */
 public interface IAuthApplicationService {
 
     long REFRESH_SLIDING_DAYS = 30;
