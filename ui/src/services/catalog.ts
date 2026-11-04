@@ -14,7 +14,7 @@ export interface CatalogSubAgentRecord {
   displayName?: string;
   whenToUse: string;
   toolSummary?: string[];
-  toolPolicyMode?: "inherit" | "custom" | string;
+  toolPolicyMode?: "inherit" | "custom";
   maxSteps?: number | null;
   status?: number;
 }

@@ -12,8 +12,6 @@ declare global {
       }
     }
 
-    type History = MsgItem[]
-
     // 接口数据
     type MsgItem = {
       logId: number
@@ -26,13 +24,6 @@ declare global {
       question: Question
       answer: Answer
       taskStatus: number
-    }
-
-    type FileItem =  {
-      name: string,
-      url: string,
-      type: string,
-      size: number
     }
 
     interface Question {
@@ -176,15 +167,6 @@ declare global {
       mimeType?: string | null
       missing?: boolean
       missingReason?: string | null
-    }
-
-    type ToolResultDataType = {
-      pageName: string;
-      name: string;
-      pageContent: string;
-      page_content: string;
-      sourceUrl: string;
-      source_url: string;
     }
 
     interface ResultMap {
@@ -339,7 +321,7 @@ declare global {
       originFileName?: string
     }
 
-    type EventResult = object
+    type EventResult = Record<string, unknown>
   }
 
 }

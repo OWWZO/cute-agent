@@ -17,10 +17,6 @@ export function getDeviceId(): string {
   return runtimeDeviceId;
 }
 
-export function getDeviceHeaders(): Record<string, string> {
-  return { "X-Device-Id": getDeviceId() };
-}
-
 export interface ConversationSessionItem {
   sessionId: string;
   title: string;

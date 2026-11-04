@@ -126,20 +126,3 @@ export type DockTaskItem = {
  * 仍挂在既有 resultMap 上，不另开第二套协议。
  */
 export type SubAgentProgressKind = "heartbeat" | "text" | "line";
-
-export type SubAgentProgressPayload = {
-  kind?: SubAgentProgressKind;
-  agentId?: string;
-  agentType?: string;
-  description?: string;
-  status?: string;
-  phase?: AgentPhase | string;
-  elapsedMs?: number;
-  /** kind=text 时追加到 live text */
-  text?: string;
-  /** kind=line 时追加一行进度 */
-  line?: string;
-  parentToolUseId?: string;
-  subAgentId?: string;
-  runInBackground?: boolean;
-};

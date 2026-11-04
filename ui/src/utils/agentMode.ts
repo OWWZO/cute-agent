@@ -7,10 +7,3 @@ export function isPlanSolveConversation(
 ) {
   return Boolean(deepThink) || agentType === AGENT_TYPE_DEEP_THINK;
 }
-
-export function isStructuredConversation(
-  agentType?: number,
-  deepThink?: boolean
-) {
-  return isPlanSolveConversation(agentType, deepThink);
-}
