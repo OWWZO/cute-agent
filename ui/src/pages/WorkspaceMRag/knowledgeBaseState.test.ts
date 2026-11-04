@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildDeleteKnowledgeBaseConfirm,
   resolveKnowledgeBaseAfterDeletion,
   resolveSelectedKnowledgeBaseId,
   shouldBootstrapKnowledgeBases,
@@ -66,5 +67,24 @@ describe("knowledgeBaseState", () => {
       )
     ).toBe("kb-2");
     expect(resolveKnowledgeBaseAfterDeletion([], "", "kb-1")).toBe("");
+  });
+
+  it("删除确认框明确标注不可恢复，并且只在 onOk 中执行删除", async () => {
+    let deleteCalls = 0;
+    const options = buildDeleteKnowledgeBaseConfirm(async () => {
+      deleteCalls += 1;
+    });
+
+    expect(options).toMatchObject({
+      title: "确认删除这个知识库吗？",
+      okText: "确认删除",
+      cancelText: "取消",
+      danger: true,
+    });
+    expect(options.content).toContain("不可恢复");
+    expect(deleteCalls).toBe(0);
+
+    await options.onOk();
+    expect(deleteCalls).toBe(1);
   });
 });

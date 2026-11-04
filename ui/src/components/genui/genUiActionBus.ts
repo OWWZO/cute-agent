@@ -85,6 +85,28 @@ function isSafeHref(url: string): boolean {
   return true;
 }
 
+/**
+ * navigate 只允许站内相对路径与 http(s) 绝对地址。
+ * 不能用 isSafeHref 的黑名单：`java\nscript:` 之类可以借浏览器解析绕过前缀匹配。
+ */
+function isSafeNavigateRoute(route: string): boolean {
+  const value = route.trim();
+  if (!value) return false;
+  try {
+    // 浏览器解析 URL 时会忽略制表符/换行，因此必须在解析后检查最终 protocol，
+    // 不能只看原始字符串前缀（`java\nscript:` 就是一个典型绕过）。
+    const base = new URL("https://genui.invalid");
+    const parsed = new URL(value, base);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return false;
+    }
+    // 未显式写 scheme 时必须是同源路径，拒绝 `//evil.com` 这类协议相对地址。
+    return /^[a-z][a-z0-9+.-]*:/i.test(value) || parsed.origin === base.origin;
+  } catch {
+    return false;
+  }
+}
+
 function isUiPatchArray(
   value: unknown
 ): value is Array<{ op: string; path: string; value?: unknown }> {
@@ -135,7 +157,7 @@ export function normalizeAction(
       }
       case "navigate": {
         const route = typeof payload.route === "string" ? payload.route : "";
-        if (!route) return null;
+        if (!isSafeNavigateRoute(route)) return null;
         return { type: "navigate", payload: { route } };
       }
       case "patch_ui": {

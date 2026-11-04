@@ -54,3 +54,17 @@ export function resolveKnowledgeBaseAfterDeletion(
     currentKnowledgeBaseId === deletedKnowledgeBaseId ? "" : currentKnowledgeBaseId
   );
 }
+
+export function buildDeleteKnowledgeBaseConfirm(
+  onConfirm: () => void | Promise<void>
+) {
+  return {
+    title: "确认删除这个知识库吗？",
+    content:
+      "删除后会同时清理向量数据、文件记录和正文回显记录，且不可恢复。",
+    okText: "确认删除",
+    cancelText: "取消",
+    danger: true,
+    onOk: onConfirm,
+  } as const;
+}

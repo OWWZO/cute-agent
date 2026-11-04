@@ -114,6 +114,7 @@ function ActionButton(props: {
   href?: string;
   loading?: boolean;
   disabled?: boolean;
+  ariaLabel?: string;
   variant?: "primary" | "secondary" | "danger" | "ghost";
 }) {
   const {
@@ -123,6 +124,7 @@ function ActionButton(props: {
     href,
     loading,
     disabled,
+    ariaLabel,
     variant = "secondary",
   } = props;
 
@@ -162,6 +164,7 @@ function ActionButton(props: {
   return (
     <button
       type="button"
+      aria-label={ariaLabel}
       onClick={onClick}
       disabled={disabled || loading}
       className={className}
@@ -1170,6 +1173,7 @@ export function WorkspaceMRagView(props: WorkspaceMRagViewProps) {
               <ActionButton
                 label="删除库"
                 icon={<Trash2 className="h-3.5 w-3.5" />}
+                ariaLabel="删除当前知识库"
                 onClick={() => onDeleteKnowledgeBase(selectedKnowledgeBase.id)}
                 loading={deletingKnowledgeBaseId === selectedKnowledgeBase.id}
                 variant="danger"
