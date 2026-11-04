@@ -7,11 +7,17 @@
 """
 from datetime import datetime
 
-from sqlalchemy import String, func
 from typing import Annotated
 
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, declared_attr, mapped_column
+from sqlalchemy import String, func
 from sqlalchemy.ext.asyncio import AsyncAttrs
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    MappedAsDataclass,
+    declared_attr,
+    mapped_column,
+)
 
 
 class MappedBase(AsyncAttrs, DeclarativeBase):

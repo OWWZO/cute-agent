@@ -174,7 +174,7 @@ class ExcelReaderTool(SyncTool):
                 f"File looks like legacy OLE Excel (.xls) but extension is {suffix}: {file_path}. "
                 "Re-save as real .xlsx and retry."
             )
-        elif head.lstrip().startswith((b"<", b"<!DOCTYPE", b"{", b"HTTP")):
+        elif head.lstrip().startswith((b"<", b"{", b"HTTP")):
             raise ValueError(
                 f"File is not Excel binary (looks like HTML/JSON/text): {file_path}. "
                 "Check upload/download path; file may be an error page renamed to .xlsx."

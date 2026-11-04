@@ -27,7 +27,7 @@ _RETRYABLE_EXCEPTION_NAMES = frozenset(
         "readerror",
         "readtimeout",
         "remoteprotocolerror",
-        "writerror",
+        "writeerror",
         "writetimeout",
     }
 )

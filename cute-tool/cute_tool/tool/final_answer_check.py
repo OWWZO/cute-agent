@@ -62,7 +62,7 @@ class FinalAnswerCheck(object):
             inputs, extra_headers={"x-ms-client-request-id": self.request_id},
         )
         obj = json_repair.loads(chat_message.content)
-        if obj == None or obj == "":
+        if obj is None or obj == "":
             return False, None
         if isinstance(obj, dict) and obj["is_final"] == True:
             return True, self.execution_logs

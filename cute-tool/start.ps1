@@ -71,7 +71,12 @@ try {
         }
 
         if ([string]::IsNullOrWhiteSpace($commandLine)) {
-            $commandLine = "unknown process"
+            $processName = if ($listenerProcess) { [string]$listenerProcess.Name } else { "" }
+            $commandLine = if ($processName) {
+                "$processName (command line unavailable; elevated privileges may be required)"
+            } else {
+                "unknown process"
+            }
         }
         throw "Port $port is already in use by PID $($listener.OwningProcess): $commandLine"
     }
@@ -81,7 +86,7 @@ try {
     try {
         # Python/Uvicorn 会把常规日志写到 stderr，这里避免被 PowerShell 误判成脚本错误。
         $PSNativeCommandUseErrorActionPreference = $false
-        & $pythonExe "server.py" "--workers" $workerCount
+        & $pythonExe "server.py" "--workers" $workerCount "--port" $port
     }
     finally {
         if ($nativeCommandPreferenceExisted) {

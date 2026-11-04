@@ -161,19 +161,23 @@ class AnalysisContext(object):
     @property
     def schemas_markdown(self) -> str:
         """将 schema 转为 Markdown 表格，便于模型阅读。"""
-        schemas = ""
+        schema_blocks: list[str] = []
         for s in self._normalized_schemas():
-            columns = (
-                "| name | type | comment | valueExample |\n| --- | --- | --- | --- |\n"
-            )
-            columns += "\n".join(
+            rows = "\n".join(
                 [
                     f"| {c['name']} | {c['type']} | {c['comment']} | {c['valueExampleMarkdown']} |"
                     for c in s["columns"]
                 ]
             )
-            schemas += f"""\ntable: {s["table"]}\n\ncolumns:\n\n{columns}\n\nnoAnalysisColumns: {s["noAnalysisColumns"]}\n"""
-        return schemas
+            columns = (
+                "| name | type | comment | valueExample |\n"
+                "| --- | --- | --- | --- |\n"
+                f"{rows}"
+            )
+            schema_blocks.append(
+                f"""\ntable: {s["table"]}\n\ncolumns:\n\n{columns}\n\nnoAnalysisColumns: {s["noAnalysisColumns"]}\n"""
+            )
+        return "".join(schema_blocks)
 
     def save_insight(self, df: "pd.DataFrame", insight: str, analysis_process: str):  # type: ignore
         """保存一步分析得到的洞察（数据帧 + 结论 + 过程）。"""
