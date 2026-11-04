@@ -103,7 +103,6 @@ class GetDataTool(Tool):
                 raise AnalysisDataFetchError(message)
             # 一个自然语言查询可能拆成多个结果集；只有维度一致的结果才会被合并。
             df = self.merge_df(base_datas)
-            # dfs = [self.to_df(bd) for bd in base_datas]
             pretty_sql = sqlparse.format(
                 base_datas[0]["nl2sqlResult"],
                 reindent=True,

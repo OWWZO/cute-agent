@@ -129,12 +129,11 @@ class _LinksParser(HTMLParser, _SkipScriptStyleMixin):
 
 
 class _TableState:
-    __slots__ = ("rows", "cur_row", "in_thead", "cell_parts", "in_cell", "cell_tag")
+    __slots__ = ("rows", "cur_row", "cell_parts", "in_cell", "cell_tag")
 
     def __init__(self) -> None:
         self.rows: list[list[tuple[str, str]]] = []
         self.cur_row: list[tuple[str, str]] | None = None
-        self.in_thead = False
         self.cell_parts: list[str] = []
         self.in_cell = False
         self.cell_tag = "td"
@@ -159,11 +158,7 @@ class _TablesParser(HTMLParser, _SkipScriptStyleMixin):
         if not self._stack:
             return
         st = self._stack[-1]
-        if t == "thead":
-            st.in_thead = True
-        elif t == "tbody" or t == "tfoot":
-            st.in_thead = False
-        elif t == "tr":
+        if t == "tr":
             st.cur_row = []
         elif t in ("td", "th"):
             st.in_cell = True
