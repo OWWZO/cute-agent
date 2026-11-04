@@ -95,8 +95,9 @@ class FileManageApiTest(unittest.TestCase):
             self.assertEqual(200, response.status_code)
             self.assertTrue(response.headers["content-type"].startswith("text/html"))
             self.assertTrue(
-                response.headers["content-disposition"].startswith("inline")
+                response.headers["content-disposition"].startswith("attachment")
             )
+            self.assertEqual("sandbox", response.headers["content-security-policy"])
             self.assertIn(
                 "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js",
                 response.text,
@@ -191,3 +192,85 @@ class FileManageApiTest(unittest.TestCase):
                 self.assertEqual("poster.png", saved_path.name)
             finally:
                 FileDB._work_dir = original_work_dir
+
+    def test_should_reject_register_file_outside_allowed_roots(self):
+        app = FastAPI()
+        app.include_router(router, prefix="/v1/file_tool")
+        client = TestClient(app, raise_server_exceptions=False)
+        with tempfile.TemporaryDirectory(prefix="file-manage-allowed-") as allowed_dir:
+            with tempfile.TemporaryDirectory(prefix="file-manage-outside-") as outside_dir:
+                outside_file = Path(outside_dir) / "secret.txt"
+                outside_file.write_text("secret", encoding="utf-8")
+                with patch.dict(
+                    "os.environ",
+                    {"FILE_SAVE_PATH": allowed_dir},
+                    clear=False,
+                ):
+                    response = client.post(
+                        "/v1/file_tool/register_file",
+                        json={
+                            "requestId": "session-register",
+                            "fileName": "secret.txt",
+                            "localPath": str(outside_file),
+                        },
+                    )
+
+        self.assertEqual(500, response.status_code)
+
+    def test_should_allow_register_file_under_file_save_root(self):
+        with tempfile.TemporaryDirectory(prefix="file-manage-allowed-") as allowed_dir:
+            allowed_file = Path(allowed_dir) / "allowed.txt"
+            allowed_file.write_text("ok", encoding="utf-8")
+            app = FastAPI()
+            app.include_router(router, prefix="/v1/file_tool")
+            client = TestClient(app, raise_server_exceptions=False)
+            file_info = SimpleNamespace(
+                request_id="session-register",
+                filename="allowed.txt",
+                file_size=allowed_file.stat().st_size,
+            )
+            with patch.dict(
+                "os.environ",
+                {"FILE_SAVE_PATH": allowed_dir},
+                clear=False,
+            ), patch(
+                "cute_tool.api.file_manage.FileInfoOp.add_by_existing_path",
+                new=AsyncMock(return_value=file_info),
+            ):
+                response = client.post(
+                    "/v1/file_tool/register_file",
+                    json={
+                        "requestId": "session-register",
+                        "fileName": "allowed.txt",
+                        "localPath": str(allowed_file),
+                    },
+                )
+
+        self.assertEqual(200, response.status_code)
+
+    def test_existing_path_registration_should_reject_outside_allowed_roots(self):
+        with tempfile.TemporaryDirectory(prefix="file-manage-allowed-") as allowed_dir:
+            with tempfile.TemporaryDirectory(
+                prefix="file-manage-outside-"
+            ) as outside_dir:
+                outside_file = Path(outside_dir) / "secret.txt"
+                outside_file.write_text("secret", encoding="utf-8")
+                with patch.dict(
+                    "os.environ",
+                    {"FILE_SAVE_PATH": allowed_dir},
+                    clear=False,
+                ), patch(
+                    "cute_tool.db.file_table_op.FileInfoOp.add",
+                    new=AsyncMock(return_value=SimpleNamespace()),
+                ) as add:
+                    with self.assertRaises(PermissionError):
+                        asyncio.run(
+                            FileInfoOp.add_by_existing_path(
+                                filename="secret.txt",
+                                local_path=str(outside_file),
+                                file_id="file-secret",
+                                request_id="session-register",
+                            )
+                        )
+
+        add.assert_not_awaited()

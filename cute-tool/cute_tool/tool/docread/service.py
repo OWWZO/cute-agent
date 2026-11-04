@@ -126,14 +126,11 @@ _WRITE_OPS = frozenset(
 
 
 def _resolve_existing(val: str, request_id: str, workspace_root: str | None) -> str:
-    try:
-        return str(
-            resolve_input_path(
-                val, request_id=request_id, workspace_root=workspace_root
-            )
+    return str(
+        resolve_input_path(
+            val, request_id=request_id, workspace_root=workspace_root
         )
-    except FileNotFoundError:
-        return val
+    )
 
 
 def _run_sync_tool(
@@ -146,11 +143,46 @@ def _run_sync_tool(
     op = str(clean.get("operation") or "read").strip().lower()
     is_write = op in _WRITE_OPS
 
-    # 输入路径解析为已存在文件，输出路径解析到当前会话工作区；读写使用不同解析器避免越界或覆盖错误位置。
-    # Always try to resolve readable file_path when present (even if also output_path_params)
-    for key in ("file_path", "file_path_2", *path_keys):
-        if key in out_keys and is_write and key == "file_path":
-            # write/create: ensure parent under session root
+    try:
+        # 输入路径解析为已存在文件，输出路径解析到当前会话工作区；读写使用不同解析器避免越界或覆盖错误位置。
+        # Always try to resolve readable file_path when present (even if also output_path_params)
+        for key in ("file_path", "file_path_2", *path_keys):
+            if key in out_keys and is_write and key == "file_path":
+                # write/create: ensure parent under session root
+                val = clean.get(key)
+                if isinstance(val, str) and val.strip():
+                    clean[key] = str(
+                        resolve_output_path(
+                            val,
+                            request_id=request_id,
+                            workspace_root=workspace_root,
+                            default_name=Path(val).name,
+                        )
+                    )
+                continue
+            val = clean.get(key)
+            if isinstance(val, str) and val.strip():
+                clean[key] = _resolve_existing(val, request_id, workspace_root)
+            elif key == "source_files" and isinstance(clean.get(key), list):
+                clean[key] = [
+                    _resolve_existing(item, request_id, workspace_root)
+                    if isinstance(item, str)
+                    else item
+                    for item in clean[key]
+                ]
+
+        if isinstance(clean.get("merge_files"), list):
+            clean["merge_files"] = [
+                _resolve_existing(item, request_id, workspace_root)
+                if isinstance(item, str)
+                else item
+                for item in clean["merge_files"]
+            ]
+
+        for key in out_keys:
+            if key == "file_path":
+                # read/query/stats 时 file_path 是输入，不能误当输出改写。
+                continue
             val = clean.get(key)
             if isinstance(val, str) and val.strip():
                 clean[key] = str(
@@ -161,39 +193,9 @@ def _run_sync_tool(
                         default_name=Path(val).name,
                     )
                 )
-            continue
-        val = clean.get(key)
-        if isinstance(val, str) and val.strip():
-            clean[key] = _resolve_existing(val, request_id, workspace_root)
-        elif key == "source_files" and isinstance(clean.get(key), list):
-            clean[key] = [
-                _resolve_existing(item, request_id, workspace_root)
-                if isinstance(item, str)
-                else item
-                for item in clean[key]
-            ]
-
-    if isinstance(clean.get("merge_files"), list):
-        clean["merge_files"] = [
-            _resolve_existing(item, request_id, workspace_root)
-            if isinstance(item, str)
-            else item
-            for item in clean["merge_files"]
-        ]
-
-    for key in out_keys:
-        if key == "file_path" and is_write:
-            continue  # already handled
-        val = clean.get(key)
-        if isinstance(val, str) and val.strip():
-            clean[key] = str(
-                resolve_output_path(
-                    val,
-                    request_id=request_id,
-                    workspace_root=workspace_root,
-                    default_name=Path(val).name,
-                )
-            )
+    except (FileNotFoundError, ValueError) as exc:
+        logger.warning(f"docread path validation failed: {exc}")
+        return _fail(str(exc))
 
     context = _ctx(request_id, workspace_root)
     try:

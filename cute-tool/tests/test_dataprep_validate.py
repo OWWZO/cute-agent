@@ -2,6 +2,7 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
+import numpy as np
 import pandas as pd
 
 from cute_tool.tool.dataprep.data_validate import DataValidateTool
@@ -39,6 +40,19 @@ class DataValidateToolTest(unittest.TestCase):
 
         self.assertTrue(result["valid"])
         self.assertEqual([], result["errors"])
+
+    def test_should_accept_numpy_integer_scalar_as_integer(self):
+        self.assertNotIsInstance(np.int64(1), int)
+        self.assertIsInstance(np.int64(1), np.integer)
+        self.assertNotIsInstance(np.int64(1), np.floating)
+        # object 列保留 numpy 标量，直接覆盖 items() 产出 numpy.int64 的真实路径。
+        df = pd.DataFrame(
+            {"id": pd.Series([np.int64(1), np.int64(2)], dtype=object)}
+        )
+
+        errors = DataValidateTool()._check_type(df, "id", "integer", pd)
+
+        self.assertEqual([], errors)
 
 
 class DataprepExecutorTest(unittest.IsolatedAsyncioTestCase):

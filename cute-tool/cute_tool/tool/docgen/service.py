@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import re
 import uuid
 from datetime import datetime
@@ -563,12 +564,12 @@ def fill_template(
     from jinja2 import (
         BaseLoader,
         ChoiceLoader,
-        Environment,
         FileSystemLoader,
         StrictUndefined,
         Undefined,
         select_autoescape,
     )
+    from jinja2.sandbox import SandboxedEnvironment
     from jinja2.exceptions import TemplateError, TemplateSyntaxError, UndefinedError
 
     template_source = params.get("template_source") or "string"
@@ -614,7 +615,7 @@ def fill_template(
         )
     else:
         autoescape_config = False
-    env = Environment(
+    env = SandboxedEnvironment(
         loader=loader,
         undefined=undefined_class,
         autoescape=autoescape_config,
@@ -659,12 +660,37 @@ def fill_template(
             raise ValueError("template_string is required for 'string' source")
         template = env.from_string(template_string)
     elif template_source == "url":
+        import ipaddress
         import requests
+        from urllib.parse import urlparse
 
         template_url = params.get("template_url")
         if not template_url:
             raise ValueError("template_url is required for 'url' source")
-        resp = requests.get(template_url, timeout=30)
+        parsed = urlparse(template_url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("Only http(s) template URLs are allowed")
+        try:
+            host = parsed.hostname
+            if not host:
+                raise ValueError("template_url host is required")
+            for resolved in socket.getaddrinfo(host, None):
+                ip = ipaddress.ip_address(resolved[4][0])
+                if (
+                    ip.is_private
+                    or ip.is_loopback
+                    or ip.is_link_local
+                    or ip.is_reserved
+                    or ip.is_multicast
+                    or ip.is_unspecified
+                ):
+                    raise ValueError("Private or internal template URLs are not allowed")
+        except ValueError:
+            raise
+        # 不跟随重定向：即使初始 host 是公网地址，重定向目标仍可能是内网。
+        resp = requests.get(template_url, timeout=30, allow_redirects=False)
+        if 300 <= resp.status_code < 400:
+            raise ValueError("Template URL redirects are not allowed")
         resp.raise_for_status()
         template = env.from_string(resp.text)
     else:

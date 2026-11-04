@@ -247,11 +247,13 @@ class PDFReaderTool(SyncTool):
         *,
         on_progress: ToolProgressCallback | None = None,
     ) -> ToolResult:
-        return await super().run(
+        result = self.execute_sync(
             normalize_pdf_reader_params(params),
             context,
-            on_progress=on_progress,
         )
+        if on_progress is not None:
+            on_progress({"message": "PDF processing complete"})
+        return ToolResult.ok(data=result)
 
     def execute_sync(self, params: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         operation = (params.get("operation") or "read").strip().lower()
