@@ -154,6 +154,25 @@ function formatFont(style: WebElementStyleSummary | undefined): string {
   return [style.fontSize, style.fontFamily].filter(Boolean).join(" ");
 }
 
+function buildMarkdownFence(value: string): string {
+  const longestRun = Math.max(0, ...Array.from(value.matchAll(/`+/gu), (match) => match[0].length));
+  return "`".repeat(Math.max(3, longestRun + 1));
+}
+
+function appendFencedSection(
+  lines: string[],
+  label: string,
+  value: string | undefined,
+  language?: string
+): void {
+  const normalized = truncateMarkdownValue(value);
+  if (!normalized) {
+    return;
+  }
+  const fence = buildMarkdownFence(normalized);
+  lines.push("", `${label}:`, language ? `${fence}${language}` : fence, normalized, fence);
+}
+
 function buildWebElementMarkdown(payload: WebElementPayload): string {
   const lines = [
     "## Element",
@@ -181,20 +200,9 @@ function buildWebElementMarkdown(payload: WebElementPayload): string {
     );
   }
 
-  const text = truncateMarkdownValue(payload.text);
-  if (text) {
-    lines.push("", "Text:", "```", text, "```");
-  }
-
-  const nearbyText = truncateMarkdownValue(payload.nearbyText);
-  if (nearbyText) {
-    lines.push("", "Nearby context:", "```", nearbyText, "```");
-  }
-
-  const htmlExcerpt = truncateMarkdownValue(payload.htmlExcerpt);
-  if (htmlExcerpt) {
-    lines.push("", "HTML excerpt:", "```html", htmlExcerpt, "```");
-  }
+  appendFencedSection(lines, "Text", payload.text);
+  appendFencedSection(lines, "Nearby context", payload.nearbyText);
+  appendFencedSection(lines, "HTML excerpt", payload.htmlExcerpt, "html");
 
   return lines.join("\n");
 }
@@ -224,10 +232,11 @@ function readField(rawItem: string, label: string): string {
 
 function readFencedSection(rawItem: string, label: string): string {
   const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`${escapedLabel}:\\s*\\n\`\`\`(?:html)?\\n([\\s\\S]*?)\\n\`\`\``, "m").exec(
-    rawItem
-  );
-  return match?.[1]?.trim() ?? "";
+  const match = new RegExp(
+    `${escapedLabel}:\\s*\\n(\`{3,})(?:[a-z][a-z0-9_-]*)?\\n([\\s\\S]*?)\\n\\1(?:\\n|$)`,
+    "m"
+  ).exec(rawItem);
+  return match?.[2]?.trim() ?? "";
 }
 
 function parseFontSummary(font: string): Pick<WebElementStyleSummary, "fontFamily" | "fontSize"> {
@@ -287,6 +296,38 @@ function parseElementItem(rawItem: string, index: number): WebElementAttachment 
   };
 }
 
+function splitWebElementItems(rawBlock: string): string[] {
+  const items: string[] = [];
+  let current: string[] = [];
+  let fenceLength = 0;
+
+  for (const line of rawBlock.split("\n")) {
+    const fence = /^(`{3,})(?:[a-z][a-z0-9_-]*)?\s*$/iu.exec(line.trim());
+    if (fenceLength === 0) {
+      if (/^## Element(?:\s+\d+)?$/u.test(line.trim()) && current.length > 0) {
+        items.push(current.join("\n"));
+        current = [line];
+      } else {
+        current.push(line);
+      }
+      if (fence) {
+        fenceLength = fence[1]?.length ?? 0;
+      }
+      continue;
+    }
+
+    current.push(line);
+    if (fence && fence[1]?.length === fenceLength) {
+      fenceLength = 0;
+    }
+  }
+
+  if (current.length > 0) {
+    items.push(current.join("\n"));
+  }
+  return items;
+}
+
 export function parsePromptWebElementContexts(content: string): ParsedWebElementPrompt {
   const blockMatch = /(?:^|\n\n)# Web page elements:\s*\n\n([\s\S]*?)\s*$/.exec(content);
   if (!blockMatch) {
@@ -298,8 +339,7 @@ export function parsePromptWebElementContexts(content: string): ParsedWebElement
     return { visibleContent: content, webElementContexts: [] };
   }
 
-  const rawItems = rawBlock
-    .split(/\n(?=## Element(?:\s+\d+)?\n)/)
+  const rawItems = splitWebElementItems(rawBlock)
     .map((item) => item.trim())
     .filter(Boolean);
   const webElementContexts = rawItems
