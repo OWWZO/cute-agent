@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 子 Agent 执行引擎。
  * 阻塞跑完嵌套 ReactImplAgent（LLM 侧流式），只把结论文本回传主 Agent。
- * 结束后将 Memory 投影到 working_memory scope=sub:{agentId}，支持再次唤醒。
+ * 结束后将 Memory 投影到子会话自己的 working_memory（scope={@code main}），支持再次唤醒。
  */
 @Slf4j
 @Component
@@ -112,7 +112,7 @@ public class SubAgentRunner {
     }
 
     /**
-     * @param resumeAgentId 非空时从 working_memory sub scope hydrate 并续跑同一 agentId
+     * @param resumeAgentId 非空时从子会话的 working_memory hydrate 并续跑同一 agentId
      */
     public SubAgentResult run(AgentContext parentContext,
                               String description,
@@ -641,9 +641,9 @@ public class SubAgentRunner {
     /**
      * 子 Agent 工作记忆落库。
      * <p>
-     * 作用域键仍是 <b>父会话 sessionId</b>：{@code sub:{agentId}} 侧链是 resume 的承载，
-     * 而 {@link #hasPersistedMemory} / resume 分支都按父会话寻址。若跟着子 sessionId 走，
-     * 唤醒时会读到空投影。子会话自己的 ledger run 与这条记忆侧链互不相干。
+     * 作用域键是 <b>childSessionId</b>，scope 为 {@code main}：
+     * {@link #hasPersistedMemory} / resume 分支都按同一子会话寻址。
+     * 子会话自己的 ledger run 与 working_memory 行使用相同会话键。
      *
      * @return true 若成功写入至少一条投影
      */

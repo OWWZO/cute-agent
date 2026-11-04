@@ -12,6 +12,11 @@ public interface TasklistPersistencePort {
     /** 可能返回 {@code null}；调用方需做空值兜底。 */
     List<SessionTaskItem> loadTodos(String sessionId);
 
+    /**
+     * 返回生成 todo id 所用的单调高水位。
+     * <p>实现必须包含软删除行：{@code replaceTodos} 会软删旧行后重新发放 id，
+     * 若这里退回为当前可见行的最大值，后续生成的新 id 会与软删除行冲突。</p>
+     */
     int loadTodoHighWaterMark(String sessionId);
 
     void upsertTodo(String sessionId, SessionTaskItem item);

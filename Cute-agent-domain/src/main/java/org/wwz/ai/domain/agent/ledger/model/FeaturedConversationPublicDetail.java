@@ -37,6 +37,10 @@ public class FeaturedConversationPublicDetail {
 
     private LocalDateTime contentLastActiveAt;
 
+    /**
+     * 公共历史内容是否可读取。null 表示调用方未显式设置；消费方应按
+     * {@code Boolean.TRUE.equals(getContentAvailable())} 处理，不能直接拆箱。
+     */
     private Boolean contentAvailable;
 
     private String contentUnavailableReason;

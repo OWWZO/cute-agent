@@ -26,7 +26,9 @@ public interface ConversationFilePort {
      * @param sessionId        会话 ID，必填
      * @param originalFileName 原始文件名；为空白时实现回退为 {@code uploaded-file}
      * @param contentType      MIME 类型；为 null 时按 {@code application/octet-stream} 处理
-     * @param size             文件字节数，作为 multipart 的内容长度提示
+     * @param size             文件实际字节数；实现会将其作为 multipart Content-Length，
+     *                         并在上游未返回大小时作为结果元数据兜底，调用方必须保证其与
+     *                         {@code content} 的实际长度一致
      * @param content          文件内容流，非 null
      * @return 非 null 的上传结果
      */
