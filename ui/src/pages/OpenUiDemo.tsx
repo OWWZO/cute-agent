@@ -42,7 +42,7 @@ export default function OpenUiDemo() {
     setStreaming(false);
   }, []);
 
-  useEffect(() => stopStreaming, [stopStreaming]);
+  useEffect(() => () => stopStreaming(), [stopStreaming]);
 
   const startStreaming = useCallback(() => {
     stopStreaming();
