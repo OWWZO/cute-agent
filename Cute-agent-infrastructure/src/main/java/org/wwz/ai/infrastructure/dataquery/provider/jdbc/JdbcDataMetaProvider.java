@@ -48,13 +48,13 @@ public class JdbcDataMetaProvider implements DataMetaProvider<JdbcQueryRequest> 
     public List<DataQueryTableColumn> getTableColumnsOfSql(JdbcQueryRequest request) throws SQLException {
         try (ConnectionWrapper wrapper = getConnection(request.getJdbcConnectionConfig())) {
             // 元数据查询同样使用方言格式化和 limit，保证字段探测与真正执行 SQL 的约束一致。
-            request.setSql(wrapper.getJdbcDialect().formatSql(request.getSql()));
-            log.info("jdbc meta 执行sql:{}", request.getSql());
+            String formattedSql = wrapper.getJdbcDialect().formatSql(request.getSql());
+            log.info("jdbc meta 执行sql:{}", formattedSql);
             List<DataQueryTableColumn> columnList = new ArrayList<>();
             try (Connection connection = wrapper.getConnection()) {
             try (
                     Statement ps = wrapper.createStatement(connection, request.getLimit());
-                    ResultSet rs = ps.executeQuery(request.getSql())) {
+                    ResultSet rs = ps.executeQuery(formattedSql)) {
                 ResultSetMetaData metaData = rs.getMetaData();
                 int columnCount = metaData.getColumnCount();
 

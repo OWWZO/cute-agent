@@ -13,6 +13,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 
@@ -29,7 +30,31 @@ public class JdbcDataMetaProviderTest {
         assertEquals(Integer.valueOf(2), columns.get(1).getPosition());
     }
 
+    @Test
+    public void sqlMetadataLookupDoesNotRewriteCallerRequest() throws Exception {
+        AtomicReference<String> executedSql = new AtomicReference<>();
+        JdbcDataMetaProvider provider = providerWithColumns(1, new H2Dialect() {
+            @Override
+            public String formatSql(String sql) {
+                return sql + " FORMATTED";
+            }
+        }, executedSql);
+        JdbcQueryRequest request = new JdbcQueryRequest();
+        request.setSql("SELECT 1");
+        request.setLimit(1);
+
+        provider.getTableColumnsOfSql(request);
+
+        assertEquals("SELECT 1 FORMATTED", executedSql.get());
+        assertEquals("SELECT 1", request.getSql());
+    }
+
     private static JdbcDataMetaProvider providerWithColumns(int columnCount) {
+        return providerWithColumns(columnCount, new H2Dialect(), new AtomicReference<>());
+    }
+
+    private static JdbcDataMetaProvider providerWithColumns(
+            int columnCount, H2Dialect dialect, AtomicReference<String> executedSql) {
         ResultSetMetaData metaData = (ResultSetMetaData) Proxy.newProxyInstance(
                 JdbcDataMetaProviderTest.class.getClassLoader(),
                 new Class<?>[]{ResultSetMetaData.class},
@@ -51,7 +76,10 @@ public class JdbcDataMetaProviderTest {
                 JdbcDataMetaProviderTest.class.getClassLoader(),
                 new Class<?>[]{Statement.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "executeQuery" -> resultSet;
+                    case "executeQuery" -> {
+                        executedSql.set((String) args[0]);
+                        yield resultSet;
+                    }
                     case "close" -> null;
                     default -> throw new UnsupportedOperationException(method.getName());
                 });
@@ -79,7 +107,7 @@ public class JdbcDataMetaProviderTest {
             public void close() {
             }
         };
-        wrapper.setJdbcDialect(new H2Dialect());
+        wrapper.setJdbcDialect(dialect);
         return new JdbcDataMetaProvider() {
             @Override
             protected ConnectionWrapper getConnection(JdbcConnectionConfig config) {
