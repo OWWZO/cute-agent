@@ -38,6 +38,27 @@ public class JdbcDialectPagingSqlTest {
     }
 
     @Test
+    public void formatPagingSqlTreatsZeroAsFirstPage() {
+        String sql = dialect.formatPagingSql(0, 10, "select 1");
+
+        assertFalse(sql, sql.contains("-"));
+        assertEquals("select 1 LIMIT 0,10", sql);
+    }
+
+    @Test
+    public void formatPagingSqlTreatsNegativeAsFirstPage() {
+        String sql = dialect.formatPagingSql(-5, 10, "select 1");
+
+        assertFalse(sql, sql.contains("-"));
+        assertEquals("select 1 LIMIT 0,10", sql);
+    }
+
+    @Test
+    public void formatPagingSqlKeepsFirstPageAtZeroOffset() {
+        assertEquals("select 1 LIMIT 0,10", dialect.formatPagingSql(1, 10, "select 1"));
+    }
+
+    @Test
     public void stripTrailingSemicolonHandlesNull() {
         assertEquals("", JdbcDialect.stripTrailingSemicolon(null));
     }
