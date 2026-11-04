@@ -71,7 +71,12 @@ try {
         }
 
         if ([string]::IsNullOrWhiteSpace($commandLine)) {
-            $commandLine = "unknown process"
+            $processName = if ($listenerProcess) { [string]$listenerProcess.Name } else { "" }
+            $commandLine = if ($processName) {
+                "$processName (command line unavailable; elevated privileges may be required)"
+            } else {
+                "unknown process"
+            }
         }
         throw "Port $port is already in use by PID $($listener.OwningProcess): $commandLine"
     }

@@ -47,8 +47,8 @@ def check_command(
     failure_prefix: str,
 ) -> Any:
     """校验单次远程命令结果，失败时抛 ``RuntimeError(detail 或 prefix + exit_code)``。"""
-    exit_code = getattr(result, "exit_code", None)
-    if exit_code not in (None, 0) or getattr(result, "error", None):
+    if not command_succeeded(result):
+        exit_code = getattr(result, "exit_code", None)
         raise RuntimeError(command_detail(result) or f"{failure_prefix} {exit_code}")
     return result
 
