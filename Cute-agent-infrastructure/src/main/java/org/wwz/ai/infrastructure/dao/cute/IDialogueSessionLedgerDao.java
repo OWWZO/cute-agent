@@ -61,6 +61,11 @@ public interface IDialogueSessionLedgerDao {
     List<DialogueSessionView> queryRecentSessionsByUserId(@Param("userId") String userId,
                                                            @Param("limit") int limit);
 
+    /**
+     * 按 {@code last_active_at DESC, id DESC} 做 keyset 分页。
+     * {@code afterId} 非空时启用游标条件；{@code afterLastActiveAt} 为空仅续查
+     * {@code last_active_at IS NULL} 的记录，两者共同保证同时间戳行不重不漏。
+     */
     List<DialogueSessionView> queryRecentSessionsByUserIdAfter(@Param("userId") String userId,
                                                                 @Param("afterLastActiveAt") LocalDateTime afterLastActiveAt,
                                                                 @Param("afterId") Long afterId,

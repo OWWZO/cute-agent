@@ -16,6 +16,7 @@ public interface IAiClientModelConfigDao {
     int deleteById(Long id);
     int deleteByModelId(String modelId);
     AiClientModelPO queryById(Long id);
+    /** 按 modelId 查询；重复时优先非备用模型，并取 id 最大的一条。 */
     AiClientModelPO queryByModelId(String modelId);
     List<AiClientModelPO> queryAllByModelId(String modelId);
     List<AiClientModelPO> queryByApiId(String apiId);

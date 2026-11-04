@@ -46,7 +46,7 @@ export function matchProviderId(baseUrl?: string): string {
   const u = (baseUrl || "").trim().toLowerCase();
   if (!u) return "custom";
   const hit = PROVIDER_PRESETS.find(
-    (p) => p.id !== "custom" && p.baseUrl && u.startsWith(p.baseUrl.toLowerCase())
+    (p) => p.baseUrl && u.startsWith(p.baseUrl.toLowerCase())
   );
   return hit?.id ?? "custom";
 }

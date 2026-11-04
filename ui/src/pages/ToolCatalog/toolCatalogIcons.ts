@@ -19,7 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-const iconByKey: Record<string, LucideIcon> = {
+const iconByKey: Partial<Record<string, LucideIcon>> = {
   search: Search,
   chart: ChartNoAxesColumnIncreasing,
   "file-input": FileInput,

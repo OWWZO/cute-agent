@@ -37,10 +37,12 @@ public final class JdbcCatalogLoader {
         final List<JdbcCatalogFactory> matchingFactories =
                 foundFactories.stream().filter(f -> f.jdbcDialect() == jdbcDialect).toList();
         if (matchingFactories.isEmpty()) {
-            throw new CatalogException("Could not find any jdbc dialect factory that can handled ");
+            throw new CatalogException(String.format(
+                    "Could not find any jdbc dialect factory that can handle '%s'.", jdbcDialect));
         }
         if (matchingFactories.size() > 1) {
-            throw new JdbcBizException("Multiple jdbc dialect factories can handle");
+            throw new JdbcBizException(String.format(
+                    "Multiple jdbc dialect factories can handle '%s'.", jdbcDialect));
         }
 
         return matchingFactories.get(0).createCatalog();

@@ -96,7 +96,10 @@ export async function resolveInitialSession(params: {
  */
 export function applyInlineReplays(
   conversation: CHAT.ConversationHistory,
-  replays: Record<string, ConversationRunReplay> | null | undefined
+  replays:
+    | Record<string, ConversationRunReplay | null | undefined>
+    | null
+    | undefined
 ): CHAT.ConversationHistory {
   if (!replays) {
     return conversation;
