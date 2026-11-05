@@ -1,4 +1,4 @@
-// Generated from adapter-host/cli-manifest.json. Run pnpm sync:opencli-catalog to refresh.
+// Generated from Cute-BrowserStack/adapter-host/cli-manifest.json. Run pnpm sync:opencli-catalog to refresh.
 import type { OpenCliSiteDefinition } from "./openCliManifestTypes";
 
 export const OPENCLI_SITE_DEFINITIONS: readonly OpenCliSiteDefinition[] = [

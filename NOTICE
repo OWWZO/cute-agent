@@ -2,4 +2,4 @@ Cute includes code derived from OpenCLI
 (https://github.com/jackwener/OpenCLI), Copyright 2025 jackwener.
 Licensed under the Apache License, Version 2.0.
 
-See adapter-host/ and browser-extension/ for the copied runtime and extension sources.
+See Cute-BrowserStack/adapter-host/ and Cute-BrowserStack/browser-extension/ for the copied runtime and extension sources.

@@ -11,10 +11,10 @@ RUN mvn -B -pl Cute-agent-app -am package \
 FROM node:22-bookworm-slim AS opencli-build
 
 WORKDIR /opt/opencli
-COPY adapter-host/package.json adapter-host/package-lock.json ./
-COPY adapter-host/scripts ./scripts
+COPY Cute-BrowserStack/adapter-host/package.json Cute-BrowserStack/adapter-host/package-lock.json ./
+COPY Cute-BrowserStack/adapter-host/scripts ./scripts
 RUN npm ci
-COPY adapter-host/ ./
+COPY Cute-BrowserStack/adapter-host/ ./
 RUN npm run build && npm prune --omit=dev
 
 FROM eclipse-temurin:21-jre AS backend

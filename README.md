@@ -490,10 +490,11 @@ curl http://127.0.0.1:8100/web/health
 
 图片生成和兼容模型上游的地址、凭证通过环境变量配置，不写入源码配置文件。常用变量包括 `AUTOBOTS_AUTOAGENT_IMAGE_GENERATION_BASE_URL`、`AUTOBOTS_AUTOAGENT_IMAGE_GENERATION_API_KEY`、`AUTOBOTS_AUTOAGENT_IMAGE_GENERATION_GROK_BASE_URL` 和 `AUTOBOTS_AUTOAGENT_IMAGE_GENERATION_GROK_API_KEY`；源码启动时在 Java 进程环境中导出，使用 Compose 时可放在 `cute-tool/.env` 中。
 
-浏览器遥控由 Java 后端直接 spawn 仓库内 `adapter-host/`（OpenCLI 1.8.8）。先构建 OpenCLI，再设入口路径：
+浏览器遥控由 Java 后端直接 spawn `Cute-BrowserStack/adapter-host/`（OpenCLI 1.8.8）。先初始化 submodule 并构建 OpenCLI，再设入口路径：
 
 ```bash
-cd adapter-host
+git submodule update --init --recursive
+cd Cute-BrowserStack/adapter-host
 npm install
 npm run build
 ```
@@ -502,11 +503,11 @@ Windows PowerShell：
 
 ```powershell
 $env:CUTE_OPENCLI_COMMAND = "node"
-$env:CUTE_OPENCLI_MAIN = "D:\Java Code\ai-agent\Cute-agent\adapter-host\dist\src\main.js"
+$env:CUTE_OPENCLI_MAIN = "D:\Java Code\ai-agent\Cute-agent\Cute-BrowserStack\adapter-host\dist\src\main.js"
 $env:ADAPTER_HOST_SECRET = "..."
 ```
 
-插件在线时 Agent 会装配 `opencli` 工具，进程带 `OPENCLI_RELAY_URL=http://127.0.0.1:8100/internal/browser/rpc`。Chrome 加载 unpacked 扩展 `browser-extension/`（先 `cd browser-extension && npm install && npm run build`）。用户电脑不要再装 OpenCLI daemon。
+插件在线时 Agent 会装配 `opencli` 工具，进程带 `OPENCLI_RELAY_URL=http://127.0.0.1:8100/internal/browser/rpc`。Chrome 加载 unpacked 扩展 `Cute-BrowserStack/browser-extension/`（先 `cd Cute-BrowserStack/browser-extension && npm install && npm run build`）。用户电脑不要再装 OpenCLI daemon。
 
 #### Agent 浏览器（Kernel 云端服务，可选）
 

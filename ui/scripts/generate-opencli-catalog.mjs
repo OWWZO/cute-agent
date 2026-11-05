@@ -176,7 +176,7 @@ const noLoginSites = new Set([
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const uiDirectory = resolve(scriptDirectory, "..");
 const repositoryDirectory = resolve(uiDirectory, "..");
-const manifestPath = resolve(repositoryDirectory, "adapter-host/cli-manifest.json");
+const manifestPath = resolve(repositoryDirectory, "Cute-BrowserStack/adapter-host/cli-manifest.json");
 const outputPath = resolve(
   uiDirectory,
   "src/pages/ToolCatalog/openCliCatalog.generated.ts",
@@ -247,7 +247,7 @@ if (new Set(duplicateCommands).size !== duplicateCommands.length) {
 }
 
 const generatedContent = [
-  "// Generated from adapter-host/cli-manifest.json. Run pnpm sync:opencli-catalog to refresh.",
+  "// Generated from Cute-BrowserStack/adapter-host/cli-manifest.json. Run pnpm sync:opencli-catalog to refresh.",
   'import type { OpenCliSiteDefinition } from "./openCliManifestTypes";',
   "",
   `export const OPENCLI_SITE_DEFINITIONS: readonly OpenCliSiteDefinition[] = ${JSON.stringify(sites, null, 2)};`,
