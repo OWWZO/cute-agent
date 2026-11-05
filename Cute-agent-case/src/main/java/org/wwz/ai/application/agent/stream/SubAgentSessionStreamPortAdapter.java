@@ -44,26 +44,28 @@ public class SubAgentSessionStreamPortAdapter implements SubAgentSessionStreamPo
     public Printer openChildSessionStream(String childSessionId,
                                           String userId,
                                           String requestId,
-                                          String queryText) {
+                                          String queryText,
+                                          Integer agentType) {
         if (StringUtils.isAnyBlank(childSessionId, requestId)) {
             return null;
         }
         // 主 Agent 类型：handlerMap 与主聊天链共用一份映射，子会话帧复用同一处理
+        Integer effectiveAgentType = agentType == null ? AgentType.REACT.getValue() : agentType;
         AgentExecutionCommand childRequest = AgentExecutionCommand.builder()
                 .requestId(requestId)
                 .sessionId(childSessionId)
                 .userId(userId)
                 .query(queryText)
-                .agentType(AgentType.REACT.getValue())
+                .agentType(effectiveAgentType)
                 .isStream(Boolean.TRUE)
                 .build();
 
         AgentStreamProjection projection = new AgentStreamProjection(
                 null, childRequest, handlerMap, agentSessionEventBus, sessionEventClock,
-                agentTimelineEventProjector);
-        sessionProjectionRegistry.register(childSessionId, projection);
+                agentTimelineEventProjector)
+                .bindRegistry(sessionProjectionRegistry);
         log.info("open child session stream childSessionId={} requestId={}", childSessionId, requestId);
-        return new AgentSessionPrinter(projection, childRequest, AgentType.REACT.getValue());
+        return new AgentSessionPrinter(projection, childRequest, effectiveAgentType);
     }
 
     @Override
@@ -82,7 +84,7 @@ public class SubAgentSessionStreamPortAdapter implements SubAgentSessionStreamPo
         }
         // Printer 不是本适配器产生的实例时，按 sessionId 兜底清理，避免残留活投影
         for (AgentStreamProjection live : sessionProjectionRegistry.listLive(childSessionId)) {
-            sessionProjectionRegistry.unregister(childSessionId, live);
+            live.complete();
         }
     }
 }

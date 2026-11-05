@@ -521,7 +521,8 @@ public class SubAgentRunner {
                     childSessionId,
                     parentContext.getUserId(),
                     childRequestId,
-                    prompt);
+                    prompt,
+                    parentContext.getAgentType());
             if (printer == null) {
                 log.warn("{} open child session stream returned null, fallback childSessionId={}",
                         parentContext.getRequestId(), childSessionId);

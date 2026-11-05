@@ -44,6 +44,7 @@ public class SubAgentSessionStreamIsolationTest {
         Assert.assertEquals("user-1", call.userId);
         Assert.assertNotNull("子 run requestId 必须与投影一致", call.requestId);
         Assert.assertTrue(call.requestId.length() <= 64);
+        Assert.assertEquals(AgentType.PLAN_SOLVE.getValue(), call.agentType);
 
         // 终态收口：子流被关闭一次
         Assert.assertEquals(1, streamPort.closes.size());
@@ -123,13 +124,18 @@ public class SubAgentSessionStreamIsolationTest {
                 .sessionId("parent-session")
                 .userId("user-1")
                 .query("q")
+                .agentType(AgentType.PLAN_SOLVE.getValue())
                 .printer(printer)
                 .toolCollection(new ToolCollection())
                 .runtimeDependencies(dependencies)
                 .build();
     }
 
-    private record StreamCall(String childSessionId, String userId, String requestId, String queryText) {
+    private record StreamCall(String childSessionId,
+                              String userId,
+                              String requestId,
+                              String queryText,
+                              Integer agentType) {
     }
 
     private static final class NoopSessionPort implements SubAgentSessionPort {
@@ -147,8 +153,9 @@ public class SubAgentSessionStreamIsolationTest {
         public Printer openChildSessionStream(String childSessionId,
                                               String userId,
                                               String requestId,
-                                              String queryText) {
-            calls.add(new StreamCall(childSessionId, userId, requestId, queryText));
+                                              String queryText,
+                                              Integer agentType) {
+            calls.add(new StreamCall(childSessionId, userId, requestId, queryText, agentType));
             return new RecordingPrinter();
         }
 
@@ -165,8 +172,9 @@ public class SubAgentSessionStreamIsolationTest {
         public Printer openChildSessionStream(String childSessionId,
                                               String userId,
                                               String requestId,
-                                              String queryText) {
-            calls.add(new StreamCall(childSessionId, userId, requestId, queryText));
+                                              String queryText,
+                                              Integer agentType) {
+            calls.add(new StreamCall(childSessionId, userId, requestId, queryText, agentType));
             throw new IllegalStateException("stream bus down");
         }
 

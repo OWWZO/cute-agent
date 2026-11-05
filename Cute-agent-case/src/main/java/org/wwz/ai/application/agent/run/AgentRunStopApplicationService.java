@@ -67,12 +67,16 @@ public class AgentRunStopApplicationService {
         if (ctx != null) {
             // finishRun 只记录一次用户停止事实，Printer 通知是即时 UI 反馈，两者职责不同，
             // 不能用关闭 SSE 代替 ledger 状态迁移。
-            ExecutionLedgerRunSupport.finishRun(
-                    ctx,
-                    ExecutionLedgerConstants.STATUS_STOPPED,
-                    null,
-                    "USER_STOP",
-                    "用户停止本轮对话");
+            try {
+                ExecutionLedgerRunSupport.finishRun(
+                        ctx,
+                        ExecutionLedgerConstants.STATUS_STOPPED,
+                        null,
+                        "USER_STOP",
+                        "用户停止本轮对话");
+            } catch (Exception e) {
+                log.error("finish stopped run ledger failed, requestId={}", requestId, e);
+            }
             notifyStopped(ctx);
         }
 

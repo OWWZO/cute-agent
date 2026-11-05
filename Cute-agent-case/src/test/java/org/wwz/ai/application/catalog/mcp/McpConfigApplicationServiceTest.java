@@ -70,6 +70,59 @@ public class McpConfigApplicationServiceTest {
         Assert.assertEquals("mcp-1", repository.inserted.getMcpId());
     }
 
+    @Test
+    public void shouldPreserveUnspecifiedFieldsOnPartialUpdateById() {
+        Repository repository = new Repository();
+        repository.existing = AiClientToolMcpConfig.builder()
+                .id(7L)
+                .mcpId("mcp-1")
+                .mcpName("Original")
+                .transportType("sse")
+                .transportConfig("{\"url\":\"http://localhost\"}")
+                .requestTimeout(42)
+                .status(1)
+                .build();
+        McpConfigApplicationService service = new McpConfigApplicationService(repository,
+                reloadSupport(McpRuntimeReloadResult::succeeded));
+
+        ApplicationResult<Boolean> result = service.updateById(new McpConfigCommand(
+                7L, null, null, null, null, null, 0));
+
+        Assert.assertEquals("0000", result.code());
+        Assert.assertEquals("mcp-1", repository.updatedById.getMcpId());
+        Assert.assertEquals("Original", repository.updatedById.getMcpName());
+        Assert.assertEquals("sse", repository.updatedById.getTransportType());
+        Assert.assertEquals("{\"url\":\"http://localhost\"}", repository.updatedById.getTransportConfig());
+        Assert.assertEquals(Integer.valueOf(42), repository.updatedById.getRequestTimeout());
+        Assert.assertEquals(Integer.valueOf(0), repository.updatedById.getStatus());
+    }
+
+    @Test
+    public void shouldPreserveUnspecifiedFieldsOnPartialUpdateByMcpId() {
+        Repository repository = new Repository();
+        repository.existing = AiClientToolMcpConfig.builder()
+                .id(8L)
+                .mcpId("mcp-2")
+                .mcpName("Original")
+                .transportType("stdio")
+                .transportConfig("{\"command\":\"node\"}")
+                .requestTimeout(60)
+                .status(1)
+                .build();
+        McpConfigApplicationService service = new McpConfigApplicationService(repository,
+                reloadSupport(McpRuntimeReloadResult::succeeded));
+
+        ApplicationResult<Boolean> result = service.updateByMcpId(new McpConfigCommand(
+                8L, "mcp-2", null, null, null, null, 0));
+
+        Assert.assertEquals("0000", result.code());
+        Assert.assertEquals("Original", repository.updatedByMcpId.getMcpName());
+        Assert.assertEquals("stdio", repository.updatedByMcpId.getTransportType());
+        Assert.assertEquals("{\"command\":\"node\"}", repository.updatedByMcpId.getTransportConfig());
+        Assert.assertEquals(Integer.valueOf(60), repository.updatedByMcpId.getRequestTimeout());
+        Assert.assertEquals(Integer.valueOf(0), repository.updatedByMcpId.getStatus());
+    }
+
     private static McpWriteReloadSupport reloadSupport(IMcpRuntimeReloadPort port) {
         return new McpWriteReloadSupport(port);
     }
@@ -77,13 +130,17 @@ public class McpConfigApplicationServiceTest {
     private static final class Repository implements IAiClientToolMcpConfigRepository {
         private AiClientToolMcpConfig existing;
         private AiClientToolMcpConfig inserted;
+        private AiClientToolMcpConfig updatedById;
+        private AiClientToolMcpConfig updatedByMcpId;
 
         @Override public boolean insert(AiClientToolMcpConfig config) { inserted = config; return true; }
-        @Override public boolean updateById(AiClientToolMcpConfig config) { return true; }
-        @Override public boolean updateByMcpId(AiClientToolMcpConfig config) { return true; }
+        @Override public boolean updateById(AiClientToolMcpConfig config) { updatedById = config; return true; }
+        @Override public boolean updateByMcpId(AiClientToolMcpConfig config) { updatedByMcpId = config; return true; }
         @Override public boolean deleteById(Long id) { return true; }
         @Override public boolean deleteByMcpId(String mcpId) { return true; }
-        @Override public Optional<AiClientToolMcpConfig> findById(Long id) { return Optional.empty(); }
+        @Override public Optional<AiClientToolMcpConfig> findById(Long id) {
+            return existing != null && id.equals(existing.getId()) ? Optional.of(existing) : Optional.empty();
+        }
         @Override public Optional<AiClientToolMcpConfig> findByMcpId(String mcpId) { return Optional.ofNullable(existing); }
         @Override public List<AiClientToolMcpConfig> findAll() { return List.of(); }
         @Override public List<AiClientToolMcpConfig> findByStatus(Integer status) { return List.of(); }

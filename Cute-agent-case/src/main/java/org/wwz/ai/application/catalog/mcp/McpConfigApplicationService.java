@@ -60,8 +60,8 @@ public class McpConfigApplicationService {
         }
         try {
             AiClientToolMcpConfig config = toConfig(command);
+            config = mergeForUpdate(config, repository.findById(command.id()).orElse(null));
             config.setUpdateTime(LocalDateTime.now());
-            applyWriteDefaults(config);
             boolean changed = repository.updateById(config);
             return writeReloadSupport.afterWrite(changed);
         } catch (Exception e) {
@@ -76,8 +76,8 @@ public class McpConfigApplicationService {
         }
         try {
             AiClientToolMcpConfig config = toConfig(command);
+            config = mergeForUpdate(config, repository.findByMcpId(command.mcpId()).orElse(null));
             config.setUpdateTime(LocalDateTime.now());
-            applyWriteDefaults(config);
             boolean changed = repository.updateByMcpId(config);
             return writeReloadSupport.afterWrite(changed);
         } catch (Exception e) {
@@ -181,13 +181,7 @@ public class McpConfigApplicationService {
         }
     }
 
-    /**
-     * 补齐写入默认值，create / update 都必须走。
-     * <p>
-     * Mapper 的 UPDATE 是静态赋值（{@code transport_type = #{transportType}}），
-     * 不补默认值就会把 NULL 写进可空列，之后 buildDescriptor 三个分支全部落空，
-     * 该 MCP 从运行时静默消失。
-     */
+    /** 只用于新增路径；更新路径必须保留调用方未传字段的库中原值。 */
     private static void applyWriteDefaults(AiClientToolMcpConfig config) {
         if (StringUtils.isBlank(config.getTransportType())) {
             config.setTransportType(McpDefaults.DEFAULT_TRANSPORT_TYPE);
@@ -196,6 +190,34 @@ public class McpConfigApplicationService {
             config.setRequestTimeout(McpDefaults.DEFAULT_REQUEST_TIMEOUT);
         }
         config.setStatus(McpDefaults.normalizeStatus(config.getStatus()));
+    }
+
+    private static AiClientToolMcpConfig mergeForUpdate(AiClientToolMcpConfig config,
+                                                        AiClientToolMcpConfig existing) {
+        if (existing == null) {
+            return config;
+        }
+        if (config.getMcpId() == null) {
+            config.setMcpId(existing.getMcpId());
+        }
+        if (config.getMcpName() == null) {
+            config.setMcpName(existing.getMcpName());
+        }
+        if (config.getTransportType() == null) {
+            config.setTransportType(existing.getTransportType());
+        }
+        if (config.getTransportConfig() == null) {
+            config.setTransportConfig(existing.getTransportConfig());
+        }
+        if (config.getRequestTimeout() == null) {
+            config.setRequestTimeout(existing.getRequestTimeout());
+        }
+        if (config.getStatus() == null) {
+            config.setStatus(existing.getStatus());
+        } else {
+            config.setStatus(McpDefaults.normalizeStatus(config.getStatus()));
+        }
+        return config;
     }
 
     private static AiClientToolMcpConfig toConfig(McpConfigCommand command) {

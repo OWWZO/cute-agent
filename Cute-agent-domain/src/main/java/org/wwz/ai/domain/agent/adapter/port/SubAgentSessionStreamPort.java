@@ -38,12 +38,14 @@ public interface SubAgentSessionStreamPort {
      * @param userId         会话归属用户
      * @param requestId      子 run 的 requestId（与 ledger run 同一）
      * @param queryText      子 Agent 任务 prompt，用于投影初始 query
+     * @param agentType      主 Agent 类型；子会话投影复用主聊天链的 handler
      * @return 子会话领域 Printer；无法隔离时返回 null
      */
     Printer openChildSessionStream(String childSessionId,
                                    String userId,
                                    String requestId,
-                                   String queryText);
+                                   String queryText,
+                                   Integer agentType);
 
     /**
      * 关闭并注销子会话投影流。
