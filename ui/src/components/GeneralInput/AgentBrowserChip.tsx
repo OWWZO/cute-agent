@@ -3,6 +3,7 @@ import { Cloud, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { agentBrowserApi, type AgentBrowserStatus } from "@/services/agentBrowser";
+import { resolveAgentBrowserLiveViewUrl } from "./agentBrowserUrl";
 
 type Props = {
   disabled?: boolean;
@@ -40,7 +41,14 @@ export default function AgentBrowserChip({ disabled }: Props) {
         toast.error("Agent 浏览器地址不可用");
         return;
       }
-      popup.location.replace(liveView.browserLiveViewUrl);
+      const liveViewUrl = resolveAgentBrowserLiveViewUrl(liveView.browserLiveViewUrl);
+      if (!liveViewUrl) {
+        popup.close();
+        console.warn("[AgentBrowserChip] 已拒绝非 http(s) 的 Agent 浏览器地址");
+        toast.error("Agent 浏览器地址不安全，已拒绝打开");
+        return;
+      }
+      popup.location.replace(liveViewUrl);
       await refresh();
     } catch (error) {
       popup.close();

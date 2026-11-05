@@ -48,4 +48,18 @@ describe("resolveGenUiAssetUrl", () => {
       "data:model/gltf-binary;base64,xx"
     );
   });
+
+  it.each([
+    "javascript:alert(1)",
+    "file:///etc/passwd",
+    "ftp://example.com/a.bin",
+  ])("rejects unsafe scheme %s", (value) => {
+    expect(resolveGenUiAssetUrl(value)).toBe("");
+  });
+
+  it("keeps https asset urls", () => {
+    expect(resolveGenUiAssetUrl("https://example.com/a.glb")).toBe(
+      "https://example.com/a.glb"
+    );
+  });
 });
