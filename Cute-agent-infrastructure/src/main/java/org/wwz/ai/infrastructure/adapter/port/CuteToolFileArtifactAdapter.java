@@ -19,6 +19,7 @@ import org.wwz.ai.domain.agent.adapter.port.RemoteHttpPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpRequest;
 import org.wwz.ai.domain.agent.runtime.dto.FileRequest;
 import org.wwz.ai.domain.agent.runtime.dto.FileResponse;
+import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspacePaths;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
@@ -42,6 +44,7 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
     /** 二进制上传的单文件上限，超过上限直接失败，避免把大文件读进传输链路。 */
     private static final long MAX_UPLOAD_BYTES = 200L * 1024 * 1024;
     private static final int UPLOAD_BUFFER_SIZE = 8192;
+    private static final String DEFAULT_ALLOWED_ROOT = "";
 
     /** 本地文件物化模式：共享 workspace 走 register，非共享走 upload。 */
     public static final String MODE_REGISTER = "register";
@@ -49,23 +52,28 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
 
     private final RemoteHttpPort remoteHttpPort;
     private final OkHttpClient sharedClient;
+    private final Path allowedRoot;
 
     private volatile String localFileMode = MODE_REGISTER;
 
     public CuteToolFileArtifactAdapter(RemoteHttpPort remoteHttpPort) {
-        this(remoteHttpPort, new OkHttpClient());
+        this(remoteHttpPort, new OkHttpClient(), MODE_REGISTER, DEFAULT_ALLOWED_ROOT);
     }
 
     public CuteToolFileArtifactAdapter(RemoteHttpPort remoteHttpPort, OkHttpClient sharedClient) {
-        this.remoteHttpPort = Objects.requireNonNull(remoteHttpPort, "RemoteHttpPort must not be null");
-        this.sharedClient = Objects.requireNonNull(sharedClient, "sharedClient must not be null");
+        this(remoteHttpPort, sharedClient, MODE_REGISTER, DEFAULT_ALLOWED_ROOT);
     }
 
     @Autowired
     public CuteToolFileArtifactAdapter(RemoteHttpPort remoteHttpPort,
-                                          OkHttpClient sharedClient,
-                                          @Value("${cute.file-artifact.local-file-mode:register}") String localFileMode) {
-        this(remoteHttpPort, sharedClient);
+                                       OkHttpClient sharedClient,
+                                       @Value("${cute.file-artifact.local-file-mode:register}")
+                                       String localFileMode,
+                                       @Value("${cute.file-artifact.allowed-root:}")
+                                       String allowedRoot) {
+        this.remoteHttpPort = Objects.requireNonNull(remoteHttpPort, "RemoteHttpPort must not be null");
+        this.sharedClient = Objects.requireNonNull(sharedClient, "sharedClient must not be null");
+        this.allowedRoot = resolveAllowedRoot(allowedRoot);
         setLocalFileMode(localFileMode);
     }
 
@@ -98,6 +106,8 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
         if (StringUtils.isBlank(normalizedRequest.getLocalPath())) {
             throw new IllegalArgumentException("localPath must not be blank for register");
         }
+        Path localPath = requireLocalFile(normalizedRequest.getLocalPath());
+        normalizedRequest.setLocalPath(localPath.toString());
         String responseText = remoteHttpPort.execute(RemoteHttpRequest.builder()
                 .method("POST")
                 .url(normalizeBaseUrl(serviceBaseUrl) + "/v1/file_tool/register_file")
@@ -118,10 +128,8 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
         if (StringUtils.isBlank(normalizedRequest.getLocalPath())) {
             throw new IllegalArgumentException("localPath must not be blank for uploadLocalFile");
         }
-        Path localPath = Path.of(normalizedRequest.getLocalPath());
-        if (!Files.isRegularFile(localPath)) {
-            throw new IOException("local file not found: " + normalizedRequest.getLocalPath());
-        }
+        Path localPath = requireLocalFile(normalizedRequest.getLocalPath());
+        normalizedRequest.setLocalPath(localPath.toString());
         long size = Files.size(localPath);
         if (size > MAX_UPLOAD_BYTES) {
             throw new IOException("local file exceeds upload limit, size=" + size + ", limit=" + MAX_UPLOAD_BYTES);
@@ -326,6 +334,52 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
                 .content(request.getContent())
                 .localPath(request.getLocalPath())
                 .build();
+    }
+
+    private Path requireLocalFile(String rawPath) throws IOException {
+        Path candidate;
+        try {
+            candidate = Path.of(rawPath);
+        } catch (InvalidPathException e) {
+            throw new IOException("invalid local file path", e);
+        }
+        if (!candidate.isAbsolute()) {
+            candidate = allowedRoot.resolve(candidate);
+        }
+        Path realRoot;
+        try {
+            realRoot = allowedRoot.toRealPath();
+        } catch (IOException e) {
+            throw new IOException("allowed local file root not found: " + allowedRoot, e);
+        }
+        Path realPath;
+        try {
+            realPath = candidate.toRealPath();
+        } catch (IOException e) {
+            throw new IOException("local file not found: " + rawPath, e);
+        }
+        if (!realPath.startsWith(realRoot)) {
+            throw new IOException("local file is outside allowed root: " + rawPath);
+        }
+        if (!Files.isRegularFile(realPath)) {
+            throw new IOException("local file not found: " + rawPath);
+        }
+        return realPath;
+    }
+
+    private Path resolveAllowedRoot(String configuredRoot) {
+        if (StringUtils.isBlank(configuredRoot)) {
+            return WorkspacePaths.resolveRepoRoot()
+                    .resolve("cute-tool")
+                    .resolve("skilloutput")
+                    .toAbsolutePath()
+                    .normalize();
+        }
+        String expanded = configuredRoot
+                .replace("{repoRoot}", WorkspacePaths.resolveRepoRoot().toString())
+                .replace("${user.dir}", System.getProperty("user.dir", "."))
+                .replace("${java.io.tmpdir}", System.getProperty("java.io.tmpdir", "."));
+        return Path.of(expanded).toAbsolutePath().normalize();
     }
 
     private String normalizeBaseUrl(String serviceBaseUrl) {

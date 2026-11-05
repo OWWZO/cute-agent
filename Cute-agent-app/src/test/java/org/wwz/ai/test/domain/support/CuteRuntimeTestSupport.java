@@ -1,5 +1,6 @@
 package org.wwz.ai.test.domain.support;
 
+import okhttp3.OkHttpClient;
 import org.springframework.core.env.Environment;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.scheduling.concurrent.ConcurrentTaskScheduler;
@@ -113,7 +114,10 @@ public final class CuteRuntimeTestSupport {
                 : new OkHttpRemoteHttpAdapter();
         RemoteStreamPort remoteStreamPort = new OkHttpRemoteStreamAdapter();
         FileArtifactPort fileArtifactPort = new CuteToolFileArtifactAdapter(
-                overrideRemoteHttpPort != null ? overrideRemoteHttpPort : new OkHttpRemoteHttpAdapter());
+                overrideRemoteHttpPort != null ? overrideRemoteHttpPort : new OkHttpRemoteHttpAdapter(),
+                new OkHttpClient(),
+                CuteToolFileArtifactAdapter.MODE_REGISTER,
+                System.getProperty("java.io.tmpdir"));
         Executor sameThreadExecutor = Runnable::run;
 
         return CuteRuntimeDependencies.builder()

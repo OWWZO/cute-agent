@@ -31,6 +31,11 @@ management:
       exposure:
         include: health,info,metrics,prometheus
 
+cute:
+  file-artifact:
+    local-file-mode: register
+    allowed-root: "{repoRoot}/cute-tool/skilloutput"
+
 autobots:
   http:
     # 所有同步 HTTP、SSE、文件和图片客户端共享连接池；虚拟线程不能突破下游连接上限。

@@ -46,7 +46,7 @@ public interface IChatModelMetadataRepository {
      */
     List<ChatModelSchema> listDistinctSchemas(String modelCode);
 
-    /** 逐个插入，不做 upsert；入参为 null/空时为空操作。 */
+    /** 同一事务内批量插入，不做 upsert；入参为 null/空时为空操作。 */
     void saveModelSchemas(List<ChatModelSchema> schemaList);
 
     /** 删除字段行；未命中时为空操作（幂等，可直接重试）。 */
