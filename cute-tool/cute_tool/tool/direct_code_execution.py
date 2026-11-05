@@ -16,6 +16,7 @@ from cute_tool.tool.python_sandbox_executor import (
 )
 from cute_tool.util.blocking_executor import run_blocking
 from cute_tool.util.file_util import download_all_files_in_path, upload_file_by_path
+from cute_tool.util.path_safety import is_path_within_root
 
 # cute-tool 包根：.../cute-tool/cute_tool/tool/this.py → parents[2] = cute-tool
 _CUTE_TOOL_ROOT = Path(__file__).resolve().parents[2]
@@ -63,6 +64,12 @@ async def execute_code(request: CodeExecutionRequest) -> dict:
         str(input_dir),
         workspace_root=str(workspace),
     )
+    imported_files = [
+        item
+        for item in imported_files
+        if item.get("file_path")
+        and is_path_within_root(str(item["file_path"]), workspace)
+    ]
     policy = build_permission_policy(
         profile=request.permission_profile,
         workspace_root=str(workspace),
@@ -137,8 +144,14 @@ async def execute_code(request: CodeExecutionRequest) -> dict:
 def _workspace_path(request: CodeExecutionRequest) -> Path:
     """统一会话工作区：skilloutput/{sessionId}（与 Java workspace_write 对齐）。"""
     if request.workspace_root and str(request.workspace_root).strip():
-        # 显式工作区由调用方负责生命周期；此处只归一化路径，不再追加 session 子目录。
-        return Path(str(request.workspace_root).strip()).expanduser().resolve()
+        # 显式工作区必须位于部署配置允许的根目录内，避免请求体把写入/清理边界指向宿主机任意位置。
+        candidate = Path(str(request.workspace_root).strip()).expanduser().resolve()
+        if not any(
+            is_path_within_root(candidate, root)
+            for root in _allowed_workspace_roots()
+        ):
+            raise ValueError("workspaceRoot is outside allowed workspace roots")
+        return candidate
 
     safe_id = _safe_session_id(request.request_id)
     env_root = (os.getenv("CODE_EXECUTION_WORKSPACE_ROOT") or "").strip()
@@ -153,6 +166,19 @@ def _workspace_path(request: CodeExecutionRequest) -> Path:
         return (Path(skill_root).expanduser().resolve() / safe_id).resolve()
 
     return (_DEFAULT_SKILL_OUTPUT / safe_id).resolve()
+
+
+def _allowed_workspace_roots() -> tuple[Path, ...]:
+    roots = [_DEFAULT_SKILL_OUTPUT]
+    for env_name in (
+        "CODE_EXECUTION_WORKSPACE_ROOT",
+        "SKILL_OUTPUT_ROOT",
+        "CUTE_SKILL_OUTPUT_ROOT",
+    ):
+        value = (os.getenv(env_name) or "").strip()
+        if value:
+            roots.append(Path(value).expanduser().resolve())
+    return tuple(dict.fromkeys(roots))
 
 
 def _safe_session_id(request_id: str) -> str:

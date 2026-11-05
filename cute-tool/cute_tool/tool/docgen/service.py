@@ -16,23 +16,39 @@ from loguru import logger
 
 from cute_tool.docgen.paths import OUTPUT_DIR
 from cute_tool.util.file_util import upload_file_by_path
+from cute_tool.util.path_safety import resolve_within_root, safe_path_segment
 
 
 def _safe_filename(name: str, default_ext: str) -> str:
     base = (name or "").strip() or f"docgen_{uuid.uuid4().hex[:8]}"
     base = os.path.basename(base.replace("\\", "/"))
     base = re.sub(r'[<>:"|?*]+', "_", base)
-    if default_ext and not base.lower().endswith(default_ext.lower()):
+    extension = _safe_extension(default_ext)
+    if extension and not base.lower().endswith(extension.lower()):
         if "." not in Path(base).name:
-            base = f"{base}{default_ext}"
-    return base
+            base = f"{base}{extension}"
+    return safe_path_segment(base, label="output filename")
+
+
+def _safe_extension(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    if not text.startswith("."):
+        text = f".{text}"
+    if not re.fullmatch(r"\.[A-Za-z0-9]{1,16}", text):
+        raise ValueError("default extension must be alphanumeric")
+    return text
 
 
 def resolve_output_path(
     request_id: str, output_path: str | None, default_ext: str
 ) -> Path:
-    rid = (request_id or "default").strip() or "default"
-    root = OUTPUT_DIR / rid
+    rid = safe_path_segment(
+        (request_id or "default").strip() or "default",
+        label="request id",
+    )
+    root = resolve_within_root(OUTPUT_DIR, rid, label="request output root")
     # 所有生成产物按 request_id 隔离，文件名只保留 basename 并做 Windows 保留字符清洗；
     # 这样调用方可以传入用户文件名，但不能借 output_path 穿越到 request 目录之外。
     root.mkdir(parents=True, exist_ok=True)
@@ -40,7 +56,7 @@ def resolve_output_path(
         name = _safe_filename(output_path, default_ext)
     else:
         name = _safe_filename(f"output_{uuid.uuid4().hex[:8]}", default_ext)
-    path = root / name
+    path = resolve_within_root(root, name, label="output path")
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 

@@ -15,6 +15,7 @@ from loguru import logger
 
 from cute_tool.tool.e2b_file_upload import write_e2b_files
 from cute_tool.tool.sandbox_backend_config import get_e2b_workdir
+from cute_tool.util.path_safety import safe_path_segment
 
 SKILLS_DIR = "skills"
 _SKIP_DIR_NAMES = frozenset(
@@ -55,12 +56,16 @@ class SyncManifest:
 
 
 def normalize_session_id(session_id: str) -> str:
-    return (session_id or "").strip() or "anonymous"
+    text = (session_id or "").strip()
+    return safe_path_segment(text, label="session id") if text else "anonymous"
 
 
 def session_remote_root(session_id: str, workdir: str | None = None) -> str:
     root = (workdir or get_e2b_workdir()).rstrip("/")
-    return f"{root}/sessions/{normalize_session_id(session_id)}"
+    remote_root = f"{root}/sessions/{normalize_session_id(session_id)}"
+    if not e2b_remote_path_ok(remote_root):
+        raise ValueError("session remote root is not a safe path")
+    return remote_root
 
 
 def fingerprint_path(workspace: Path) -> Path:
@@ -200,6 +205,8 @@ def scan_local_files(
 
 
 def mkdir_remote(sandbox: Any, remote_root: str) -> None:
+    if not e2b_remote_path_ok(remote_root):
+        raise ValueError("remote root is not a safe path")
     commands = getattr(sandbox, "commands", None)
     run = getattr(commands, "run", None) if commands is not None else None
     if not callable(run):

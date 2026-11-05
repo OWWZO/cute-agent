@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import cute_tool.docgen._structlog as structlog
+from cute_tool.util.path_safety import resolve_within_root, safe_path_segment
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -426,8 +427,12 @@ def get_theme(
 def _load_custom_theme(
     name: str, *, default_name: str, kind: Literal["document", "deck"]
 ) -> Theme | None:
+    try:
+        key = safe_path_segment(name, label="Theme name")
+    except ValueError:
+        return None
     # 缓存键包含主题类型，避免同名 document/deck 主题互相污染；文件解析成功后才入缓存。
-    cache_key = f"{kind}:{name}"
+    cache_key = f"{kind}:{key}"
     with _cache_lock:
         if cache_key in _custom_cache:
             return _custom_cache[cache_key]
@@ -437,7 +442,9 @@ def _load_custom_theme(
     import yaml
 
     for ext in (".yaml", ".yml"):
-        path = custom_dir / f"{name}{ext}"
+        path = resolve_within_root(
+            custom_dir, f"{key}{ext}", label="theme path"
+        )
         if not path.is_file():
             continue
         try:
@@ -450,7 +457,7 @@ def _load_custom_theme(
             return None
         base = BUILTIN_THEMES[default_name].model_dump()
         _deep_merge(base, raw)
-        base["name"] = name
+        base["name"] = key
         base["kind"] = kind
         try:
             theme = Theme.model_validate(base)

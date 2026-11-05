@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 
 from cute_tool.docgen.paths import OUTPUT_DIR, UPLOAD_DIR
-
-_UNSAFE = re.compile(r'[<>:"|?*\x00-\x1f]+')
+from cute_tool.util.path_safety import resolve_within_root, safe_path_segment
 
 
 def _safe_segment(value: str, fallback: str = "default") -> str:
     text = (value or "").strip() or fallback
-    text = text.replace("\\", "/").split("/")[-1]
-    text = _UNSAFE.sub("_", text)
-    return text or fallback
+    return safe_path_segment(text, label="request id")
 
 
 def session_roots(request_id: str, workspace_root: str | None = None) -> list[Path]:
@@ -99,7 +95,7 @@ def resolve_input_path(
         if resolved.is_absolute() and any(_is_under(resolved, r) for r in roots):
             return resolved
 
-    raise FileNotFoundError(f"File not found: {raw}")
+    raise FileNotFoundError("File not found")
 
 
 def resolve_output_path(
@@ -114,15 +110,17 @@ def resolve_output_path(
     base = Path(workspace_root).expanduser().resolve() if workspace_root else (Path.cwd() / "skilloutput" / rid)
     base.mkdir(parents=True, exist_ok=True)
     if not raw or not str(raw).strip():
-        return (base / default_name).resolve()
+        return resolve_within_root(
+            base, safe_path_segment(default_name, label="output filename")
+        )
     text = str(raw).strip().replace("\\", "/")
     p = Path(text).expanduser()
     if p.is_absolute():
-        raise ValueError(f"Output path escapes workspace root: {raw}")
-    out = (base / text).resolve()
+        raise ValueError("Output path escapes workspace root")
+    safe_path_segment(Path(text).name, label="output filename")
     try:
-        out.relative_to(base)
+        out = resolve_within_root(base, text, label="output path")
     except ValueError as exc:
-        raise ValueError(f"Output path escapes workspace root: {raw}") from exc
+        raise ValueError("Output path escapes workspace root") from exc
     out.parent.mkdir(parents=True, exist_ok=True)
     return out

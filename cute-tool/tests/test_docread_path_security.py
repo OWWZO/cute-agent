@@ -3,9 +3,13 @@ import asyncio
 import unittest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from cute_tool.tool.docread.paths import resolve_input_path, resolve_output_path
+from cute_tool.tool.docread.paths import (
+    _safe_segment,
+    resolve_input_path,
+    resolve_output_path,
+)
 
 
 class DocreadPathSecurityTest(unittest.TestCase):
@@ -93,6 +97,60 @@ class DocreadPathSecurityTest(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertIn("not writable", result["message"])
+
+    def test_request_id_dot_dot_should_not_be_a_safe_segment(self):
+        with self.assertRaises(ValueError):
+            _safe_segment("..")
+
+    def test_upload_should_skip_files_outside_session_workspace(self):
+        from cute_tool.tool.docread.service import _maybe_upload_produced_files
+
+        with tempfile.TemporaryDirectory() as outside_dir:
+            outside = Path(outside_dir) / "secret.txt"
+            outside.write_text("secret", encoding="utf-8")
+            upload = AsyncMock(return_value={"fileName": "secret.txt"})
+            with patch(
+                "cute_tool.tool.docread.service.upload_file_by_path", upload
+            ):
+                result = asyncio.run(
+                    _maybe_upload_produced_files(
+                        "session-upload-boundary",
+                        {"file_path": str(outside)},
+                    )
+                )
+
+        self.assertNotIn("fileInfo", result)
+        upload.assert_not_awaited()
+
+    def test_upload_should_keep_files_inside_session_output_root(self):
+        from cute_tool.tool.docread.service import _maybe_upload_produced_files
+
+        with tempfile.TemporaryDirectory() as output_root:
+            request_dir = Path(output_root) / "session-upload-boundary"
+            request_dir.mkdir()
+            report = request_dir / "report.txt"
+            report.write_text("ok", encoding="utf-8")
+            upload = AsyncMock(return_value={"fileName": "report.txt"})
+            with (
+                patch(
+                    "cute_tool.tool.docread.service.OUTPUT_DIR",
+                    Path(output_root),
+                ),
+                patch(
+                    "cute_tool.tool.docread.service.upload_file_by_path", upload
+                ),
+            ):
+                result = asyncio.run(
+                    _maybe_upload_produced_files(
+                        "session-upload-boundary",
+                        {"file_path": str(report)},
+                    )
+                )
+
+        self.assertEqual(
+            [{"fileName": "report.txt"}], result.get("fileInfo")
+        )
+        upload.assert_awaited_once()
 
 
 if __name__ == "__main__":

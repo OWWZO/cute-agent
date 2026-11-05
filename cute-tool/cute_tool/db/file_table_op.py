@@ -16,6 +16,7 @@ from cute_tool.db.file_table import FileInfo
 from cute_tool.db.db_engine import async_session_local
 from cute_tool.util.file_name import normalize_stored_file_name
 from cute_tool.util.log_util import timer
+from cute_tool.util.path_safety import resolve_within_root, safe_path_segment
 
 
 class _FileDB(object):
@@ -35,16 +36,11 @@ class _FileDB(object):
             file_name = f"{file_name}.txt"
         file_name = normalize_stored_file_name(file_name)
 
-        # Windows 目录名不允许 ":" 等字符；request_id 常含冒号，需清洗
-        safe_scope = "".join(c if c not in '<>:"/\\|?*' else "_" for c in str(scope))
-
-        save_path = os.path.join(self._work_dir, safe_scope)
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-        file_path = os.path.join(save_path, file_name)
+        save_path = self._scope_directory(scope)
+        file_path = resolve_within_root(save_path, file_name, label="file path")
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
-        return file_path
+        return str(file_path)
 
     async def save_by_data(self, file: UploadFile, scope: str = None) -> str:
         """将 UploadFile 二进制写入本地，返回落盘路径。"""
@@ -68,22 +64,33 @@ class _FileDB(object):
                 file_data = b""
         if not file_data:
             raise ValueError(f"uploaded file is empty: {file_name}")
-        safe_scope = (
-            "".join(c if c not in '<>:"/\\|?*' else "_" for c in str(scope))
-            if scope
-            else ""
+        save_directory = self._scope_directory(scope)
+        save_path = resolve_within_root(
+            save_directory, file_name, label="file path"
         )
-        save_directory = (
-            self._work_dir
-            if not safe_scope
-            else os.path.join(self._work_dir, safe_scope)
-        )
-        if not os.path.exists(save_directory):
-            os.makedirs(save_directory)
-        save_path = os.path.join(save_directory, file_name)
         with open(save_path, "wb") as f:
             f.write(file_data)
-        return save_path
+        return str(save_path)
+
+    def _scope_directory(self, scope: str | None) -> str:
+        """Return the work dir for an empty scope, otherwise a safe child dir."""
+        if scope is None or not str(scope).strip():
+            return str(resolve_within_root(self._work_dir, label="scope"))
+        raw_scope = str(scope).strip()
+        if (
+            "\x00" in raw_scope
+            or "/" in raw_scope
+            or "\\" in raw_scope
+            or (len(raw_scope) >= 2 and raw_scope[1] == ":")
+        ):
+            raise ValueError("scope must be a single safe path segment")
+        sanitized = "".join(
+            char if char not in '<>:"|?*' else "_" for char in raw_scope
+        )
+        safe_scope = safe_path_segment(sanitized, label="scope")
+        save_path = resolve_within_root(self._work_dir, safe_scope, label="scope")
+        save_path.mkdir(parents=True, exist_ok=True)
+        return str(save_path)
 
 
 FileDB = _FileDB()

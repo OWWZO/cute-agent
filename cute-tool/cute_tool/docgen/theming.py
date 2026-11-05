@@ -18,6 +18,7 @@ import re
 from typing import Any, Literal
 
 import cute_tool.docgen._structlog as structlog
+from cute_tool.util.path_safety import resolve_within_root, safe_path_segment
 
 from cute_tool.docgen.slides import relative_luminance
 from cute_tool.docgen.themes import (
@@ -39,9 +40,6 @@ __all__ = [
     "load_custom_theme_payload",
     "save_custom_theme",
 ]
-
-_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
-
 
 # ---------------------------------------------------------------------------
 # Color math
@@ -257,11 +255,7 @@ def lint_theme(theme: Theme) -> list[str]:
 
 
 def _validate_name(name: str) -> str:
-    key = str(name).strip().lower()
-    if not _NAME_RE.fullmatch(key):
-        raise ValueError(
-            "Theme name must be 2-64 chars of lowercase letters, digits, '-' or '_'."
-        )
+    key = safe_path_segment(name, label="Theme name").lower()
     if key in BUILTIN_THEMES:
         raise ValueError(f"'{key}' is a built-in theme and cannot be modified.")
     return key
@@ -312,9 +306,12 @@ def load_custom_theme_payload(name: str) -> dict[str, Any] | None:
     """Raw YAML payload of a custom theme, or None."""
     import yaml
 
+    key = safe_path_segment(name, label="Theme name").lower()
     directory = styles_dir()
     for ext in (".yaml", ".yml"):
-        path = directory / f"{name}{ext}"
+        path = resolve_within_root(
+            directory, f"{key}{ext}", label="theme path"
+        )
         if path.is_file():
             raw = yaml.safe_load(path.read_text(encoding="utf-8"))
             return raw if isinstance(raw, dict) else None
