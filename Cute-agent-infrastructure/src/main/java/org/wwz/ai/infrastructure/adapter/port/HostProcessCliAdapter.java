@@ -9,9 +9,9 @@ import org.wwz.ai.domain.agent.adapter.port.cli.CliResult;
 import org.wwz.ai.types.agent.config.HostCliProperties;
 import org.wwz.ai.types.agent.config.OpenCliProperties;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -189,10 +189,10 @@ public class HostProcessCliAdapter implements CliExecutionPort {
 
     private static Thread startCollector(InputStream stream, StreamCollector collector) {
         Thread thread = new Thread(() -> {
-            try {
-                byte[] buffer = new byte[4096];
+            try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+                char[] buffer = new char[4096];
                 int read;
-                while ((read = stream.read(buffer)) >= 0) {
+                while ((read = reader.read(buffer)) >= 0) {
                     collector.write(buffer, read);
                 }
             } catch (Exception ignore) {
@@ -218,7 +218,7 @@ public class HostProcessCliAdapter implements CliExecutionPort {
     }
 
     private static final class StreamCollector {
-        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        private final StringBuilder buffer = new StringBuilder();
         private final int maxChars;
         private boolean truncated;
 
@@ -226,23 +226,28 @@ public class HostProcessCliAdapter implements CliExecutionPort {
             this.maxChars = Math.max(1, maxChars);
         }
 
-        private synchronized void write(byte[] data, int length) {
+        private synchronized void write(char[] data, int length) {
             if (truncated) {
                 return;
             }
-            buffer.write(data, 0, length);
-            if (buffer.size() > maxChars) {
+            int remaining = maxChars - buffer.length();
+            if (remaining <= 0) {
+                truncated = true;
+                return;
+            }
+            int accepted = Math.min(length, remaining);
+            buffer.append(data, 0, accepted);
+            if (accepted < length) {
+                truncated = true;
+            }
+            if (buffer.length() == maxChars && Character.isHighSurrogate(buffer.charAt(maxChars - 1))) {
+                buffer.setLength(maxChars - 1);
                 truncated = true;
             }
         }
 
         private synchronized String text() {
-            byte[] bytes = buffer.toByteArray();
-            String value = new String(bytes, 0, Math.min(bytes.length, maxChars), StandardCharsets.UTF_8);
-            if (truncated && value.length() > maxChars) {
-                return value.substring(0, maxChars);
-            }
-            return value;
+            return buffer.toString();
         }
     }
 }

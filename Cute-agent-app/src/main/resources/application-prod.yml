@@ -5,8 +5,10 @@ cute:
   # 本地文件产物物化模式：
   #   register = 后端与文件服务共享 workspace 目录（docker-compose 的 cute-data 卷），零拷贝登记；
   #   upload   = 后端与文件服务不共享目录，改走 multipart 二进制上传。
+  # allowed-root 是后端允许读取/登记的 workspace 根，可通过环境变量覆盖。
   file-artifact:
     local-file-mode: ${CUTE_FILE_ARTIFACT_LOCAL_FILE_MODE:register}
+    allowed-root: "${CUTE_FILE_ARTIFACT_ALLOWED_ROOT:${WORKSPACE_ROOT:/data/skilloutput}}"
   opencli:
     enabled: true
     command: ${CUTE_OPENCLI_COMMAND:node}

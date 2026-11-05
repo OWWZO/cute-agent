@@ -114,14 +114,13 @@ public class ChatModelMetadataRepository implements IChatModelMetadataRepository
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void saveModelSchemas(List<ChatModelSchema> schemaList) {
         if (CollectionUtils.isEmpty(schemaList)) {
             return;
         }
-        // 单模型字段量可控，Phase 2A 先保持显式逐条写入，避免 domain 再暴露批量持久化框架细节。
-        for (ChatModelSchema schema : schemaList) {
-            chatModelSchemaMapper.insert(toPO(schema));
-        }
+        List<ChatModelSchemaPO> poList = schemaList.stream().map(this::toPO).toList();
+        chatModelSchemaMapper.insertBatch(poList);
     }
 
     @Override

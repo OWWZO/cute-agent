@@ -33,12 +33,14 @@ public class CuteToolFileArtifactAdapterTest {
             exchange.getResponseBody().write(responseBody);
             exchange.close();
         });
-        Path localFile = Files.createTempFile("cute-file-artifact-", ".txt");
+        Path root = Files.createTempDirectory("cute-file-artifact-root-");
+        Path localFile = Files.createFile(root.resolve("payload.txt"));
         Files.writeString(localFile, "payload");
         server.start();
         try {
             CuteToolFileArtifactAdapter adapter =
-                    new CuteToolFileArtifactAdapter(new NoopRemoteHttpPort(), new OkHttpClient());
+                    new CuteToolFileArtifactAdapter(new NoopRemoteHttpPort(), new OkHttpClient(),
+                            CuteToolFileArtifactAdapter.MODE_UPLOAD, root.toString());
             FileResponse response = adapter.uploadLocalFile(
                     "http://127.0.0.1:" + server.getAddress().getPort(),
                     FileRequest.builder()
@@ -52,6 +54,7 @@ public class CuteToolFileArtifactAdapterTest {
         } finally {
             server.stop(0);
             Files.deleteIfExists(localFile);
+            Files.deleteIfExists(root);
         }
     }
 

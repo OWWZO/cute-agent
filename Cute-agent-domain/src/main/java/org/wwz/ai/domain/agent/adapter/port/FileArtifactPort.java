@@ -13,7 +13,7 @@ import java.io.IOException;
  * <ul>
  *   <li>返回值可能为 null：{@link #upload} / {@link #get} 在响应体为空时返回 null；
  *       {@link #register} / {@link #uploadLocalFile} 在响应体为空或不是合法 JSON 时返回 null；</li>
- *   <li>网络失败、远端非 2xx、本地文件缺失、超过上传/下载大小上限均抛 {@link IOException}，
+     *   <li>网络失败、远端非 2xx、本地文件缺失或不在允许根目录内、超过上传/下载大小上限均抛 {@link IOException}，
  *       其中 {@link #readBytes(String, Long, long)} 的超限在流式读取阶段就会抛；</li>
  *   <li>“文件不存在”没有独立信号：远端 2xx 但缺少 URL 字段时返回 ossUrl 为 null 的
  *       {@link FileResponse}，调用方必须自行判空，不能只看是否抛异常。</li>

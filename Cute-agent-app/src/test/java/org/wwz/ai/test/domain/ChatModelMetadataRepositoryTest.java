@@ -192,9 +192,9 @@ public class ChatModelMetadataRepositoryTest {
         schema.setYn(1);
         repository.saveModelSchemas(List.of(schema));
 
-        ArgumentCaptor<ChatModelSchemaPO> schemaCaptor = ArgumentCaptor.forClass(ChatModelSchemaPO.class);
-        verify(schemaMapper).insert(schemaCaptor.capture());
-        ChatModelSchemaPO savedSchema = schemaCaptor.getValue();
+        ArgumentCaptor<List<ChatModelSchemaPO>> schemaCaptor = ArgumentCaptor.forClass(List.class);
+        verify(schemaMapper).insertBatch(schemaCaptor.capture());
+        ChatModelSchemaPO savedSchema = schemaCaptor.getValue().get(0);
         Assert.assertEquals("华东,华南", savedSchema.getFewShot());
         Assert.assertEquals(Integer.valueOf(1), savedSchema.getDefaultRecall());
         Assert.assertEquals(Integer.valueOf(-1), savedSchema.getAnalyzeSuggest());
