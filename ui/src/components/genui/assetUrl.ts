@@ -1,8 +1,11 @@
 import {
   buildFilePreviewUrlForBrowser,
+  isSafeBrowserUrl,
   isToolFilePath,
   normalizeFileUrlForBrowser,
 } from "@/utils/fileUrl";
+
+const SAFE_ASSET_PROTOCOLS = ["http:", "https:", "blob:", "data:"] as const;
 
 function basenameOf(pathLike: string): string {
   const normalized = pathLike.replace(/\\/g, "/");
@@ -24,6 +27,9 @@ export function resolveGenUiAssetUrl(
 ): string {
   const value = (raw || "").trim();
   if (!value) {
+    return "";
+  }
+  if (!isSafeBrowserUrl(value, SAFE_ASSET_PROTOCOLS)) {
     return "";
   }
   if (/^(?:blob:|data:)/i.test(value)) {

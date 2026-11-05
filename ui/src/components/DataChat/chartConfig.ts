@@ -114,6 +114,40 @@ function formatSeriesData(dataList: DataChatRow[], key: string): ChartDatum[] {
   }));
 }
 
+function createTooltipElement(styles: Record<string, string> = {}) {
+  const element = document.createElement("div");
+  Object.assign(element.style, styles);
+  return element;
+}
+
+function createTooltipRow(color: string, seriesName: unknown, showValue: unknown) {
+  const row = createTooltipElement({
+    display: "flex",
+    fontSize: "12px",
+    marginTop: "3px",
+    alignItems: "center",
+    gap: "10px",
+  });
+  const dot = createTooltipElement({
+    width: "10px",
+    height: "10px",
+    borderRadius: "50%",
+    backgroundColor: color,
+  });
+  const name = createTooltipElement({ color: "#6a6a6a" });
+  name.textContent = String(seriesName);
+  const value = createTooltipElement({
+    color: "#181818",
+    flex: "1",
+    textAlign: "end",
+  });
+  value.textContent = String(showValue);
+  row.appendChild(dot);
+  row.appendChild(name);
+  row.appendChild(value);
+  return { row, value };
+}
+
 function buildAxisTooltip(
   params: Array<{
     seriesName: string;
@@ -122,20 +156,18 @@ function buildAxisTooltip(
     data: ChartDatum;
   }>
 ) {
-  const htmlParts: string[] = [];
+  const container = createTooltipElement();
   params.forEach((series, index) => {
     if (index === 0) {
-      htmlParts.push(`<div>${series.name}</div>`);
+      const title = createTooltipElement();
+      title.textContent = String(series.name);
+      container.appendChild(title);
     }
-    htmlParts.push(`<div style="display: flex; font-size: 12px; margin-top: 3px;align-items: center;gap: 10px">
-          <div style="width: 10px; height: 10px; border-radius: 50%; background-color: ${series.color};"></div>
-          <div style="color: #6a6a6a">${series.seriesName}</div>
-          <div style="color: #181818; flex: 1; text-align: end;">
-            ${series.data.showValue}
-          </div>
-        </div>`);
+    container.appendChild(
+      createTooltipRow(series.color, series.seriesName, series.data.showValue).row
+    );
   });
-  return htmlParts.join("");
+  return container;
 }
 
 function attachHorizontalZoom(option: Record<string, unknown>, labels: unknown[]) {
@@ -368,16 +400,18 @@ function initChartOption(
         data: ChartDatum;
         percent: number;
       }) => {
-        const htmlParts: string[] = [];
-        htmlParts.push(`<div>${series.name}</div>`);
-        htmlParts.push(`<div style="display: flex; font-size: 12px; margin-top: 3px;align-items: center;gap: 10px">
-        <div style="width: 10px; height: 10px; border-radius: 50%; background-color: ${series.color};"></div>
-        <div style="color: #6a6a6a">${series.seriesName}</div>
-        <div style="color: #181818; flex: 1; text-align: end;">
-          ${series.data.showValue} (${series.percent}%)
-        </div>
-      </div>`);
-        return htmlParts.join("");
+        const container = createTooltipElement();
+        const title = createTooltipElement();
+        title.textContent = String(series.name);
+        container.appendChild(title);
+        const { row, value } = createTooltipRow(
+          series.color,
+          series.seriesName,
+          series.data.showValue
+        );
+        value.textContent = `${String(series.data.showValue)} (${series.percent}%)`;
+        container.appendChild(row);
+        return container;
       },
     };
     return option;

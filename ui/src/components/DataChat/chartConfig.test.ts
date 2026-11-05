@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildChartConfig, resolveChartType, resolveCurrentChartType } from "./chartConfig";
 
@@ -175,5 +175,119 @@ describe("resolveChartType", () => {
 
   it("显式 order 仍使用 hbar", () => {
     expect(resolveChartType(build(1))).toBe("hbar");
+  });
+});
+
+type FakeDomNode = {
+  style: Record<string, string>;
+  textContent: string;
+  children: FakeDomNode[];
+  appendChild: (child: FakeDomNode) => FakeDomNode;
+  innerHTML: string;
+};
+
+function installFakeDom() {
+  const innerHtmlWrites: string[] = [];
+  const createNode = (): FakeDomNode => {
+    const node = {
+      style: {},
+      textContent: "",
+      children: [],
+      appendChild(child: FakeDomNode) {
+        node.children.push(child);
+        return child;
+      },
+    } as unknown as FakeDomNode;
+    Object.defineProperty(node, "innerHTML", {
+      get: () => "",
+      set: (value: string) => {
+        innerHtmlWrites.push(value);
+      },
+    });
+    return node;
+  };
+  vi.stubGlobal("document", { createElement: createNode });
+  vi.stubGlobal("window", {});
+  return { innerHtmlWrites };
+}
+
+function textOf(node: FakeDomNode): string {
+  return node.textContent + node.children.map(textOf).join("");
+}
+
+describe("图表 tooltip 不解析后端数据里的 HTML", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const payload = '<img src=x onerror="window.__pwned=1">';
+
+  it("坐标轴 tooltip 把系列名当文本写入", () => {
+    const { innerHtmlWrites } = installFakeDom();
+    const option = buildChartConfig({
+      chartSuggest: "bar",
+      dimCols: ["dt"],
+      measureCols: ["gmv"],
+      columnList: [
+        { guid: "dt", name: "日期" },
+        { guid: "gmv", name: payload },
+      ],
+      dataList: [
+        { dt: "2026-05-01", gmv: 10 },
+        { dt: "2026-05-02", gmv: 20 },
+      ],
+    }).option as {
+      tooltip?: { formatter?: (params: unknown) => unknown };
+    };
+
+    const formatter = option.tooltip?.formatter;
+    expect(typeof formatter).toBe("function");
+    const node = formatter!([
+      {
+        seriesName: payload,
+        name: "2026-05-01",
+        color: "#4687F7",
+        data: { value: 10, showValue: "10" },
+      },
+    ]) as FakeDomNode;
+
+    expect(typeof node).not.toBe("string");
+    expect(textOf(node)).toContain(payload);
+    expect(innerHtmlWrites).toEqual([]);
+    expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined();
+  });
+
+  it("饼图 tooltip 把名称和数值当文本写入", () => {
+    const { innerHtmlWrites } = installFakeDom();
+    const option = buildChartConfig({
+      chartSuggest: "pie",
+      dimCols: ["city"],
+      measureCols: ["gmv"],
+      columnList: [
+        { guid: "city", name: "城市" },
+        { guid: "gmv", name: "GMV" },
+      ],
+      dataList: [
+        { city: payload, gmv: 10 },
+        { city: "上海", gmv: 20 },
+      ],
+    }).option as {
+      tooltip?: { formatter?: (params: unknown) => unknown };
+    };
+
+    const formatter = option.tooltip?.formatter;
+    expect(typeof formatter).toBe("function");
+    const node = formatter!({
+      seriesName: payload,
+      name: payload,
+      color: "#4687F7",
+      data: { value: 10, showValue: payload },
+      percent: 50,
+    }) as FakeDomNode;
+
+    expect(typeof node).not.toBe("string");
+    expect(textOf(node)).toContain(payload);
+    expect(innerHtmlWrites).toEqual([]);
+    expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined();
   });
 });
