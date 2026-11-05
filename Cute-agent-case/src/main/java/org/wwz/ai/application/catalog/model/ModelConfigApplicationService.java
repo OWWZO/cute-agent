@@ -61,6 +61,7 @@ public class ModelConfigApplicationService {
             return ApplicationResult.failure(ResponseCode.ILLEGAL_PARAMETER, "ID不能为空", false);
         }
         try {
+            assertModelIdAvailableForUpdate(command);
             AiClientModelConfig config = toConfig(command);
             config.setUpdateTime(LocalDateTime.now());
             boolean changed = repository.updateById(config);
@@ -68,6 +69,8 @@ public class ModelConfigApplicationService {
                 modelRuntimePort.invalidateAll();
             }
             return ApplicationResult.success(changed);
+        } catch (IllegalArgumentException e) {
+            return ApplicationResult.failure(ResponseCode.ILLEGAL_PARAMETER, e.getMessage(), false);
         } catch (Exception e) {
             log.error("根据 ID 更新 AI 客户端模型配置失败", e);
             return ApplicationResult.failure(ResponseCode.UN_ERROR, ResponseCode.UN_ERROR.getInfo(), false);
@@ -213,6 +216,21 @@ public class ModelConfigApplicationService {
                 .contextWindow(command.contextWindow())
                 .status(command.status())
                 .build();
+    }
+
+    private void assertModelIdAvailableForUpdate(ModelConfigCommand command) {
+        if (StringUtils.isBlank(command.modelId())) {
+            return;
+        }
+        List<AiClientModelConfig> existing = repository.findAllByModelId(command.modelId());
+        if (existing == null) {
+            return;
+        }
+        for (AiClientModelConfig config : existing) {
+            if (config == null || !command.id().equals(config.getId())) {
+                throw new IllegalArgumentException("模型 ID 已存在: " + command.modelId());
+            }
+        }
     }
 
     private void assertModelIdAvailable(ModelConfigCommand command) {

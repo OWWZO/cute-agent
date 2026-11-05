@@ -209,34 +209,38 @@ public class AgentStreamProjection implements AgentSessionStream {
 
     @Override
     public void complete() {
-        if (!closed.compareAndSet(false, true)) {
-            return;
-        }
-        persistWatermark(lastBufferedSeq());
-        detachRegistry();
-        for (ObserverSink sink : observers) {
-            if (sink.stream != null && !sink.stream.isAborted()) {
-                sink.stream.complete();
+        synchronized (projectionLock) {
+            if (!closed.compareAndSet(false, true)) {
+                return;
+            }
+            persistWatermark(lastBufferedSeq());
+            detachRegistry();
+            for (ObserverSink sink : observers) {
+                if (sink.stream != null && !sink.stream.isAborted()) {
+                    sink.stream.complete();
+                }
             }
         }
     }
 
     @Override
     public void completeWithError(Throwable throwable) {
-        if (!closed.compareAndSet(false, true)) {
-            return;
-        }
-        AgentSessionStreamFrame failed = buildDefaultResult(
-                request, throwable == null ? "执行失败" : throwable.getMessage());
-        assignSeq(failed);
-        offerReplayBuffer(failed);
-        if (eventBus != null && request != null && StringUtils.isNotBlank(request.getSessionId())) {
-            eventBus.publish(request.getSessionId(), failed);
-        }
-        detachRegistry();
-        for (ObserverSink sink : observers) {
-            if (sink.stream != null && !sink.stream.isAborted()) {
-                sink.stream.completeWithError(throwable);
+        synchronized (projectionLock) {
+            if (!closed.compareAndSet(false, true)) {
+                return;
+            }
+            AgentSessionStreamFrame failed = buildDefaultResult(
+                    request, throwable == null ? "执行失败" : throwable.getMessage());
+            assignSeq(failed);
+            offerReplayBuffer(failed);
+            if (eventBus != null && request != null && StringUtils.isNotBlank(request.getSessionId())) {
+                eventBus.publish(request.getSessionId(), failed);
+            }
+            detachRegistry();
+            for (ObserverSink sink : observers) {
+                if (sink.stream != null && !sink.stream.isAborted()) {
+                    sink.stream.completeWithError(throwable);
+                }
             }
         }
     }
@@ -533,7 +537,8 @@ public class AgentStreamProjection implements AgentSessionStream {
         }
         sink.stream.onAbort(() -> {
             observers.remove(sink);
-            if (closed.get() || !liveObservers().isEmpty()) {
+            // 主路径以 session bus 为准；单个本地观察者断开不代表整条投影中断。
+            if (eventBus != null || closed.get() || !liveObservers().isEmpty()) {
                 return;
             }
             for (Runnable handler : abortHandlers) {
