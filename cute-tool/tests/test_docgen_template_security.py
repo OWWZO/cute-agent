@@ -4,6 +4,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from cute_tool.docgen.templates import load_template
+from cute_tool.docgen.themes import get_theme
+from cute_tool.docgen.theming import load_custom_theme_payload
 from cute_tool.tool.docgen.service import fill_template
 
 
@@ -106,6 +109,48 @@ class DocgenTemplateSecurityTest(unittest.TestCase):
                 )
 
         self.assertIn("unsafe", str(context.exception).lower())
+
+    def test_template_loader_should_reject_path_traversal(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            (home / "secret.yaml").write_text(
+                "name: secret\nkind: document\ncontent: leaked\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                "os.environ", {"CUTE_DOCGEN_HOME": str(home)}, clear=False
+            ):
+                with self.assertRaises(ValueError):
+                    load_template("../../secret")
+
+    def test_theme_lookup_should_not_read_outside_styles_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            (home / "templates" / "styles").mkdir(parents=True)
+            (home / "secret.yaml").write_text(
+                "fonts:\n  heading: Leaked Font\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                "os.environ", {"CUTE_DOCGEN_HOME": str(home)}, clear=False
+            ):
+                theme = get_theme("../../secret")
+
+        self.assertNotEqual("Leaked Font", theme.fonts.heading)
+        self.assertNotEqual("../../secret", theme.name)
+
+    def test_custom_theme_payload_loader_should_reject_path_traversal(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            (home / "secret.yaml").write_text(
+                "colors:\n  primary: '#000000'\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                "os.environ", {"CUTE_DOCGEN_HOME": str(home)}, clear=False
+            ):
+                with self.assertRaises(ValueError):
+                    load_custom_theme_payload("../../secret")
 
 
 if __name__ == "__main__":

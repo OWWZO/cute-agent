@@ -202,23 +202,28 @@ class DirectCodeExecutionTest(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue((expected / "out.txt").is_file())
 
     async def test_should_honor_explicit_workspace_root(self):
-        with (
-            tempfile.TemporaryDirectory() as session_root,
-            patch(
-                "cute_tool.tool.direct_code_execution.upload_file_by_path",
-                new=AsyncMock(return_value={"fileName": "a.txt"}),
-            ),
-        ):
-            result = await execute_code(
-                CodeExecutionRequest(
-                    requestId="ignored-for-path",
-                    workspaceRoot=session_root,
-                    source=(
-                        "from pathlib import Path\n"
-                        "Path('a.txt').write_text('x', encoding='utf-8')\n"
-                    ),
+        with tempfile.TemporaryDirectory() as session_root:
+            with (
+                patch.dict(
+                    "os.environ",
+                    {"CODE_EXECUTION_WORKSPACE_ROOT": session_root},
+                    clear=False,
+                ),
+                patch(
+                    "cute_tool.tool.direct_code_execution.upload_file_by_path",
+                    new=AsyncMock(return_value={"fileName": "a.txt"}),
+                ),
+            ):
+                result = await execute_code(
+                    CodeExecutionRequest(
+                        requestId="ignored-for-path",
+                        workspaceRoot=session_root,
+                        source=(
+                            "from pathlib import Path\n"
+                            "Path('a.txt').write_text('x', encoding='utf-8')\n"
+                        ),
+                    )
                 )
-            )
             self.assertEqual("ok", result["status"])
             self.assertEqual(
                 str(Path(session_root).resolve()),
@@ -227,28 +232,174 @@ class DirectCodeExecutionTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue((Path(session_root) / "a.txt").is_file())
 
     async def test_should_read_nested_workspace_file_with_relative_path(self):
+        with tempfile.TemporaryDirectory() as session_root:
+            with patch.dict(
+                "os.environ",
+                {"CODE_EXECUTION_WORKSPACE_ROOT": session_root},
+                clear=False,
+            ):
+                report = Path(session_root) / "chinagt-shanghai-fire-report"
+                report.mkdir()
+                (report / "index.html").write_text(
+                    "<html>ok</html>\n", encoding="utf-8"
+                )
+                result = await execute_code(
+                    CodeExecutionRequest(
+                        requestId="session-workspace-read",
+                        workspaceRoot=session_root,
+                        source=(
+                            "from pathlib import Path\n"
+                            "print(Path('chinagt-shanghai-fire-report/index.html').read_text(encoding='utf-8').strip())\n"
+                        ),
+                    )
+                )
+                self.assertEqual("ok", result["status"], result)
+                self.assertIn("<html>ok</html>", result["stdout"])
+
+    async def test_should_reject_workspace_root_outside_allowed_roots(self):
+        captured = {}
+
+        class FakeExecutor:
+            def __init__(self, *args, **kwargs):
+                captured["initialized"] = True
+
+            def execute(self, *args, **kwargs):
+                return type(
+                    "Result",
+                    (),
+                    {
+                        "stdout": "",
+                        "stderr": "",
+                        "result": None,
+                        "duration_ms": 1,
+                        "returncode": 0,
+                        "stdout_truncated": False,
+                        "stderr_truncated": False,
+                    },
+                )()
+
+            def produced_files(self):
+                return []
+
+            def close(self):
+                pass
+
         with (
-            tempfile.TemporaryDirectory() as session_root,
+            tempfile.TemporaryDirectory() as allowed_root,
+            tempfile.TemporaryDirectory() as outside_root,
+            patch.dict(
+                "os.environ",
+                {"CODE_EXECUTION_WORKSPACE_ROOT": allowed_root},
+                clear=False,
+            ),
             patch(
-                "cute_tool.tool.direct_code_execution.upload_file_by_path",
-                new=AsyncMock(return_value=None),
+                "cute_tool.tool.direct_code_execution.PythonSandboxExecutor",
+                FakeExecutor,
             ),
         ):
-            report = Path(session_root) / "chinagt-shanghai-fire-report"
-            report.mkdir()
-            (report / "index.html").write_text("<html>ok</html>\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                await execute_code(
+                    CodeExecutionRequest(
+                        requestId="unsafe-root",
+                        workspaceRoot=outside_root,
+                        source="answer = 1",
+                    )
+                )
+            self.assertNotIn("initialized", captured)
+            self.assertFalse((Path(outside_root) / "input").exists())
+
+    async def test_should_not_grant_read_access_to_file_outside_workspace(self):
+        captured = {}
+
+        class FakeExecutor:
+            def __init__(self, policy, *args, **kwargs):
+                captured["policy"] = policy
+
+            def execute(self, *args, **kwargs):
+                return type(
+                    "Result",
+                    (),
+                    {
+                        "stdout": "",
+                        "stderr": "",
+                        "result": None,
+                        "duration_ms": 1,
+                        "returncode": 0,
+                        "stdout_truncated": False,
+                        "stderr_truncated": False,
+                    },
+                )()
+
+            def produced_files(self):
+                return []
+
+            def close(self):
+                pass
+
+        with (
+            tempfile.TemporaryDirectory() as workspace_root,
+            tempfile.TemporaryDirectory() as outside_root,
+            patch.dict(
+                "os.environ",
+                {"CODE_EXECUTION_WORKSPACE_ROOT": workspace_root},
+                clear=False,
+            ),
+            patch(
+                "cute_tool.tool.direct_code_execution.download_all_files_in_path",
+                new=AsyncMock(
+                    return_value=[
+                        {
+                            "file_name": "secret.txt",
+                            "file_path": str(Path(outside_root) / "secret.txt"),
+                        }
+                    ]
+                ),
+            ),
+            patch(
+                "cute_tool.tool.direct_code_execution.PythonSandboxExecutor",
+                FakeExecutor,
+            ),
+        ):
             result = await execute_code(
                 CodeExecutionRequest(
-                    requestId="session-workspace-read",
-                    workspaceRoot=session_root,
+                    requestId="outside-input",
+                    fileNames=[str(Path(outside_root) / "secret.txt")],
+                    source="answer = 1",
+                )
+            )
+
+        self.assertEqual("ok", result["status"])
+        self.assertNotIn(
+            str(Path(outside_root) / "secret.txt"),
+            captured["policy"].allowed_read_paths,
+        )
+
+    async def test_should_allow_explicit_workspace_root_inside_allowed_root(self):
+        with (
+            tempfile.TemporaryDirectory() as allowed_root,
+            patch.dict(
+                "os.environ",
+                {"CODE_EXECUTION_WORKSPACE_ROOT": allowed_root},
+                clear=False,
+            ),
+            patch(
+                "cute_tool.tool.direct_code_execution.upload_file_by_path",
+                new=AsyncMock(return_value={"fileName": "a.txt"}),
+            ),
+        ):
+            session_root = Path(allowed_root) / "session-1"
+            result = await execute_code(
+                CodeExecutionRequest(
+                    requestId="allowed-root",
+                    workspaceRoot=str(session_root),
                     source=(
                         "from pathlib import Path\n"
-                        "print(Path('chinagt-shanghai-fire-report/index.html').read_text(encoding='utf-8').strip())\n"
+                        "Path('a.txt').write_text('x', encoding='utf-8')\n"
                     ),
                 )
             )
-            self.assertEqual("ok", result["status"], result)
-            self.assertIn("<html>ok</html>", result["stdout"])
+            self.assertEqual("ok", result["status"])
+            self.assertTrue((session_root / "a.txt").is_file())
 
 
 if __name__ == "__main__":

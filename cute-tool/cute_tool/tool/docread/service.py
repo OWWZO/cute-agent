@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
+from cute_tool.docgen.paths import OUTPUT_DIR, UPLOAD_DIR
 from cute_tool.tool.docread._compat import ToolContext, ToolResult
 from cute_tool.tool.docread.paths import resolve_input_path, resolve_output_path
 from cute_tool.util.file_util import upload_file_by_path
+from cute_tool.util.path_safety import is_path_within_root, safe_path_segment
 
 _MAX_JSON_CHARS = 200_000
 
@@ -53,20 +56,28 @@ def _strip_internal(params: dict[str, Any]) -> dict[str, Any]:
 async def _maybe_upload_produced_files(
     request_id: str,
     result: dict[str, Any],
+    workspace_root: str | None = None,
 ) -> dict[str, Any]:
     """If result mentions output files on disk, upload them for Java clients."""
     file_info: list[dict[str, Any]] = []
     candidates: list[str] = []
+    allowed_roots = _upload_allowed_roots(request_id, workspace_root)
+
+    def is_uploadable(raw: str) -> bool:
+        if not raw or not Path(raw).is_file():
+            return False
+        return any(is_path_within_root(raw, root) for root in allowed_roots)
+
     # 工具返回的文件路径可能出现在多个兼容字段中，先收集候选，再按路径去重后上传。
     for key in ("output_path", "outputPath", "file_path", "filePath"):
         v = result.get(key)
-        if isinstance(v, str) and v and Path(v).is_file():
+        if isinstance(v, str) and is_uploadable(v):
             candidates.append(v)
     for key in ("output_files", "outputFiles", "files", "produced_files"):
         v = result.get(key)
         if isinstance(v, list):
             for item in v:
-                if isinstance(item, str) and Path(item).is_file():
+                if isinstance(item, str) and is_uploadable(item):
                     candidates.append(item)
                 elif isinstance(item, dict):
                     p = (
@@ -74,7 +85,7 @@ async def _maybe_upload_produced_files(
                         or item.get("file_path")
                         or item.get("filePath")
                     )
-                    if isinstance(p, str) and Path(p).is_file():
+                    if isinstance(p, str) and is_uploadable(p):
                         candidates.append(p)
     seen: set[str] = set()
     for path in candidates:
@@ -92,6 +103,32 @@ async def _maybe_upload_produced_files(
         result = dict(result)
         result["fileInfo"] = file_info
     return result
+
+
+def _upload_allowed_roots(
+    request_id: str, workspace_root: str | None
+) -> tuple[Path, ...]:
+    rid = safe_path_segment(request_id or "default", label="request id")
+    file_save_path = Path(os.getenv("FILE_SAVE_PATH", "file_db_dir")).expanduser()
+    if not file_save_path.is_absolute():
+        file_save_path = Path.cwd() / file_save_path
+    roots = [
+        Path.cwd() / "skilloutput" / rid,
+        OUTPUT_DIR / rid,
+        UPLOAD_DIR / rid,
+        file_save_path / rid,
+    ]
+    if workspace_root:
+        roots.append(Path(workspace_root).expanduser())
+    resolved_roots: list[Path] = []
+    for root in roots:
+        try:
+            resolved = root.resolve()
+        except OSError:
+            continue
+        if resolved not in resolved_roots:
+            resolved_roots.append(resolved)
+    return tuple(resolved_roots)
 
 
 def _ok(data: Any) -> dict[str, Any]:
@@ -218,7 +255,9 @@ async def run_csv_processor(request_id: str, params: dict[str, Any]) -> dict[str
 
     result = _run_sync_tool(CSVProcessorTool(), params, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
-        result["data"] = await _maybe_upload_produced_files(request_id, result["data"])
+        result["data"] = await _maybe_upload_produced_files(
+            request_id, result["data"], _workspace(params)
+        )
         if "fileInfo" in result["data"]:
             result["fileInfo"] = result["data"].pop("fileInfo")
     return result
@@ -235,7 +274,9 @@ async def run_html_processor(request_id: str, params: dict[str, Any]) -> dict[st
 
     result = _run_sync_tool(HTMLProcessorTool(), params, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
-        result["data"] = await _maybe_upload_produced_files(request_id, result["data"])
+        result["data"] = await _maybe_upload_produced_files(
+            request_id, result["data"], _workspace(params)
+        )
         if "fileInfo" in result["data"]:
             result["fileInfo"] = result["data"].pop("fileInfo")
     return result
@@ -248,7 +289,9 @@ async def run_markdown_processor(
 
     result = _run_sync_tool(MarkdownProcessorTool(), params, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
-        result["data"] = await _maybe_upload_produced_files(request_id, result["data"])
+        result["data"] = await _maybe_upload_produced_files(
+            request_id, result["data"], _workspace(params)
+        )
         if "fileInfo" in result["data"]:
             result["fileInfo"] = result["data"].pop("fileInfo")
     return result
@@ -259,7 +302,9 @@ async def run_text_processor(request_id: str, params: dict[str, Any]) -> dict[st
 
     result = _run_sync_tool(TextFileProcessorTool(), params, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
-        result["data"] = await _maybe_upload_produced_files(request_id, result["data"])
+        result["data"] = await _maybe_upload_produced_files(
+            request_id, result["data"], _workspace(params)
+        )
         if "fileInfo" in result["data"]:
             result["fileInfo"] = result["data"].pop("fileInfo")
     return result
@@ -281,7 +326,9 @@ async def run_pdf_reader(request_id: str, params: dict[str, Any]) -> dict[str, A
     clean = normalize_pdf_reader_params(_strip_internal(params))
     result = _run_sync_tool(tool, {**params, **clean}, request_id)
     if result.get("success") and isinstance(result.get("data"), dict):
-        result["data"] = await _maybe_upload_produced_files(request_id, result["data"])
+        result["data"] = await _maybe_upload_produced_files(
+            request_id, result["data"], _workspace(params)
+        )
         if "fileInfo" in result["data"]:
             result["fileInfo"] = result["data"].pop("fileInfo")
     return result

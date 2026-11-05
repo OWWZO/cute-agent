@@ -66,6 +66,22 @@ class FileNameSafetyTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_stored_relative_path("../secret.txt")
 
+    def test_should_reject_parent_directory_as_storage_scope(self):
+        with tempfile.TemporaryDirectory(prefix="file-scope-safety-") as temp_dir:
+            with patch.object(FileDB, "_work_dir", temp_dir):
+                with self.assertRaises(ValueError):
+                    asyncio.run(FileDB.save("report.txt", "content", ".."))
+                with self.assertRaises(ValueError):
+                    asyncio.run(FileDB.save("report.txt", "content", "../escape"))
+
+    def test_should_store_missing_scope_directly_in_work_dir(self):
+        with tempfile.TemporaryDirectory(prefix="file-scope-safety-") as temp_dir:
+            with patch.object(FileDB, "_work_dir", temp_dir):
+                saved_path = asyncio.run(FileDB.save("report.txt", "content", None))
+
+            self.assertEqual(Path(temp_dir), Path(saved_path).parent)
+            self.assertFalse((Path(temp_dir) / "None").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

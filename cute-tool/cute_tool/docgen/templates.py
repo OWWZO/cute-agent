@@ -17,11 +17,11 @@ real Document/Deck IR so broken templates are rejected up front.
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 from typing import Any, Literal
 
 import cute_tool.docgen._structlog as structlog
+from cute_tool.util.path_safety import resolve_within_root, safe_path_segment
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,9 +37,6 @@ __all__ = [
     "save_template",
     "templates_dir",
 ]
-
-_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
-
 
 def templates_dir() -> Path:
     """Return the configured doc-template YAML directory."""
@@ -83,12 +80,7 @@ class DocTemplate(_Model):
 
 
 def _validate_name(name: str) -> str:
-    key = str(name).strip().lower()
-    if not _NAME_RE.fullmatch(key):
-        raise ValueError(
-            "Template name must be 2-64 chars of lowercase letters, digits, '-' or '_'."
-        )
-    return key
+    return safe_path_segment(name, label="Template name").lower()
 
 
 # ---------------------------------------------------------------------------
@@ -237,9 +229,12 @@ def load_template(name: str) -> DocTemplate | None:
     """Load a template by name, or None when absent/invalid."""
     import yaml
 
+    key = _validate_name(name)
     directory = templates_dir()
     for ext in (".yaml", ".yml"):
-        path = directory / f"{name}{ext}"
+        path = resolve_within_root(
+            directory, f"{key}{ext}", label="template path"
+        )
         if not path.is_file():
             continue
         try:
@@ -249,7 +244,7 @@ def load_template(name: str) -> DocTemplate | None:
             return None
         if not isinstance(raw, dict):
             return None
-        raw.setdefault("name", name)
+        raw.setdefault("name", key)
         try:
             return DocTemplate.model_validate(raw)
         except Exception:  # noqa: BLE001

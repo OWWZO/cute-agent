@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
-from cute_tool.tool.e2b_session_sync import download_changed_files
+from cute_tool.tool.e2b_session_sync import download_changed_files, push_workspace
 
 
 class E2BSessionSyncSecurityTest(unittest.TestCase):
@@ -95,6 +95,29 @@ class E2BSessionSyncSecurityTest(unittest.TestCase):
 
             self.assertEqual([], changed)
             self.assertFalse(target.exists())
+
+    def test_malicious_session_id_should_be_rejected_before_remote_mkdir(self):
+        commands_run = []
+        sandbox = SimpleNamespace(
+            files=SimpleNamespace(),
+            commands=SimpleNamespace(
+                run=lambda command, **kwargs: commands_run.append(command)
+                or SimpleNamespace(exit_code=0, stdout="", stderr="")
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaises(ValueError):
+                push_workspace(
+                    sandbox,
+                    Path(temp_dir),
+                    "../escape",
+                    owner_key="owner",
+                    sandbox_id="sandbox",
+                    generation=1,
+                )
+
+        self.assertEqual([], commands_run)
 
 
 if __name__ == "__main__":
