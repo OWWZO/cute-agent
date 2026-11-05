@@ -16,6 +16,7 @@ import org.wwz.ai.domain.agent.runtime.prompt.AgentPrompt;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -116,13 +117,14 @@ public class ReactImplAgent extends ReActAgent {
             if (!Boolean.TRUE.equals(context.getIsStream())) {
                 if (response.getReasoningContent() != null && !response.getReasoningContent().isEmpty()) {
                     sendLlmEvent(org.wwz.ai.domain.agent.runtime.llm.ReasoningContentExtractor.EVENT_TYPE,
-                            response.getReasoningContent(), response.getTiming());
+                            response.getReasoningContent(), response.getTiming(), response.getLlmInvocationId());
                 }
                 if (response.getContent() != null
                         && !response.getContent().isEmpty()
                         && response.getToolCalls() != null
                         && !response.getToolCalls().isEmpty()) {
-                    sendLlmEvent("tool_thought", response.getContent(), response.getTiming());
+                    sendLlmEvent("tool_thought", response.getContent(), response.getTiming(),
+                            response.getLlmInvocationId());
                 }
             }
 
@@ -151,12 +153,20 @@ public class ReactImplAgent extends ReActAgent {
     }
 
     private void sendLlmEvent(String messageType, Object message,
-                              org.wwz.ai.domain.agent.ledger.model.replay.ReplayTiming timing) {
-        if (timing == null) {
+                              org.wwz.ai.domain.agent.ledger.model.replay.ReplayTiming timing,
+                              Long llmInvocationId) {
+        Map<String, Object> extraResultMap = new LinkedHashMap<>();
+        if (llmInvocationId != null) {
+            extraResultMap.put("llmInvocationId", llmInvocationId);
+        }
+        if (timing != null) {
+            extraResultMap.put("timing", timing);
+        }
+        if (extraResultMap.isEmpty()) {
             printer.send(messageType, message);
             return;
         }
-        printer.sendWithResultMap(null, messageType, message, Map.of("timing", timing), true);
+        printer.sendWithResultMap(null, messageType, message, extraResultMap, true);
     }
 
     /**

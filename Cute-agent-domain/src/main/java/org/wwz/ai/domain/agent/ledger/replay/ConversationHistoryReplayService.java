@@ -1,13 +1,15 @@
 package org.wwz.ai.domain.agent.ledger.replay;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryDetail;
 import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryPage;
 import org.wwz.ai.domain.agent.ledger.model.ConversationRunReplay;
 import org.wwz.ai.domain.agent.ledger.model.ConversationRunSummary;
+import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
@@ -16,6 +18,11 @@ import org.wwz.ai.domain.agent.ledger.model.LlmInvocationView;
 import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
 import org.wwz.ai.domain.agent.ledger.model.replay.ReplayFactBundle;
+import org.wwz.ai.domain.agent.ledger.timeline.ITimelineItemRepository;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItem;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemKind;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemView;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
 import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
@@ -23,8 +30,10 @@ import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 会话历史摘要与回放聚合服务。
@@ -33,7 +42,6 @@ import java.util.Map;
  * ReplayProjector 生成前端事件。working memory 仅服务下一轮 prompt，不参与用户可见历史回放。
  */
 @Slf4j
-@RequiredArgsConstructor
 public class ConversationHistoryReplayService {
 
     public static final int DEFAULT_HISTORY_PAGE_SIZE = 20;
@@ -52,6 +60,29 @@ public class ConversationHistoryReplayService {
     private final ReplayProjector replayProjector;
     private final HistoryReplayPrinter historyReplayPrinter;
     private final LlmModelCatalog llmModelCatalog;
+    private final ITimelineItemRepository timelineItemRepository;
+
+    public ConversationHistoryReplayService(ExecutionLedgerQueryService executionLedgerQueryService,
+                                            ReplayProjector replayProjector,
+                                            HistoryReplayPrinter historyReplayPrinter,
+                                            LlmModelCatalog llmModelCatalog) {
+        this(executionLedgerQueryService, replayProjector, historyReplayPrinter, llmModelCatalog, null);
+    }
+
+    @Autowired
+    public ConversationHistoryReplayService(ExecutionLedgerQueryService executionLedgerQueryService,
+                                            ReplayProjector replayProjector,
+                                            HistoryReplayPrinter historyReplayPrinter,
+                                            LlmModelCatalog llmModelCatalog,
+                                            ObjectProvider<ITimelineItemRepository> timelineItemRepositoryProvider) {
+        this.executionLedgerQueryService = executionLedgerQueryService;
+        this.replayProjector = replayProjector;
+        this.historyReplayPrinter = historyReplayPrinter;
+        this.llmModelCatalog = llmModelCatalog;
+        this.timelineItemRepository = timelineItemRepositoryProvider == null
+                ? null
+                : timelineItemRepositoryProvider.getIfAvailable();
+    }
 
     /**
      * 读取会话轻量摘要。该路径只访问 session/run 主账本，不触发 replay projector、
@@ -170,13 +201,303 @@ public class ConversationHistoryReplayService {
                 .build();
         List<AgentStreamResult> frames =
                 replayProjector == null ? List.of() : replayProjector.projectHistoryFrames(bundle);
+        List<AgentStreamResult> readableFrames = historyReplayPrinter == null
+                ? frames
+                : historyReplayPrinter.ensureReadableConclusion(run, frames);
+        Set<String> runToolCallIds = new HashSet<>();
+        if (runDetail.getToolInvocations() != null) {
+            runDetail.getToolInvocations().forEach(invocation -> {
+                if (invocation != null && StringUtils.isNotBlank(invocation.getToolCallId())) {
+                    runToolCallIds.add(invocation.getToolCallId());
+                }
+            });
+        }
         return ConversationRunReplay.builder()
                 .run(run)
                 .contextUsage(resolveContextUsage(runDetail.getLlmInvocations()))
-                .replayFrames(historyReplayPrinter == null
-                        ? frames
-                        : historyReplayPrinter.ensureReadableConclusion(run, frames))
+                .replayFrames(readableFrames)
+                .timelineItems(buildTimelineItems(
+                        run, readableFrames, runDetail.getArtifacts(), runToolCallIds))
                 .build();
+    }
+
+    private List<TimelineItemView> buildTimelineItems(DialogueRunView run,
+                                                      List<AgentStreamResult> frames,
+                                                      List<ArtifactView> artifacts,
+                                                      Set<String> runToolCallIds) {
+        if (run == null || StringUtils.isBlank(run.getRequestId())) {
+            return List.of();
+        }
+        List<TimelineItemView> views = new ArrayList<>();
+        long seq = sequenceBase(run);
+        int frameIndex = 0;
+        for (AgentStreamResult frame : frames == null ? List.<AgentStreamResult>of() : frames) {
+            int currentFrameIndex = frameIndex++;
+            Map<String, Object> eventData = readCanonicalEventData(frame);
+            if (eventData.isEmpty()) {
+                continue;
+            }
+            String parentToolCallId = resolveParentToolCallId(eventData);
+            if (TimelineItemProjection.isNestedSubAgentDetail(eventData)
+                    && runToolCallIds.contains(parentToolCallId)) {
+                // 当前 run 里的子 Agent 明细只属于子会话时间线；父 run 只保留摘要卡。
+                continue;
+            }
+            try {
+                views.add(TimelineItemProjection.projectEvent(
+                        run.getRequestId(),
+                        run.getSessionId(),
+                        ++seq,
+                        eventData,
+                        frame.getStatus(),
+                        frame.isComplete()
+                ));
+            } catch (RuntimeException e) {
+                // 目录/时间线是回放增强；单帧投影失败不能丢掉其他历史事实。
+                log.warn("history timeline projection failed, requestId={}, frameIndex={}",
+                        run.getRequestId(), currentFrameIndex, e);
+            }
+        }
+        List<TimelineItem> directory = loadDirectory(run.getRequestId());
+        List<TimelineItemView> merged = TimelineItemProjection.mergeDirectory(
+                views, directory == null ? List.of() : directory);
+        enrichArtifactPayloads(merged, artifacts);
+        if (directory != null && directory.isEmpty() && isTerminalRun(run)) {
+            backfillDirectory(run, merged);
+        }
+        return merged;
+    }
+
+    /**
+     * 历史回放没有 live SSE seq，不能从 1 重新编号：eventId/updatedSeq 是会话级游标，
+     * 多轮 run 会撞成相同值。用 run 主键分配稳定区间，并把同一 run 内事件顺序编码进去。
+     */
+    private long sequenceBase(DialogueRunView run) {
+        Long runId = run == null ? null : run.getId();
+        if (runId != null && runId > 0 && runId <= Long.MAX_VALUE / 1_000_000L) {
+            return runId * 1_000_000L;
+        }
+        if (run != null && run.getStartedAt() != null) {
+            return run.getStartedAt()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli() * 1_000L;
+        }
+        return 0L;
+    }
+
+    private String resolveParentToolCallId(Map<String, Object> eventData) {
+        Map<String, Object> task = firstMap(eventData.get("resultMap"), eventData);
+        Map<String, Object> nested = firstMap(task.get("resultMap"), Map.of());
+        return firstText(
+                task.get("parentToolUseId"),
+                task.get("parentToolCallId"),
+                nested.get("parentToolUseId"),
+                nested.get("parentToolCallId"),
+                eventData.get("parentToolUseId"),
+                eventData.get("parentToolCallId")
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> firstMap(Object first, Object fallback) {
+        if (first instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        if (fallback instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
+    private String firstText(Object... values) {
+        if (values == null) {
+            return null;
+        }
+        for (Object value : values) {
+            if (value != null && StringUtils.isNotBlank(String.valueOf(value))) {
+                return String.valueOf(value).trim();
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readCanonicalEventData(AgentStreamResult frame) {
+        if (frame == null || frame.getEventData() == null) {
+            return Map.of();
+        }
+        Object eventData = frame.getEventData().get("eventData");
+        if (eventData instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return frame.getEventData();
+    }
+
+    private List<TimelineItem> loadDirectory(String requestId) {
+        if (timelineItemRepository == null) {
+            return List.of();
+        }
+        try {
+            return timelineItemRepository.queryByRunIds(List.of(requestId));
+        } catch (Exception e) {
+            log.warn("timeline directory query failed, requestId={}", requestId, e);
+            return null;
+        }
+    }
+
+    private void enrichArtifactPayloads(List<TimelineItemView> views, List<ArtifactView> artifacts) {
+        if (CollectionUtils.isEmpty(views) || CollectionUtils.isEmpty(artifacts)) {
+            return;
+        }
+        Map<Long, ArtifactView> byId = new HashMap<>();
+        for (ArtifactView artifact : artifacts) {
+            if (artifact != null && artifact.getId() != null) {
+                byId.put(artifact.getId(), artifact);
+            }
+        }
+        for (TimelineItemView view : views) {
+            if (view == null || !TimelineItemKind.ARTIFACT.name().equals(view.getKind())
+                    || view.getPayload() == null) {
+                continue;
+            }
+            Object rawId = view.getPayload().get("artifactId");
+            Long artifactId = null;
+            if (rawId instanceof Number number) {
+                artifactId = number.longValue();
+            } else if (rawId != null) {
+                try {
+                    artifactId = Long.valueOf(String.valueOf(rawId));
+                } catch (NumberFormatException ignored) {
+                    // 非法目录引用不阻断整段历史回放。
+                }
+            }
+            ArtifactView artifact = byId.get(artifactId);
+            if (artifact == null) {
+                continue;
+            }
+            view.getPayload().put("fileName", artifact.getFileName());
+            view.getPayload().put("downloadUrl", artifact.getDownloadUrl());
+            view.getPayload().put("previewUrl", artifact.getPreviewUrl());
+            view.getPayload().put("mimeType", artifact.getMimeType());
+            view.getPayload().put("fileSize", artifact.getFileSize());
+            view.getPayload().put("storageKey", artifact.getStorageKey());
+            enrichArtifactEventData(view.getPayload(), artifact);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void enrichArtifactEventData(Map<String, Object> payload, ArtifactView artifact) {
+        Object rawEventData = payload.get("eventData");
+        if (!(rawEventData instanceof Map<?, ?> eventData)) {
+            return;
+        }
+        Object rawTask = eventData.get("resultMap");
+        if (!(rawTask instanceof Map<?, ?> task)) {
+            return;
+        }
+        Map<String, Object> writableTask = (Map<String, Object>) task;
+        putIfBlank(writableTask, "fileName", artifact.getFileName());
+        putIfBlank(writableTask, "downloadUrl", artifact.getDownloadUrl());
+        putIfBlank(writableTask, "previewUrl", artifact.getPreviewUrl());
+        putIfBlank(writableTask, "mimeType", artifact.getMimeType());
+        putIfBlank(writableTask, "fileSize", artifact.getFileSize());
+        putIfBlank(writableTask, "storageKey", artifact.getStorageKey());
+        Object rawNested = writableTask.get("resultMap");
+        if (rawNested instanceof Map<?, ?> nested) {
+            Map<String, Object> writableNested = (Map<String, Object>) nested;
+            putIfBlank(writableNested, "fileName", artifact.getFileName());
+            putIfBlank(writableNested, "downloadUrl", artifact.getDownloadUrl());
+            putIfBlank(writableNested, "previewUrl", artifact.getPreviewUrl());
+            putIfBlank(writableNested, "mimeType", artifact.getMimeType());
+            putIfBlank(writableNested, "fileSize", artifact.getFileSize());
+            putIfBlank(writableNested, "storageKey", artifact.getStorageKey());
+        }
+    }
+
+    private void putIfBlank(Map<String, Object> target, String key, Object value) {
+        Object existing = target.get(key);
+        if (value != null && (existing == null || StringUtils.isBlank(String.valueOf(existing)))) {
+            target.put(key, value);
+        }
+    }
+
+    private void backfillDirectory(DialogueRunView run, List<TimelineItemView> views) {
+        if (timelineItemRepository == null || StringUtils.isBlank(run.getSessionId())) {
+            return;
+        }
+        Map<String, TimelineItem> byItemId = new HashMap<>();
+        for (TimelineItemView view : views) {
+            if (view == null
+                    || StringUtils.isBlank(view.getItemId())
+                    || TimelineItemKind.SYSTEM_NOTICE.name().equals(view.getKind())) {
+                continue;
+            }
+            TimelineItem item = byItemId.get(view.getItemId());
+            if (item == null) {
+                item = TimelineItem.builder()
+                        .sessionId(run.getSessionId())
+                        .runId(run.getRequestId())
+                        .itemId(view.getItemId())
+                        .parentItemId(view.getParentItemId())
+                        .agentId(view.getAgentId())
+                        .kind(view.getKind())
+                        .phase(view.getPhase())
+                        .status(view.getStatus())
+                        .orderKey(view.getOrderKey())
+                        .subOrder(view.getSubOrder())
+                        .updatedSeq(view.getSeq())
+                        .sourceType(TimelineItemProjection.resolveSourceType(
+                                view.getKind(), view.getPhase()))
+                        .llmInvocationId(payloadLong(view.getPayload(), "llmInvocationId"))
+                        .toolInvocationId(payloadLong(view.getPayload(), "toolInvocationId"))
+                        .artifactId(payloadLong(view.getPayload(), "artifactId"))
+                        .build();
+                byItemId.put(view.getItemId(), item);
+            } else {
+                item.setStatus(view.getStatus());
+                item.setUpdatedSeq(Math.max(
+                        item.getUpdatedSeq() == null ? 0L : item.getUpdatedSeq(),
+                        view.getSeq()));
+            }
+        }
+        if (byItemId.isEmpty()) {
+            return;
+        }
+        try {
+            timelineItemRepository.upsertBatch(List.copyOf(byItemId.values()));
+        } catch (Exception e) {
+            log.warn("timeline directory backfill failed, requestId={}, itemCount={}",
+                    run.getRequestId(), byItemId.size(), e);
+        }
+    }
+
+    private boolean isTerminalRun(DialogueRunView run) {
+        if (run == null || run.getStatus() == null) {
+            return false;
+        }
+        return run.getStatus() == ExecutionLedgerConstants.STATUS_SUCCESS
+                || run.getStatus() == ExecutionLedgerConstants.STATUS_FAILED
+                || run.getStatus() == ExecutionLedgerConstants.STATUS_STOPPED
+                || run.getStatus() == ExecutionLedgerConstants.STATUS_TIMEOUT;
+    }
+
+    private Long payloadLong(Map<String, Object> payload, String key) {
+        if (payload == null) {
+            return null;
+        }
+        Object value = payload.get(key);
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value == null || StringUtils.isBlank(String.valueOf(value))) {
+            return null;
+        }
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     public ConversationHistoryDetail queryConversationHistory(String sessionId) {

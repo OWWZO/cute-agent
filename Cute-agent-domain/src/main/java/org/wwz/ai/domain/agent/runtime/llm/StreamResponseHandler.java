@@ -71,6 +71,7 @@ public class StreamResponseHandler {
                 pushToClient, timeoutSeconds, null);
     }
 
+    @Deprecated
     public CompletableFuture<StringStreamResult> handleStringStreamWithUsage(AgentContext context,
                                                                                LlmCompletionPort.StreamCall streamCall,
                                                                                String hiddenStartMarker,
@@ -78,6 +79,18 @@ public class StreamResponseHandler {
                                                                                boolean pushToClient,
                                                                                int timeoutSeconds,
                                                                                ReplayTiming runtimeTiming) {
+        return handleStringStreamWithUsage(context, streamCall, hiddenStartMarker, emitFinalSnapshot,
+                pushToClient, timeoutSeconds, runtimeTiming, null);
+    }
+
+    public CompletableFuture<StringStreamResult> handleStringStreamWithUsage(AgentContext context,
+                                                                               LlmCompletionPort.StreamCall streamCall,
+                                                                               String hiddenStartMarker,
+                                                                               boolean emitFinalSnapshot,
+                                                                               boolean pushToClient,
+                                                                               int timeoutSeconds,
+                                                                               ReplayTiming runtimeTiming,
+                                                                               Long llmInvocationId) {
         if (context != null && context.isRunCancelled()) {
             return failedFuture(new LlmCancelledException(context.getRunCancelReason(), null));
         }
@@ -114,7 +127,7 @@ public class StreamResponseHandler {
                     if (emitted) {
                         if (shouldFlush(tokenIndex[0], intervals[0], intervals[1])) {
                             sendStreamEvent(context, messageId, context.getStreamMessageType(),
-                                    streamBuffer.toString(), runtimeTiming, false);
+                                    streamBuffer.toString(), runtimeTiming, false, llmInvocationId);
                             streamBuffer.setLength(0);
                         }
                         tokenIndex[0]++;
@@ -136,14 +149,14 @@ public class StreamResponseHandler {
                     }
                     if (pushToClient && messageId != null && streamBuffer.length() > 0) {
                         sendStreamEvent(context, messageId, context.getStreamMessageType(),
-                                streamBuffer.toString(), runtimeTiming, false);
+                                streamBuffer.toString(), runtimeTiming, false, llmInvocationId);
                     }
                     if (pushToClient && messageId != null && emitFinalSnapshot) {
                         String visibleFinalContent = extractVisibleContent(allContent.toString(), hiddenStartMarker).trim();
                         if (StringUtils.isNotBlank(visibleFinalContent)) {
                             completeRuntimeTiming(runtimeTiming);
                             sendStreamEvent(context, messageId, context.getStreamMessageType(),
-                                    visibleFinalContent, runtimeTiming, true);
+                                    visibleFinalContent, runtimeTiming, true, llmInvocationId);
                         }
                     }
                     completeRuntimeTiming(runtimeTiming);
@@ -185,12 +198,24 @@ public class StreamResponseHandler {
         return handleToolCallStream(context, streamCall, startTimeMs, pushToClient, timeoutSeconds, null);
     }
 
+    @Deprecated
     public CompletableFuture<LLM.ToolCallResponse> handleToolCallStream(AgentContext context,
                                                                           LlmCompletionPort.StreamCall streamCall,
                                                                           long startTimeMs,
                                                                           boolean pushToClient,
                                                                           int timeoutSeconds,
                                                                           ReplayTiming runtimeTiming) {
+        return handleToolCallStream(context, streamCall, startTimeMs, pushToClient, timeoutSeconds,
+                runtimeTiming, null);
+    }
+
+    public CompletableFuture<LLM.ToolCallResponse> handleToolCallStream(AgentContext context,
+                                                                          LlmCompletionPort.StreamCall streamCall,
+                                                                          long startTimeMs,
+                                                                          boolean pushToClient,
+                                                                          int timeoutSeconds,
+                                                                          ReplayTiming runtimeTiming,
+                                                                          Long llmInvocationId) {
         if (context != null && context.isRunCancelled()) {
             return failedFuture(new LlmCancelledException(context.getRunCancelReason(), null));
         }
@@ -251,7 +276,7 @@ public class StreamResponseHandler {
                             if (shouldFlush(reasoningIndex[0], intervals[0], intervals[1])
                                     || reasoningBuffer.length() >= 24) {
                                 sendStreamEvent(context, reasoningMessageId, ReasoningContentExtractor.EVENT_TYPE,
-                                        reasoningBuffer.toString(), runtimeTiming, false);
+                                        reasoningBuffer.toString(), runtimeTiming, false, llmInvocationId);
                                 reasoningBuffer.setLength(0);
                             }
                             reasoningIndex[0]++;
@@ -266,7 +291,7 @@ public class StreamResponseHandler {
                             streamBuffer.append(chunkContent);
                             if (shouldFlush(tokenIndex[0], intervals[0], intervals[1])) {
                                 sendStreamEvent(context, messageId, context.getStreamMessageType(),
-                                        streamBuffer.toString(), runtimeTiming, false);
+                                        streamBuffer.toString(), runtimeTiming, false, llmInvocationId);
                                 streamBuffer.setLength(0);
                             }
                             tokenIndex[0]++;
@@ -305,17 +330,17 @@ public class StreamResponseHandler {
                     if (pushToClient && reasoningMessageId != null && context.getPrinter() != null && hasReasoning) {
                         if (reasoningBuffer.length() > 0) {
                             sendStreamEvent(context, reasoningMessageId, ReasoningContentExtractor.EVENT_TYPE,
-                                    reasoningBuffer.toString(), runtimeTiming, false);
+                                    reasoningBuffer.toString(), runtimeTiming, false, llmInvocationId);
                             reasoningBuffer.setLength(0);
                         }
                         completeRuntimeTiming(runtimeTiming);
                         sendStreamEvent(context, reasoningMessageId, ReasoningContentExtractor.EVENT_TYPE,
-                                reasoningContent, runtimeTiming, true);
+                                reasoningContent, runtimeTiming, true, llmInvocationId);
                     }
                     if (pushToClient && messageId != null && hasContent && context.getPrinter() != null) {
                         if (streamBuffer.length() > 0) {
                             sendStreamEvent(context, messageId, context.getStreamMessageType(),
-                                    streamBuffer.toString(), runtimeTiming, false);
+                                    streamBuffer.toString(), runtimeTiming, false, llmInvocationId);
                             streamBuffer.setLength(0);
                         }
                         completeRuntimeTiming(runtimeTiming);
@@ -323,7 +348,8 @@ public class StreamResponseHandler {
                         // 循环会继续）。前端据此把中间轮发言封口成时间线上独立的助手文本行，
                         // 终轮则留在结论区由 result 收口 —— 对齐 ZCode 的行模型。
                         sendStreamEvent(context, messageId, context.getStreamMessageType(),
-                                content, runtimeTiming, true, Map.of("moreRounds", hasToolCalls));
+                                content, runtimeTiming, true, Map.of("moreRounds", hasToolCalls),
+                                llmInvocationId);
                     }
 
                     completeRuntimeTiming(runtimeTiming);
@@ -458,8 +484,9 @@ public class StreamResponseHandler {
                                  String messageType,
                                  Object message,
                                  ReplayTiming runtimeTiming,
-                                 boolean isFinal) {
-        sendStreamEvent(context, messageId, messageType, message, runtimeTiming, isFinal, null);
+                                 boolean isFinal,
+                                 Long llmInvocationId) {
+        sendStreamEvent(context, messageId, messageType, message, runtimeTiming, isFinal, null, llmInvocationId);
     }
 
     /** 带额外 resultMap 键的流事件：帧语义由前端按 these keys 解释（如 moreRounds 分段标记）。 */
@@ -469,15 +496,22 @@ public class StreamResponseHandler {
                                  Object message,
                                  ReplayTiming runtimeTiming,
                                  boolean isFinal,
-                                 Map<String, Object> extraResultMap) {
+                                 Map<String, Object> extraResultMap,
+                                 Long llmInvocationId) {
         if (context == null || context.getPrinter() == null) {
             return;
         }
-        if (runtimeTiming == null && (extraResultMap == null || extraResultMap.isEmpty())) {
+        if (runtimeTiming == null
+                && (extraResultMap == null || extraResultMap.isEmpty())
+                && llmInvocationId == null) {
             context.getPrinter().send(messageId, messageType, message, isFinal);
             return;
         }
         Map<String, Object> resultMap = new LinkedHashMap<>();
+        if (llmInvocationId != null) {
+            // 时间线目录和实时 SSE 共用 llm:<invocationId> 作为稳定 itemId。
+            resultMap.put("llmInvocationId", llmInvocationId);
+        }
         if (runtimeTiming != null) {
             resultMap.put("timing", snapshotTiming(runtimeTiming));
         }

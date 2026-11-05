@@ -37,6 +37,8 @@ public class CuteMapperNamespaceBindingTest {
         Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.IToolInvocationLedgerDao.queryByRunId"));
         Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.IArtifactLedgerDao.queryByRunId"));
         Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.IArtifactLedgerDao.queryBySessionIdLimit"));
+        Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.ITimelineItemDao.upsert"));
+        Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.cute.ITimelineItemDao.queryByRunIds"));
         // 分页重载必须和接口同步注册，否则运行期才会报 Invalid bound statement。
         Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.ISubAgentDefinitionDao.queryPage"));
         Assert.assertTrue(configuration.hasStatement("org.wwz.ai.infrastructure.dao.catalog.IAiClientApiConfigDao.queryPage"));

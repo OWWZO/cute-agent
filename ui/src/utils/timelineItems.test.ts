@@ -1,0 +1,210 @@
+import { describe, expect, it } from "vitest";
+import type { ConversationReplayFrame } from "@/services/agentConversation";
+import {
+  resolveRunReplayFrames,
+  timelineEnvelopeToLegacy,
+  timelineItemsToReplayFrames,
+} from "./timelineItems";
+
+function eventData(messageType: string, resultMap: Record<string, unknown>): MESSAGE.EventData {
+  return {
+    taskId: "task-1",
+    taskOrder: 1,
+    messageOrder: 1,
+    messageType,
+    messageId: "msg-1",
+    resultMap: {
+      requestId: "req-1",
+      messageId: "msg-1",
+      messageTime: "0",
+      messageType,
+      finish: false,
+      isFinal: true,
+      id: "task-1",
+      resultMap: {},
+      ...resultMap,
+    } as MESSAGE.Task,
+  };
+}
+
+describe("timelineItems", () => {
+  it("maps item.delta back to the existing canonical renderer envelope", () => {
+    const event = eventData("task", {
+      messageType: "agent_stream",
+      result: "你好",
+    });
+
+    const normalized = timelineEnvelopeToLegacy({
+      protocolVersion: "2",
+      eventType: "item.delta",
+      itemId: "llm:42",
+      delta: "你好",
+      payload: { eventData: event },
+    });
+
+    expect(normalized.packageType).toBe("task");
+    expect(normalized.resultMap).toMatchObject({ eventData: event });
+  });
+
+  it("maps run.completed to the existing root result envelope", () => {
+    const event = eventData("task", {
+      messageType: "result",
+      result: "最终答案",
+    });
+
+    const normalized = timelineEnvelopeToLegacy({
+      eventType: "run.completed",
+      payload: { eventData: event },
+    });
+
+    expect(normalized.packageType).toBe("result");
+    expect(normalized.finished).toBe(true);
+    expect(normalized.resultMap).toMatchObject({ eventData: event });
+  });
+
+  it("does not treat stream.closed as run completion", () => {
+    const normalized = timelineEnvelopeToLegacy({
+      eventType: "stream.closed",
+      finished: false,
+    });
+
+    expect(normalized.packageType).toBe("stream_settle");
+    expect(normalized.finished).toBe(false);
+  });
+
+  it("keeps the explicit transport finished flag for stream.closed", () => {
+    const normalized = timelineEnvelopeToLegacy({
+      eventType: "stream.closed",
+      finished: true,
+    });
+
+    expect(normalized.packageType).toBe("stream_settle");
+    expect(normalized.finished).toBe(true);
+  });
+
+  it("keeps the transport finished flag for nested run-like events", () => {
+    const normalized = timelineEnvelopeToLegacy({
+      eventType: "run.completed",
+      finished: false,
+      payload: { eventData: eventData("task", { messageType: "result" }) },
+    });
+
+    expect(normalized.finished).toBe(false);
+  });
+
+  it("keeps renderable timeline frames when a directory-only item has no eventData", () => {
+    const replayFrame: ConversationReplayFrame = {
+      reqId: "req-1",
+      status: "success",
+      finished: true,
+      resultMap: {
+        agentType: "history",
+        multiAgent: {},
+        eventData: eventData("task", { messageType: "result", result: "最终答案" }),
+      },
+    };
+
+    const frames = resolveRunReplayFrames({
+      timelineItems: [
+        {
+          eventType: "item.completed",
+          runId: "req-1",
+          itemStatus: "COMPLETED",
+          payload: {
+            eventData: eventData("task", { messageType: "result", result: "最终答案" }),
+          },
+        },
+        { eventType: "item.completed", payload: {} },
+      ],
+      replayFrames: [replayFrame],
+    });
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0].resultMap.eventData?.resultMap.messageType).toBe("result");
+  });
+
+  it("falls back to replay frames only when no timeline item is renderable", () => {
+    const replayFrame: ConversationReplayFrame = {
+      reqId: "req-1",
+      status: "success",
+      finished: true,
+      resultMap: {
+        agentType: "history",
+        multiAgent: {},
+        eventData: eventData("task", { messageType: "result", result: "最终答案" }),
+      },
+    };
+
+    expect(resolveRunReplayFrames({
+      timelineItems: [{ eventType: "item.completed", payload: {} }],
+      replayFrames: [replayFrame],
+    })).toEqual([replayFrame]);
+  });
+
+  it("converts history timeline items to replay frames in order", () => {
+    const frames = timelineItemsToReplayFrames([
+      {
+        eventType: "item.completed",
+        runId: "req-1",
+        status: "COMPLETED",
+        payload: {
+          eventData: eventData("task", {
+            messageType: "tool_result",
+            toolCallId: "call-1",
+          }),
+        },
+      },
+      {
+        eventType: "run.completed",
+        runId: "req-1",
+        status: "COMPLETED",
+        payload: {
+          eventData: eventData("task", {
+            messageType: "result",
+            result: "最终答案",
+          }),
+        },
+      },
+    ]);
+
+    expect(frames).toHaveLength(2);
+    expect(frames[0].resultMap.eventData?.resultMap.messageType).toBe("tool_result");
+    expect(frames[1].finished).toBe(true);
+  });
+
+  it("keeps a stopped run as stopped during history replay", () => {
+    const frames = timelineItemsToReplayFrames([
+      {
+        eventType: "run.stopped",
+        runId: "req-1",
+        itemStatus: "CANCELLED",
+        payload: {
+          eventData: eventData("task", {
+            messageType: "result",
+            result: "已停止",
+          }),
+        },
+      },
+    ]);
+
+    expect(frames[0].status).toBe("stopped");
+    expect(frames[0].finished).toBe(true);
+  });
+
+  it("keeps a waiting item in progress instead of marking it successful", () => {
+    const frames = timelineItemsToReplayFrames([
+      {
+        eventType: "item.upserted",
+        runId: "req-1",
+        itemStatus: "WAITING_INPUT",
+        payload: {
+          eventData: eventData("task", {
+            messageType: "ask_user_question",
+          }),
+        },
+      },
+    ]);
+
+    expect(frames[0].status).toBe("waiting_input");
+  });
+});

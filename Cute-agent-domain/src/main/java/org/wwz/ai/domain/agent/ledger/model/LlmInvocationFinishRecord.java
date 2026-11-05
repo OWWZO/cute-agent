@@ -20,6 +20,8 @@ public class LlmInvocationFinishRecord {
 
     private String requestId;
 
+    private String sessionId;
+
     private Integer status;
 
     private String responseText;

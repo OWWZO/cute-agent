@@ -4,6 +4,7 @@ import type {
   ConversationRunReplay,
   ConversationRunSummary,
 } from "@/services/agentConversation";
+import type { TimelineEventType } from "@/types/timeline";
 import {
   buildConversationTaskData,
   buildTaskFromEventData,
@@ -11,6 +12,12 @@ import {
   normalizeEventData,
 } from "@/utils/chat";
 import { normalizeRunStatus } from "@/utils/runStatus";
+import {
+  isRunTerminal,
+  isRunReplay,
+  resolveRunReplayFrames,
+  timelineEnvelopeToLegacy,
+} from "@/utils/timelineItems";
 import { identityKeys, readTaskIdentity } from "./taskIdentity";
 
 /**
@@ -33,6 +40,7 @@ const SESSION_CONTROL_PACKAGES = new Set([
   "heartbeat",
   "follow_idle",
   "follow_pending",
+  "stream_settle",
 ]);
 
 /** 终态 run：没有活投影，SSE 会立刻 follow_idle，必须走 run replay 恢复。 */
@@ -74,12 +82,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function isRunReplay(
-  run: ConversationRunSummary | ConversationRunReplay
-): run is ConversationRunReplay {
-  return "replayFrames" in run;
 }
 
 export function isTerminalRunStatus(status?: string | null): boolean {
@@ -145,13 +147,14 @@ export function readChildSessionEventData(
   if (!isRecord(frame)) {
     return undefined;
   }
-  if (SESSION_CONTROL_PACKAGES.has(asText(frame.packageType))) {
+  const envelope = timelineEnvelopeToLegacy(frame);
+  if (SESSION_CONTROL_PACKAGES.has(asText(envelope.packageType))) {
     return undefined;
   }
-  const resultMap = isRecord(frame.resultMap) ? frame.resultMap : undefined;
+  const resultMap = isRecord(envelope.resultMap) ? envelope.resultMap : undefined;
   // 优先信封里的 eventData；裸 eventData（自身带 messageType）也直接收下。
   const raw =
-    resultMap?.eventData ?? (asText(frame.messageType) ? frame : frame.eventData);
+    resultMap?.eventData ?? (asText(envelope.messageType) ? envelope : envelope.eventData);
   if (!raw) {
     return undefined;
   }
@@ -396,6 +399,43 @@ function readLiveFrameEvents(
   return events;
 }
 
+function readLiveSettlement(
+  frames?: Iterable<unknown>
+): CHAT.RunStatus | undefined {
+  let settled: CHAT.RunStatus | undefined;
+  for (const frame of frames || []) {
+    if (!isRecord(frame)) {
+      continue;
+    }
+    const envelope = timelineEnvelopeToLegacy(frame);
+    const packageType = asText(envelope.packageType);
+    const eventType = typeof frame.eventType === "string"
+      ? frame.eventType as TimelineEventType
+      : undefined;
+    if (envelope.finished !== true || SESSION_CONTROL_PACKAGES.has(packageType)) {
+      continue;
+    }
+    if (!isRunTerminal(eventType)) {
+      const eventData = readChildSessionEventData(frame);
+      const messageType = asText(
+        eventData?.resultMap?.messageType || eventData?.messageType
+      );
+      if (messageType !== "result" || (packageType && packageType !== "result")) {
+        continue;
+      }
+    }
+    settled = toSettledStatus(asText(envelope.status));
+  }
+  return settled;
+}
+
+function toSettledStatus(status: string): CHAT.RunStatus {
+  const normalized = normalizeRunStatus(status);
+  return normalized === "UNKNOWN" || normalized === "RUNNING"
+    ? "SUCCESS"
+    : normalized;
+}
+
 /**
  * 把子会话的历史回放 / 实时帧合成一个可渲染的 ChatItem。
  * 纯函数：不触碰网络与 React 状态，便于单测直接驱动帧序列。
@@ -404,6 +444,7 @@ export function buildChildSessionChat(
   input: BuildChildSessionChatInput
 ): CHAT.ChatItem {
   const { childSessionId, history, run: explicitRun, replay, frames, fallbackQuery } = input;
+  const liveFrames = frames ? [...frames] : undefined;
   const run = explicitRun ?? replay ?? pickChildSessionRun(history);
   const chat = createChildSessionShell(childSessionId, run, fallbackQuery, Boolean(replay));
 
@@ -414,8 +455,7 @@ export function buildChildSessionChat(
     explicitConclusion = task;
   };
 
-  const replayFrames: ConversationReplayFrame[] =
-    replay && Array.isArray(replay.replayFrames) ? replay.replayFrames : [];
+  const replayFrames: ConversationReplayFrame[] = replay ? resolveRunReplayFrames(replay) : [];
 
   /**
    * 账本打底 + 实时补差，而不是二选一。
@@ -430,20 +470,18 @@ export function buildChildSessionChat(
    */
   const frameEvents = [
     ...readReplayFrameEvents(replayFrames),
-    ...readLiveFrameEvents(frames ? [...frames] : undefined),
+    ...readLiveFrameEvents(liveFrames),
   ];
 
   // 先收集本会话自身的身份键，再逐帧剥离指向会话之外的父链标签。
   // 顺序很重要：剥离判据要看全量帧，不能边读边判。
   const ownKeys = collectChildSessionOwnKeys(frameEvents);
 
-  let liveSettled: { status: CHAT.RunStatus } | undefined;
-  for (const { eventData, frame } of frameEvents) {
+  for (const { eventData } of frameEvents) {
     applyChildSessionEvent(chat, detachExternalParentTags(eventData, ownKeys), remember);
-    if (frame?.finished === true) {
-      liveSettled = { status: frame.errorMsg ? "FAILED" : "SUCCESS" };
-    }
   }
+  const transportSettled = readLiveSettlement(liveFrames);
+  const liveSettled = transportSettled ? { status: transportSettled } : undefined;
 
   applyFallbackConclusion(chat, run, remember);
   applyRunStatus(chat, run, liveSettled);

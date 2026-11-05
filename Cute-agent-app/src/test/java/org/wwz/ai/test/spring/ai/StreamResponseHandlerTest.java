@@ -238,6 +238,33 @@ public class StreamResponseHandlerTest {
     }
 
     @Test
+    public void test_shouldForwardExplicitInvocationIdToStreamResultMap() throws Exception {
+        StreamResponseHandler handler = handler();
+        RecordingPrinter printer = new RecordingPrinter();
+        AgentContext context = AgentContext.builder()
+                .requestId("req-invocation-id")
+                .isStream(true)
+                .streamMessageType("tool_thought")
+                .printer(printer)
+                .build();
+
+        handler.handleToolCallStream(
+                context,
+                streamCall(Flux.just(toolChunk("过程文", new AssistantMessage.ToolCall(
+                        "call-invocation", "function", "read_file", "{}"), "tool_calls", 10))),
+                System.currentTimeMillis() - 10,
+                true,
+                0,
+                null,
+                42L
+        ).get(5, TimeUnit.SECONDS);
+
+        Assert.assertTrue(printer.messages.stream().anyMatch(message ->
+                message.resultMap != null
+                        && Long.valueOf(42L).equals(message.resultMap.get("llmInvocationId"))));
+    }
+
+    @Test
     public void test_handleToolCallStreamTimeoutDisposesAndIgnoresLateChunks() throws Exception {
         StreamResponseHandler handler = new StreamResponseHandler();
         CuteConfig cuteConfig = new CuteConfig();
@@ -491,37 +518,37 @@ public class StreamResponseHandlerTest {
 
         @Override
         public void send(String messageId, String messageType, Object message, String digitalEmployee, Boolean isFinal) {
-            messages.add(new PrinterMessage(messageId, messageType, message, isFinal));
+            messages.add(new PrinterMessage(messageId, messageType, message, null, isFinal));
         }
 
         @Override
         public void send(String messageId, String messageType, Object message, Map<String, Object> extraResultMap, String digitalEmployee, Boolean isFinal) {
-            messages.add(new PrinterMessage(messageId, messageType, message, isFinal));
+            messages.add(new PrinterMessage(messageId, messageType, message, extraResultMap, isFinal));
         }
 
         @Override
         public void send(String messageType, Object message) {
-            messages.add(new PrinterMessage(null, messageType, message, true));
+            messages.add(new PrinterMessage(null, messageType, message, null, true));
         }
 
         @Override
         public void send(String messageType, Object message, String digitalEmployee) {
-            messages.add(new PrinterMessage(null, messageType, message, true));
+            messages.add(new PrinterMessage(null, messageType, message, null, true));
         }
 
         @Override
         public void send(String messageId, String messageType, Object message, Boolean isFinal) {
-            messages.add(new PrinterMessage(messageId, messageType, message, isFinal));
+            messages.add(new PrinterMessage(messageId, messageType, message, null, isFinal));
         }
 
         @Override
         public void sendWithResultMap(String messageId, String messageType, Object message, Map<String, Object> extraResultMap, Boolean isFinal) {
-            messages.add(new PrinterMessage(messageId, messageType, message, isFinal));
+            messages.add(new PrinterMessage(messageId, messageType, message, extraResultMap, isFinal));
         }
 
         @Override
         public void sendWithResultMap(String messageType, Object message, Map<String, Object> extraResultMap) {
-            messages.add(new PrinterMessage(null, messageType, message, true));
+            messages.add(new PrinterMessage(null, messageType, message, extraResultMap, true));
         }
 
         @Override
@@ -533,6 +560,10 @@ public class StreamResponseHandlerTest {
         }
     }
 
-    private record PrinterMessage(String messageId, String messageType, Object message, Boolean isFinal) {
+    private record PrinterMessage(String messageId,
+                                  String messageType,
+                                  Object message,
+                                  Map<String, Object> resultMap,
+                                  Boolean isFinal) {
     }
 }

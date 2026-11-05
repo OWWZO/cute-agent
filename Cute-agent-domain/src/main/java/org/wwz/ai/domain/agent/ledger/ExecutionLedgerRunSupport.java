@@ -1,7 +1,10 @@
 package org.wwz.ai.domain.agent.ledger;
 
 import com.alibaba.fastjson.JSON;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionFile;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactRecordCommand;
@@ -19,9 +22,21 @@ import java.util.Map;
  * 执行账本运行态辅助方法。
  * 统一收口 run 的启动、输入产物登记和结束写回，避免多条执行链路重复实现。
  */
+@Slf4j
 public final class ExecutionLedgerRunSupport {
 
     private ExecutionLedgerRunSupport() {
+    }
+
+    /**
+     * 账本 run 的稳定 requestId：优先使用激活时捕获的 runUid，避免旧续跑路径改写
+     * context.requestId 后写到另一个 run。
+     */
+    public static String ledgerRequestId(AgentContext agentContext) {
+        return agentContext == null || agentContext.getAgentRunState() == null
+                ? null
+                : StringUtils.defaultIfBlank(
+                        agentContext.getAgentRunState().getRunUid(), agentContext.getRequestId());
     }
 
     /**
@@ -65,14 +80,53 @@ public final class ExecutionLedgerRunSupport {
         // 用激活 run 时捕获的 runUid 定位，而不是当前 context.requestId：
         // 子 Agent 旧续跑路径会改写 requestId，改后查不到 run 会静默丢终态、把 run 永久留在 RUNNING。
         String runUid = agentContext.getAgentRunState().getRunUid();
-        agentContext.getExecutionRecorder().finishRun(DialogueRunFinishRecord.builder()
+        DialogueRunFinishRecord record = DialogueRunFinishRecord.builder()
                 .runId(agentContext.getAgentRunState().getRunId())
                 .requestId(StringUtils.defaultIfBlank(runUid, agentContext.getRequestId()))
                 .status(status)
                 .finalSummaryText(finalSummaryText)
                 .errorCode(errorCode)
                 .errorMsg(errorMsg)
-                .build());
+                .build();
+        try {
+            agentContext.getExecutionRecorder().finishRun(record);
+        } catch (RuntimeException e) {
+            log.warn("finish run ledger failed, retrying without timeline, requestId={}",
+                    StringUtils.defaultIfBlank(runUid, agentContext.getRequestId()), e);
+            compensateAfterRollback(agentContext.getExecutionRecorder(), record);
+        }
+    }
+
+    /**
+     * 目录失败会把当前 Ledger 事务标记为 rollback-only。若此时立即补写终态，
+     * 新写入仍会加入同一个待回滚事务，既补不进去还可能等待当前事务持有的行锁。
+     * 因此把补偿放到事务完成之后，并用独立事务写回 run/session。
+     */
+    private static void compensateAfterRollback(AgentExecutionRecorder recorder,
+                                                DialogueRunFinishRecord record) {
+        if (recorder == null || record == null) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    finishWithoutTimeline(recorder, record);
+                }
+            });
+            return;
+        }
+        finishWithoutTimeline(recorder, record);
+    }
+
+    private static void finishWithoutTimeline(AgentExecutionRecorder recorder,
+                                              DialogueRunFinishRecord record) {
+        try {
+            recorder.finishRunWithoutTimeline(record);
+        } catch (RuntimeException fallbackError) {
+            log.error("finish run fallback failed, requestId={}",
+                    record.getRequestId(), fallbackError);
+        }
     }
 
     /**
@@ -109,7 +163,11 @@ public final class ExecutionLedgerRunSupport {
                                              String requestId) {
         List<ArtifactRecordCommand> inputArtifacts = buildInputArtifacts(sessionFiles, runId, requestId);
         if (!inputArtifacts.isEmpty()) {
-            recorder.recordArtifacts(inputArtifacts);
+            try {
+                recorder.recordArtifacts(inputArtifacts);
+            } catch (RuntimeException e) {
+                log.warn("input artifact ledger write failed, requestId={}", requestId, e);
+            }
         }
     }
 

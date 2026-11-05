@@ -540,6 +540,7 @@ public class ReplayProjector {
         response.put("requestId", bundle == null || bundle.getRun() == null ? null : bundle.getRun().getRequestId());
         response.put("messageId", resolveLlmMessageId(invocation, messageType));
         response.put("messageType", messageType);
+        response.put("llmInvocationId", invocation.getId());
         response.put("messageTime", invocation.getFinishedAt() == null
                 ? String.valueOf(System.currentTimeMillis())
                 : String.valueOf(invocation.getFinishedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()));

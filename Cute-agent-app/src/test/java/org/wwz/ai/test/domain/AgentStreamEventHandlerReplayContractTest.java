@@ -41,7 +41,10 @@ public class AgentStreamEventHandlerReplayContractTest {
                         .planThought("先规划执行步骤")
                         .isFinal(true)
                         .finish(false)
-                        .resultMap(Map.of("agentType", 3, "plannerRoundId", "planner-round-001"))
+                        .resultMap(Map.of(
+                                "agentType", 3,
+                                "plannerRoundId", "planner-round-001",
+                                "llmInvocationId", 42L))
                         .build()
         );
 
@@ -49,6 +52,7 @@ public class AgentStreamEventHandlerReplayContractTest {
         Assert.assertEquals("先规划执行步骤", frameResultMap(result).get("planThought"));
         Assert.assertEquals(Boolean.TRUE, frameResultMap(result).get("isFinal"));
         Assert.assertEquals("planner-round-001", frameResultMap(result).get("plannerRoundId"));
+        Assert.assertEquals(42L, frameResultMap(result).get("llmInvocationId"));
     }
 
     @Test
@@ -147,7 +151,10 @@ public class AgentStreamEventHandlerReplayContractTest {
                         .planThought("重排计划")
                         .isFinal(true)
                         .finish(false)
-                        .resultMap(Map.of("agentType", 3, "plannerRoundId", "planner-round-002"))
+                        .resultMap(Map.of(
+                                "agentType", 3,
+                                "plannerRoundId", "planner-round-002",
+                                "llmInvocationId", 43L))
                         .build()
         );
         AgentStreamResult planFrame = handler.build(
@@ -167,12 +174,17 @@ public class AgentStreamEventHandlerReplayContractTest {
                                 .build())
                         .isFinal(true)
                         .finish(false)
-                        .resultMap(Map.of("agentType", 3, "plannerRoundId", "planner-round-002"))
+                        .resultMap(Map.of(
+                                "agentType", 3,
+                                "plannerRoundId", "planner-round-002",
+                                "llmInvocationId", 43L))
                         .build()
         );
 
         Assert.assertEquals("planner-round-002", frameResultMap(thoughtFrame).get("plannerRoundId"));
         Assert.assertEquals("planner-round-002", frameResultMap(planFrame).get("plannerRoundId"));
+        Assert.assertEquals(43L, frameResultMap(thoughtFrame).get("llmInvocationId"));
+        Assert.assertEquals(43L, frameResultMap(planFrame).get("llmInvocationId"));
     }
 
     @Test

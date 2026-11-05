@@ -36,6 +36,13 @@ public class AgentStreamContractTest {
     @Test
     public void mapsCaseFrameToTriggerResponseWithoutChangingWireFields() {
         AgentSessionStreamFrame frame = AgentSessionStreamFrame.builder()
+                .protocolVersion("2")
+                .eventType("item.completed")
+                .eventId("session-1:4")
+                .seq(4L)
+                .runId("req-1")
+                .itemId("tool:call-1")
+                .itemStatus("COMPLETED")
                 .status("success")
                 .response("delta")
                 .responseAll("all")
@@ -51,5 +58,12 @@ public class AgentStreamContractTest {
         Assert.assertTrue(response.isFinished());
         Assert.assertEquals("result", response.getPackageType());
         Assert.assertEquals(4L, response.getEventSeq());
+        Assert.assertEquals("2", response.getProtocolVersion());
+        Assert.assertEquals("item.completed", response.getEventType());
+        Assert.assertEquals("session-1:4", response.getEventId());
+        Assert.assertEquals(4L, response.getSeq());
+        Assert.assertEquals("req-1", response.getRunId());
+        Assert.assertEquals("tool:call-1", response.getItemId());
+        Assert.assertEquals("COMPLETED", response.getItemStatus());
     }
 }

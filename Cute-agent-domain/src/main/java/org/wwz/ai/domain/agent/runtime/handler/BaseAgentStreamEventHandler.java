@@ -299,6 +299,7 @@ public class BaseAgentStreamEventHandler {
         payload.put("steps", agentResponse.getPlan().getSteps());
         payload.put("stepStatus", agentResponse.getPlan().getStepStatus());
         payload.put("notes", agentResponse.getPlan().getNotes());
+        copyIfPresent(payload, agentResponse.getResultMap(), "llmInvocationId");
         appendPlannerRoundId(payload, agentResponse == null ? null : agentResponse.getResultMap());
         appendPlannerRoundId(payload, fallbackPlannerRoundId);
         return payload;
@@ -322,11 +323,13 @@ public class BaseAgentStreamEventHandler {
             switch (agentResponse.getMessageType()) {
             case "tool_thought":
                 payload.put("toolThought", agentResponse.getToolThought());
+                copyIfPresent(payload, agentResponse.getResultMap(), "llmInvocationId");
                 appendSubAgentNestingTags(payload, agentResponse.getResultMap());
                 break;
             case "llm_reasoning":
                 // 仅原生 CoT；禁止再塞进 toolThought（避免被当过程文/假思考）
                 payload.put("reasoningContent", agentResponse.getReasoningContent());
+                copyIfPresent(payload, agentResponse.getResultMap(), "llmInvocationId");
                 appendSubAgentNestingTags(payload, agentResponse.getResultMap());
                 break;
             case "task":
@@ -340,6 +343,7 @@ public class BaseAgentStreamEventHandler {
                 break;
             case "plan_thought":
                 payload.put("planThought", agentResponse.getPlanThought());
+                copyIfPresent(payload, agentResponse.getResultMap(), "llmInvocationId");
                 break;
             case "plan":
                 if (agentResponse.getPlan() != null) {
@@ -349,6 +353,7 @@ public class BaseAgentStreamEventHandler {
                     payload.put("stepStatus", agentResponse.getPlan().getStepStatus());
                     payload.put("notes", agentResponse.getPlan().getNotes());
                 }
+                copyIfPresent(payload, agentResponse.getResultMap(), "llmInvocationId");
                 break;
             case "tool_result":
                 payload.put("toolResult", agentResponse.getToolResult());
@@ -361,6 +366,7 @@ public class BaseAgentStreamEventHandler {
                 // 前端据此把中间轮发言封口成时间线独立的助手文本行，终轮留给 result 收口。
                 // 这里必须透传，否则实时链路的中间轮插不进工具卡片之间。
                 copyIfPresent(payload, agentResponse.getResultMap(), "moreRounds");
+                copyIfPresent(payload, agentResponse.getResultMap(), "llmInvocationId");
                 // 子 agent（SubAgentPrinter 透传回退路径）的正文流也要带嵌套标签：
                 // 前端据此区分主/子 —— 子的挂嵌套时间线，不写主对话结论区。
                 appendSubAgentNestingTags(payload, agentResponse.getResultMap());

@@ -21,10 +21,16 @@ public class LlmInvocationStartRecord {
     /** 账本关联与幂等键，必填。 */
     private String requestId;
 
+    /** 所属会话；用于同步写时间线目录。 */
+    private String sessionId;
+
     /** run 内调用序号，必填。 */
     private Integer invocationSeq;
 
     private String agentName;
+
+    /** 时间线目录使用的运行时 Agent ID：main 或子 Agent 运行时 ID。 */
+    private String agentId;
 
     private Integer stepNo;
 

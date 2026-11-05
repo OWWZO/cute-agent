@@ -9,6 +9,7 @@ import org.wwz.ai.application.agent.planmode.PlanApprovalApplicationService;
 import org.wwz.ai.application.agent.dispatch.IAgentDispatchService;
 import org.wwz.ai.application.agent.run.AgentRunLaunchGate;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
+import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
 import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
@@ -86,6 +87,9 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
 
     @Resource
     private SessionProjectionRegistry sessionProjectionRegistry;
+
+    @Resource
+    private AgentTimelineEventProjector agentTimelineEventProjector;
 
     @Resource
     private IExecutionLedgerReadRepository executionLedgerReadRepository;
@@ -218,7 +222,8 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         AgentStreamProjection projectingStream = null;
         try {
             projectingStream =
-                    new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus, sessionEventClock)
+                    new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus,
+                            sessionEventClock, agentTimelineEventProjector)
                             .bindRegistry(sessionProjectionRegistry);
             AgentStreamProjection deferredStream = projectingStream;
             agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {

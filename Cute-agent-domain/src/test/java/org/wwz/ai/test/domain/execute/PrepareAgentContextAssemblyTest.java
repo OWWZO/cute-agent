@@ -364,6 +364,10 @@ public class PrepareAgentContextAssemblyTest {
         }
 
         @Override
+        public void finishRunWithoutTimeline(DialogueRunFinishRecord record) {
+        }
+
+        @Override
         public Long createLlmInvocation(LlmInvocationStartRecord record) {
             return 1L;
         }
@@ -373,12 +377,25 @@ public class PrepareAgentContextAssemblyTest {
         }
 
         @Override
+        public void finishLlmInvocationWithoutTimeline(LlmInvocationFinishRecord record) {
+        }
+
+        @Override
         public Map<String, Long> createToolInvocations(ToolInvocationBatchStartRecord record) {
             return Map.of();
         }
 
         @Override
+        public Map<String, Long> createToolInvocationsWithoutTimeline(ToolInvocationBatchStartRecord record) {
+            return Map.of();
+        }
+
+        @Override
         public void finishToolInvocation(ToolInvocationFinishRecord record) {
+        }
+
+        @Override
+        public void finishToolInvocationWithoutTimeline(ToolInvocationFinishRecord record) {
         }
 
         @Override

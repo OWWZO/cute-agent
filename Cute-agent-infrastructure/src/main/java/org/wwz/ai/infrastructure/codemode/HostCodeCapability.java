@@ -110,20 +110,20 @@ public final class HostCodeCapability {
         ToolArtifactSource source = agentContext.getCurrentToolArtifactSource();
         String parentToolCallId = source == null ? null : source.getToolCallId();
         LocalDateTime startedAt = LocalDateTime.now();
-        Long invocationId = CodeModeInvocationRecorder.begin(
+        CodeModeInvocationRecorder.InvocationHandle invocation = CodeModeInvocationRecorder.begin(
                 agentContext, parentToolCallId, CodeModeInvocationRecorder.TOOL_HOST,
                 CodeModeInvocationRecorder.summarize(toolParams), startedAt);
         try {
             HostCliTool hostCliTool = new HostCliTool(availableTools);
             Map<String, Object> fields = invoke(hostCliTool, toolParams, agentContext);
-            CodeModeInvocationRecorder.end(agentContext, invocationId, CodeModeInvocationRecorder.TOOL_HOST,
+            CodeModeInvocationRecorder.end(agentContext, invocation, CodeModeInvocationRecorder.TOOL_HOST,
                     fields.get("ok") == Boolean.TRUE
                             ? ExecutionLedgerConstants.STATUS_SUCCESS
                             : ExecutionLedgerConstants.STATUS_FAILED,
                     summarize(fields), null, LocalDateTime.now());
             return fields;
-        } catch (CodeModeExecutionException e) {
-            CodeModeInvocationRecorder.end(agentContext, invocationId, CodeModeInvocationRecorder.TOOL_HOST,
+        } catch (RuntimeException e) {
+            CodeModeInvocationRecorder.end(agentContext, invocation, CodeModeInvocationRecorder.TOOL_HOST,
                     ExecutionLedgerConstants.STATUS_FAILED, null, e.getMessage(), LocalDateTime.now());
             throw e;
         }

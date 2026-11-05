@@ -15,10 +15,10 @@ public interface IArtifactLedgerDao {
     /**
      * 批量写入产物账本。
      *
-     * <p>当前 mapper 使用 {@code INSERT IGNORE ... VALUES <foreach>}，调用方必须传入至少一条记录；
-     * 返回实际插入行数。</p>
+     * <p>当前 mapper 使用 {@code INSERT ... VALUES <foreach>} 并回填主键，重复键会直接失败，
+     * 避免批量生成 ID 与输入行错位；调用方必须传入至少一条记录。</p>
      */
-    int batchInsertArtifacts(@Param("records") List<ArtifactRecord> records);
+    int batchInsertArtifacts(List<ArtifactRecord> records);
 
     /** 查询单 run 的原始产物行，不做子 Agent 血缘折叠。 */
     List<ArtifactRecord> queryByRunId(@Param("runId") Long runId);

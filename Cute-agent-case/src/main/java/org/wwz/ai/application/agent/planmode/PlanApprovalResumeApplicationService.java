@@ -10,6 +10,7 @@ import org.wwz.ai.application.agent.query.AgentQuerySubmitResult;
 import org.wwz.ai.application.agent.query.GptQueryApplicationService;
 import org.wwz.ai.application.agent.run.AgentRunLaunchGate;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
+import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
 import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
@@ -65,6 +66,9 @@ public class PlanApprovalResumeApplicationService {
     @Resource
     private BackgroundTaskWakePort backgroundTaskWakePort;
 
+    @Resource
+    private AgentTimelineEventProjector agentTimelineEventProjector;
+
     public AgentQuerySubmitResult resume(String resumeRequestId) {
         if (StringUtils.isBlank(resumeRequestId)) {
             throw new IllegalArgumentException("resumeRequestId 不能为空");
@@ -116,7 +120,8 @@ public class PlanApprovalResumeApplicationService {
         }
 
         AgentStreamProjection projectingStream =
-                new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus, sessionEventClock)
+                new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus,
+                        sessionEventClock, agentTimelineEventProjector)
                         .bindRegistry(sessionProjectionRegistry);
         agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {
             try {

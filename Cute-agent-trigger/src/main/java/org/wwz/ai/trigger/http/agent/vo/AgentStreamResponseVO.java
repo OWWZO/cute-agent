@@ -1,5 +1,6 @@
 package org.wwz.ai.trigger.http.agent.vo;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -16,6 +17,23 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgentStreamResponseVO {
+
+    private String protocolVersion;
+    private String eventType;
+    private String eventId;
+    private long seq;
+    private String runId;
+    private String itemId;
+    private String parentItemId;
+    private String agentId;
+    private String kind;
+    private String phase;
+    private String itemStatus;
+    private long orderKey;
+    private int subOrder;
+    private String delta;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Map<String, Object> payload;
 
     private String status;
     private String response;

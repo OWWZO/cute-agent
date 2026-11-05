@@ -16,6 +16,7 @@ import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryPage;
 import org.wwz.ai.domain.agent.ledger.model.ConversationRunReplay;
 import org.wwz.ai.domain.agent.ledger.model.ConversationRunSummary;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.replay.ConversationHistoryReplayService;
 
@@ -174,7 +175,18 @@ public class ConversationSessionBootstrapApplicationService {
      */
     private long estimateReplayBytes(ConversationRunReplay replay) {
         long bytes = 0;
-        if (replay.getReplayFrames() != null) {
+        var timelineItems = replay.getTimelineItems();
+        if (TimelineItemProjection.hasRenderableEventData(timelineItems)) {
+            for (var item : timelineItems) {
+                if (item == null) {
+                    continue;
+                }
+                bytes += lengthOf(item.getDelta());
+                bytes += lengthOf(item.getErrorMsg());
+                bytes += estimateMapBytes(item.getPayload());
+                bytes += 256; // item 元数据粗估
+            }
+        } else if (replay.getReplayFrames() != null) {
             for (var frame : replay.getReplayFrames()) {
                 if (frame == null) {
                     continue;

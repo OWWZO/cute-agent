@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.wwz.ai.infrastructure.dao.cute.ITimelineItemDao">
+
+    <resultMap id="TimelineItemMap" type="org.wwz.ai.domain.agent.ledger.timeline.TimelineItem">
+        <id column="id" property="id"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="request_id" property="runId"/>
+        <result column="item_id" property="itemId"/>
+        <result column="parent_item_id" property="parentItemId"/>
+        <result column="agent_id" property="agentId"/>
+        <result column="kind" property="kind"/>
+        <result column="phase" property="phase"/>
+        <result column="status" property="status"/>
+        <result column="order_key" property="orderKey"/>
+        <result column="sub_order" property="subOrder"/>
+        <result column="updated_seq" property="updatedSeq"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="llm_invocation_id" property="llmInvocationId"/>
+        <result column="tool_invocation_id" property="toolInvocationId"/>
+        <result column="artifact_id" property="artifactId"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="timelineItemColumns">
+        id, session_id, request_id, item_id, parent_item_id, agent_id, kind, phase, status,
+        order_key, sub_order, updated_seq, source_type, llm_invocation_id,
+        tool_invocation_id, artifact_id, create_time, update_time, deleted
+    </sql>
+
+    <insert id="upsert">
+        INSERT INTO ai_agent_timeline_item (
+            session_id, request_id, item_id, parent_item_id, agent_id, kind, phase, status,
+            order_key, sub_order, updated_seq, source_type, llm_invocation_id,
+            tool_invocation_id, artifact_id, create_time, update_time, deleted
+        ) VALUES (
+            #{sessionId}, #{runId}, #{itemId}, #{parentItemId}, #{agentId}, #{kind}, #{phase}, #{status},
+            #{orderKey}, #{subOrder}, #{updatedSeq}, #{sourceType}, #{llmInvocationId},
+            #{toolInvocationId}, #{artifactId}, NOW(), NOW(), 0
+        )
+        ON DUPLICATE KEY UPDATE
+            parent_item_id = COALESCE(VALUES(parent_item_id), parent_item_id),
+            agent_id = COALESCE(VALUES(agent_id), agent_id),
+            kind = kind,
+            phase = CASE
+                WHEN phase = 'FINAL' OR VALUES(phase) = 'FINAL' THEN 'FINAL'
+                WHEN phase = 'SUMMARY' OR VALUES(phase) = 'SUMMARY' THEN 'SUMMARY'
+                ELSE VALUES(phase)
+            END,
+            status = CASE
+                WHEN status IN ('COMPLETED', 'CANCELLED', 'FAILED') THEN status
+                WHEN VALUES(status) IN ('COMPLETED', 'CANCELLED', 'FAILED') THEN VALUES(status)
+                WHEN VALUES(updated_seq) = 0 OR VALUES(updated_seq) >= updated_seq THEN VALUES(status)
+                ELSE status
+            END,
+            order_key = CASE WHEN order_key = 0 THEN VALUES(order_key) ELSE order_key END,
+            sub_order = CASE WHEN sub_order = 0 THEN VALUES(sub_order) ELSE sub_order END,
+            updated_seq = GREATEST(updated_seq, VALUES(updated_seq)),
+            source_type = source_type,
+            llm_invocation_id = COALESCE(VALUES(llm_invocation_id), llm_invocation_id),
+            tool_invocation_id = COALESCE(VALUES(tool_invocation_id), tool_invocation_id),
+            artifact_id = COALESCE(VALUES(artifact_id), artifact_id),
+            update_time = NOW(),
+            deleted = 0
+    </insert>
+
+    <insert id="upsertBatch">
+        INSERT INTO ai_agent_timeline_item (
+            session_id, request_id, item_id, parent_item_id, agent_id, kind, phase, status,
+            order_key, sub_order, updated_seq, source_type, llm_invocation_id,
+            tool_invocation_id, artifact_id, create_time, update_time, deleted
+        ) VALUES
+        <foreach collection="items" item="item" separator=",">
+            (
+                #{item.sessionId}, #{item.runId}, #{item.itemId}, #{item.parentItemId},
+                #{item.agentId}, #{item.kind}, #{item.phase}, #{item.status},
+                #{item.orderKey}, #{item.subOrder}, #{item.updatedSeq}, #{item.sourceType},
+                #{item.llmInvocationId}, #{item.toolInvocationId}, #{item.artifactId},
+                NOW(), NOW(), 0
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            parent_item_id = COALESCE(VALUES(parent_item_id), parent_item_id),
+            agent_id = COALESCE(VALUES(agent_id), agent_id),
+            kind = kind,
+            phase = CASE
+                WHEN phase = 'FINAL' OR VALUES(phase) = 'FINAL' THEN 'FINAL'
+                WHEN phase = 'SUMMARY' OR VALUES(phase) = 'SUMMARY' THEN 'SUMMARY'
+                ELSE VALUES(phase)
+            END,
+            status = CASE
+                WHEN status IN ('COMPLETED', 'CANCELLED', 'FAILED') THEN status
+                WHEN VALUES(status) IN ('COMPLETED', 'CANCELLED', 'FAILED') THEN VALUES(status)
+                WHEN VALUES(updated_seq) = 0 OR VALUES(updated_seq) >= updated_seq THEN VALUES(status)
+                ELSE status
+            END,
+            order_key = CASE WHEN order_key = 0 THEN VALUES(order_key) ELSE order_key END,
+            sub_order = CASE WHEN sub_order = 0 THEN VALUES(sub_order) ELSE sub_order END,
+            updated_seq = GREATEST(updated_seq, VALUES(updated_seq)),
+            source_type = source_type,
+            llm_invocation_id = COALESCE(VALUES(llm_invocation_id), llm_invocation_id),
+            tool_invocation_id = COALESCE(VALUES(tool_invocation_id), tool_invocation_id),
+            artifact_id = COALESCE(VALUES(artifact_id), artifact_id),
+            update_time = NOW(),
+            deleted = 0
+    </insert>
+
+    <select id="queryByRunIds" resultMap="TimelineItemMap">
+        SELECT <include refid="timelineItemColumns"/>
+        FROM ai_agent_timeline_item
+        WHERE deleted = 0
+          AND request_id IN
+        <foreach collection="runIds" item="runId" open="(" separator="," close=")">
+            #{runId}
+        </foreach>
+        ORDER BY request_id ASC,
+                 CASE WHEN order_key = 0 THEN 1 ELSE 0 END ASC,
+                 order_key ASC, sub_order ASC, id ASC
+    </select>
+</mapper>

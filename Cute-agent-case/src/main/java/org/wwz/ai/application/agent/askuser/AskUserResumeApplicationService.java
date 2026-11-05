@@ -10,6 +10,7 @@ import org.wwz.ai.application.agent.query.AgentQuerySubmitResult;
 import org.wwz.ai.application.agent.query.GptQueryApplicationService;
 import org.wwz.ai.application.agent.run.AgentRunLaunchGate;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
+import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
 import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
@@ -64,6 +65,9 @@ public class AskUserResumeApplicationService {
 
     @Resource
     private BackgroundTaskWakePort backgroundTaskWakePort;
+
+    @Resource
+    private AgentTimelineEventProjector agentTimelineEventProjector;
 
     /**
      * CAS claim 后提交 continuation run。观察流走 GET session stream。
@@ -129,7 +133,8 @@ public class AskUserResumeApplicationService {
         AgentStreamProjection projectingStream = null;
         try {
             projectingStream =
-                    new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus, sessionEventClock)
+                    new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus,
+                            sessionEventClock, agentTimelineEventProjector)
                             .bindRegistry(sessionProjectionRegistry);
             AgentStreamProjection deferredStream = projectingStream;
             agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {

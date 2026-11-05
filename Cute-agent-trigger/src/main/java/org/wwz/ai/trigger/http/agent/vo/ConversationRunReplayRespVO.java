@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemView;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -53,4 +54,7 @@ public class ConversationRunReplayRespVO {
 
     @Builder.Default
     private List<AgentStreamResponseVO> replayFrames = new ArrayList<>();
+
+    @Builder.Default
+    private List<TimelineItemView> timelineItems = new ArrayList<>();
 }

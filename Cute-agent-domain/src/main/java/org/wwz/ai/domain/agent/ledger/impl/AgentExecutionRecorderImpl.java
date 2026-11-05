@@ -1,10 +1,13 @@
 package org.wwz.ai.domain.agent.ledger.impl;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository;
 import org.wwz.ai.domain.agent.ledger.entity.ArtifactRecord;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
@@ -25,10 +28,18 @@ import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputNames;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputPersistCommand;
 import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.ledger.tooloutput.ToolOutputWriter;
+import org.wwz.ai.domain.agent.ledger.timeline.ITimelineItemRepository;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItem;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemKind;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemPhase;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemSourceType;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemStatus;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemWriteException;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,16 +52,33 @@ import java.util.concurrent.atomic.LongAdder;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
 
     private final IExecutionLedgerWriteRepository executionLedgerWriteRepository;
     private final ToolOutputWriter toolOutputWriter;
+    private final ITimelineItemRepository timelineItemRepository;
 
     private final Map<String, LongAdder> successCounters = new ConcurrentHashMap<>();
     private final Map<String, LongAdder> failureCounters = new ConcurrentHashMap<>();
 
+    public AgentExecutionRecorderImpl(IExecutionLedgerWriteRepository executionLedgerWriteRepository,
+                                      ToolOutputWriter toolOutputWriter) {
+        this(executionLedgerWriteRepository, toolOutputWriter, null);
+    }
+
+    @Autowired
+    public AgentExecutionRecorderImpl(IExecutionLedgerWriteRepository executionLedgerWriteRepository,
+                                      ToolOutputWriter toolOutputWriter,
+                                      ObjectProvider<ITimelineItemRepository> timelineItemRepositoryProvider) {
+        this.executionLedgerWriteRepository = executionLedgerWriteRepository;
+        this.toolOutputWriter = toolOutputWriter;
+        this.timelineItemRepository = timelineItemRepositoryProvider == null
+                ? null
+                : timelineItemRepositoryProvider.getIfAvailable();
+    }
+
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long createRun(DialogueRunStartRecord record) {
         // sessionId 是会话汇总行的主键：为空时写会话会生成 key=null 的脏行，直接拒绝初始化。
         if (record == null
@@ -128,7 +156,18 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void finishRun(DialogueRunFinishRecord record) {
+        finishRunInternal(record, true);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public void finishRunWithoutTimeline(DialogueRunFinishRecord record) {
+        finishRunInternal(record, false);
+    }
+
+    private void finishRunInternal(DialogueRunFinishRecord record, boolean writeTimeline) {
         // status 会在写会话计数时拆箱成 int：null 若留到 updateRunFinish 之后才炸，
         // run 已进入终态、计数却永久丢失，因此必须在任何写入前拒绝。
         if (record == null || record.getRunId() == null || StringUtils.isBlank(record.getRequestId())
@@ -182,13 +221,20 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                     isSuccessStatus(record.getStatus()) ? 1 : 0,
                     isFailedStatus(record.getStatus()) ? 1 : 0,
                     finishedAt);
+            if (writeTimeline) {
+                recordRunTimelineItem(existing, record);
+            }
             markSuccess("finishRun");
+        } catch (TimelineItemWriteException e) {
+            markFailure("finishRun", record.getRequestId(), record.getRunId(), null, e);
+            throw e;
         } catch (Exception e) {
             markFailure("finishRun", record.getRequestId(), record.getRunId(), null, e);
         }
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long createLlmInvocation(LlmInvocationStartRecord record) {
         if (record == null || record.getRunId() == null) {
             return null;
@@ -224,8 +270,25 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                 .build();
         try {
             executionLedgerWriteRepository.insertLlmInvocation(entity);
+            recordTimelineItem(TimelineItem.builder()
+                    .sessionId(record.getSessionId())
+                    .runId(record.getRequestId())
+                    .itemId("llm:" + entity.getId())
+                    .agentId(StringUtils.defaultIfBlank(record.getAgentId(), "main"))
+                    .kind(TimelineItemKind.ASSISTANT_MESSAGE.name())
+                    .phase(TimelineItemPhase.INTERMEDIATE.name())
+                    .status(TimelineItemStatus.RUNNING.name())
+                    .orderKey(0L)
+                    .subOrder(0)
+                    .updatedSeq(0L)
+                    .sourceType(TimelineItemSourceType.LLM.name())
+                    .llmInvocationId(entity.getId())
+                    .build());
             markSuccess("createLlmInvocation");
             return entity.getId();
+        } catch (TimelineItemWriteException e) {
+            markFailure("createLlmInvocation", record.getRequestId(), record.getRunId(), null, e);
+            throw e;
         } catch (Exception e) {
             markFailure("createLlmInvocation", record.getRequestId(), record.getRunId(), null, e);
             return null;
@@ -233,7 +296,18 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void finishLlmInvocation(LlmInvocationFinishRecord record) {
+        finishLlmInvocationInternal(record, true);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void finishLlmInvocationWithoutTimeline(LlmInvocationFinishRecord record) {
+        finishLlmInvocationInternal(record, false);
+    }
+
+    private void finishLlmInvocationInternal(LlmInvocationFinishRecord record, boolean writeTimeline) {
         if (record == null || record.getLlmInvocationId() == null) {
             return;
         }
@@ -261,14 +335,32 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                     .errorMsg(trimText(record.getErrorMsg(), 2000))
                     .finishedAt(finishedAt)
                     .build());
+            if (writeTimeline) {
+                recordLlmFinishTimelineItem(record);
+            }
             markSuccess("finishLlmInvocation");
+        } catch (TimelineItemWriteException e) {
+            markFailure("finishLlmInvocation", record.getRequestId(), null, null, e);
+            throw e;
         } catch (Exception e) {
             markFailure("finishLlmInvocation", record.getRequestId(), null, null, e);
         }
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Long> createToolInvocations(ToolInvocationBatchStartRecord record) {
+        return createToolInvocationsInternal(record, true);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Long> createToolInvocationsWithoutTimeline(ToolInvocationBatchStartRecord record) {
+        return createToolInvocationsInternal(record, false);
+    }
+
+    private Map<String, Long> createToolInvocationsInternal(ToolInvocationBatchStartRecord record,
+                                                            boolean writeTimeline) {
         Map<String, Long> mapping = new LinkedHashMap<>();
         if (record == null || record.getRunId() == null || CollectionUtils.isEmpty(record.getItems())) {
             return mapping;
@@ -319,10 +411,16 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                                     + "runId={}, expected={}, inserted={}, mapped={}",
                             record.getRunId(), entities.size(), inserted, mapping.size());
                 }
+                if (writeTimeline) {
+                    recordToolTimelineItems(record, entities, toolCallIds, mapping);
+                }
                 return mapping;
             }
             log.warn("batch createToolInvocations wrote no rows, fallback to per-item write: runId={}, size={}",
                     record.getRunId(), entities.size());
+        } catch (TimelineItemWriteException e) {
+            markFailure("createToolInvocation", record.getRequestId(), record.getRunId(), null, e);
+            throw e;
         } catch (Exception e) {
             // 单条批量语句整体失败（如唯一键冲突）时回退逐条写入：
             // 单个工具失败不应阻止同批其他工具获得 invocationId。
@@ -336,7 +434,13 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
             try {
                 executionLedgerWriteRepository.insertToolInvocation(entity);
                 mapping.put(toolCallId, entity.getId());
+                if (writeTimeline) {
+                    recordTimelineItem(toolTimelineItem(record, entity, toolCallId));
+                }
                 markSuccess("createToolInvocation");
+            } catch (TimelineItemWriteException e) {
+                markFailure("createToolInvocation", record.getRequestId(), record.getRunId(), toolCallId, e);
+                throw e;
             } catch (Exception e) {
                 markFailure("createToolInvocation", record.getRequestId(), record.getRunId(), toolCallId, e);
             }
@@ -345,7 +449,18 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void finishToolInvocation(ToolInvocationFinishRecord record) {
+        finishToolInvocationInternal(record, true);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void finishToolInvocationWithoutTimeline(ToolInvocationFinishRecord record) {
+        finishToolInvocationInternal(record, false);
+    }
+
+    private void finishToolInvocationInternal(ToolInvocationFinishRecord record, boolean writeTimeline) {
         if (record == null || record.getToolInvocationId() == null) {
             return;
         }
@@ -361,8 +476,27 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                     .errorMsg(trimText(record.getErrorMsg(), 2000))
                     .finishedAt(record.getFinishedAt())
                     .build());
+            if (writeTimeline) {
+                recordTimelineItem(TimelineItem.builder()
+                        .sessionId(record.getSessionId())
+                        .runId(record.getRequestId())
+                        .itemId("tool:" + StringUtils.defaultIfBlank(
+                                record.getToolCallId(), String.valueOf(record.getToolInvocationId())))
+                        .kind(TimelineItemKind.TOOL_CALL.name())
+                        .phase(TimelineItemPhase.INTERMEDIATE.name())
+                        .status(toTimelineStatus(record.getStatus()).name())
+                        .orderKey(0L)
+                        .subOrder(0)
+                        .updatedSeq(0L)
+                        .sourceType(TimelineItemSourceType.TOOL.name())
+                        .toolInvocationId(record.getToolInvocationId())
+                        .build());
+            }
             persistStructuredOutput(record);
             markSuccess("finishToolInvocation");
+        } catch (TimelineItemWriteException e) {
+            markFailure("finishToolInvocation", record.getRequestId(), null, record.getToolCallId(), e);
+            throw e;
         } catch (Exception e) {
             markFailure("finishToolInvocation", record.getRequestId(), null, record.getToolCallId(), e);
         }
@@ -393,9 +527,13 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void recordArtifacts(List<ArtifactRecordCommand> records) {
         try {
             recordArtifactsOrThrow(records);
+        } catch (TimelineItemWriteException e) {
+            markFailure("recordArtifacts", artifactRequestId(records), artifactRunId(records), null, e);
+            throw e;
         } catch (Exception e) {
             String requestId = null;
             Long runId = null;
@@ -413,6 +551,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void recordArtifactsOrThrow(List<ArtifactRecordCommand> records) {
         if (CollectionUtils.isEmpty(records)) {
             return;
@@ -452,7 +591,204 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
             throw new IllegalStateException(String.format(
                     "artifact duplicate or ignored, expected=%d, inserted=%d", entities.size(), inserted));
         }
+        recordArtifactTimelineItems(entities);
         markSuccess("recordArtifacts");
+    }
+
+    private void recordToolTimelineItems(ToolInvocationBatchStartRecord record,
+                                         List<ToolInvocation> entities,
+                                         List<String> toolCallIds,
+                                         Map<String, Long> mapping) {
+        if (timelineItemRepository == null || CollectionUtils.isEmpty(entities)) {
+            return;
+        }
+        if (StringUtils.isBlank(record.getSessionId())) {
+            // 兼容历史调用方：记录级 session 缺失时退回逐条解析 run 归属。
+            for (int i = 0; i < entities.size(); i++) {
+                String toolCallId = toolCallIds.get(i);
+                if (mapping.get(toolCallId) != null) {
+                    recordTimelineItem(toolTimelineItem(record, entities.get(i), toolCallId));
+                }
+            }
+            return;
+        }
+        List<TimelineItem> timelineItems = new ArrayList<>(entities.size());
+        for (int i = 0; i < entities.size(); i++) {
+            String toolCallId = toolCallIds.get(i);
+            Long invocationId = mapping.get(toolCallId);
+            if (invocationId == null) {
+                continue;
+            }
+            ToolInvocation entity = entities.get(i);
+            timelineItems.add(toolTimelineItem(record, entity, toolCallId));
+        }
+        if (timelineItems.isEmpty()) {
+            return;
+        }
+        try {
+            timelineItemRepository.upsertBatch(timelineItems);
+        } catch (Exception e) {
+            throw new TimelineItemWriteException("tool timeline batch write failed", e);
+        }
+    }
+
+    private TimelineItem toolTimelineItem(ToolInvocationBatchStartRecord record,
+                                          ToolInvocation entity,
+                                          String toolCallId) {
+        return TimelineItem.builder()
+                .sessionId(record.getSessionId())
+                .runId(record.getRequestId())
+                .itemId("tool:" + toolCallId)
+                .parentItemId(StringUtils.isNotBlank(entity.getParentToolCallId())
+                        ? "tool:" + entity.getParentToolCallId()
+                        : null)
+                .agentId(StringUtils.defaultIfBlank(entity.getSubAgentId(), "main"))
+                .kind(TimelineItemKind.TOOL_CALL.name())
+                .phase(TimelineItemPhase.INTERMEDIATE.name())
+                .status(TimelineItemStatus.RUNNING.name())
+                .orderKey(0L)
+                .subOrder(0)
+                .updatedSeq(0L)
+                .sourceType(TimelineItemSourceType.TOOL.name())
+                .llmInvocationId(record.getLlmInvocationId())
+                .toolInvocationId(entity.getId())
+                .build();
+    }
+
+    private void recordLlmFinishTimelineItem(LlmInvocationFinishRecord record) {
+        TimelineItemStatus status = toTimelineStatus(record.getStatus());
+        recordTimelineItem(TimelineItem.builder()
+                .sessionId(record.getSessionId())
+                .runId(record.getRequestId())
+                .itemId("llm:" + record.getLlmInvocationId())
+                .kind(TimelineItemKind.ASSISTANT_MESSAGE.name())
+                .phase(TimelineItemPhase.INTERMEDIATE.name())
+                .status(status.name())
+                .orderKey(0L)
+                .subOrder(0)
+                .updatedSeq(0L)
+                .sourceType(TimelineItemSourceType.LLM.name())
+                .llmInvocationId(record.getLlmInvocationId())
+                .build());
+        if (StringUtils.isNotBlank(record.getReasoningContent())) {
+            recordTimelineItem(TimelineItem.builder()
+                    .sessionId(record.getSessionId())
+                    .runId(record.getRequestId())
+                    .itemId("llm:" + record.getLlmInvocationId() + ":reasoning")
+                    .kind(TimelineItemKind.REASONING.name())
+                    .phase(TimelineItemPhase.INTERMEDIATE.name())
+                    .status(status.name())
+                    .orderKey(0L)
+                    .subOrder(0)
+                    .updatedSeq(0L)
+                    .sourceType(TimelineItemSourceType.LLM.name())
+                    .llmInvocationId(record.getLlmInvocationId())
+                    .build());
+        }
+    }
+
+    private void recordRunTimelineItem(DialogueRun existing,
+                                       DialogueRunFinishRecord record) {
+        recordTimelineItem(TimelineItem.builder()
+                .sessionId(existing.getSessionId())
+                .runId(record.getRequestId())
+                .itemId("run:" + record.getRequestId() + ":final")
+                .kind(TimelineItemKind.ASSISTANT_MESSAGE.name())
+                .phase(TimelineItemPhase.FINAL.name())
+                .status(toTimelineStatus(record.getStatus()).name())
+                .orderKey(0L)
+                .subOrder(0)
+                .updatedSeq(0L)
+                .sourceType(TimelineItemSourceType.RUN.name())
+                .build());
+    }
+
+    private void recordArtifactTimelineItems(List<ArtifactRecord> entities) {
+        if (timelineItemRepository == null || CollectionUtils.isEmpty(entities)) {
+            return;
+        }
+        Map<String, DialogueRun> runByRequestId = new HashMap<>();
+        for (ArtifactRecord persisted : entities) {
+            if (persisted == null
+                    || persisted.getId() == null
+                    || !ExecutionLedgerConstants.ARTIFACT_ROLE_OUTPUT.equalsIgnoreCase(
+                    persisted.getArtifactRole())
+                    || !ExecutionLedgerConstants.VISIBILITY_VISIBLE.equalsIgnoreCase(
+                    persisted.getVisibility())) {
+                continue;
+            }
+            DialogueRun run = null;
+            if (StringUtils.isNotBlank(persisted.getRequestId())) {
+                if (!runByRequestId.containsKey(persisted.getRequestId())) {
+                    runByRequestId.put(
+                            persisted.getRequestId(),
+                            executionLedgerWriteRepository.queryRunByRequestId(persisted.getRequestId()));
+                }
+                run = runByRequestId.get(persisted.getRequestId());
+            }
+            if (run == null) {
+                continue;
+            }
+            recordTimelineItem(TimelineItem.builder()
+                    .sessionId(run.getSessionId())
+                    .runId(persisted.getRequestId())
+                    .itemId("artifact:" + persisted.getId())
+                    .parentItemId(StringUtils.isNotBlank(persisted.getToolCallId())
+                            ? "tool:" + persisted.getToolCallId()
+                            : null)
+                    .kind(TimelineItemKind.ARTIFACT.name())
+                    .phase(TimelineItemPhase.INTERMEDIATE.name())
+                    .status(TimelineItemStatus.COMPLETED.name())
+                    .orderKey(0L)
+                    .subOrder(0)
+                    .updatedSeq(0L)
+                    .sourceType(TimelineItemSourceType.ARTIFACT.name())
+                    .toolInvocationId(persisted.getToolInvocationId())
+                    .artifactId(persisted.getId())
+                    .build());
+        }
+    }
+
+    private void recordTimelineItem(TimelineItem item) {
+        if (timelineItemRepository == null || item == null || StringUtils.isBlank(item.getItemId())) {
+            return;
+        }
+        if (StringUtils.isBlank(item.getSessionId()) && StringUtils.isNotBlank(item.getRunId())) {
+            try {
+                DialogueRun run = executionLedgerWriteRepository.queryRunByRequestId(item.getRunId());
+                item.setSessionId(run == null ? null : run.getSessionId());
+            } catch (Exception e) {
+                // 目录归属查询只是展示增强，不能因此回滚已经完成的 Ledger 写入。
+                log.warn("timeline item session lookup failed, runId={}, itemId={}",
+                        item.getRunId(), item.getItemId(), e);
+                return;
+            }
+        }
+        if (StringUtils.isBlank(item.getSessionId()) || StringUtils.isBlank(item.getRunId())) {
+            log.warn("skip timeline item without session/run, itemId={}", item.getItemId());
+            return;
+        }
+        try {
+            timelineItemRepository.upsert(item);
+        } catch (Exception e) {
+            throw new TimelineItemWriteException("timeline item write failed: " + item.getItemId(), e);
+        }
+    }
+
+    private TimelineItemStatus toTimelineStatus(Integer ledgerStatus) {
+        int status = defaultZero(ledgerStatus);
+        if (status == ExecutionLedgerConstants.STATUS_SUCCESS) {
+            return TimelineItemStatus.COMPLETED;
+        }
+        if (status == ExecutionLedgerConstants.STATUS_STOPPED) {
+            return TimelineItemStatus.CANCELLED;
+        }
+        if (status == ExecutionLedgerConstants.STATUS_WAITING_INPUT) {
+            return TimelineItemStatus.WAITING_INPUT;
+        }
+        return status == ExecutionLedgerConstants.STATUS_RUNNING
+                ? TimelineItemStatus.RUNNING
+                : TimelineItemStatus.FAILED;
     }
 
     private int sumPromptTokens(List<LlmInvocation> invocations) {
@@ -490,6 +826,30 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
 
     private int sizeOf(List<?> items) {
         return items == null ? 0 : items.size();
+    }
+
+    private String artifactRequestId(List<ArtifactRecordCommand> records) {
+        if (CollectionUtils.isEmpty(records)) {
+            return null;
+        }
+        for (ArtifactRecordCommand record : records) {
+            if (record != null && StringUtils.isNotBlank(record.getRequestId())) {
+                return record.getRequestId();
+            }
+        }
+        return null;
+    }
+
+    private Long artifactRunId(List<ArtifactRecordCommand> records) {
+        if (CollectionUtils.isEmpty(records)) {
+            return null;
+        }
+        for (ArtifactRecordCommand record : records) {
+            if (record != null && record.getRunId() != null) {
+                return record.getRunId();
+            }
+        }
+        return null;
     }
 
     private int defaultZero(Integer value) {

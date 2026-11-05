@@ -263,7 +263,8 @@ public class LLM {
                             false,
                             pushToClient,
                             0,
-                            invocationHandle.runtimeTiming()
+                            invocationHandle.runtimeTiming(),
+                            invocationHandle.invocationId()
                     ),
                     retryNotifier(context)
             );
@@ -410,7 +411,8 @@ public class LLM {
                             startTime,
                             pushToClient,
                             timeout,
-                            invocationHandle.runtimeTiming()
+                            invocationHandle.runtimeTiming(),
+                            invocationHandle.invocationId()
                     ),
                     retryNotifier(context)
             );
@@ -538,7 +540,8 @@ public class LLM {
                                 true,
                                 true,
                                 timeout,
-                                invocationHandle.runtimeTiming()
+                                invocationHandle.runtimeTiming(),
+                                invocationHandle.invocationId()
                         ),
                         retryNotifier(context)
                 )
@@ -828,6 +831,8 @@ public class LLM {
         private Integer reasoningTokens;
         private long duration;
         private ReplayTiming timing;
+        /** 产出本次响应的实际 LLM invocation；fallback 时指向 fallback 自己。 */
+        private Long llmInvocationId;
 
         public LlmUsageSnapshot toUsageSnapshot() {
             return LlmUsageSnapshot.builder()

@@ -26,7 +26,10 @@ import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.domain.agent.ledger.replay.ArtifactRelativePath;
 import org.wwz.ai.domain.agent.ledger.replay.ConversationHistoryReplayService;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
+import org.wwz.ai.trigger.http.agent.mapper.AgentStreamResponseMapper;
+import org.wwz.ai.trigger.http.agent.vo.AgentStreamResponseVO;
 import org.wwz.ai.trigger.http.agent.vo.ArtifactReferenceRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationHistoryPageRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionBootstrapRespVO;
@@ -35,8 +38,6 @@ import org.wwz.ai.trigger.http.agent.vo.ConversationRunSummaryRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionPageRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionStatusRespVO;
-import org.wwz.ai.trigger.http.agent.mapper.AgentStreamResponseMapper;
-import org.wwz.ai.trigger.http.agent.vo.AgentStreamResponseVO;
 import org.wwz.ai.types.agent.user.UserRequestContext;
 import org.wwz.ai.types.enums.ResponseCode;
 
@@ -57,12 +58,6 @@ public class AgentConversationHistoryController {
     private ExecutionLedgerQueryService executionLedgerQueryService;
 
     @Resource
-    private AgentStreamFrameMapper agentStreamFrameMapper = new AgentStreamFrameMapper();
-
-    @Resource
-    private AgentStreamResponseMapper agentStreamResponseMapper = new AgentStreamResponseMapper();
-
-    @Resource
     private ConversationHistoryReplayService conversationHistoryReplayService;
 
     @Resource
@@ -70,6 +65,12 @@ public class AgentConversationHistoryController {
 
     @Resource
     private ConversationSessionBootstrapApplicationService conversationSessionBootstrapApplicationService;
+
+    @Resource
+    private AgentStreamFrameMapper agentStreamFrameMapper = new AgentStreamFrameMapper();
+
+    @Resource
+    private AgentStreamResponseMapper agentStreamResponseMapper = new AgentStreamResponseMapper();
 
     /**
      * 会话切换 bootstrap：一次返回恢复会话所需的全部数据，替代 detail + files + 三类 HITL pending 五个串行请求。
@@ -378,7 +379,10 @@ public class AgentConversationHistoryController {
                 .finishedAt(run.getFinishedAt())
                 .durationMs(run.getDurationMs())
                 .contextUsage(replay.getContextUsage())
-                .replayFrames(toResponseFrames(replay.getReplayFrames()))
+                .replayFrames(TimelineItemProjection.hasRenderableEventData(replay.getTimelineItems())
+                        ? List.of()
+                        : toResponseFrames(replay.getReplayFrames()))
+                .timelineItems(replay.getTimelineItems())
                 .build();
     }
 

@@ -21,6 +21,8 @@ public class ToolInvocationBatchStartRecord {
 
     private String requestId;
 
+    private String sessionId;
+
     private Long llmInvocationId;
 
     private String agentName;

@@ -1,7 +1,9 @@
 package org.wwz.ai.domain.agent.runtime.tool.codemode;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
+import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationBatchStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
@@ -19,6 +21,7 @@ import java.util.Map;
  * 不新建消息账本，不写源码全文，参数只登记摘要。
  * </p>
  */
+@Slf4j
 public final class CodeModeInvocationRecorder {
 
     /** 内部 browser capability 的虚拟工具名。 */
@@ -39,13 +42,13 @@ public final class CodeModeInvocationRecorder {
      * @param parentToolCallId 外层 code_mode 的 toolCallId
      * @param toolName         虚拟工具名
      * @param argSummary       参数摘要（已脱敏，不含完整敏感参数）
-     * @return toolInvocationId，可能为 null
+     * @return 调用句柄；账本不可用时为 null
      */
-    public static Long begin(AgentContext agentContext,
-                             String parentToolCallId,
-                             String toolName,
-                             String argSummary,
-                             LocalDateTime startedAt) {
+    public static InvocationHandle begin(AgentContext agentContext,
+                                         String parentToolCallId,
+                                         String toolName,
+                                         String argSummary,
+                                         LocalDateTime startedAt) {
         if (agentContext == null || !agentContext.hasActiveLedgerRun()) {
             return null;
         }
@@ -58,30 +61,43 @@ public final class CodeModeInvocationRecorder {
             return null;
         }
         String callId = "cm-" + toolName + "-" + System.nanoTime();
+        ToolInvocationBatchStartRecord record = ToolInvocationBatchStartRecord.builder()
+                .runId(agentContext.getAgentRunState().getRunId())
+                .requestId(ExecutionLedgerRunSupport.ledgerRequestId(agentContext))
+                .sessionId(agentContext.getSessionId())
+                .llmInvocationId(llmInvocationId)
+                .items(List.of(ToolInvocationBatchStartRecord.Item.builder()
+                        .toolCallId(callId)
+                        .parentToolCallId(parentToolCallId)
+                        .subAgentId(agentContext.getSubAgentId())
+                        .subAgentType(agentContext.getSubAgentType())
+                        .dispatchIndex(1)
+                        .toolName(toolName)
+                        .toolProvider(ExecutionLedgerConstants.TOOL_PROVIDER_LOCAL)
+                        .inputJson(truncate(argSummary, 2000))
+                        .startedAt(startedAt == null ? LocalDateTime.now() : startedAt)
+                        .build()))
+                .build();
         try {
-            Map<String, Long> created = recorder.createToolInvocations(ToolInvocationBatchStartRecord.builder()
-                    .runId(agentContext.getAgentRunState().getRunId())
-                    .requestId(agentContext.getRequestId())
-                    .llmInvocationId(llmInvocationId)
-                    .items(List.of(ToolInvocationBatchStartRecord.Item.builder()
-                            .toolCallId(callId)
-                            .parentToolCallId(parentToolCallId)
-                            .subAgentId(agentContext.getSubAgentId())
-                            .subAgentType(agentContext.getSubAgentType())
-                            .dispatchIndex(1)
-                            .toolName(toolName)
-                            .toolProvider(ExecutionLedgerConstants.TOOL_PROVIDER_LOCAL)
-                            .inputJson(truncate(argSummary, 2000))
-                            .startedAt(startedAt == null ? LocalDateTime.now() : startedAt)
-                            .build()))
-                    .build());
+            Map<String, Long> created = recorder.createToolInvocations(record);
             if (created == null) {
                 return null;
             }
-            return created.get(callId);
+            Long toolInvocationId = created.get(callId);
+            return toolInvocationId == null ? null : new InvocationHandle(callId, toolInvocationId);
         } catch (Exception e) {
             // 账本故障不能影响主链路
-            return null;
+            log.warn("code mode invocation start failed, sessionId={}, toolName={}, parentToolCallId={}",
+                    agentContext.getSessionId(), toolName, parentToolCallId, e);
+            try {
+                Map<String, Long> fallback = recorder.createToolInvocationsWithoutTimeline(record);
+                Long toolInvocationId = fallback == null ? null : fallback.get(callId);
+                return toolInvocationId == null ? null : new InvocationHandle(callId, toolInvocationId);
+            } catch (Exception fallbackError) {
+                log.warn("code mode invocation start fallback failed, sessionId={}, toolName={}",
+                        agentContext.getSessionId(), toolName, fallbackError);
+                return null;
+            }
         }
     }
 
@@ -91,33 +107,43 @@ public final class CodeModeInvocationRecorder {
      * @param status 见 {@link ExecutionLedgerConstants} 的 STATUS_*
      */
     public static void end(AgentContext agentContext,
-                           Long toolInvocationId,
+                           InvocationHandle handle,
                            String toolName,
                            int status,
                            String observation,
                            String errorMsg,
                            LocalDateTime finishedAt) {
-        if (agentContext == null || toolInvocationId == null) {
+        if (agentContext == null || handle == null || handle.toolInvocationId() == null) {
             return;
         }
         AgentExecutionRecorder recorder = agentContext.getExecutionRecorder();
         if (recorder == null || agentContext.getAgentRunState() == null) {
             return;
         }
+        ToolInvocationFinishRecord record = ToolInvocationFinishRecord.builder()
+                .toolInvocationId(handle.toolInvocationId())
+                .runId(agentContext.getAgentRunState().getRunId())
+                .requestId(ExecutionLedgerRunSupport.ledgerRequestId(agentContext))
+                .sessionId(agentContext.getSessionId())
+                .toolCallId(handle.toolCallId())
+                .toolName(toolName)
+                .status(status)
+                .llmObservation(truncate(observation, 4000))
+                .errorMsg(truncate(errorMsg, 500))
+                .finishedAt(finishedAt == null ? LocalDateTime.now() : finishedAt)
+                .build();
         try {
-            recorder.finishToolInvocation(ToolInvocationFinishRecord.builder()
-                    .toolInvocationId(toolInvocationId)
-                    .runId(agentContext.getAgentRunState().getRunId())
-                    .requestId(agentContext.getRequestId())
-                    .sessionId(agentContext.getSessionId())
-                    .toolName(toolName)
-                    .status(status)
-                    .llmObservation(truncate(observation, 4000))
-                    .errorMsg(truncate(errorMsg, 500))
-                    .finishedAt(finishedAt == null ? LocalDateTime.now() : finishedAt)
-                    .build());
-        } catch (Exception ignore) {
+            recorder.finishToolInvocation(record);
+        } catch (Exception e) {
             // 同上：账本故障不影响主链路
+            log.warn("code mode invocation finish failed, sessionId={}, toolName={}, toolCallId={}",
+                    agentContext.getSessionId(), toolName, handle.toolCallId(), e);
+            try {
+                recorder.finishToolInvocationWithoutTimeline(record);
+            } catch (Exception fallbackError) {
+                log.warn("code mode invocation finish fallback failed, sessionId={}, toolName={}, toolCallId={}",
+                        agentContext.getSessionId(), toolName, handle.toolCallId(), fallbackError);
+            }
         }
     }
 
@@ -126,6 +152,9 @@ public final class CodeModeInvocationRecorder {
             return null;
         }
         return text.length() <= max ? text : text.substring(0, max) + "...(truncated)";
+    }
+
+    public record InvocationHandle(String toolCallId, Long toolInvocationId) {
     }
 
     /**

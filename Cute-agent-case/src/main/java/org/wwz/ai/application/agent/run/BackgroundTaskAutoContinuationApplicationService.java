@@ -10,12 +10,14 @@ import org.wwz.ai.application.agent.query.GptQueryApplicationService;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
 import org.wwz.ai.application.agent.stream.AgentSessionStreamFrame;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
+import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
 import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.model.SessionKind;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
@@ -57,6 +59,9 @@ public class BackgroundTaskAutoContinuationApplicationService {
     @Qualifier(AgentExecutorNames.DISPATCH_EXECUTOR)
     private Executor dispatchExecutor;
 
+    @Resource
+    private AgentTimelineEventProjector agentTimelineEventProjector;
+
     /**
      * 派发唤醒轮。
      *
@@ -91,7 +96,8 @@ public class BackgroundTaskAutoContinuationApplicationService {
         }
 
         AgentStreamProjection projectingStream =
-                new AgentStreamProjection(null, request, handlerMap, agentSessionEventBus, sessionEventClock)
+                new AgentStreamProjection(null, request, handlerMap, agentSessionEventBus,
+                        sessionEventClock, agentTimelineEventProjector)
                         .bindRegistry(sessionProjectionRegistry);
         // 先发控制帧，前端据此建占位 chat 并重新订阅；再结束旧投影的观察流。
         publishWakeFrame(sessionId, request.getRequestId(), taskId);
@@ -166,6 +172,10 @@ public class BackgroundTaskAutoContinuationApplicationService {
         agentSessionEventBus.publish(sessionId, AgentSessionStreamFrame.builder()
                 .reqId(requestId)
                 .packageType("run_wake")
+                .protocolVersion(TimelineItemProjection.PROTOCOL_VERSION)
+                .eventType("run.wake")
+                .eventId(TimelineItemProjection.eventId(sessionId, 0, "run_wake:" + requestId))
+                .runId(requestId)
                 .status("success")
                 .finished(false)
                 .responseType("text")
@@ -177,12 +187,20 @@ public class BackgroundTaskAutoContinuationApplicationService {
         Map<String, Object> resultMap = new LinkedHashMap<>();
         resultMap.put("requestId", requestId);
         resultMap.put("sessionId", sessionId);
+        if (failure != null) {
+            log.warn("background task wake failed, sessionId={}, requestId={}",
+                    sessionId, requestId, failure);
+        }
         agentSessionEventBus.publish(sessionId, AgentSessionStreamFrame.builder()
                 .reqId(requestId)
                 .packageType("run_wake_failed")
+                .protocolVersion(TimelineItemProjection.PROTOCOL_VERSION)
+                .eventType("run.wake_failed")
+                .eventId(TimelineItemProjection.eventId(sessionId, 0, "run_wake_failed:" + requestId))
+                .runId(requestId)
                 .status("failed")
                 .finished(true)
-                .errorMsg(failure == null ? "后台续跑启动失败" : failure.getMessage())
+                .errorMsg("后台续跑启动失败，请稍后重试")
                 .resultMap(resultMap)
                 .build());
     }

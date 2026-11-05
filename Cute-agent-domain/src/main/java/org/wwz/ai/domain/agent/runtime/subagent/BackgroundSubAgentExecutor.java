@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskCompletionEvent;
 import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
+import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
@@ -372,10 +373,10 @@ public final class BackgroundSubAgentExecutor {
         int ledgerStatus = RuntimeBackgroundTask.STATUS_STOPPED.equals(task.getStatus())
                 ? ExecutionLedgerConstants.STATUS_STOPPED
                 : completed ? ExecutionLedgerConstants.STATUS_SUCCESS : ExecutionLedgerConstants.STATUS_FAILED;
-        parent.getExecutionRecorder().finishToolInvocation(ToolInvocationFinishRecord.builder()
+        ToolInvocationFinishRecord record = ToolInvocationFinishRecord.builder()
                 .toolInvocationId(toolInvocationId)
                 .runId(parent.getAgentRunState().getRunId())
-                .requestId(parent.getRequestId())
+                .requestId(ExecutionLedgerRunSupport.ledgerRequestId(parent))
                 .sessionId(parent.getSessionId())
                 .toolCallId(parentToolUseId)
                 .toolName(toolName)
@@ -384,7 +385,19 @@ public final class BackgroundSubAgentExecutor {
                 .toolResult(ToolObservationSerializer.serializeSuccess(data))
                 .errorMsg(task.getErrorMsg())
                 .finishedAt(resolveFinishedAt(task))
-                .build());
+                .build();
+        try {
+            parent.getExecutionRecorder().finishToolInvocation(record);
+        } catch (RuntimeException e) {
+            log.warn("background sub-agent ledger settle failed, parentSessionId={}, toolCallId={}",
+                    parent.getSessionId(), parentToolUseId, e);
+            try {
+                parent.getExecutionRecorder().finishToolInvocationWithoutTimeline(record);
+            } catch (RuntimeException fallbackError) {
+                log.warn("background sub-agent ledger fallback failed, parentSessionId={}, toolCallId={}",
+                        parent.getSessionId(), parentToolUseId, fallbackError);
+            }
+        }
     }
 
     private static LocalDateTime resolveFinishedAt(RuntimeBackgroundTask task) {

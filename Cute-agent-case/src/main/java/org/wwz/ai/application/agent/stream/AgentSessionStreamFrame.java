@@ -22,6 +22,44 @@ import java.util.Map;
 @AllArgsConstructor
 public class AgentSessionStreamFrame {
 
+    /** 时间线协议版本；空值表示旧帧或控制帧。 */
+    private String protocolVersion;
+
+    /** item.delta / item.upserted / item.completed / run.completed / stream.closed 等。 */
+    private String eventType;
+
+    /** 会话内稳定事件 ID，当前等于 sessionId:eventSeq。 */
+    private String eventId;
+
+    /** 时间线协议中的事件序号；与既有 eventSeq 同值，供旧传输字段平滑迁移。 */
+    private long seq;
+
+    /** 对外 runId，当前复用 requestId。 */
+    private String runId;
+
+    private String itemId;
+
+    private String parentItemId;
+
+    private String agentId;
+
+    private String kind;
+
+    private String phase;
+
+    /** 时间线项状态，避免与传输层 status 混淆。 */
+    private String itemStatus;
+
+    private long orderKey;
+
+    private int subOrder;
+
+    /** 流式正文增量；仅 item.delta 使用。 */
+    private String delta;
+
+    /** Ledger 事实按请求即时组装的完整内容。 */
+    private Map<String, Object> payload;
+
     /** 运行状态，当前取值为 {@code running}、{@code success}、{@code failed}。 */
     private String status;
 

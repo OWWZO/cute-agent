@@ -37,6 +37,9 @@ public class SubAgentSessionStreamPortAdapter implements SubAgentSessionStreamPo
     @Resource
     private Map<AgentType, AgentStreamEventHandler> handlerMap;
 
+    @Resource
+    private AgentTimelineEventProjector agentTimelineEventProjector;
+
     @Override
     public Printer openChildSessionStream(String childSessionId,
                                           String userId,
@@ -56,7 +59,8 @@ public class SubAgentSessionStreamPortAdapter implements SubAgentSessionStreamPo
                 .build();
 
         AgentStreamProjection projection = new AgentStreamProjection(
-                null, childRequest, handlerMap, agentSessionEventBus, sessionEventClock);
+                null, childRequest, handlerMap, agentSessionEventBus, sessionEventClock,
+                agentTimelineEventProjector);
         sessionProjectionRegistry.register(childSessionId, projection);
         log.info("open child session stream childSessionId={} requestId={}", childSessionId, requestId);
         return new AgentSessionPrinter(projection, childRequest, AgentType.REACT.getValue());

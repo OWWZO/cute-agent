@@ -12,6 +12,11 @@ import {
   AGENT_TYPE_PLAN_SOLVE,
 } from "@/utils/agentMode";
 import { ARTIFACT_SECTION_DELIMITER } from "@/utils/artifactContent";
+import {
+  hasRenderableTimelineItems,
+  isRunReplay,
+  resolveRunReplayFrames,
+} from "@/utils/timelineItems";
 
 import {
   buildConversationTaskData,
@@ -103,7 +108,7 @@ export function hydrateRunReplay(
   // 历史 run 先还原为与实时流相同的空状态，再逐帧复用 combineData，确保历史和实时使用同一事件语义。
   const currentChat = createRunShell(detail, run);
 
-  for (const frame of run.replayFrames || []) {
+  for (const frame of resolveRunReplayFrames(run)) {
     const eventData = readEventData(frame);
     if (!eventData) {
       continue;
@@ -342,7 +347,10 @@ function mergeSummaryChatsByRequestId(
 }
 
 function hasReplayFrames(run: ConversationRunSummary | ConversationRunReplay) {
-  return isRunReplay(run) && run.replayFrames.length > 0;
+  return isRunReplay(run) && (
+    (run.replayFrames?.length ?? 0) > 0
+    || hasRenderableTimelineItems(run.timelineItems)
+  );
 }
 
 function getRunQuery(run: ConversationRunSummary | ConversationRunReplay) {
@@ -359,12 +367,6 @@ function getRunSummary(run: ConversationRunSummary | ConversationRunReplay) {
 
 function getRunContextUsage(run: ConversationRunSummary | ConversationRunReplay) {
   return isRunReplay(run) ? run.contextUsage : undefined;
-}
-
-function isRunReplay(
-  run: ConversationRunSummary | ConversationRunReplay
-): run is ConversationRunReplay {
-  return "replayFrames" in run;
 }
 
 function readEventData(frame?: ConversationReplayFrame | null) {

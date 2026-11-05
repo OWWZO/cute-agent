@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
 import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemView;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,6 +36,11 @@ public class ConversationRunReplay {
     @Builder.Default
     private List<AgentStreamResult> replayFrames = List.of();
 
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @Builder.Default
+    private List<TimelineItemView> timelineItems = List.of();
+
     /**
      * 回放帧以只读副本返回，避免调用方通过 getter 改动回放快照的内部状态。
      */
@@ -42,5 +48,11 @@ public class ConversationRunReplay {
         return replayFrames == null
                 ? List.of()
                 : Collections.unmodifiableList(new ArrayList<>(replayFrames));
+    }
+
+    public List<TimelineItemView> getTimelineItems() {
+        return timelineItems == null
+                ? List.of()
+                : Collections.unmodifiableList(new ArrayList<>(timelineItems));
     }
 }

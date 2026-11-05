@@ -128,8 +128,10 @@ public class SseEmitterAgentSessionStream implements AgentSessionStream {
             if (result.getEventSeq() > 0) {
                 builder.id(Long.toString(result.getEventSeq()));
             }
-            if (result.getPackageType() != null && !result.getPackageType().isBlank()) {
-                builder.name(result.getPackageType());
+            // SSE event: 名称只取旧 packageType；没有旧名称的帧继续走默认 message 事件。
+            String eventName = result.getPackageType();
+            if (eventName != null && !eventName.isBlank()) {
+                builder.name(eventName);
             }
         }
         Object response = payload instanceof AgentSessionStreamFrame frame

@@ -87,10 +87,10 @@ public class PlanApprovalYieldService {
             );
         }
         if (toolInvocationId != null && agentContext.getExecutionRecorder() != null) {
-            agentContext.getExecutionRecorder().finishToolInvocation(ToolInvocationFinishRecord.builder()
+            agentContext.getExecutionRecorder().finishToolInvocationWithoutTimeline(ToolInvocationFinishRecord.builder()
                     .toolInvocationId(toolInvocationId)
                     .runId(runId)
-                    .requestId(agentContext.getRequestId())
+                    .requestId(ExecutionLedgerRunSupport.ledgerRequestId(agentContext))
                     .sessionId(agentContext.getSessionId())
                     .toolCallId(toolCallId)
                     .toolName(TaskToolNames.EXIT_PLAN_MODE)

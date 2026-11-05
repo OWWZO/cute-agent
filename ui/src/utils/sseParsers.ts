@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { timelineEnvelopeToLegacy } from "@/utils/timelineItems";
 
 /**
  * 前端 SSE 协议边界校验。
@@ -12,6 +13,13 @@ const answerEnvelopeSchema = z.object({
   finished: z.boolean(),
   errorMsg: z.string().nullable().optional().transform((value) => value ?? ""),
   resultMap: z.object({ eventData: z.unknown().optional() }).passthrough().optional().default({}),
+}).passthrough();
+
+const timelineEnvelopeSchema = z.object({
+  eventType: z.string(),
+  payload: z.object({
+    eventData: z.unknown().optional(),
+  }).passthrough().nullish(),
 }).passthrough();
 
 const eventDataSchema = z.object({
@@ -55,7 +63,13 @@ export type AgentAnswerEnvelope = z.infer<typeof answerEnvelopeSchema>;
  * 避免前端跟后端富结构结果做过紧耦合。
  */
 export function parseAgentAnswer(raw: unknown): AgentAnswerEnvelope {
-  return answerEnvelopeSchema.parse(raw);
+  const candidate = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? timelineEnvelopeSchema.safeParse(raw)
+    : null;
+  const normalized = candidate?.success
+    ? timelineEnvelopeToLegacy(candidate.data)
+    : raw;
+  return answerEnvelopeSchema.parse(normalized);
 }
 
 /**

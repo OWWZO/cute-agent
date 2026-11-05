@@ -412,6 +412,50 @@ describe("conversationHistory hydrate", () => {
     expect(taskData.taskList[1].messageType).toBe("result");
   });
 
+  it("hydrates history from timelineItems when replayFrames is empty", () => {
+    const detail: ConversationHistoryDetail = {
+      sessionId: "session-timeline-only-001",
+      title: "时间线历史",
+      status: "SUCCESS",
+      deepThink: false,
+      runCount: 1,
+      finishedRunCount: 1,
+      failedRunCount: 0,
+      runs: [],
+    };
+
+    const chat = hydrateRunReplay(detail, {
+      requestId: "req-history-001",
+      status: "SUCCESS",
+      queryText: "只看时间线",
+      replayFrames: [],
+      timelineItems: [
+        {
+          eventType: "item.completed",
+          runId: "req-history-001",
+          itemStatus: "COMPLETED",
+          payload: { eventData: createToolThoughtEvent("先读取已有资料") },
+        },
+        {
+          eventType: "item.completed",
+          runId: "req-history-001",
+          itemStatus: "COMPLETED",
+          payload: {},
+        },
+        {
+          eventType: "run.completed",
+          runId: "req-history-001",
+          itemStatus: "COMPLETED",
+          payload: { eventData: createResultEvent("时间线最终结论") },
+        },
+      ],
+    });
+
+    expect(chat.replayLoaded).toBe(true);
+    expect(chat.multiAgent.tasks[0]?.[0]?.messageType).toBe("tool_thought");
+    expect(resolveTaskSummaryText(chat.conclusion)).toBe("时间线最终结论");
+  });
+
   it("hydrates derived thought and timeline fields for deep think history", () => {
     const history = hydrateConversationFromReplayFrames({
       sessionId: "session-history-deep-001",

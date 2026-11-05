@@ -17,14 +17,15 @@ import org.wwz.ai.domain.agent.ledger.model.FeaturedConversationCardView;
 import org.wwz.ai.domain.agent.ledger.model.FeaturedConversationPageResult;
 import org.wwz.ai.domain.agent.ledger.model.FeaturedConversationPublicDetail;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
 import org.wwz.ai.trigger.http.agent.mapper.AgentStreamResponseMapper;
+import org.wwz.ai.trigger.http.agent.vo.AgentStreamResponseVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationHistoryPageRespVO;
 import org.wwz.ai.trigger.http.agent.vo.FeaturedConversationCardRespVO;
 import org.wwz.ai.trigger.http.agent.vo.FeaturedConversationDetailRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationRunReplayRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationRunSummaryRespVO;
-import org.wwz.ai.trigger.http.agent.vo.AgentStreamResponseVO;
 import org.wwz.ai.trigger.http.agent.vo.PageRespVO;
 import org.wwz.ai.types.enums.ResponseCode;
 
@@ -257,7 +258,10 @@ public class AgentFeaturedConversationController {
                 .finishedAt(run.getFinishedAt())
                 .durationMs(run.getDurationMs())
                 .contextUsage(replay.getContextUsage())
-                .replayFrames(toResponseFrames(replay.getReplayFrames()))
+                .replayFrames(TimelineItemProjection.hasRenderableEventData(replay.getTimelineItems())
+                        ? List.of()
+                        : toResponseFrames(replay.getReplayFrames()))
+                .timelineItems(replay.getTimelineItems())
                 .build();
     }
 

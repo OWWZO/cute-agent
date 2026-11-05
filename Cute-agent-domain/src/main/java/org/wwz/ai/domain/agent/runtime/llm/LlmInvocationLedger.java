@@ -2,6 +2,7 @@ package org.wwz.ai.domain.agent.runtime.llm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationStartRecord;
@@ -55,26 +56,36 @@ final class LlmInvocationLedger {
                 Thread.currentThread().getName());
         LlmPromptObservability.ObservationBundle obs = LlmPromptObservability.current();
         TokenCounter.PromptEstimate est = obs == null ? null : obs.getEstimate();
-        Long invocationId = context.getExecutionRecorder().createLlmInvocation(LlmInvocationStartRecord.builder()
-                .runId(context.getAgentRunState().getRunId())
-                .requestId(context.getRequestId())
-                .invocationSeq(invocationSeq)
-                .agentName(agentName)
-                .stepNo(stepNo)
-                .callKind(callKind)
-                .streaming(stream)
-                .modelName(model)
-                .startedAt(startedAt)
-                .systemFingerprint(obs == null ? null : obs.getSystemFingerprint())
-                .estTotalTokens(est == null ? null : est.getEstimatedTotalTokens())
-                .estSystemTokens(est == null ? null : est.getSystemTokens())
-                .estMessageTokens(est == null ? null : est.getMessageTokens())
-                .estToolTokens(est == null ? null : est.getToolTokens())
-                .messageCount(est == null ? null : est.getMessageCount())
-                .toolCount(est == null ? null : est.getToolCount())
-                .cacheStatus(obs == null ? null : obs.getCacheStatus())
-                .cacheRiskFlags(obs == null ? null : obs.getCacheRiskFlags())
-                .build());
+        Long invocationId;
+        try {
+            invocationId = context.getExecutionRecorder().createLlmInvocation(LlmInvocationStartRecord.builder()
+                    .runId(context.getAgentRunState().getRunId())
+                    .requestId(ExecutionLedgerRunSupport.ledgerRequestId(context))
+                    .sessionId(context.getSessionId())
+                    .invocationSeq(invocationSeq)
+                    .agentName(agentName)
+                    .agentId(StringUtils.defaultIfBlank(context.getSubAgentId(), "main"))
+                    .stepNo(stepNo)
+                    .callKind(callKind)
+                    .streaming(stream)
+                    .modelName(model)
+                    .startedAt(startedAt)
+                    .systemFingerprint(obs == null ? null : obs.getSystemFingerprint())
+                    .estTotalTokens(est == null ? null : est.getEstimatedTotalTokens())
+                    .estSystemTokens(est == null ? null : est.getSystemTokens())
+                    .estMessageTokens(est == null ? null : est.getMessageTokens())
+                    .estToolTokens(est == null ? null : est.getToolTokens())
+                    .messageCount(est == null ? null : est.getMessageCount())
+                    .toolCount(est == null ? null : est.getToolCount())
+                    .cacheStatus(obs == null ? null : obs.getCacheStatus())
+                    .cacheRiskFlags(obs == null ? null : obs.getCacheRiskFlags())
+                    .build());
+        } catch (RuntimeException e) {
+            log.warn("{} llm invocation ledger start failed, model={}, callKind={}",
+                    context.getRequestId(), model, callKind, e);
+            context.getAgentRunState().bindCurrentLlmInvocationId(null);
+            return Handle.disabled(runtimeTiming);
+        }
         context.getAgentRunState().bindCurrentLlmInvocationId(invocationId);
         return new Handle(invocationId, obs, runtimeTiming);
     }
@@ -85,6 +96,9 @@ final class LlmInvocationLedger {
         completeTiming(handle);
         if (response != null) {
             response.setTiming(ReplayTiming.copyOf(handle.runtimeTiming()));
+            if (handle.enabled()) {
+                response.setLlmInvocationId(handle.invocationId());
+            }
         }
         long durationMs = handle.runtimeTiming() == null || handle.runtimeTiming().getDurationMs() == null
                 ? 0L
@@ -164,9 +178,10 @@ final class LlmInvocationLedger {
                     obs = LlmPromptObservability.current();
                 }
             }
-            context.getExecutionRecorder().finishLlmInvocation(LlmInvocationFinishRecord.builder()
+            LlmInvocationFinishRecord record = LlmInvocationFinishRecord.builder()
                     .llmInvocationId(handle.invocationId())
-                    .requestId(context.getRequestId())
+                    .requestId(ExecutionLedgerRunSupport.ledgerRequestId(context))
+                    .sessionId(context.getSessionId())
                     .status(status)
                     .responseText(responseText)
                     .reasoningContent(reasoningContent)
@@ -188,7 +203,35 @@ final class LlmInvocationLedger {
                     .finishedAt(handle.runtimeTiming() == null || handle.runtimeTiming().getFinishedAt() == null
                             ? LocalDateTime.now()
                             : handle.runtimeTiming().getFinishedAt())
-                    .build());
+                    .build();
+            context.getExecutionRecorder().finishLlmInvocation(record);
+        } catch (RuntimeException e) {
+            log.warn("{} llm invocation ledger finish failed, invocationId={}",
+                    context == null ? "-" : context.getRequestId(),
+                    handle == null ? null : handle.invocationId(), e);
+            if (context != null && handle != null && handle.invocationId() != null) {
+                try {
+                    LlmInvocationFinishRecord fallback = LlmInvocationFinishRecord.builder()
+                            .llmInvocationId(handle.invocationId())
+                            .requestId(ExecutionLedgerRunSupport.ledgerRequestId(context))
+                            .sessionId(context.getSessionId())
+                            .status(status)
+                            .responseText(responseText)
+                            .reasoningContent(reasoningContent)
+                            .toolCallCount(toolCallCount)
+                            .finishReason(finishReason)
+                            .errorMsg(errorMsg)
+                            .finishedAt(handle.runtimeTiming() == null
+                                    || handle.runtimeTiming().getFinishedAt() == null
+                                    ? LocalDateTime.now()
+                                    : handle.runtimeTiming().getFinishedAt())
+                            .build();
+                    context.getExecutionRecorder().finishLlmInvocationWithoutTimeline(fallback);
+                } catch (RuntimeException fallbackError) {
+                    log.warn("{} llm invocation ledger fallback failed, invocationId={}",
+                            context.getRequestId(), handle.invocationId(), fallbackError);
+                }
+            }
         } finally {
             // fail-open（无 run / 空 agentName / 无 context）同样要清理：否则线程复用时
             // 下一次调用会把本次的 cacheStatus/usage 当成自己的观测快照。

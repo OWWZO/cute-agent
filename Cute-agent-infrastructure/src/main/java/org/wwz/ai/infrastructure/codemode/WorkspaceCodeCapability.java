@@ -25,6 +25,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Code Mode 的 {@code workspace} capability：会话 workspace 内的文件读写与 CSV 处理。
@@ -53,145 +54,173 @@ public final class WorkspaceCodeCapability {
 
     /** 读文本。 */
     public Map<String, Object> readText(Map<String, Object> args) {
-        Map<String, Object> params = begin(args, CodeModeInvocationRecorder.TOOL_WORKSPACE_READ);
-        Path file = resolvePath(requirePath(params), false);
-        long maxBytes = longParam(params, "maxBytes", limits.getMaxReadBytes());
-        byte[] bytes = readAllBytes(file, maxBytes);
-        int maxChars = intParam(params, "maxChars", 0);
-        String content = new String(bytes, StandardCharsets.UTF_8);
-        boolean truncated = false;
-        if (maxChars > 0 && content.length() > maxChars) {
-            content = content.substring(0, maxChars);
-            truncated = true;
-        }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("path", agentPath(file));
-        result.put("content", content);
-        result.put("chars", content.length());
-        result.put("truncated", truncated);
-        result.put("version", version(bytes));
-        result.put("encoding", "UTF-8");
-        return finish(params, CodeModeInvocationRecorder.TOOL_WORKSPACE_READ, result);
+        return recorded(CodeModeInvocationRecorder.TOOL_WORKSPACE_READ, args, begun -> {
+            Map<String, Object> params = begun.params();
+            Path file = resolvePath(requirePath(params), false);
+            long maxBytes = longParam(params, "maxBytes", limits.getMaxReadBytes());
+            byte[] bytes = readAllBytes(file, maxBytes);
+            int maxChars = intParam(params, "maxChars", 0);
+            String content = new String(bytes, StandardCharsets.UTF_8);
+            boolean truncated = false;
+            if (maxChars > 0 && content.length() > maxChars) {
+                content = content.substring(0, maxChars);
+                truncated = true;
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("path", agentPath(file));
+            result.put("content", content);
+            result.put("chars", content.length());
+            result.put("truncated", truncated);
+            result.put("version", version(bytes));
+            result.put("encoding", "UTF-8");
+            return finish(begun, CodeModeInvocationRecorder.TOOL_WORKSPACE_READ, result);
+        });
     }
 
     /** 读二进制（JS 侧以 Base64 表示）。 */
     public Map<String, Object> readBytes(Map<String, Object> args) {
-        Map<String, Object> params = begin(args, CodeModeInvocationRecorder.TOOL_WORKSPACE_READ);
-        Path file = resolvePath(requirePath(params), false);
-        long maxBytes = longParam(params, "maxBytes", limits.getMaxReadBytes());
-        byte[] bytes = readAllBytes(file, maxBytes);
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("path", agentPath(file));
-        result.put("base64", Base64.getEncoder().encodeToString(bytes));
-        result.put("bytes", bytes.length);
-        result.put("version", version(bytes));
-        return finish(params, CodeModeInvocationRecorder.TOOL_WORKSPACE_READ, result);
+        return recorded(CodeModeInvocationRecorder.TOOL_WORKSPACE_READ, args, begun -> {
+            Map<String, Object> params = begun.params();
+            Path file = resolvePath(requirePath(params), false);
+            long maxBytes = longParam(params, "maxBytes", limits.getMaxReadBytes());
+            byte[] bytes = readAllBytes(file, maxBytes);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("path", agentPath(file));
+            result.put("base64", Base64.getEncoder().encodeToString(bytes));
+            result.put("bytes", bytes.length);
+            result.put("version", version(bytes));
+            return finish(begun, CodeModeInvocationRecorder.TOOL_WORKSPACE_READ, result);
+        });
     }
 
     /** 读 CSV → 结构化 rows（解析在 Java 侧完成）。 */
     public Map<String, Object> readCsv(Map<String, Object> args) {
-        Map<String, Object> params = begin(args, CodeModeInvocationRecorder.TOOL_WORKSPACE_READ);
-        Path file = resolvePath(requirePath(params), false);
-        byte[] bytes = readAllBytes(file, limits.getMaxReadBytes());
-        String delimiterRaw = params.get("delimiter") == null ? null : String.valueOf(params.get("delimiter"));
-        char delimiter = StringUtils.isBlank(delimiterRaw) ? ',' : delimiterRaw.charAt(0);
-        int maxRows = intParam(params, "maxRows", limits.getMaxCsvRows());
-        CsvCodec.Table table = CsvCodec.parse(
-                CsvCodec.stripBom(new String(bytes, StandardCharsets.UTF_8)),
-                delimiter,
-                maxRows > 0 ? maxRows : 100_000,
-                limits.getMaxCsvColumns());
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("path", agentPath(file));
-        result.put("columns", table.columns());
-        result.put("rows", table.rows());
-        result.put("rowCount", table.rows().size());
-        result.put("version", version(bytes));
-        result.put("encoding", "UTF-8");
-        result.put("delimiter", String.valueOf(delimiter));
-        return finish(params, CodeModeInvocationRecorder.TOOL_WORKSPACE_READ, result);
+        return recorded(CodeModeInvocationRecorder.TOOL_WORKSPACE_READ, args, begun -> {
+            Map<String, Object> params = begun.params();
+            Path file = resolvePath(requirePath(params), false);
+            byte[] bytes = readAllBytes(file, limits.getMaxReadBytes());
+            String delimiterRaw = params.get("delimiter") == null ? null : String.valueOf(params.get("delimiter"));
+            char delimiter = StringUtils.isBlank(delimiterRaw) ? ',' : delimiterRaw.charAt(0);
+            int maxRows = intParam(params, "maxRows", limits.getMaxCsvRows());
+            CsvCodec.Table table = CsvCodec.parse(
+                    CsvCodec.stripBom(new String(bytes, StandardCharsets.UTF_8)),
+                    delimiter,
+                    maxRows > 0 ? maxRows : 100_000,
+                    limits.getMaxCsvColumns());
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("path", agentPath(file));
+            result.put("columns", table.columns());
+            result.put("rows", table.rows());
+            result.put("rowCount", table.rows().size());
+            result.put("version", version(bytes));
+            result.put("encoding", "UTF-8");
+            result.put("delimiter", String.valueOf(delimiter));
+            return finish(begun, CodeModeInvocationRecorder.TOOL_WORKSPACE_READ, result);
+        });
     }
 
     /** 写文本（原子替换 + artifact 登记）。 */
     public Map<String, Object> writeText(Map<String, Object> args) {
-        Map<String, Object> params = begin(args, CodeModeInvocationRecorder.TOOL_WORKSPACE_WRITE);
-        Path file = resolvePath(requirePath(params), true);
-        Object content = params.get("content");
-        if (content == null) {
-            throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
-                    "writeText 需要 content");
-        }
-        byte[] bytes = String.valueOf(content).getBytes(StandardCharsets.UTF_8);
-        return write(params, file, bytes, "writeText");
+        return recorded(CodeModeInvocationRecorder.TOOL_WORKSPACE_WRITE, args, begun -> {
+            Map<String, Object> params = begun.params();
+            Path file = resolvePath(requirePath(params), true);
+            Object content = params.get("content");
+            if (content == null) {
+                throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
+                        "writeText 需要 content");
+            }
+            byte[] bytes = String.valueOf(content).getBytes(StandardCharsets.UTF_8);
+            return write(begun, file, bytes, "writeText");
+        });
     }
 
     /** 写二进制（Base64 入参）。 */
     public Map<String, Object> writeBytes(Map<String, Object> args) {
-        Map<String, Object> params = begin(args, CodeModeInvocationRecorder.TOOL_WORKSPACE_WRITE);
-        Path file = resolvePath(requirePath(params), true);
-        Object base64 = params.get("base64");
-        if (base64 == null) {
-            throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
-                    "writeBytes 需要 base64");
-        }
-        byte[] bytes;
-        try {
-            bytes = Base64.getDecoder().decode(String.valueOf(base64).trim());
-        } catch (IllegalArgumentException e) {
-            throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
-                    "writeBytes 的 base64 非法");
-        }
-        return write(params, file, bytes, "writeBytes");
+        return recorded(CodeModeInvocationRecorder.TOOL_WORKSPACE_WRITE, args, begun -> {
+            Map<String, Object> params = begun.params();
+            Path file = resolvePath(requirePath(params), true);
+            Object base64 = params.get("base64");
+            if (base64 == null) {
+                throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
+                        "writeBytes 需要 base64");
+            }
+            byte[] bytes;
+            try {
+                bytes = Base64.getDecoder().decode(String.valueOf(base64).trim());
+            } catch (IllegalArgumentException e) {
+                throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
+                        "writeBytes 的 base64 非法");
+            }
+            return write(begun, file, bytes, "writeBytes");
+        });
     }
 
     /** 写 CSV（序列化在 Java 侧完成）。 */
     public Map<String, Object> writeCsv(Map<String, Object> args) {
-        Map<String, Object> params = begin(args, CodeModeInvocationRecorder.TOOL_WORKSPACE_WRITE);
-        Path file = resolvePath(requirePath(params), true);
-        List<String> columns = stringList(params.get("columns"));
-        List<Map<String, Object>> rows = rowList(params.get("rows"));
-        if (columns.isEmpty()) {
-            // 列为空时从第一行推导，兼容只传 rows 的写法
-            if (rows.isEmpty()) {
-                throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
-                        "writeCsv 需要 columns 或非空 rows");
+        return recorded(CodeModeInvocationRecorder.TOOL_WORKSPACE_WRITE, args, begun -> {
+            Map<String, Object> params = begun.params();
+            Path file = resolvePath(requirePath(params), true);
+            List<String> columns = stringList(params.get("columns"));
+            List<Map<String, Object>> rows = rowList(params.get("rows"));
+            if (columns.isEmpty()) {
+                if (rows.isEmpty()) {
+                    throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
+                            "writeCsv 需要 columns 或非空 rows");
+                }
+                columns = new ArrayList<>(rows.get(0).keySet());
             }
-            columns = new ArrayList<>(rows.get(0).keySet());
-        }
-        if (columns.size() > limits.getMaxCsvColumns()) {
-            throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_FILE_TOO_LARGE,
-                    "CSV 列数超过上限 " + limits.getMaxCsvColumns());
-        }
-        if (rows.size() > limits.getMaxCsvRows()) {
-            throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_FILE_TOO_LARGE,
-                    "CSV 行数超过上限 " + limits.getMaxCsvRows());
-        }
-        String delimiterRaw = params.get("delimiter") == null ? null : String.valueOf(params.get("delimiter"));
-        char delimiter = StringUtils.isBlank(delimiterRaw) ? ',' : delimiterRaw.charAt(0);
-        byte[] bytes = CsvCodec.serialize(columns, rows, delimiter).getBytes(StandardCharsets.UTF_8);
-        return write(params, file, bytes, "writeCsv");
+            if (columns.size() > limits.getMaxCsvColumns()) {
+                throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_FILE_TOO_LARGE,
+                        "CSV 列数超过上限 " + limits.getMaxCsvColumns());
+            }
+            if (rows.size() > limits.getMaxCsvRows()) {
+                throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_FILE_TOO_LARGE,
+                        "CSV 行数超过上限 " + limits.getMaxCsvRows());
+            }
+            String delimiterRaw = params.get("delimiter") == null ? null : String.valueOf(params.get("delimiter"));
+            char delimiter = StringUtils.isBlank(delimiterRaw) ? ',' : delimiterRaw.charAt(0);
+            byte[] bytes = CsvCodec.serialize(columns, rows, delimiter).getBytes(StandardCharsets.UTF_8);
+            return write(begun, file, bytes, "writeCsv");
+        });
     }
 
     // ---------- 内部实现 ----------
 
-    private Map<String, Object> begin(Map<String, Object> args, String toolName) {
+    private <T> T recorded(String toolName,
+                           Map<String, Object> args,
+                           Function<Begun, T> action) {
+        Begun begun = begin(args, toolName);
+        try {
+            return action.apply(begun);
+        } catch (RuntimeException e) {
+            CodeModeInvocationRecorder.end(
+                    agentContext,
+                    begun.handle(),
+                    toolName,
+                    ExecutionLedgerConstants.STATUS_FAILED,
+                    null,
+                    e.getMessage(),
+                    LocalDateTime.now());
+            throw e;
+        }
+    }
+
+    private Begun begin(Map<String, Object> args, String toolName) {
         budget.beginCall(agentContext);
         Map<String, Object> params = args == null ? new LinkedHashMap<>() : new LinkedHashMap<>(args);
         ToolArtifactSource source = agentContext.getCurrentToolArtifactSource();
-        Long invocationId = CodeModeInvocationRecorder.begin(
+        CodeModeInvocationRecorder.InvocationHandle invocation = CodeModeInvocationRecorder.begin(
                 agentContext,
                 source == null ? null : source.getToolCallId(),
                 toolName,
                 CodeModeInvocationRecorder.summarize(params),
                 LocalDateTime.now());
-        params.put("__invocationId", invocationId == null ? -1L : invocationId);
-        return params;
+        return new Begun(params, invocation);
     }
 
-    private Map<String, Object> finish(Map<String, Object> params, String toolName, Map<String, Object> result) {
-        Long invocationId = (Long) params.get("__invocationId");
+    private Map<String, Object> finish(Begun begun, String toolName, Map<String, Object> result) {
         CodeModeInvocationRecorder.end(agentContext,
-                invocationId == null || invocationId < 0 ? null : invocationId,
+                begun.handle(),
                 toolName,
                 ExecutionLedgerConstants.STATUS_SUCCESS,
                 String.valueOf(result.get("path")),
@@ -200,20 +229,16 @@ public final class WorkspaceCodeCapability {
         return result;
     }
 
-    private Map<String, Object> write(Map<String, Object> params, Path file, byte[] bytes, String method) {
+    private Map<String, Object> write(Begun begun, Path file, byte[] bytes, String method) {
         if (bytes.length > limits.getMaxWriteBytes()) {
             throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_FILE_TOO_LARGE,
                     "写入字节数超过单文件上限 " + limits.getMaxWriteBytes());
         }
         budget.accountWrite(bytes.length);
-        checkVersion(file, params.get("expectedVersion"));
-        Long invocationId = (Long) params.get("__invocationId");
-        String toolName = CodeModeInvocationRecorder.TOOL_WORKSPACE_WRITE;
+        checkVersion(file, begun.params().get("expectedVersion"));
         try {
             atomicWrite(file, bytes);
         } catch (IOException e) {
-            CodeModeInvocationRecorder.end(agentContext, invocationId, toolName,
-                    ExecutionLedgerConstants.STATUS_FAILED, null, e.getMessage(), LocalDateTime.now());
             throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_RUNTIME_ERROR,
                     method + " 写入失败：" + e.getMessage(), e);
         }
@@ -225,9 +250,13 @@ public final class WorkspaceCodeCapability {
         result.put("bytes", bytes.length);
         result.put("version", version(bytes));
         result.put("ok", true);
-        CodeModeInvocationRecorder.end(agentContext, invocationId, toolName,
+        CodeModeInvocationRecorder.end(agentContext, begun.handle(), CodeModeInvocationRecorder.TOOL_WORKSPACE_WRITE,
                 ExecutionLedgerConstants.STATUS_SUCCESS, agentPath, null, LocalDateTime.now());
         return result;
+    }
+
+    private record Begun(Map<String, Object> params,
+                         CodeModeInvocationRecorder.InvocationHandle handle) {
     }
 
     /** 临时文件 + 原子替换；失败保留旧文件。 */

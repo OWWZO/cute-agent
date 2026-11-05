@@ -2,6 +2,7 @@ package org.wwz.ai.application.agent.stream;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamEvent;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -71,6 +73,8 @@ public class AgentStreamProjection implements AgentSessionStream {
     private SessionProjectionRegistry projectionRegistry;
     private final AgentExecutionCommand request;
     private final Map<AgentType, AgentStreamEventHandler> handlerMap;
+    private final AgentTimelineEventProjector timelineEventProjector;
+    private final Set<String> timelineWrittenItems = ConcurrentHashMap.newKeySet();
     private final AgentStreamAccumulator eventResult = new AgentStreamAccumulator();
     private final List<Runnable> abortHandlers = new CopyOnWriteArrayList<>();
     private final AtomicBoolean closed = new AtomicBoolean(false);
@@ -100,10 +104,20 @@ public class AgentStreamProjection implements AgentSessionStream {
                                          Map<AgentType, AgentStreamEventHandler> handlerMap,
                                          AgentSessionEventBus eventBus,
                                          SessionEventClock eventClock) {
+        this(downstream, request, handlerMap, eventBus, eventClock, null);
+    }
+
+    public AgentStreamProjection(AgentSessionStream downstream,
+                                 AgentExecutionCommand request,
+                                 Map<AgentType, AgentStreamEventHandler> handlerMap,
+                                 AgentSessionEventBus eventBus,
+                                 SessionEventClock eventClock,
+                                 AgentTimelineEventProjector timelineEventProjector) {
         this.request = request;
         this.handlerMap = handlerMap == null ? Map.of() : handlerMap;
         this.eventBus = eventBus;
         this.eventClock = eventClock;
+        this.timelineEventProjector = timelineEventProjector;
         if (downstream != null) {
             addDownstream(downstream, 0L);
         }
@@ -179,8 +193,10 @@ public class AgentStreamProjection implements AgentSessionStream {
             if (handler == null) {
                 log.error("{} no AgentStreamEventHandler found for agentType: {}",
                         request.getRequestId(), agentType);
-                AgentSessionStreamFrame failed = buildDefaultResult(request, "unsupported agentType: " + agentType);
+                AgentSessionStreamFrame failed = buildDefaultResult(
+                        request, "Agent 执行失败，请稍后重试");
                 assignSeq(failed);
+                enrichRunFailed(failed);
                 offerReplayBuffer(failed);
                 forwardIfLive(failed);
                 return;
@@ -190,6 +206,15 @@ public class AgentStreamProjection implements AgentSessionStream {
             AgentStreamResult result = handler.handle(request, agentResponse, eventResult);
             AgentSessionStreamFrame frame = frameMapper.toFrame(result);
             assignSeq(frame);
+            if (timelineEventProjector != null) {
+                try {
+                    timelineEventProjector.project(frame, request, timelineWrittenItems);
+                } catch (RuntimeException e) {
+                    // 时间线是展示增强，不能让投影异常吞掉本帧或打断 Agent 主循环。
+                    log.warn("{} timeline projection failed, seq={}",
+                            request.getRequestId(), frame == null ? null : frame.getEventSeq(), e);
+                }
+            }
             offerReplayBuffer(frame);
             forwardIfLive(frame);
             // 根 result 的 finished 只表示业务终态（前端收口 loading），不在此关传输层。
@@ -226,9 +251,13 @@ public class AgentStreamProjection implements AgentSessionStream {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
+        if (throwable != null) {
+            log.error("{} agent stream failed", request == null ? "-" : request.getRequestId(), throwable);
+        }
         AgentSessionStreamFrame failed = buildDefaultResult(
-                request, throwable == null ? "执行失败" : throwable.getMessage());
+                request, "Agent 执行失败，请稍后重试");
         assignSeq(failed);
+        enrichRunFailed(failed);
         offerReplayBuffer(failed);
         if (eventBus != null && request != null && StringUtils.isNotBlank(request.getSessionId())) {
             eventBus.publish(request.getSessionId(), failed);
@@ -290,6 +319,8 @@ public class AgentStreamProjection implements AgentSessionStream {
                 .useTokens(0)
                 .reqId(requestId)
                 .packageType("heartbeat")
+                .protocolVersion(TimelineItemProjection.PROTOCOL_VERSION)
+                .eventType("stream.heartbeat")
                 .encrypted(false)
                 .build();
     }
@@ -297,7 +328,7 @@ public class AgentStreamProjection implements AgentSessionStream {
     /**
      * 续流时若 run 已不在进程内且 ledger 终态，向前端推终态空包。
      */
-    public static AgentSessionStreamFrame buildFollowIdle(String requestId) {
+    public static AgentSessionStreamFrame buildFollowIdle(String sessionId) {
         return AgentSessionStreamFrame.builder()
                 .finished(true)
                 .status("success")
@@ -306,8 +337,13 @@ public class AgentStreamProjection implements AgentSessionStream {
                 .responseAll("")
                 .useTimes(0)
                 .useTokens(0)
-                .reqId(requestId)
+                .reqId(sessionId)
                 .packageType("follow_idle")
+                .protocolVersion(TimelineItemProjection.PROTOCOL_VERSION)
+                .eventType("stream.follow_idle")
+                .eventId(TimelineItemProjection.eventId(sessionId, 0, "follow_idle"))
+                // 观察流空闲只代表当前 session 没有可挂载 run，不能伪造 runId。
+                .runId(null)
                 .encrypted(false)
                 .build();
     }
@@ -315,11 +351,11 @@ public class AgentStreamProjection implements AgentSessionStream {
     /**
      * registry 暂无但 ledger 仍 RUNNING：提示前端继续退避重连，不要当任务结束。
      */
-    public static AgentSessionStreamFrame buildFollowPending(String requestId) {
-        return buildFollowPending(requestId, null);
+    public static AgentSessionStreamFrame buildFollowPending(String sessionId) {
+        return buildFollowPending(sessionId, null);
     }
 
-    public static AgentSessionStreamFrame buildFollowPending(String requestId, Long retryMs) {
+    public static AgentSessionStreamFrame buildFollowPending(String sessionId, Long retryMs) {
         return AgentSessionStreamFrame.builder()
                 .finished(false)
                 .status("success")
@@ -328,8 +364,12 @@ public class AgentStreamProjection implements AgentSessionStream {
                 .responseAll("")
                 .useTimes(0)
                 .useTokens(0)
-                .reqId(requestId)
+                .reqId(sessionId)
                 .packageType("follow_pending")
+                .protocolVersion(TimelineItemProjection.PROTOCOL_VERSION)
+                .eventType("stream.follow_pending")
+                .eventId(TimelineItemProjection.eventId(sessionId, 0, "follow_pending"))
+                .runId(null)
                 .encrypted(false)
                 .retryMs(retryMs)
                 .build();
@@ -353,7 +393,9 @@ public class AgentStreamProjection implements AgentSessionStream {
         if (result == null) {
             return;
         }
-        result.setEventSeq(nextSeq());
+        long seq = nextSeq();
+        result.setEventSeq(seq);
+        result.setSeq(seq);
         if (isDurable(result)) {
             persistWatermark(result.getEventSeq());
         }
@@ -556,6 +598,17 @@ public class AgentStreamProjection implements AgentSessionStream {
                 .reqId(request == null ? null : request.getRequestId())
                 .traceId(request == null ? null : request.getRequestId())
                 .build();
+    }
+
+    private void enrichRunFailed(AgentSessionStreamFrame frame) {
+        if (frame == null) {
+            return;
+        }
+        frame.setProtocolVersion(TimelineItemProjection.PROTOCOL_VERSION);
+        frame.setEventType("run.failed");
+        frame.setEventId(TimelineItemProjection.eventId(
+                request == null ? null : request.getSessionId(), frame.getEventSeq(), null));
+        frame.setRunId(request == null ? null : request.getRequestId());
     }
 
     private static final class ObserverSink {

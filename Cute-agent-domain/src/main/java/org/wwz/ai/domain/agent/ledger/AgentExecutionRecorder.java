@@ -25,11 +25,17 @@ public interface AgentExecutionRecorder {
     Long createRun(DialogueRunStartRecord record);
 
     /**
-     * 结束 run。fail-open：实现记录并吞掉所有异常，调用方无法感知失败；
-     * 失败时 run 可能永久停留在 RUNNING，由启动对账（{@code BackgroundRunReconciler}）兜底收敛。
+     * 结束 run。账本写入异常 fail-open；时间线目录写入失败会抛出
+     * {@code TimelineItemWriteException}，以便调用方回滚本次 Ledger 事务后补写终态。
      * <p>入参不完整（record / runId / requestId / status 为空）或 run 不存在时直接 no-op。</p>
      */
     void finishRun(DialogueRunFinishRecord record);
+
+    /**
+     * 目录事务失败回滚后的终态补偿：只结算 run / session，不写时间线目录。
+     * 目录缺失仍可由历史投影按 Ledger 重建，不能让整条 run 永久停在 RUNNING。
+     */
+    void finishRunWithoutTimeline(DialogueRunFinishRecord record);
 
     /**
      * 创建 LLM 调用账本行。返回新行主键；入参为 {@code null}、{@code runId} 为空、
@@ -39,11 +45,16 @@ public interface AgentExecutionRecorder {
     Long createLlmInvocation(LlmInvocationStartRecord record);
 
     /**
-     * 结束 LLM 调用。fail-open：异常被记录后吞掉，调用方无法感知失败，
-     * 对应行可能停留在 RUNNING。
+     * 结束 LLM 调用。普通账本异常 fail-open；时间线目录写入失败会抛出
+     * {@code TimelineItemWriteException}，事务调用方应回滚。
      * <p>{@code llmInvocationId} 为空时直接 no-op。</p>
      */
     void finishLlmInvocation(LlmInvocationFinishRecord record);
+
+    /**
+     * 只结算 LLM 账本，不写时间线目录。用于目录写失败后的补偿。
+     */
+    void finishLlmInvocationWithoutTimeline(LlmInvocationFinishRecord record);
 
     /**
      * 批量创建工具调用账本行。
@@ -56,15 +67,26 @@ public interface AgentExecutionRecorder {
     Map<String, Long> createToolInvocations(ToolInvocationBatchStartRecord record);
 
     /**
-     * 结束工具调用。fail-open：异常被记录后吞掉，调用方无法感知失败，
-     * 对应行可能停留在 RUNNING。
+     * 只创建工具账本行，不写时间线目录。用于目录写失败后的补偿。
+     */
+    Map<String, Long> createToolInvocationsWithoutTimeline(ToolInvocationBatchStartRecord record);
+
+    /**
+     * 结束工具调用。普通账本异常 fail-open；时间线目录写入失败会抛出
+     * {@code TimelineItemWriteException}，事务调用方应回滚。
      * <p>{@code toolInvocationId} 为空时直接 no-op；{@code finishedAt} 为 {@code null}
      * 表示 provisional 后台 ACK 写，此时行仍保持 RUNNING，不能当作已结算。</p>
      */
     void finishToolInvocation(ToolInvocationFinishRecord record);
 
     /**
-     * 写入产物，fail-open：实现记录并吞掉写入异常，调用方无法感知丢失。
+     * 只结算工具账本，不写时间线目录。用于 HITL 关键事务或目录写失败后的补偿。
+     */
+    void finishToolInvocationWithoutTimeline(ToolInvocationFinishRecord record);
+
+    /**
+     * 写入产物。普通账本异常 fail-open；时间线目录写入失败会抛出
+     * {@code TimelineItemWriteException}，事务调用方应回滚。
      * 适合请求收尾等不希望产物失败反噬主流程的场景；{@code fileName} 为空的记录会被跳过。
      */
     void recordArtifacts(List<ArtifactRecordCommand> records);

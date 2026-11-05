@@ -1,4 +1,5 @@
 import api from "./index";
+import type { AgentTimelineItem } from "@/types/timeline";
 
 const DEFAULT_DEVICE_ID = "device-default";
 const CONVERSATION_API_PREFIX = "/api/agent/conversation";
@@ -109,6 +110,8 @@ export interface ConversationRunReplay {
   durationMs?: number | null;
   contextUsage?: ConversationContextUsage;
   replayFrames: ConversationReplayFrame[];
+  /** 后端语义时间线目录；存在时优先于 replayFrames 消费。 */
+  timelineItems?: AgentTimelineItem[];
 }
 
 export type ConversationSessionFile = MESSAGE.ArtifactReference;

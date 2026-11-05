@@ -31,13 +31,13 @@
         file_size, file_hash, metadata_json, create_time, update_time, deleted
     </sql>
 
-    <insert id="batchInsertArtifacts">
-        INSERT IGNORE INTO ai_agent_artifact (
+    <insert id="batchInsertArtifacts" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ai_agent_artifact (
             run_id, request_id, tool_invocation_id, tool_call_id, artifact_role, visibility, source_type, source_name,
             file_name, storage_key, download_url, preview_url, mime_type, file_size, file_hash, metadata_json,
             create_time, update_time, deleted
         ) VALUES
-        <foreach collection="records" item="record" separator=",">
+        <foreach collection="list" item="record" separator=",">
             (
                 #{record.runId}, #{record.requestId}, #{record.toolInvocationId}, #{record.toolCallId}, #{record.artifactRole}, #{record.visibility},
                 #{record.sourceType}, #{record.sourceName}, #{record.fileName}, #{record.storageKey}, #{record.downloadUrl},

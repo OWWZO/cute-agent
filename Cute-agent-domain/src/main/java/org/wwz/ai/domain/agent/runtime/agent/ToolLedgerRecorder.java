@@ -1,7 +1,9 @@
 package org.wwz.ai.domain.agent.runtime.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactRecordCommand;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationBatchStartRecord;
@@ -28,6 +30,7 @@ import java.util.Map;
  * 所有写入都以「有活跃 run」为闸门；缺少 runId 或 toolInvocationId 时静默跳过，
  * 避免写出无法结算的孤儿行。
  */
+@Slf4j
 final class ToolLedgerRecorder {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -119,14 +122,29 @@ final class ToolLedgerRecorder {
         if (items.isEmpty()) {
             return Map.of();
         }
-        return context.getExecutionRecorder().createToolInvocations(ToolInvocationBatchStartRecord.builder()
+        ToolInvocationBatchStartRecord record = ToolInvocationBatchStartRecord.builder()
                 .runId(context.getAgentRunState().getRunId())
-                .requestId(context.getRequestId())
+                .requestId(ExecutionLedgerRunSupport.ledgerRequestId(context))
+                .sessionId(context.getSessionId())
                 .llmInvocationId(llmInvocationId)
                 .agentName(agent.getName())
                 .stepNo(agent.getCurrentStep())
                 .items(items)
-                .build());
+                .build();
+        try {
+            return context.getExecutionRecorder().createToolInvocations(record);
+        } catch (RuntimeException e) {
+            // 目录写失败会通过事务代理抛出；账本失败不能阻断后续工具执行与 SSE 收口。
+            log.warn("tool ledger start failed, requestId={}, toolCount={}",
+                    ExecutionLedgerRunSupport.ledgerRequestId(context), items.size(), e);
+            try {
+                return context.getExecutionRecorder().createToolInvocationsWithoutTimeline(record);
+            } catch (RuntimeException fallbackError) {
+                log.warn("tool ledger start fallback failed, requestId={}, toolCount={}",
+                        ExecutionLedgerRunSupport.ledgerRequestId(context), items.size(), fallbackError);
+                return Map.of();
+            }
+        }
     }
 
     void finish(ToolCall command, ToolDispatch dispatch, ToolExecutionOutcome outcome) {
@@ -162,10 +180,10 @@ final class ToolLedgerRecorder {
                 ? ExecutionLedgerConstants.STATUS_RUNNING
                 : ToolExecutionPipeline.ledgerStatus(outcome);
         LocalDateTime ledgerFinishedAt = backgroundAck ? null : finishedAt;
-        context.getExecutionRecorder().finishToolInvocation(ToolInvocationFinishRecord.builder()
+        ToolInvocationFinishRecord record = ToolInvocationFinishRecord.builder()
                 .toolInvocationId(toolInvocationId)
                 .runId(context.getAgentRunState().getRunId())
-                .requestId(context.getRequestId())
+                .requestId(ExecutionLedgerRunSupport.ledgerRequestId(context))
                 .sessionId(context.getSessionId())
                 .toolCallId(command.getId())
                 .toolName(toolName)
@@ -175,7 +193,19 @@ final class ToolLedgerRecorder {
                 .structuredOutput(outcome == null ? null : outcome.getStructuredOutput())
                 .errorMsg(outcome == null ? null : outcome.getErrorMsg())
                 .finishedAt(ledgerFinishedAt)
-                .build());
+                .build();
+        try {
+            context.getExecutionRecorder().finishToolInvocation(record);
+        } catch (RuntimeException e) {
+            log.warn("tool ledger finish failed, requestId={}, toolCallId={}",
+                    ExecutionLedgerRunSupport.ledgerRequestId(context), command.getId(), e);
+            try {
+                context.getExecutionRecorder().finishToolInvocationWithoutTimeline(record);
+            } catch (RuntimeException fallbackError) {
+                log.warn("tool ledger finish fallback failed, requestId={}, toolCallId={}",
+                        ExecutionLedgerRunSupport.ledgerRequestId(context), command.getId(), fallbackError);
+            }
+        }
         if (command.getFunction() != null
                 && (AgentDispatchTool.NAME.equals(command.getFunction().getName())
                 || TaskToolNames.SEND_MESSAGE.equals(command.getFunction().getName()))) {
@@ -204,7 +234,7 @@ final class ToolLedgerRecorder {
             File file = binding.getFile();
             artifactCommands.add(ArtifactRecordCommand.builder()
                     .runId(context.getAgentRunState().getRunId())
-                    .requestId(context.getRequestId())
+                    .requestId(ExecutionLedgerRunSupport.ledgerRequestId(context))
                     .toolInvocationId(toolInvocationId)
                     .toolCallId(command.getId())
                     .artifactRole(ExecutionLedgerConstants.ARTIFACT_ROLE_OUTPUT)
@@ -222,7 +252,12 @@ final class ToolLedgerRecorder {
                     .build());
         }
         if (!artifactCommands.isEmpty()) {
-            context.getExecutionRecorder().recordArtifacts(artifactCommands);
+            try {
+                context.getExecutionRecorder().recordArtifacts(artifactCommands);
+            } catch (RuntimeException e) {
+                log.warn("tool artifact ledger write failed, requestId={}, toolCallId={}",
+                        context.getRequestId(), command.getId(), e);
+            }
         }
     }
 

@@ -60,7 +60,7 @@ public final class BrowserCodeCapability {
         ToolArtifactSource source = agentContext.getCurrentToolArtifactSource();
         String parentToolCallId = source == null ? null : source.getToolCallId();
         LocalDateTime startedAt = LocalDateTime.now();
-        Long invocationId = CodeModeInvocationRecorder.begin(
+        CodeModeInvocationRecorder.InvocationHandle invocation = CodeModeInvocationRecorder.begin(
                 agentContext, parentToolCallId, CodeModeInvocationRecorder.TOOL_BROWSER,
                 CodeModeInvocationRecorder.summarize(params), startedAt);
         try {
@@ -68,14 +68,14 @@ public final class BrowserCodeCapability {
             Map<String, Object> fields = BrowserCodeModeGate.withUserLock(
                     agentContext.getUserId(),
                     () -> invoke(tool, params, agentContext));
-            CodeModeInvocationRecorder.end(agentContext, invocationId, CodeModeInvocationRecorder.TOOL_BROWSER,
+            CodeModeInvocationRecorder.end(agentContext, invocation, CodeModeInvocationRecorder.TOOL_BROWSER,
                     fields.get("ok") == Boolean.TRUE
                             ? ExecutionLedgerConstants.STATUS_SUCCESS
                             : ExecutionLedgerConstants.STATUS_FAILED,
                     summarize(fields), null, LocalDateTime.now());
             return fields;
-        } catch (CodeModeExecutionException e) {
-            CodeModeInvocationRecorder.end(agentContext, invocationId, CodeModeInvocationRecorder.TOOL_BROWSER,
+        } catch (RuntimeException e) {
+            CodeModeInvocationRecorder.end(agentContext, invocation, CodeModeInvocationRecorder.TOOL_BROWSER,
                     ExecutionLedgerConstants.STATUS_FAILED, null, e.getMessage(), LocalDateTime.now());
             throw e;
         }

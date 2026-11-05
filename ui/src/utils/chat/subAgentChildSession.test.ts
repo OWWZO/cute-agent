@@ -140,6 +140,26 @@ describe("readChildSessionEventData", () => {
     );
   });
 
+  it("能读取语义时间线信封，并丢弃观察流控制帧", () => {
+    const data = eventData({
+      messageType: "tool_thought",
+      toolThought: "timeline",
+    });
+
+    expect(readChildSessionEventData({
+      eventType: "item.completed",
+      payload: { eventData: data },
+    })?.resultMap?.messageType).toBe("tool_thought");
+    expect(readChildSessionEventData({
+      eventType: "stream.heartbeat",
+      finished: false,
+    })).toBeUndefined();
+    expect(readChildSessionEventData({
+      eventType: "stream.closed",
+      finished: true,
+    })).toBeUndefined();
+  });
+
   it("结构非法的负载返回 undefined 而不抛", () => {
     expect(readChildSessionEventData({ resultMap: { eventData: { foo: 1 } } })).toBeUndefined();
   });
@@ -339,6 +359,63 @@ describe("buildChildSessionChat", () => {
 
     expect(chat.loading).toBe(false);
     expect(chat.metrics?.status).toBe("SUCCESS");
+  });
+
+  it("控制帧 finished 不能把失败的子会话改写成成功", () => {
+    const chat = buildChildSessionChat({
+      childSessionId: "sub_1",
+      history: historyPage([{
+        requestId: "r1",
+        status: "FAILED",
+        hasReplay: false
+      }]),
+      frames: [
+        {
+          eventSeq: 1,
+          finished: true,
+          status: "success",
+          packageType: "follow_idle",
+          eventType: "stream.follow_idle",
+        },
+        {
+          eventSeq: 2,
+          finished: true,
+          status: "success",
+          packageType: "stream_settle",
+          eventType: "stream.closed",
+        },
+      ],
+    });
+
+    expect(chat.loading).toBe(false);
+    expect(chat.metrics?.status).toBe("FAILED");
+  });
+
+  it("HITL 让步帧不能把等待输入的 run 改写成成功", () => {
+    const chat = buildChildSessionChat({
+      childSessionId: "sub_1",
+      history: historyPage([{
+        requestId: "r1",
+        status: "WAITING_INPUT",
+        hasReplay: false
+      }]),
+      frames: [
+        {
+          eventSeq: 1,
+          finished: true,
+          status: "success",
+          packageType: "result",
+          ...frameOf(eventData({
+            messageType: "ask_user_question",
+            toolCallId: "call-hitl",
+            status: "pending"
+          })),
+        },
+      ],
+    });
+
+    expect(chat.loading).toBe(false);
+    expect(chat.metrics?.status).toBe("WAITING_INPUT");
   });
 
   it("回放帧带父会话 Agent 标签时，工具卡仍留在子会话时间线", () => {
