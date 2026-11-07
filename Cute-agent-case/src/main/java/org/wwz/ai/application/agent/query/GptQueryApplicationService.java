@@ -2,13 +2,13 @@ package org.wwz.ai.application.agent.query;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.application.agent.askuser.AskUserQuestionApplicationService;
 import org.wwz.ai.application.agent.planmode.PlanApprovalApplicationService;
 import org.wwz.ai.application.agent.dispatch.IAgentDispatchService;
 import org.wwz.ai.application.agent.run.AgentRunLaunchGate;
+import org.wwz.ai.application.agent.run.SessionInboxSupport;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
 import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
@@ -99,7 +99,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
     @Resource
     private BackgroundTaskWakePort backgroundTaskWakePort;
 
-    @Autowired(required = false)
+    @Resource
     private SessionInboxPort sessionInboxPort;
 
     @Override
@@ -148,7 +148,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                 agentRequest.getRequestId(),
                 agentRequest.getSessionId(),
                 runUserId);
-        releaseHeldInboxMessages(agentRequest.getSessionId());
+        SessionInboxSupport.releaseHeldUserMessages(sessionInboxPort, agentRequest.getSessionId());
 
         scheduleDispatch(agentRequest, runUserId);
         return AgentQuerySubmitResult.builder()
@@ -212,7 +212,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         }
 
         activeAgentRunRegistry.begin(agentRequest.getRequestId(), sessionId, runUserId);
-        releaseHeldInboxMessages(sessionId);
+        SessionInboxSupport.releaseHeldUserMessages(sessionInboxPort, sessionId);
         scheduleDispatch(agentRequest, runUserId);
         return AgentQuerySubmitResult.builder()
                 .accepted(true)
@@ -335,18 +335,6 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
             throw new IllegalArgumentException("userId不能为空");
         }
         return userId;
-    }
-
-    private void releaseHeldInboxMessages(String sessionId) {
-        if (sessionInboxPort == null || StringUtils.isBlank(sessionId)) {
-            return;
-        }
-        try {
-            // 用户显式发送新消息视为确认继续；HELD 只用于 Stop 后阻止静默自动续跑。
-            sessionInboxPort.releaseHeldUserMessages(sessionId, null);
-        } catch (Exception e) {
-            log.warn("release held session inbox failed sessionId={}", sessionId, e);
-        }
     }
 
     /**

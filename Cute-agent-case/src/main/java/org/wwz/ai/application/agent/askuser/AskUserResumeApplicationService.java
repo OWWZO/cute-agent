@@ -3,13 +3,13 @@ package org.wwz.ai.application.agent.askuser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.application.agent.dispatch.IAgentDispatchService;
 import org.wwz.ai.application.agent.query.AgentQuerySubmitResult;
 import org.wwz.ai.application.agent.query.GptQueryApplicationService;
 import org.wwz.ai.application.agent.run.AgentRunLaunchGate;
+import org.wwz.ai.application.agent.run.SessionInboxSupport;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
 import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
@@ -57,6 +57,7 @@ public class AskUserResumeApplicationService {
     private final AgentRunLaunchGate agentRunLaunchGate;
     private final SessionEventClock sessionEventClock;
     private final SessionProjectionRegistry sessionProjectionRegistry;
+    private final SessionInboxPort sessionInboxPort;
 
     @Resource
     private Map<AgentType, AgentStreamEventHandler> handlerMap;
@@ -70,9 +71,6 @@ public class AskUserResumeApplicationService {
 
     @Resource
     private AgentTimelineEventProjector agentTimelineEventProjector;
-
-    @Autowired(required = false)
-    private SessionInboxPort sessionInboxPort;
 
     /**
      * CAS claim 后提交 continuation run。观察流走 GET session stream。
@@ -130,7 +128,7 @@ public class AskUserResumeApplicationService {
         try {
             activeAgentRunRegistry.begin(
                     agentRequest.getRequestId(), agentRequest.getSessionId(), userId);
-            releaseHeldInboxMessages(agentRequest.getSessionId());
+            SessionInboxSupport.releaseHeldUserMessages(sessionInboxPort, agentRequest.getSessionId());
         } catch (RuntimeException e) {
             resetResumeStatus(record, agentRequest.getRequestId(), e);
             throw e;
@@ -163,9 +161,9 @@ public class AskUserResumeApplicationService {
                     projectingStream.completeWithError(e);
                 }
             } finally {
+                resetResumeStatus(record, agentRequest.getRequestId(), e);
                 notifyRunSettled(agentRequest);
             }
-            resetResumeStatus(record, agentRequest.getRequestId(), e);
             throw e;
         }
     }
@@ -236,17 +234,6 @@ public class AskUserResumeApplicationService {
                     agentRequest.getSessionId(), agentRequest.getRequestId());
         } catch (Exception e) {
             log.warn("{} ask-user resume settle check failed", agentRequest.getRequestId(), e);
-        }
-    }
-
-    private void releaseHeldInboxMessages(String sessionId) {
-        if (sessionInboxPort == null || StringUtils.isBlank(sessionId)) {
-            return;
-        }
-        try {
-            sessionInboxPort.releaseHeldUserMessages(sessionId, null);
-        } catch (Exception e) {
-            log.warn("release held session inbox failed sessionId={}", sessionId, e);
         }
     }
 

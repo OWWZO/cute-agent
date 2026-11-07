@@ -56,6 +56,7 @@ public class DesktopControlResumeApplicationServiceTest {
                 null,
                 new AgentRunLaunchGate(0),
                 null,
+                null,
                 null);
         setField(service, "dispatchExecutor", null);
         setField(service, "handlerMap", Map.of());

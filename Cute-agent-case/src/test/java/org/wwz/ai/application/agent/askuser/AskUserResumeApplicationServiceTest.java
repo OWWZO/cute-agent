@@ -81,6 +81,7 @@ public class AskUserResumeApplicationServiceTest {
                 null,
                 new AgentRunLaunchGate(0),
                 null,
+                null,
                 null);
         setField(service, "dispatchExecutor", executor);
         setField(service, "handlerMap", Map.of());
