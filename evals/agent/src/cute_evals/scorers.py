@@ -102,7 +102,12 @@ def _subgoal_status(
     for subgoal in subgoals:
         required_tools = [str(name) for name in (subgoal.get("requiredTools") or [])]
         required_text = [str(value) for value in (subgoal.get("finalContains") or [])]
-        minimum = int(subgoal.get("minSuccessfulTools") or (1 if required_tools else 0))
+        raw_minimum = subgoal.get("minSuccessfulTools")
+        minimum = (
+            int(raw_minimum)
+            if raw_minimum is not None
+            else (1 if required_tools else 0)
+        )
         tools_ok = all(tool_counts[name] >= minimum for name in required_tools)
         text_ok = all(value in final_text for value in required_text)
         passed = tools_ok and text_ok

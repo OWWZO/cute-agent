@@ -1,7 +1,11 @@
+import copy
+
 import pytest
 
+from cute_evals.case_loader import load_case_file
 from cute_evals.cli import (
     _case_dirs,
+    _dataset_hash,
     _repo_root,
     build_parser,
     ops_schedule_command,
@@ -132,3 +136,32 @@ def test_case_approve_command_is_registered() -> None:
     )
 
     assert args.func.__name__ == "case_approve_command"
+
+
+def test_dataset_hash_includes_execution_and_gate_fields() -> None:
+    case = load_case_file(
+        _repo_root()
+        / "evals"
+        / "agent"
+        / "cases"
+        / "rag"
+        / "core"
+        / "01-cited-answer.yaml"
+    )
+    original = _dataset_hash([case])
+
+    variants = []
+    hard_gate = copy.deepcopy(case)
+    hard_gate.hard_gate = not hard_gate.hard_gate
+    variants.append(hard_gate)
+    tools = copy.deepcopy(case)
+    tools.tools = [{"name": "changed"}]
+    variants.append(tools)
+    answer_contract = copy.deepcopy(case)
+    answer_contract.answer_contract = {"format": "changed"}
+    variants.append(answer_contract)
+    baseline_trace = copy.deepcopy(case)
+    baseline_trace.baseline_trace = "traces/changed.json"
+    variants.append(baseline_trace)
+
+    assert all(_dataset_hash([variant]) != original for variant in variants)

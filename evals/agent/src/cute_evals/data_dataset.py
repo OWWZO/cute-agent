@@ -8,7 +8,11 @@ from .dataset_lock import load_dataset_manifest
 
 def fixture_files(cases_dir: Path) -> list[Path]:
     fixtures_dir = cases_dir / "fixtures"
-    return sorted(fixtures_dir.glob("*")) if fixtures_dir.exists() else []
+    return (
+        sorted(path for path in fixtures_dir.rglob("*") if path.is_file())
+        if fixtures_dir.is_dir()
+        else []
+    )
 
 
 def load_data_dataset_manifest(cases_dir: Path) -> dict[str, Any]:

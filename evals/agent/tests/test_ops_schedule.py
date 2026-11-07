@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time as time_module
 from datetime import datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -74,3 +76,34 @@ def test_scheduler_runs_immediately_and_writes_state(tmp_path: Path) -> None:
     state = (tmp_path / "scheduler-state.json").read_text(encoding="utf-8")
     assert '"lastSuccessAt": "2026-11-06T18:00:00+00:00"' in state
     assert '"status": "waiting"' in state
+
+
+@pytest.mark.skipif(
+    not hasattr(time_module, "tzset"),
+    reason="time.tzset is unavailable on Windows",
+)
+def test_naive_clock_is_converted_from_the_system_timezone(monkeypatch) -> None:
+    original = os.environ.get("TZ")
+    monkeypatch.setenv("TZ", "UTC")
+    time_module.tzset()
+    try:
+        result = next_daily_run(
+            datetime(2026, 11, 6, 23, 30),
+            time(6, 0),
+            "Asia/Shanghai",
+        )
+    finally:
+        if original is None:
+            monkeypatch.delenv("TZ", raising=False)
+        else:
+            monkeypatch.setenv("TZ", original)
+        time_module.tzset()
+
+    assert result == datetime(
+        2026,
+        11,
+        8,
+        6,
+        0,
+        tzinfo=ZoneInfo("Asia/Shanghai"),
+    )

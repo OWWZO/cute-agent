@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 
 import pytest
 
+from cute_evals.framework_scorers import _judge_cache_path
 from cute_evals.models import (
     BudgetSpec,
     EvalCase,
     ExpectedSpec,
+    JudgeConfig,
     RunTrace,
 )
 from cute_evals.scorers import score_case
@@ -335,6 +339,25 @@ def test_subgoal_progress_reports_partial_completion() -> None:
     assert score.evidence["completed"] == 1
 
 
+def test_subgoal_zero_minimum_tools_preserves_explicit_zero() -> None:
+    case = make_case()
+    case.expected.subgoals = [
+        {
+            "id": "answer-only",
+            "requiredTools": ["search_web"],
+            "finalContains": ["3306"],
+            "minSuccessfulTools": 0,
+        }
+    ]
+
+    result = score_case(case, make_trace(), "trace.json")
+    score = next(item for item in result.scores if item.name == "subgoal_progress")
+
+    assert score.value == 1.0
+    assert score.passed is True
+    assert score.evidence["subgoals"][0]["minSuccessfulTools"] == 0
+
+
 def test_agentevals_trajectory_match_is_actually_evaluated() -> None:
     result = score_case(make_case(), make_trace(), "traces/react.test/trace.json")
 
@@ -356,6 +379,61 @@ def test_require_judge_marks_deepeval_unverified_as_hard_gate() -> None:
     )
 
     assert result.unverified
+
+
+def test_corrupt_deepeval_cache_is_recomputed_instead_of_aborting(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    case = make_case()
+    trace = make_trace()
+    judge = JudgeConfig(model="fake-judge")
+    cache_path = _judge_cache_path(
+        tmp_path,
+        case=case,
+        trace=trace,
+        judge=judge,
+    )
+    assert cache_path is not None
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text("{", encoding="utf-8")
+
+    deepeval = types.ModuleType("deepeval")
+    deepeval.__path__ = []
+    metrics = types.ModuleType("deepeval.metrics")
+
+    class BrokenGEval:
+        def __init__(self, **kwargs):
+            raise RuntimeError("recomputed")
+
+    metrics.GEval = BrokenGEval
+    test_case = types.ModuleType("deepeval.test_case")
+    test_case.LLMTestCase = object
+    test_case.SingleTurnParams = types.SimpleNamespace(
+        INPUT="input",
+        ACTUAL_OUTPUT="actual_output",
+        EXPECTED_OUTPUT="expected_output",
+    )
+    monkeypatch.setitem(sys.modules, "deepeval", deepeval)
+    monkeypatch.setitem(sys.modules, "deepeval.metrics", metrics)
+    monkeypatch.setitem(sys.modules, "deepeval.test_case", test_case)
+
+    result = score_case(
+        case,
+        trace,
+        "trace.json",
+        require_judge=True,
+        judge=judge,
+        judge_cache_dir=tmp_path,
+    )
+    score = next(
+        item
+        for item in result.scores
+        if item.scorer == "deepeval"
+    )
+
+    assert score.status == "unverified"
+    assert "recomputed" in score.evidence["reason"]
 
 
 def test_skill_selection_accepts_expected_skill() -> None:
