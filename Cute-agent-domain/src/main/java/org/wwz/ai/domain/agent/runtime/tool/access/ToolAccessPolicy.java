@@ -30,9 +30,10 @@ public final class ToolAccessPolicy {
     public WebFetchDecision beforeWebFetch(String url) {
         String circuit = webFetchCircuitReason.get();
         if (circuit != null) {
+            AtomicInteger counter = webFetchAttempts.get(normalizeUrl(url));
             return new WebFetchDecision(
                     false,
-                    0,
+                    counter == null ? 0 : counter.get(),
                     "network_circuit_open",
                     "WebFetch 网络链路已连续失败，禁止继续抓网页。请改用 WebSearch 或基于已有证据输出最终答案。"
             );
@@ -53,10 +54,12 @@ public final class ToolAccessPolicy {
 
     public void recordWebFetchSuccess() {
         consecutiveNetworkFailures.set(0);
+        webFetchCircuitReason.set(null);
     }
 
     public void recordWebFetchFailure(boolean networkFailure) {
         if (!networkFailure) {
+            consecutiveNetworkFailures.set(0);
             return;
         }
         int failures = consecutiveNetworkFailures.incrementAndGet();
@@ -81,7 +84,8 @@ public final class ToolAccessPolicy {
             String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
             String path = uri.getPath() == null ? "" : uri.getPath();
             String query = uri.getQuery() == null ? "" : "?" + uri.getQuery();
-            return scheme + "://" + host + path + query;
+            String port = uri.getPort() >= 0 ? ":" + uri.getPort() : "";
+            return scheme + "://" + host + port + path + query;
         } catch (Exception ignored) {
             return value;
         }

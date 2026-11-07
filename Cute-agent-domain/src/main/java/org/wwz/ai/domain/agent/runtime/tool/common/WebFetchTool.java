@@ -15,7 +15,13 @@ import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.tool.access.ToolAccessPolicy;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 
+import javax.net.ssl.SSLException;
+import java.io.IOException;
+import java.net.ConnectException;
 import java.net.URI;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -105,7 +111,9 @@ public class WebFetchTool implements BaseTool {
                 Map<String, Object> detail = failureDetails(rawUrl, prompt);
                 detail.put("failureClass", access.reason());
                 detail.put("retryable", Boolean.FALSE);
-                detail.put("attempt", access.attempt());
+                if (access.attempt() > 0) {
+                    detail.put("attempt", access.attempt());
+                }
                 detail.put("hint", access.hint());
                 return ToolResultPayload.failureFrom("WebFetch 失败：" + access.hint(), detail);
             }
@@ -157,7 +165,7 @@ public class WebFetchTool implements BaseTool {
             return ToolResultPayload.failureFrom("WebFetch 失败：" + e.getMessage(), detail);
         } catch (Exception e) {
             log.error("{} WebFetch execute error, input={}", requestId(context), input, e);
-            FetchFailureKind failureKind = classifyFailure(0, rootCauseSummary(e));
+            FetchFailureKind failureKind = classifyFailure(e);
             recordAccessFailure(context, failureKind);
             Map<String, Object> detail = failureDetails(rawUrl, prompt);
             addFailurePolicy(detail, failureKind);
@@ -190,6 +198,27 @@ public class WebFetchTool implements BaseTool {
     }
 
     private static FetchFailureKind classifyFailure(int statusCode, String responseBody) {
+        if (statusCode == 403) {
+            return FetchFailureKind.forbidden();
+        }
+        if (statusCode == 401) {
+            return FetchFailureKind.unauthorized();
+        }
+        if (statusCode == 404) {
+            return FetchFailureKind.notFound();
+        }
+        if (statusCode == 429) {
+            return FetchFailureKind.rateLimited();
+        }
+        if (statusCode == 408 || statusCode == 504) {
+            return FetchFailureKind.timeout();
+        }
+        if (statusCode >= 500) {
+            return FetchFailureKind.upstream();
+        }
+        if (statusCode > 0) {
+            return FetchFailureKind.other();
+        }
         String body = StringUtils.defaultString(responseBody).toLowerCase(Locale.ROOT);
         if (body.contains("cannot connect to host")
                 || body.contains("connect call failed")
@@ -197,28 +226,40 @@ public class WebFetchTool implements BaseTool {
                 || body.contains("proxy")) {
             return FetchFailureKind.proxy();
         }
-        if (body.contains("403") || body.contains("forbidden") || statusCode == 403) {
-            return FetchFailureKind.forbidden();
-        }
-        if (body.contains("401") || body.contains("unauthorized") || statusCode == 401) {
-            return FetchFailureKind.unauthorized();
-        }
-        if (body.contains("404") || body.contains("not found") || statusCode == 404) {
-            return FetchFailureKind.notFound();
-        }
-        if (body.contains("429") || body.contains("rate limit") || statusCode == 429) {
-            return FetchFailureKind.rateLimited();
-        }
         if (body.contains("timeout")
-                || body.contains("timed out")
-                || statusCode == 408
-                || statusCode == 504) {
+                || body.contains("timed out")) {
             return FetchFailureKind.timeout();
         }
-        if (statusCode >= 500 || body.contains("502") || body.contains("503")) {
-            return FetchFailureKind.upstream();
-        }
         return FetchFailureKind.other();
+    }
+
+    private static FetchFailureKind classifyFailure(Throwable error) {
+        boolean timeout = false;
+        boolean network = false;
+        Throwable cursor = error;
+        while (cursor != null) {
+            if (cursor instanceof SocketTimeoutException) {
+                timeout = true;
+            } else if (cursor instanceof UnknownHostException
+                    || cursor instanceof ConnectException
+                    || cursor instanceof SocketException
+                    || cursor instanceof SSLException) {
+                network = true;
+            } else if (cursor instanceof IOException) {
+                network = true;
+            }
+            if (cursor.getCause() == null || cursor.getCause() == cursor) {
+                break;
+            }
+            cursor = cursor.getCause();
+        }
+        if (timeout) {
+            return FetchFailureKind.timeout();
+        }
+        if (network) {
+            return FetchFailureKind.proxy();
+        }
+        return classifyFailure(0, rootCauseSummary(error));
     }
 
     private FetchedPage fetchFromPython(String url, AgentContext context) throws Exception {
