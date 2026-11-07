@@ -139,12 +139,29 @@ public class BskFrameRelay {
     /** 请求超时秒数；&le;0 表示不超时（由调用方控制）。 */
     private final long sessionTimeoutSeconds;
 
+    /** session 生命周期事件回调；由 {@link BskCliRelay} 注册，用于清理 CLI 侧调用。 */
+    private volatile SessionEventListener sessionEventListener;
+
+    /** 扩展事件需要驱动 CLI 侧状态时使用的回调 seam。 */
+    public interface SessionEventListener {
+        void onDialogChanged(JSONObject payload);
+
+        void onUserInterrupt(String extensionConnectionId, String userId, String sessionId);
+
+        void onSessionEnded(String extensionConnectionId, String userId,
+                            String sessionId, String reason);
+    }
+
     public BskFrameRelay(BskSessionQueue sessionQueue,
                          BskHandshakeResponder handshakeResponder,
                          long sessionTimeoutSeconds) {
         this.sessionQueue = sessionQueue;
         this.handshakeResponder = handshakeResponder;
         this.sessionTimeoutSeconds = sessionTimeoutSeconds;
+    }
+
+    public void setSessionEventListener(SessionEventListener listener) {
+        this.sessionEventListener = listener;
     }
 
     // ── 连接生命周期 ─────────────────────────────────────────
@@ -187,7 +204,7 @@ public class BskFrameRelay {
                 "extension disconnected before response arrived");
         // 扩展断开时它内存里的会话全部消失（background.ts 的 disconnect cleanup），
         // 网关必须同步清掉，否则 session.list 会一直报已经死掉的会话。
-        dropSessionsForConnection(connectionId);
+        dropSessionsForConnection(connection);
         try {
             connection.sink.close();
         } catch (RuntimeException e) {
@@ -267,16 +284,163 @@ public class BskFrameRelay {
      * {@code {id, result}}。{@link #isErrorFrame} 用于区分两者。</p>
      */
     public boolean routeResponse(String id, JSONObject payload) {
+        return routeResponse(null, id, payload);
+    }
+
+    /**
+     * 路由扩展应答，并校验应答确实来自承载该请求的连接。
+     *
+     * <p>多用户网关里 rpc id 可能被不同 CLI 重复使用；不校验发送连接时，
+     * 任一扩展都能伪造另一条连接的在飞响应。</p>
+     */
+    public boolean routeResponse(String connectionId, String id, JSONObject payload) {
         if (StringUtils.isBlank(id)) {
             return false;
         }
-        PendingCall call = pending.remove(id);
+        PendingCall call = pending.get(id);
         if (call == null) {
             log.debug("bsk response for unknown or completed id {}", id);
             return false;
         }
+        if (StringUtils.isNotBlank(connectionId) && !connectionId.equals(call.connectionId)) {
+            log.warn("bsk response for {} came from foreign connection {}", id, connectionId);
+            return false;
+        }
+        if (!pending.remove(id, call)) {
+            return false;
+        }
         call.future.complete(normalize(payload));
         return true;
+    }
+
+    /**
+     * 处理扩展事件帧。
+     *
+     * <p>事件必须来自已握手的连接；涉及 session 的事件还必须是该连接当前承载的
+     * session，否则任何扩展都能用别人的 session_id 取消或清掉会话。</p>
+     *
+     * @return false 表示连接不存在或尚未完成握手
+     */
+    public boolean handleEvent(String connectionId, JSONObject eventFrame) {
+        RegisteredConnection connection = connections.get(connectionId);
+        if (connection == null || !connection.handshakeDone || eventFrame == null) {
+            return false;
+        }
+        connection.lastSeenAtMs = System.currentTimeMillis();
+        String event = eventFrame.getString("event");
+        JSONObject payload = eventFrame.get("payload") instanceof JSONObject object
+                ? object : new JSONObject();
+        if (StringUtils.isBlank(event)) {
+            return true;
+        }
+        switch (event) {
+            case "dialog.changed" -> handleDialogChanged(connection, payload);
+            case "session.user_interrupt" -> handleUserInterrupt(connection, payload);
+            case "session.ended" -> handleSessionEnded(connection, payload);
+            case "session.window_closed" -> handleWindowClosed(connection, payload);
+            case "session.interaction_changed" -> handleInteractionChanged(connection, payload);
+            case "session.activity" -> handleSessionActivity(connection, payload);
+            case "browser.disconnected" -> handleDisconnect(connectionId);
+            case "system.heartbeat", "browser.connected" -> {
+                // lastSeenAtMs 已在上方刷新。
+            }
+            default -> log.debug("bsk event ignored: connection={} event={}", connectionId, event);
+        }
+        return true;
+    }
+
+    private void handleDialogChanged(RegisteredConnection connection, JSONObject payload) {
+        String sessionId = payload.getString("session_id");
+        if (!ownsSession(connection.id, sessionId)) {
+            log.warn("ignoring dialog.changed from connection {} for foreign session {}",
+                    connection.id, sessionId);
+            return;
+        }
+        SessionEventListener listener = sessionEventListener;
+        if (listener != null) {
+            listener.onDialogChanged(payload);
+        }
+    }
+
+    private void handleUserInterrupt(RegisteredConnection connection, JSONObject payload) {
+        String sessionId = payload.getString("session_id");
+        if (!ownsSession(connection.id, sessionId)) {
+            log.warn("ignoring session.user_interrupt from connection {} for foreign session {}",
+                    connection.id, sessionId);
+            return;
+        }
+        SessionEventListener listener = sessionEventListener;
+        if (listener != null) {
+            listener.onUserInterrupt(connection.id, connection.userId, sessionId);
+        }
+    }
+
+    private void handleSessionEnded(RegisteredConnection connection, JSONObject payload) {
+        String sessionId = payload.getString("session_id");
+        String reason = payload.getString("reason");
+        Object tabId = payload.get("tab_id");
+        if (!ownsSession(connection.id, sessionId)
+                || !"user_moved_tab".equals(reason)
+                || !(tabId instanceof Number number)
+                || number.longValue() <= 0) {
+            log.warn("ignoring invalid session.ended from connection {} for session {}",
+                    connection.id, sessionId);
+            return;
+        }
+        SessionEventListener listener = sessionEventListener;
+        if (listener != null) {
+            listener.onSessionEnded(connection.id, connection.userId, sessionId, reason);
+        }
+        sessions.remove(sessionId);
+    }
+
+    private void handleWindowClosed(RegisteredConnection connection, JSONObject payload) {
+        String sessionId = payload.getString("session_id");
+        if (!ownsSession(connection.id, sessionId)) {
+            log.warn("ignoring session.window_closed from connection {} for foreign session {}",
+                    connection.id, sessionId);
+            return;
+        }
+        SessionEventListener listener = sessionEventListener;
+        if (listener != null) {
+            listener.onSessionEnded(connection.id, connection.userId, sessionId,
+                    "user_closed_window");
+        }
+        sessions.remove(sessionId);
+    }
+
+    private void handleInteractionChanged(RegisteredConnection connection, JSONObject payload) {
+        String sessionId = payload.getString("session_id");
+        JSONObject interaction = payload.get("interaction") instanceof JSONObject object
+                ? object : null;
+        if (!ownsSession(connection.id, sessionId) || interaction == null) {
+            return;
+        }
+        TrackedSession session = sessions.get(sessionId);
+        if (session != null) {
+            session.interaction = interaction;
+        }
+    }
+
+    private void handleSessionActivity(RegisteredConnection connection, JSONObject payload) {
+        String sessionId = payload.getString("session_id");
+        if (!ownsSession(connection.id, sessionId)
+                || !(payload.get("idle_protected") instanceof Boolean value)) {
+            return;
+        }
+        TrackedSession session = sessions.get(sessionId);
+        if (session != null) {
+            session.idleProtected = value;
+        }
+    }
+
+    /** 事件来源连接是否确实承载该 session。 */
+    private boolean ownsSession(String connectionId, String sessionId) {
+        if (StringUtils.isBlank(connectionId) || StringUtils.isBlank(sessionId)) {
+            return false;
+        }
+        TrackedSession session = sessions.get(sessionId);
+        return session != null && connectionId.equals(session.connectionId);
     }
 
     /**
@@ -460,11 +624,27 @@ public class BskFrameRelay {
 
     /** 按 browserInstanceId 找连接 id；未注册 / 已断开返回 null。 */
     public String connectionIdForInstance(String browserInstanceId) {
+        return connectionIdForInstance(browserInstanceId, null);
+    }
+
+    /**
+     * 按 browserInstanceId 找连接 id，并校验实例归属。
+     *
+     * @param userId 非空时只返回该用户的连接；空表示不校验（内部维护用）
+     */
+    public String connectionIdForInstance(String browserInstanceId, String userId) {
         if (StringUtils.isBlank(browserInstanceId)) {
             return null;
         }
         String connectionId = routeByInstanceId.get(browserInstanceId);
-        return connectionId != null && connections.containsKey(connectionId) ? connectionId : null;
+        if (connectionId == null) {
+            return null;
+        }
+        RegisteredConnection connection = connections.get(connectionId);
+        if (connection == null || !ownsConnection(connection, userId)) {
+            return null;
+        }
+        return connectionId;
     }
 
     /**
@@ -542,9 +722,14 @@ public class BskFrameRelay {
      * （{@code crates/bsk-protocol/src/system.rs}）。</p>
      */
     public List<JSONObject> browserStatusEntries() {
+        return browserStatusEntries(null);
+    }
+
+    /** 当前在线的浏览器清单，可按用户过滤。 */
+    public List<JSONObject> browserStatusEntries(String userId) {
         List<JSONObject> entries = new ArrayList<>();
         for (RegisteredConnection connection : connections.values()) {
-            if (!connection.handshakeDone) {
+            if (!connection.handshakeDone || !ownsConnection(connection, userId)) {
                 continue;
             }
             JSONObject params = connection.handshakeParams;
@@ -589,10 +774,15 @@ public class BskFrameRelay {
     }
 
     /** 断开某条连接上的全部会话（扩展断连时它内存里的会话一并消失）。 */
-    private void dropSessionsForConnection(String connectionId) {
+    private void dropSessionsForConnection(RegisteredConnection connection) {
         for (Map.Entry<String, TrackedSession> entry : sessions.entrySet()) {
-            if (connectionId.equals(entry.getValue().connectionId)) {
-                sessions.remove(entry.getKey(), entry.getValue());
+            if (connection.id.equals(entry.getValue().connectionId)
+                    && sessions.remove(entry.getKey(), entry.getValue())) {
+                SessionEventListener listener = sessionEventListener;
+                if (listener != null) {
+                    listener.onSessionEnded(connection.id, connection.userId,
+                            entry.getKey(), REASON_EXTENSION_DISCONNECTED);
+                }
             }
         }
     }
@@ -666,6 +856,23 @@ public class BskFrameRelay {
      * 任何 CLI 都转发不过去，留着它只会让清单报出僵尸条目，不构成泄露。</p>
      */
     private static boolean ownsSession(RegisteredConnection connection, String userId) {
+        return StringUtils.isBlank(userId) || userId.equals(connection.userId);
+    }
+
+    /** 该 session 是否仍存在，并且由指定用户的扩展连接承载。 */
+    public boolean sessionBelongsToUser(String sessionId, String userId) {
+        if (StringUtils.isBlank(sessionId) || StringUtils.isBlank(userId)) {
+            return false;
+        }
+        TrackedSession session = sessions.get(sessionId);
+        if (session == null) {
+            return false;
+        }
+        RegisteredConnection connection = connections.get(session.connectionId);
+        return connection != null && userId.equals(connection.userId);
+    }
+
+    private static boolean ownsConnection(RegisteredConnection connection, String userId) {
         return StringUtils.isBlank(userId) || userId.equals(connection.userId);
     }
 
@@ -748,6 +955,7 @@ public class BskFrameRelay {
         volatile JSONObject handshakeParams;
         /** 握手完成时间（毫秒），browser.list 按它排序。 */
         volatile long connectedAtMs;
+        volatile long lastSeenAtMs;
 
         RegisteredConnection(String id, String instanceId, String userId, BskSink sink) {
             this.id = id;
@@ -755,6 +963,7 @@ public class BskFrameRelay {
             this.userId = userId;
             this.sink = sink;
             this.connectedAtMs = System.currentTimeMillis();
+            this.lastSeenAtMs = this.connectedAtMs;
         }
     }
 
@@ -776,7 +985,8 @@ public class BskFrameRelay {
         /** 扩展返回的 Agent Window id；扩展没返回时为 null。 */
         final Long agentWindowId;
         /** 扩展返回的交互策略；没返回时为 null。 */
-        final JSONObject interaction;
+        volatile JSONObject interaction;
+        volatile boolean idleProtected;
         final long createdAtMs;
 
         TrackedSession(String sessionId, String connectionId,

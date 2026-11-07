@@ -95,10 +95,11 @@ public class BskRelayWebSocketHandler extends TextWebSocketHandler implements Su
                 // （在线判定在 BskFrameRelay.isOnlineByUser）。
             }
             case BSK_RESPONSE -> relay.routeResponse(
-                    BskFrameRouter.idOf(payload), BskFrameRouter.parse(payload));
+                    session.getId(), BskFrameRouter.idOf(payload), BskFrameRouter.parse(payload));
             case BSK_EVENT -> {
-                // 事件帧只作为活性信号；透传语义由后续批次（case 层路由）承接。
-                log.debug("bsk event on session {}: {}", session.getId(), payload);
+                if (!relay.handleEvent(session.getId(), BskFrameRouter.parse(payload))) {
+                    closeQuietly(session, CloseStatus.POLICY_VIOLATION);
+                }
             }
             case CUTE_LEGACY -> {
                 if (legacyDelegate != null) {

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -55,6 +56,45 @@ public class BskCliRelay {
     /** 取消方法：网关先查本地令牌，再转发给扩展（对齐 Rust {@code handle_cancel}）。 */
     private static final String METHOD_CANCEL = "cancel";
 
+    /** daemon 层操作恢复方法：扩展不实现，由网关的 operation registry 回答。 */
+    private static final String METHOD_OPERATION_AWAIT = "tool.operation_await";
+    private static final String METHOD_OPERATION_CANCEL = "tool.operation_cancel";
+
+    private static final String DIALOG_PENDING_MESSAGE =
+            "Original operation is suspended for a dialog decision; do not repeat it";
+
+    private static final long MAX_OPERATION_WAIT_MS = 60_000;
+
+    /** 这些 tool 方法不注册 dialog operation，直接按普通控制请求转发。 */
+    private static final Set<String> NON_DIALOG_AWARE_TOOL_METHODS = Set.of(
+            "tool.session_start",
+            "tool.session_stop",
+            "tool.dialog_status",
+            "tool.dialog_accept",
+            "tool.dialog_dismiss",
+            "tool.operation_await",
+            "tool.operation_cancel",
+            "tool.wait_ms",
+            "tool.record_stop",
+            "tool.debug");
+
+    /** 控制面方法不进入 session 串行车道。 */
+    private static final Set<String> INDEPENDENT_METHODS = Set.of(
+            METHOD_CANCEL,
+            METHOD_BROWSER_LIST,
+            METHOD_SESSION_LIST,
+            METHOD_SESSION_STOP_ALL,
+            METHOD_TOOL_WAIT_MS,
+            METHOD_OPERATION_AWAIT,
+            METHOD_OPERATION_CANCEL,
+            "tool.session_start",
+            "tool.session_stop",
+            "tool.dialog_status",
+            "tool.dialog_accept",
+            "tool.dialog_dismiss",
+            "tool.record_stop",
+            "tool.debug");
+
     /**
      * {@code tool.wait_ms} 的上限，对齐 Rust daemon 的 {@code MAX_WAIT_MS}
      * （{@code daemon/ipc.rs}：5 分钟）。
@@ -97,11 +137,40 @@ public class BskCliRelay {
      */
     private final Map<String, InFlightCall> inFlight = new ConcurrentHashMap<>();
 
+    /** 已入队但尚未开始转发的请求；cancel 必须能看到它们。 */
+    private final Map<String, QueuedCall> queuedCalls = new ConcurrentHashMap<>();
+
+    /** 已派发但因原生 dialog 暂停、仍可由 operation_* 找回的动作。 */
+    private final BskDialogOperations dialogOperations = new BskDialogOperations();
+
     public BskCliRelay(BskFrameRelay frameRelay, long awaitTimeoutSeconds) {
         this.frameRelay = frameRelay;
         // 构造参数是权威值：生产侧由 BskRelayBeansConfig 传 AWAIT_TIMEOUT_SECONDS，
         // 测试可以传更短的值。&le;0 表示不设网关侧兜底（由帧自己的超时负责）。
         this.awaitTimeoutSeconds = awaitTimeoutSeconds;
+        this.frameRelay.setSessionEventListener(new BskFrameRelay.SessionEventListener() {
+            @Override
+            public void onDialogChanged(JSONObject payload) {
+                dialogOperations.dialogChanged(payload);
+            }
+
+            @Override
+            public void onUserInterrupt(String extensionConnectionId,
+                                        String userId, String sessionId) {
+                cancelSessionCalls(extensionConnectionId, userId, sessionId,
+                        "user_aborted", "session interrupted by the user",
+                        Map.of("reason", "user_interrupt"));
+            }
+
+            @Override
+            public void onSessionEnded(String extensionConnectionId, String userId,
+                                       String sessionId, String reason) {
+                cancelSessionCalls(extensionConnectionId, userId, sessionId,
+                        "cancelled", "session ended before the command completed",
+                        Map.of("reason", reason));
+                dialogOperations.removeSession(sessionId);
+            }
+        });
     }
 
     public void register(BskCliConnection connection) {
@@ -113,6 +182,56 @@ public class BskCliRelay {
     /** 按连接 id 取 CLI 连接；未注册返回 null。 */
     public BskCliConnection connectionOf(String connectionId) {
         return connectionId == null ? null : cliConnections.get(connectionId);
+    }
+
+    /**
+     * 在进入 session 车道前登记请求，使尚未出队的命令也能被 cancel 命中。
+     *
+     * @return false 表示连接已失效、帧缺 id，或同一连接已有相同 rpc id 在队列中
+     */
+    public boolean registerQueued(BskCliConnection cli, String rawFrame) {
+        if (!isCurrentConnection(cli)) {
+            return false;
+        }
+        String rpcId = BskFrameRouter.idOf(rawFrame);
+        if (StringUtils.isBlank(rpcId)) {
+            return false;
+        }
+        QueuedCall call = new QueuedCall(cli, sessionIdOf(rawFrame));
+        return queuedCalls.putIfAbsent(callKey(cli.connectionId(), rpcId), call) == null;
+    }
+
+    /** 队列提交失败时撤销登记。 */
+    public void unregisterQueued(BskCliConnection cli, String rawFrame) {
+        String rpcId = BskFrameRouter.idOf(rawFrame);
+        if (cli != null && StringUtils.isNotBlank(rpcId)) {
+            queuedCalls.remove(callKey(cli.connectionId(), rpcId));
+        }
+    }
+
+    /** 当前排队等待执行的请求数（观测用）。 */
+    public int queuedCount() {
+        return queuedCalls.size();
+    }
+
+    /** 该请求是否应绕过 session 车道。 */
+    public static boolean isIndependentMethod(String rawFrame) {
+        JSONObject frame = BskFrameRouter.parse(rawFrame);
+        if (frame == null) {
+            return false;
+        }
+        String method = frame.getString("method");
+        if (StringUtils.isBlank(method)) {
+            return false;
+        }
+        if (INDEPENDENT_METHODS.contains(method)) {
+            return true;
+        }
+        if ("tool.cooperate".equals(method)) {
+            JSONObject params = frame.get("params") instanceof JSONObject object ? object : null;
+            return params == null || !"enable".equals(params.getString("action"));
+        }
+        return false;
     }
 
     /**
@@ -134,6 +253,8 @@ public class BskCliRelay {
             if (!cliConnections.remove(connectionId, connection)) {
                 return;
             }
+            queuedCalls.entrySet().removeIf(entry ->
+                    connectionId.equals(entry.getValue().cli.connectionId()));
             for (Map.Entry<String, InFlightCall> entry : inFlight.entrySet()) {
                 if (connectionId.equals(entry.getValue().cliConnectionId)
                         && inFlight.remove(entry.getKey(), entry.getValue())) {
@@ -142,6 +263,7 @@ public class BskCliRelay {
                             Map.of("reason", REASON_CLI_DISCONNECTED));
                 }
             }
+            dialogOperations.removeCliConnection(connectionId);
         }
     }
 
@@ -159,11 +281,16 @@ public class BskCliRelay {
         if (!isCurrentConnection(cli)) {
             return cliDisconnectedFrame(rpcId);
         }
+        QueuedCall queued = claimQueued(cli, rpcId);
+        if (queued != null && !queued.begin()) {
+            return errorFrame(rpcId, queued.cancelCode, queued.cancelMessage,
+                    queued.cancelData);
+        }
         String method = frame.getString("method");
         if (METHOD_BROWSER_LIST.equals(method)) {
             // browser.list 是 daemon 层的方法：Java 网关顶替了 Rust daemon 的位置，
             // 「哪些浏览器连着」只有网关知道；扩展没有实现它，转过去只会得到 unknown_method。
-            return browserListFrame(rpcId);
+            return browserListFrame(rpcId, cli);
         }
         if (METHOD_SESSION_LIST.equals(method)) {
             // session.list 同样是 daemon 层的：Rust 由 daemon 的 SessionRegistry 回答
@@ -179,67 +306,139 @@ public class BskCliRelay {
         if (METHOD_TOOL_WAIT_MS.equals(method)) {
             // tool.wait_ms 是 daemon 自己 sleep 的（daemon/ipc.rs handle_wait_ms），
             // 不经扩展，也不需要 session。转给扩展只会得到 unknown_method。
-            return waitMsFrame(rpcId, frame.getJSONObject("params"));
+            return waitMsFrame(rpcId, paramsOf(frame));
         }
         if (METHOD_CANCEL.equals(method)) {
-            return cancelFrame(rpcId, frame.getJSONObject("params"));
+            return cancelFrame(cli, rpcId, paramsOf(frame));
+        }
+        if (METHOD_OPERATION_AWAIT.equals(method)) {
+            return operationAwaitFrame(cli, rpcId, paramsOf(frame));
+        }
+        if (METHOD_OPERATION_CANCEL.equals(method)) {
+            return operationCancelFrame(cli, rpcId, paramsOf(frame));
         }
         String targetConnectionId = resolveTarget(cli);
         if (targetConnectionId == null) {
             return errorFrame(rpcId, "protocol_error", "extension is not connected",
                     Map.of("reason", REASON_EXTENSION_DISCONNECTED));
         }
-        CompletableFuture<JSONObject> future;
+        InFlightCall call = new InFlightCall(
+                cli.connectionId(), targetConnectionId, sessionIdOf(rawFrame), rpcId);
         synchronized (cli) {
             // 排队期间连接可能已经断开；检查与 inFlight 登记必须和 unregister
             // 串行，否则会漏掉「检查通过后、登记前」这一个小窗口。
             if (!isCurrentConnection(cli)) {
                 return cliDisconnectedFrame(rpcId);
             }
-            inFlight.put(rpcId, new InFlightCall(cli.connectionId(), targetConnectionId));
-            future = frameRelay.dispatch(targetConnectionId, rpcId, rawFrame);
+            InFlightCall existing = inFlight.putIfAbsent(rpcId, call);
+            if (existing != null) {
+                return errorFrame(rpcId, "protocol_error", "duplicate rpc id: " + rpcId, null);
+            }
         }
+        if (isDialogAware(method)) {
+            return dispatchDialogAware(cli, rawFrame, frame, rpcId,
+                    method, targetConnectionId, call);
+        }
+        CompletableFuture<JSONObject> future = frameRelay.dispatch(targetConnectionId, rpcId, rawFrame);
         if (future == null) {
-            inFlight.remove(rpcId);
+            inFlight.remove(rpcId, call);
             return errorFrame(rpcId, "protocol_error", "extension is not connected",
                     Map.of("reason", REASON_EXTENSION_DISCONNECTED));
         }
-        JSONObject value;
-        try {
-            value = future.get(awaitTimeoutSeconds, TimeUnit.SECONDS);
-        } catch (TimeoutException e) {
-            inFlight.remove(rpcId);
+        future.whenComplete((value, error) -> inFlight.remove(rpcId, call));
+        JSONObject value = await(future, rawFrame);
+        if (value == null) {
+            frameRelay.failPending(rpcId, "timeout", "extension did not respond in time", null);
             return errorFrame(rpcId, "timeout", "extension did not respond in time", null);
-        } catch (ExecutionException e) {
-            inFlight.remove(rpcId);
-            return errorFrame(rpcId, "protocol_error", String.valueOf(e.getCause()), null);
+        }
+        if (value.containsKey("__gateway_error")) {
+            return errorFrame(rpcId, value.getString("code"), value.getString("message"),
+                    dataOf(value));
+        }
+        JSONObject answer = wireResponse(rpcId, value);
+        trackFailureOutcome(answer, rawFrame, targetConnectionId);
+        if (answer.get("error") == null) {
+            trackSessionOutcome(method, rawFrame, targetConnectionId, value);
+        }
+        return answer;
+    }
+
+    /**
+     * 为会产生页面副作用的方法注册 operation，并注入内部 {@code _operation_id}。
+     *
+     * <p>原动作只派发一次。若扩展先报告 dialog，CLI 立即收到
+     * {@code dialog_pending}；扩展最终返回的原请求结果留在 registry，供
+     * {@code tool.operation_await} 读取。</p>
+     */
+    private JSONObject dispatchDialogAware(BskCliConnection cli, String rawFrame,
+                                           JSONObject frame, String rpcId, String method,
+                                           String targetConnectionId, InFlightCall call) {
+        String sessionId = sessionIdOf(rawFrame);
+        if (StringUtils.isBlank(sessionId)) {
+            inFlight.remove(rpcId, call);
+            return errorFrame(rpcId, "invalid_params",
+                    "tool.* RPC requires non-empty session_id", null);
+        }
+        BskDialogOperations.Operation operation = dialogOperations.register(
+                sessionId, cli.connectionId(), targetConnectionId, rpcId, method);
+        if (operation == null) {
+            inFlight.remove(rpcId, call);
+            return errorFrame(rpcId, "protocol_error",
+                    "dialog operation capacity reached; action was not dispatched",
+                    Map.of("dispatched", false));
+        }
+        String forwardedFrame = withOperationId(frame, operation.id);
+        if (forwardedFrame == null) {
+            dialogOperations.remove(operation.id);
+            inFlight.remove(rpcId, call);
+            return errorFrame(rpcId, "invalid_params",
+                    "tool.* params must be a JSON object", null);
+        }
+        CompletableFuture<JSONObject> future =
+                frameRelay.dispatch(targetConnectionId, rpcId, forwardedFrame);
+        if (future == null) {
+            dialogOperations.remove(operation.id);
+            inFlight.remove(rpcId, call);
+            return errorFrame(rpcId, "protocol_error", "extension is not connected",
+                    Map.of("reason", REASON_EXTENSION_DISCONNECTED));
+        }
+        future.whenComplete((value, error) -> {
+            inFlight.remove(rpcId, call);
+            JSONObject wire = error == null
+                    ? wireResponse(rpcId, value)
+                    : BskFrameRelay.completedError(
+                            rpcId, "protocol_error", String.valueOf(error), null);
+            operation.finish(wire);
+        });
+        try {
+            boolean finished = operation.awaitInitial(awaitTimeoutSecondsFor(rawFrame));
+            if (finished) {
+                dialogOperations.remove(operation.id);
+                return operation.response.join();
+            }
+            return errorFrame(rpcId, "dialog_pending", DIALOG_PENDING_MESSAGE,
+                    operation.pendingData(operation.dialog.get()));
+        } catch (TimeoutException e) {
+            dialogOperations.remove(operation.id);
+            frameRelay.failPending(rpcId, "timeout", "extension did not respond in time", null);
+            return errorFrame(rpcId, "timeout", "extension did not respond in time", null);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            inFlight.remove(rpcId);
+            dialogOperations.remove(operation.id);
+            frameRelay.failPending(rpcId, "cancelled", "interrupted while waiting", null);
             return errorFrame(rpcId, "protocol_error", "interrupted while waiting for extension", null);
-        } finally {
-            inFlight.remove(rpcId);
         }
-        if (value == null) {
-            return errorFrame(rpcId, "protocol_error", "empty response from extension", null);
+    }
+
+    private QueuedCall claimQueued(BskCliConnection cli, String rpcId) {
+        if (cli == null || StringUtils.isBlank(rpcId)) {
+            return null;
         }
-        if (BskFrameRelay.isErrorFrame(value)) {
-            // 扩展回 not_found：说明它那边的会话已经没了（service worker 重启等），
-            // 网关的会话表要同步删掉，否则 session.list 会一直报幽灵会话。
-            if ("not_found".equals(value.getString("code"))) {
-                String sessionId = sessionIdOf(rawFrame);
-                if (sessionId != null) {
-                    frameRelay.dropSession(sessionId);
-                }
-            }
-            // BskFrameRelay.normalize 把错误帧归一成 {code,message,data?}，
-            // 这里再包回线上形状 {id, error:{...}}。
-            JSONObject data = value.getJSONObject("data");
-            return errorFrame(rpcId, value.getString("code"), value.getString("message"),
-                    data == null ? null : new LinkedHashMap<>(data));
-        }
-        trackSessionOutcome(method, rawFrame, targetConnectionId, value);
-        return value;
+        return queuedCalls.remove(callKey(cli.connectionId(), rpcId));
+    }
+
+    private static String callKey(String connectionId, String rpcId) {
+        return connectionId + "\u0000" + rpcId;
     }
 
     private boolean isCurrentConnection(BskCliConnection cli) {
@@ -255,9 +454,98 @@ public class BskCliRelay {
     /** 从请求帧里取 {@code params.session_id}；缺失返回 null。 */
     private static String sessionIdOf(String rawFrame) {
         JSONObject frame = BskFrameRouter.parse(rawFrame);
-        JSONObject params = frame == null ? null : frame.getJSONObject("params");
+        JSONObject params = paramsOf(frame);
         String sessionId = params == null ? null : params.getString("session_id");
         return StringUtils.isBlank(sessionId) ? null : sessionId;
+    }
+
+    private static JSONObject paramsOf(JSONObject frame) {
+        return frame != null && frame.get("params") instanceof JSONObject object ? object : null;
+    }
+
+    private void trackFailureOutcome(JSONObject answer, String rawFrame,
+                                     String extensionConnectionId) {
+        JSONObject error = answer == null ? null : answer.getJSONObject("error");
+        if (error == null || !"not_found".equals(error.getString("code"))) {
+            return;
+        }
+        String sessionId = sessionIdOf(rawFrame);
+        if (sessionId != null) {
+            frameRelay.dropSession(sessionId);
+            cancelSessionCalls(extensionConnectionId, null, sessionId,
+                    "cancelled", "session no longer exists",
+                    Map.of("reason", "session_not_found"));
+            dialogOperations.removeSession(sessionId);
+        }
+    }
+
+    private static JSONObject wireResponse(String rpcId, JSONObject value) {
+        if (value == null) {
+            return errorFrame(rpcId, "protocol_error", "empty response from extension", null);
+        }
+        if (!BskFrameRelay.isErrorFrame(value)) {
+            return value;
+        }
+        return errorFrame(rpcId, value.getString("code"), value.getString("message"),
+                dataOf(value));
+    }
+
+    private static Map<String, Object> dataOf(JSONObject value) {
+        JSONObject data = value == null ? null : value.getJSONObject("data");
+        return data == null ? null : new LinkedHashMap<>(data);
+    }
+
+    private static boolean isDialogAware(String method) {
+        return method != null && method.startsWith("tool.")
+                && !NON_DIALOG_AWARE_TOOL_METHODS.contains(method);
+    }
+
+    private static String withOperationId(JSONObject frame, String operationId) {
+        if (!(frame.get("params") instanceof JSONObject params)) {
+            return null;
+        }
+        params.put("_operation_id", operationId);
+        return frame.toJSONString();
+    }
+
+    private JSONObject await(CompletableFuture<JSONObject> future, String rawFrame) {
+        try {
+            long timeoutSeconds = awaitTimeoutSecondsFor(rawFrame);
+            if (timeoutSeconds <= 0) {
+                return future.get();
+            }
+            return future.get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            return null;
+        } catch (ExecutionException e) {
+            JSONObject error = new JSONObject(new LinkedHashMap<>());
+            error.put("__gateway_error", true);
+            error.put("code", "protocol_error");
+            error.put("message", String.valueOf(e.getCause()));
+            return error;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            JSONObject error = new JSONObject(new LinkedHashMap<>());
+            error.put("__gateway_error", true);
+            error.put("code", "protocol_error");
+            error.put("message", "interrupted while waiting for extension");
+            return error;
+        }
+    }
+
+    /**
+     * CLI 到扩展的等待预算。
+     *
+     * <p>{@code request_help} 默认 300s，客户端自身会等到 315s；Java 不能仍用
+     * 固定 240s 提前判死。这里取「配置下限」与「帧方法预算 + 5s」的较大值。</p>
+     */
+    long awaitTimeoutSecondsFor(String rawFrame) {
+        long frameTimeout = frameRelay.timeoutSecondsFor(rawFrame);
+        if (frameTimeout <= 0) {
+            return awaitTimeoutSeconds;
+        }
+        long withSlack = frameTimeout + 5;
+        return awaitTimeoutSeconds > 0 ? Math.max(awaitTimeoutSeconds, withSlack) : withSlack;
     }
 
     /**
@@ -278,16 +566,20 @@ public class BskCliRelay {
         }
         if (METHOD_TOOL_SESSION_STOP.equals(method)) {
             frameRelay.dropSession(sessionId);
+            cancelSessionCalls(connectionId, null, sessionId,
+                    "cancelled", "session stopped before the command completed",
+                    Map.of("reason", "session_stopped"));
+            dialogOperations.removeSession(sessionId);
             return;
         }
-        JSONObject body = result.getJSONObject("result");
+        JSONObject body = result.get("result") instanceof JSONObject object ? object : null;
         Long agentWindowId = null;
         JSONObject interaction = null;
         if (body != null) {
             if (body.get("agent_window_id") instanceof Number number) {
                 agentWindowId = number.longValue();
             }
-            interaction = body.getJSONObject("interaction");
+            interaction = body.get("interaction") instanceof JSONObject object ? object : null;
         }
         frameRelay.registerSession(sessionId, connectionId, agentWindowId, interaction);
     }
@@ -309,27 +601,109 @@ public class BskCliRelay {
      * 就返回（fire-and-forget），取消的确认由被取消的那条请求自己给出。这里同理，
      * 只把 {@code cancelled} 报成"本地找到了这条在飞请求"。</p>
      */
-    private JSONObject cancelFrame(String rpcId, JSONObject params) {
+    private JSONObject cancelFrame(BskCliConnection cli, String rpcId, JSONObject params) {
         String targetRpcId = params == null ? null : params.getString("rpc_id");
         if (StringUtils.isBlank(targetRpcId)) {
             return errorFrame(rpcId, "invalid_params", "cancel requires rpc_id", null);
         }
-        InFlightCall call = inFlight.get(targetRpcId);
-        boolean cancelled = false;
-        if (call != null && StringUtils.isNotBlank(call.extensionConnectionId)) {
-            JSONObject cancelRequest = new JSONObject(new LinkedHashMap<>());
-            cancelRequest.put("id", "cancel-" + targetRpcId);
-            cancelRequest.put("method", METHOD_CANCEL);
-            cancelRequest.put("params", new JSONObject(Map.of("rpc_id", targetRpcId)));
-            // 直接写进扩展连接，不注册等待者：扩展会自己给原请求回 cancelled。
-            cancelled = frameRelay.sendRaw(call.extensionConnectionId, cancelRequest.toJSONString());
+        QueuedCall queued = queuedCalls.get(callKey(cli.connectionId(), targetRpcId));
+        if (queued != null) {
+            if (queued.cancel("cancelled", "command cancelled before dispatch",
+                    Map.of("reason", "cancelled"))) {
+                return cancelledResult(rpcId, true);
+            }
         }
+        InFlightCall call = inFlight.get(targetRpcId);
+        boolean cancelled = call != null
+                && cli.connectionId().equals(call.cliConnectionId)
+                && sendCancelToExtension(call);
+        return cancelledResult(rpcId, cancelled);
+    }
+
+    private JSONObject cancelledResult(String rpcId, boolean cancelled) {
         JSONObject result = new JSONObject(new LinkedHashMap<>());
         result.put("cancelled", cancelled);
         JSONObject frame = new JSONObject(new LinkedHashMap<>());
         frame.put("id", rpcId);
         frame.put("result", result);
         return frame;
+    }
+
+    private boolean sendCancelToExtension(InFlightCall call) {
+        if (call == null || StringUtils.isBlank(call.extensionConnectionId)) {
+            return false;
+        }
+        JSONObject cancelRequest = new JSONObject(new LinkedHashMap<>());
+        cancelRequest.put("id", "cancel-" + call.rpcId);
+        cancelRequest.put("method", METHOD_CANCEL);
+        cancelRequest.put("params", new JSONObject(Map.of("rpc_id", call.rpcId)));
+        return frameRelay.sendRaw(call.extensionConnectionId, cancelRequest.toJSONString());
+    }
+
+    private JSONObject operationAwaitFrame(BskCliConnection cli, String rpcId, JSONObject params) {
+        String sessionId = params == null ? null : params.getString("session_id");
+        String operationId = params == null ? null : params.getString("operation_id");
+        if (StringUtils.isBlank(sessionId) || StringUtils.isBlank(operationId)) {
+            return errorFrame(rpcId, "invalid_params",
+                    "operation await requires session_id and operation_id", null);
+        }
+        if (!frameRelay.sessionBelongsToUser(sessionId, cli.userId())) {
+            return errorFrame(rpcId, "not_found", "session no longer exists", null);
+        }
+        long waitMs = 10_000;
+        if (params.containsKey("wait_ms")) {
+            Object raw = params.get("wait_ms");
+            if (!(raw instanceof Number number)
+                    || number.longValue() < 0
+                    || number.longValue() > MAX_OPERATION_WAIT_MS
+                    || number.doubleValue() != number.longValue()) {
+                return errorFrame(rpcId, "invalid_params",
+                        "wait_ms must be an integer in 0..=60000", null);
+            }
+            waitMs = number.longValue();
+        }
+        BskDialogOperations.Operation operation =
+                dialogOperations.get(sessionId, operationId, cli.connectionId());
+        if (operation == null) {
+            return errorFrame(rpcId, "not_found",
+                    "operation not found in this session or its retained result expired; "
+                            + "do not replay an action with unknown effects", null);
+        }
+        try {
+            JSONObject result = operation.awaitResult(waitMs);
+            JSONObject frame = new JSONObject(new LinkedHashMap<>());
+            frame.put("id", rpcId);
+            frame.put("result", result);
+            return frame;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return errorFrame(rpcId, "cancelled",
+                    "result wait cancelled; the original operation continues", null);
+        }
+    }
+
+    private JSONObject operationCancelFrame(BskCliConnection cli, String rpcId, JSONObject params) {
+        String sessionId = params == null ? null : params.getString("session_id");
+        String operationId = params == null ? null : params.getString("operation_id");
+        if (StringUtils.isBlank(sessionId) || StringUtils.isBlank(operationId)) {
+            return errorFrame(rpcId, "invalid_params",
+                    "operation cancel requires session_id and operation_id", null);
+        }
+        if (!frameRelay.sessionBelongsToUser(sessionId, cli.userId())) {
+            return errorFrame(rpcId, "not_found", "session no longer exists", null);
+        }
+        BskDialogOperations.Operation operation =
+                dialogOperations.get(sessionId, operationId, cli.connectionId());
+        if (operation == null) {
+            return errorFrame(rpcId, "not_found",
+                    "operation not found in this session or its retained result expired; "
+                            + "do not replay an action with unknown effects", null);
+        }
+        InFlightCall call = inFlight.get(operation.cliRpcId);
+        boolean cancelled = call != null
+                && operation.extensionConnectionId.equals(call.extensionConnectionId)
+                && sendCancelToExtension(call);
+        return cancelledResult(rpcId, cancelled);
     }
 
     /**
@@ -347,7 +721,10 @@ public class BskCliRelay {
         // 只报这个 CLI 用户自己的会话：网关服务所有用户，这里等价于 Rust daemon
         // 的单用户视角。不过滤就是跨用户泄露（session id / Agent Window id /
         // 交互策略），而且 stop_all 还会顺势把别人的会话停掉。
-        result.put("sessions", frameRelay.sessionStatusEntries(cli == null ? null : cli.userId()));
+        String userId = cli == null ? null : cli.userId();
+        result.put("sessions", StringUtils.isBlank(userId)
+                ? List.of()
+                : frameRelay.sessionStatusEntries(userId));
         JSONObject frame = new JSONObject(new LinkedHashMap<>());
         frame.put("id", rpcId);
         frame.put("result", result);
@@ -370,8 +747,18 @@ public class BskCliRelay {
     private JSONObject sessionStopAllFrame(String rpcId, BskCliConnection cli) {
         List<JSONObject> stopped = new ArrayList<>();
         List<JSONObject> failed = new ArrayList<>();
+        String userId = cli == null ? null : cli.userId();
+        if (StringUtils.isBlank(userId)) {
+            JSONObject result = new JSONObject(new LinkedHashMap<>());
+            result.put("stopped", stopped);
+            result.put("failed", failed);
+            JSONObject frame = new JSONObject(new LinkedHashMap<>());
+            frame.put("id", rpcId);
+            frame.put("result", result);
+            return frame;
+        }
         // 「全部」= 这个用户自己的全部，不是网关上所有用户的全部。
-        for (JSONObject session : frameRelay.sessionStatusEntries(cli == null ? null : cli.userId())) {
+        for (JSONObject session : frameRelay.sessionStatusEntries(userId)) {
             String sessionId = session.getString("session_id");
             if (StringUtils.isBlank(sessionId)) {
                 continue;
@@ -451,7 +838,7 @@ public class BskCliRelay {
      */
     public String sessionKeyOf(BskCliConnection cli, String rawFrame) {
         JSONObject frame = BskFrameRouter.parse(rawFrame);
-        JSONObject params = frame == null ? null : frame.getJSONObject("params");
+        JSONObject params = paramsOf(frame);
         String sessionId = params == null ? null : params.getString("session_id");
         if (StringUtils.isNotBlank(sessionId)) {
             return sessionId;
@@ -461,14 +848,13 @@ public class BskCliRelay {
 
     /** 目标扩展连接 id；解析不到返回 null（= 该用户的浏览器没连上网关）。 */
     private String resolveTarget(BskCliConnection cli) {
-        if (cli == null) {
+        if (cli == null || StringUtils.isBlank(cli.userId())) {
             return null;
         }
         if (StringUtils.isNotBlank(cli.browserId())) {
-            String byInstance = frameRelay.connectionIdForInstance(cli.browserId());
-            if (byInstance != null) {
-                return byInstance;
-            }
+            // 显式 --browser 是强约束：不存在或不属于当前用户时直接失败，
+            // 绝不能悄悄回退到该用户的默认浏览器。
+            return frameRelay.connectionIdForInstance(cli.browserId(), cli.userId());
         }
         return frameRelay.connectionIdForUser(cli.userId());
     }
@@ -479,13 +865,49 @@ public class BskCliRelay {
      * <p>形状对齐 Rust daemon 的 {@code BrowserListResult}：结果对象里是
      * {@code browsers} 数组，每项是 {@code BrowserStatusEntry}。</p>
      */
-    private JSONObject browserListFrame(String rpcId) {
+    private JSONObject browserListFrame(String rpcId, BskCliConnection cli) {
         JSONObject result = new JSONObject(new LinkedHashMap<>());
-        result.put("browsers", frameRelay.browserStatusEntries());
+        String userId = cli == null ? null : cli.userId();
+        result.put("browsers", StringUtils.isBlank(userId)
+                ? List.of()
+                : frameRelay.browserStatusEntries(userId));
         JSONObject frame = new JSONObject(new LinkedHashMap<>());
         frame.put("id", rpcId);
         frame.put("result", result);
         return frame;
+    }
+
+    /**
+     * 取消某 session 的排队与在飞请求。
+     *
+     * <p>排队请求只标记取消，轮到它时由 {@link #forward} 返回结构化错误；
+     * 在飞请求则先向承载它的扩展连接发 {@code cancel}，再立即结束网关 future，
+     * 避免 CLI 侧继续挂到超时。</p>
+     */
+    private void cancelSessionCalls(String extensionConnectionId, String userId,
+                                    String sessionId, String code, String message,
+                                    Map<String, Object> data) {
+        if (StringUtils.isBlank(sessionId)) {
+            return;
+        }
+        for (QueuedCall queued : queuedCalls.values()) {
+            if (sessionId.equals(queued.sessionId)
+                    && (StringUtils.isBlank(userId) || userId.equals(queued.cli.userId()))) {
+                queued.cancel(code, message, data);
+            }
+        }
+        for (Map.Entry<String, InFlightCall> entry : inFlight.entrySet()) {
+            InFlightCall call = entry.getValue();
+            if (!sessionId.equals(call.sessionId)
+                    || extensionConnectionId == null
+                    || !extensionConnectionId.equals(call.extensionConnectionId)) {
+                continue;
+            }
+            sendCancelToExtension(call);
+            if (inFlight.remove(entry.getKey(), call)) {
+                frameRelay.failPending(entry.getKey(), code, message, data);
+            }
+        }
     }
 
     /** 构造线上形状的错误帧 {@code {id, error:{code,message,data?}}}。 */
@@ -511,10 +933,47 @@ public class BskCliRelay {
     private static final class InFlightCall {
         final String cliConnectionId;
         final String extensionConnectionId;
+        final String sessionId;
+        final String rpcId;
 
-        InFlightCall(String cliConnectionId, String extensionConnectionId) {
+        InFlightCall(String cliConnectionId, String extensionConnectionId,
+                     String sessionId, String rpcId) {
             this.cliConnectionId = cliConnectionId;
             this.extensionConnectionId = extensionConnectionId;
+            this.sessionId = sessionId;
+            this.rpcId = rpcId;
+        }
+    }
+
+    /** 已排队但尚未开始转发的请求。 */
+    private static final class QueuedCall {
+        final BskCliConnection cli;
+        final String sessionId;
+        private boolean started;
+        volatile boolean cancelled;
+        volatile String cancelCode;
+        volatile String cancelMessage;
+        volatile Map<String, Object> cancelData;
+
+        QueuedCall(BskCliConnection cli, String sessionId) {
+            this.cli = cli;
+            this.sessionId = sessionId;
+        }
+
+        synchronized boolean begin() {
+            started = true;
+            return !cancelled;
+        }
+
+        synchronized boolean cancel(String code, String message, Map<String, Object> data) {
+            if (started) {
+                return false;
+            }
+            cancelCode = code;
+            cancelMessage = message;
+            cancelData = data;
+            cancelled = true;
+            return true;
         }
     }
 }

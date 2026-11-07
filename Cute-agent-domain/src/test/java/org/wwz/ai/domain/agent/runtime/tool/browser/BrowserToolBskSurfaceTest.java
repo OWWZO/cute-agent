@@ -81,6 +81,9 @@ public class BrowserToolBskSurfaceTest {
         String description = String.valueOf(args.get("description"));
         Assert.assertTrue(description.contains("observe"));
         Assert.assertTrue(description.contains("navigate"));
+        Assert.assertTrue(description.contains("dialog status"));
+        Assert.assertTrue(description.contains("operation await"));
+        Assert.assertTrue(description.contains("dialog_pending"));
         // opencli 的词汇不许出现，否则模型还是会在两套命令之间串台。
         Assert.assertFalse(description.contains("先用 list"));
         Assert.assertFalse(description.contains("<site>"));

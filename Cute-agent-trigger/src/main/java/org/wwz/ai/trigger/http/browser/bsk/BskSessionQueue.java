@@ -92,6 +92,30 @@ public class BskSessionQueue {
         return future;
     }
 
+    /**
+     * 提交一条不进入 session 车道的控制操作。
+     *
+     * <p>{@code cancel}、dialog 决策、operation await/cancel 等控制面请求必须能
+     * 绕过普通工具队列；否则长动作占住车道时，连取消它的命令也会排在后面。</p>
+     */
+    public CompletableFuture<Void> submitIndependent(Runnable task) {
+        if (task == null) {
+            CompletableFuture<Void> failed = new CompletableFuture<>();
+            failed.completeExceptionally(new IllegalArgumentException("task is required"));
+            return failed;
+        }
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        executor.execute(() -> {
+            try {
+                task.run();
+                future.complete(null);
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        });
+        return future;
+    }
+
     /** 当前该 session 是否有任务正在执行（观测用）。 */
     public boolean isBusy(String sessionId) {
         SessionLane lane = lanes.get(sessionId);

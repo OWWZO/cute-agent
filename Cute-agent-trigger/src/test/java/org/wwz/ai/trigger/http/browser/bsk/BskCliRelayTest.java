@@ -7,6 +7,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 锁定 CLI 侧网关的路由与转发（021）。
@@ -217,6 +218,41 @@ public class BskCliRelayTest {
     }
 
     @Test
+    public void browserListOnlyReportsTheCallingUsersBrowsers() {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        RecordingSink otherUserSink = new RecordingSink();
+        frameRelay.registerSession("ext-2", null, "user-2", otherUserSink);
+        frameRelay.handleHandshake("ext-2", handshakeFrame("hs-2", "inst-2"));
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+
+        JSONArray browsers = cliRelay.forward(cli, browserListRequest("rpc-list-mine"))
+                .getJSONObject("result").getJSONArray("browsers");
+
+        Assert.assertEquals(1, browsers.size());
+        Assert.assertEquals("inst-1", browsers.getJSONObject(0).getString("instance_id"));
+    }
+
+    @Test
+    public void explicitBrowserCannotSelectAnotherUsersInstanceOrFallBack() {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        RecordingSink otherUserSink = new RecordingSink();
+        frameRelay.registerSession("ext-2", null, "user-2", otherUserSink);
+        frameRelay.handleHandshake("ext-2", handshakeFrame("hs-2", "inst-2"));
+        BskCliConnection cli = registerCli("cli-1", "user-1", "inst-2");
+
+        JSONObject answer = cliRelay.forward(cli, toolRequest("rpc-foreign", "s1"));
+
+        Assert.assertEquals("protocol_error", answer.getJSONObject("error").getString("code"));
+        Assert.assertEquals("extension_disconnected",
+                answer.getJSONObject("error").getJSONObject("data").getString("reason"));
+        // 既不能投给别人的 inst-2，也不能静默回退到自己的 inst-1。
+        Assert.assertNull(awaitMethodFrame(extensionSink, "tool.navigate", 200));
+        Assert.assertNull(awaitMethodFrame(otherUserSink, "tool.navigate", 200));
+    }
+
+    @Test
     public void sessionListIsAnsweredByTheGatewayNotForwardedToTheExtension() {
         frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
         frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
@@ -292,6 +328,44 @@ public class BskCliRelayTest {
         Assert.assertEquals(0,
                 cliRelay.forward(cli, list.toJSONString())
                         .getJSONObject("result").getJSONArray("sessions").size());
+    }
+
+    @Test
+    public void failedSessionStartDoesNotLeaveAGhostSession() throws Exception {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+        int startIndex = extensionSink.frameCount();
+        Thread responder = new Thread(() -> {
+            String request = awaitMethodFrameFrom(
+                    extensionSink, startIndex, "tool.session_start", 5000);
+            if (request == null) {
+                return;
+            }
+            String id = JSONObject.parseObject(request).getString("id");
+            JSONObject response = new JSONObject();
+            response.put("id", id);
+            JSONObject error = new JSONObject();
+            error.put("code", "invalid_params");
+            error.put("message", "bad session start");
+            response.put("error", error);
+            frameRelay.routeResponse("ext-1", id, response);
+        });
+        responder.start();
+
+        JSONObject start = new JSONObject();
+        start.put("id", "rpc-start-failed");
+        start.put("method", "tool.session_start");
+        start.put("params", new JSONObject(java.util.Map.of("session_id", "s-failed")));
+        JSONObject answer = cliRelay.forward(cli, start.toJSONString());
+        Assert.assertEquals("invalid_params", answer.getJSONObject("error").getString("code"));
+        responder.join(5000);
+
+        JSONObject list = new JSONObject();
+        list.put("id", "rpc-list-after-failed-start");
+        list.put("method", "session.list");
+        Assert.assertEquals(0, cliRelay.forward(cli, list.toJSONString())
+                .getJSONObject("result").getJSONArray("sessions").size());
     }
 
     @Test
@@ -518,6 +592,27 @@ public class BskCliRelayTest {
     }
 
     @Test
+    public void cancelOfAQueuedRequestPreventsItFromReachingTheExtension() {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+        String queuedRequest = toolRequest("rpc-queued", "s1");
+        Assert.assertTrue(cliRelay.registerQueued(cli, queuedRequest));
+
+        JSONObject cancel = new JSONObject();
+        cancel.put("id", "rpc-cancel-queued");
+        cancel.put("method", "cancel");
+        cancel.put("params", new JSONObject(java.util.Map.of("rpc_id", "rpc-queued")));
+        JSONObject cancelAnswer = cliRelay.forward(cli, cancel.toJSONString());
+
+        Assert.assertTrue(cancelAnswer.getJSONObject("result").getBooleanValue("cancelled"));
+        JSONObject queuedAnswer = cliRelay.forward(cli, queuedRequest);
+        Assert.assertEquals("cancelled", queuedAnswer.getJSONObject("error").getString("code"));
+        Assert.assertNull(awaitMethodFrame(extensionSink, "tool.navigate", 200));
+        Assert.assertEquals(0, cliRelay.queuedCount());
+    }
+
+    @Test
     public void cancelWithoutRpcIdIsRejected() {
         BskCliConnection cli = registerCli("cli-1", "user-1", null);
 
@@ -620,6 +715,197 @@ public class BskCliRelayTest {
                 .getJSONObject("result").getJSONArray("sessions");
         Assert.assertEquals(1, theirs.size());
         Assert.assertEquals("s2", theirs.getJSONObject(0).getString("session_id"));
+    }
+
+    @Test
+    public void dialogChangedReturnsDialogPendingAndOriginalResultRemainsAwaitable() throws Exception {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        frameRelay.registerSession("s1", "ext-1", 1L, new JSONObject());
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+
+        AtomicReference<JSONObject> initial = new AtomicReference<>();
+        Thread forwarder = new Thread(() ->
+                initial.set(cliRelay.forward(cli, toolRequest("rpc-dialog", "s1"))));
+        forwarder.start();
+        String forwardedRaw = awaitMethodFrame(extensionSink, "tool.navigate", 5000);
+        Assert.assertNotNull(forwardedRaw);
+        JSONObject forwarded = JSONObject.parseObject(forwardedRaw);
+        String operationId = forwarded.getJSONObject("params").getString("_operation_id");
+        Assert.assertNotNull(operationId);
+
+        Assert.assertTrue(frameRelay.handleEvent("ext-1",
+                dialogChangedEvent("s1", operationId, "dialog-1")));
+        forwarder.join(5000);
+
+        JSONObject pending = initial.get();
+        Assert.assertEquals("dialog_pending", pending.getJSONObject("error").getString("code"));
+        Assert.assertEquals(operationId,
+                pending.getJSONObject("error").getJSONObject("data").getString("operation_id"));
+
+        JSONObject finalResponse = new JSONObject();
+        finalResponse.put("id", "rpc-dialog");
+        finalResponse.put("result", new JSONObject(java.util.Map.of("ok", true)));
+        Assert.assertTrue(frameRelay.routeResponse("ext-1", "rpc-dialog", finalResponse));
+
+        JSONObject awaitAnswer = cliRelay.forward(cli,
+                operationRequest("rpc-await", "tool.operation_await", operationId, 100));
+        JSONObject awaitResult = awaitAnswer.getJSONObject("result");
+        Assert.assertEquals("completed", awaitResult.getString("state"));
+        Assert.assertTrue(awaitResult.getJSONObject("result").getBooleanValue("ok"));
+    }
+
+    @Test
+    public void operationCancelTargetsTheOriginalExtensionRequest() throws Exception {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        frameRelay.registerSession("s1", "ext-1", 1L, new JSONObject());
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+
+        AtomicReference<JSONObject> initial = new AtomicReference<>();
+        Thread forwarder = new Thread(() ->
+                initial.set(cliRelay.forward(cli, toolRequest("rpc-dialog-cancel", "s1"))));
+        forwarder.start();
+        JSONObject forwarded = JSONObject.parseObject(
+                awaitMethodFrame(extensionSink, "tool.navigate", 5000));
+        String operationId = forwarded.getJSONObject("params").getString("_operation_id");
+        frameRelay.handleEvent("ext-1", dialogChangedEvent("s1", operationId, "dialog-2"));
+        forwarder.join(5000);
+        Assert.assertEquals("dialog_pending",
+                initial.get().getJSONObject("error").getString("code"));
+
+        JSONObject cancelAnswer = cliRelay.forward(cli,
+                operationRequest("rpc-op-cancel", "tool.operation_cancel", operationId, null));
+        Assert.assertTrue(cancelAnswer.getJSONObject("result").getBooleanValue("cancelled"));
+        String cancelFrame = awaitMethodFrame(extensionSink, "cancel", 2000);
+        Assert.assertNotNull(cancelFrame);
+        Assert.assertEquals("rpc-dialog-cancel",
+                JSONObject.parseObject(cancelFrame).getJSONObject("params").getString("rpc_id"));
+
+        JSONObject cancelled = new JSONObject();
+        cancelled.put("id", "rpc-dialog-cancel");
+        JSONObject error = new JSONObject();
+        error.put("code", "cancelled");
+        error.put("message", "cancelled by test");
+        cancelled.put("error", error);
+        frameRelay.routeResponse("ext-1", "rpc-dialog-cancel", cancelled);
+
+        JSONObject awaitAnswer = cliRelay.forward(cli,
+                operationRequest("rpc-await-cancelled", "tool.operation_await", operationId, 100));
+        Assert.assertEquals("failed",
+                awaitAnswer.getJSONObject("result").getString("state"));
+        Assert.assertEquals("cancelled",
+                awaitAnswer.getJSONObject("result").getJSONObject("error").getString("code"));
+    }
+
+    @Test
+    public void sessionUserInterruptCancelsQueuedCommandsBeforeDispatch() {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        frameRelay.registerSession("s1", "ext-1", 1L, new JSONObject());
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+        String queuedRequest = toolRequest("rpc-interrupted", "s1");
+        Assert.assertTrue(cliRelay.registerQueued(cli, queuedRequest));
+
+        Assert.assertTrue(frameRelay.handleEvent("ext-1",
+                event("session.user_interrupt", new JSONObject(java.util.Map.of("session_id", "s1")))));
+
+        JSONObject answer = cliRelay.forward(cli, queuedRequest);
+        Assert.assertEquals("user_aborted", answer.getJSONObject("error").getString("code"));
+        Assert.assertNull(awaitMethodFrame(extensionSink, "tool.navigate", 200));
+    }
+
+    @Test
+    public void sessionUserInterruptCancelsTheInflightExtensionRequest() throws Exception {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        frameRelay.registerSession("s1", "ext-1", 1L, new JSONObject());
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+
+        AtomicReference<JSONObject> answer = new AtomicReference<>();
+        Thread forwarder = new Thread(() ->
+                answer.set(cliRelay.forward(cli, toolRequest("rpc-interrupt-live", "s1"))));
+        forwarder.start();
+        Assert.assertNotNull(awaitMethodFrame(extensionSink, "tool.navigate", 5000));
+
+        Assert.assertTrue(frameRelay.handleEvent("ext-1",
+                event("session.user_interrupt", new JSONObject(java.util.Map.of("session_id", "s1")))));
+        forwarder.join(5000);
+
+        Assert.assertEquals("user_aborted", answer.get().getJSONObject("error").getString("code"));
+        String cancelFrame = awaitMethodFrame(extensionSink, "cancel", 2000);
+        Assert.assertNotNull(cancelFrame);
+        Assert.assertEquals("rpc-interrupt-live",
+                JSONObject.parseObject(cancelFrame).getJSONObject("params").getString("rpc_id"));
+    }
+
+    @Test
+    public void extensionDisconnectCancelsQueuedCommandsForItsSessions() {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        frameRelay.registerSession("s1", "ext-1", 1L, new JSONObject());
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+        String queuedRequest = toolRequest("rpc-ext-down", "s1");
+        Assert.assertTrue(cliRelay.registerQueued(cli, queuedRequest));
+
+        frameRelay.handleDisconnect("ext-1");
+
+        JSONObject answer = cliRelay.forward(cli, queuedRequest);
+        Assert.assertEquals("cancelled", answer.getJSONObject("error").getString("code"));
+        Assert.assertEquals("extension_disconnected",
+                answer.getJSONObject("error").getJSONObject("data").getString("reason"));
+    }
+
+    @Test
+    public void requestHelpWaitBudgetOutlivesTheClientTimeout() {
+        BskFrameRelay relay60 = new BskFrameRelay(
+                new BskSessionQueue(), new BskHandshakeResponder(), 60);
+        BskCliRelay relay = new BskCliRelay(relay60, 240);
+        JSONObject params = new JSONObject();
+        params.put("session_id", "s1");
+        params.put("timeout_ms", 300_000);
+        JSONObject request = new JSONObject();
+        request.put("id", "rpc-help");
+        request.put("method", "tool.request_help");
+        request.put("params", params);
+
+        Assert.assertTrue(relay.awaitTimeoutSecondsFor(request.toJSONString())
+                > relay60.timeoutSecondsFor(request.toJSONString()));
+        Assert.assertTrue(relay.awaitTimeoutSecondsFor(request.toJSONString()) > 315);
+    }
+
+    private static JSONObject dialogChangedEvent(String sessionId, String operationId,
+                                                 String dialogId) {
+        JSONObject dialog = new JSONObject();
+        dialog.put("id", dialogId);
+        dialog.put("type", "confirm");
+        JSONObject payload = new JSONObject();
+        payload.put("session_id", sessionId);
+        payload.put("operation_id", operationId);
+        payload.put("dialog", dialog);
+        return event("dialog.changed", payload);
+    }
+
+    private static JSONObject event(String event, JSONObject payload) {
+        JSONObject frame = new JSONObject();
+        frame.put("event", event);
+        frame.put("payload", payload);
+        return frame;
+    }
+
+    private static String operationRequest(String rpcId, String method,
+                                           String operationId, Integer waitMs) {
+        JSONObject params = new JSONObject();
+        params.put("session_id", "s1");
+        params.put("operation_id", operationId);
+        if (waitMs != null) {
+            params.put("wait_ms", waitMs);
+        }
+        JSONObject request = new JSONObject();
+        request.put("id", rpcId);
+        request.put("method", method);
+        request.put("params", params);
+        return request.toJSONString();
     }
 
     /** 在指定用户的扩展连接上建一个会话（走完整的 start 应答路径）。 */

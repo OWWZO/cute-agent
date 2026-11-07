@@ -111,6 +111,30 @@ public class BskSessionQueueTest {
         Assert.assertEquals(3, flags.get());
     }
 
+    @Test
+    public void independentControlTaskDoesNotWaitBehindABusySessionLane() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            BskSessionQueue queue = new BskSessionQueue(pool);
+            CountDownLatch laneEntered = new CountDownLatch(1);
+            CountDownLatch releaseLane = new CountDownLatch(1);
+            CompletableFuture<Void> busyLane = queue.submit("sess-busy", () -> {
+                laneEntered.countDown();
+                awaitQuietly(releaseLane);
+            });
+            Assert.assertTrue(laneEntered.await(2, TimeUnit.SECONDS));
+
+            CompletableFuture<Void> control = queue.submitIndependent(() -> {
+            });
+            control.get(2, TimeUnit.SECONDS);
+
+            releaseLane.countDown();
+            busyLane.get(2, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     // ── 异常不阻塞队列 ───────────────────────────────────────
 
     @Test
@@ -159,6 +183,7 @@ public class BskSessionQueueTest {
         CompletableFuture<Void> noTask = queue.submit("s", null);
         Assert.assertTrue(noSession.isCompletedExceptionally());
         Assert.assertTrue(noTask.isCompletedExceptionally());
+        Assert.assertTrue(queue.submitIndependent(null).isCompletedExceptionally());
     }
 
     @Test

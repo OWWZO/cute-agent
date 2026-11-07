@@ -256,6 +256,79 @@ public class BskFrameRelayTest {
     }
 
     @Test
+    public void responseFromAnotherExtensionCannotCompleteTheRequest() {
+        RecordingSink sinkB = new RecordingSink();
+        relay.registerSession("conn-1", null, "user-1", sink);
+        relay.registerSession("conn-2", null, "user-2", sinkB);
+        relay.handleHandshake("conn-1", handshakeFrame("hs-1"));
+        relay.handleHandshake("conn-2", handshakeFrame("hs-1"));
+        CompletableFuture<JSONObject> pending =
+                relay.dispatch("conn-1", "rpc-owned", toolRequest("rpc-owned"));
+
+        JSONObject forged = new JSONObject();
+        forged.put("id", "rpc-owned");
+        forged.put("result", new JSONObject());
+        Assert.assertFalse(relay.routeResponse("conn-2", "rpc-owned", forged));
+        Assert.assertFalse(pending.isDone());
+        Assert.assertTrue(relay.routeResponse("conn-1", "rpc-owned", forged));
+        Assert.assertFalse(BskFrameRelay.isErrorFrame(pending.join()));
+    }
+
+    @Test
+    public void sessionEventsUpdateInteractionAndDropClosedSessions() {
+        relay.registerSession("conn-1", null, "user-1", sink);
+        relay.handleHandshake("conn-1", handshakeFrame("hs-1"));
+        relay.registerSession("s1", "conn-1", 7L, new JSONObject());
+
+        JSONObject interaction = new JSONObject();
+        interaction.put("mode", "cooperate");
+        JSONObject changed = event("session.interaction_changed", new JSONObject());
+        changed.getJSONObject("payload").put("session_id", "s1");
+        changed.getJSONObject("payload").put("interaction", interaction);
+        Assert.assertTrue(relay.handleEvent("conn-1", changed));
+
+        JSONObject session = relay.sessionStatusEntries("user-1").get(0);
+        Assert.assertEquals("cooperate",
+                session.getJSONObject("interaction").getString("mode"));
+
+        JSONObject closed = event("session.window_closed", new JSONObject());
+        closed.getJSONObject("payload").put("session_id", "s1");
+        Assert.assertTrue(relay.handleEvent("conn-1", closed));
+        Assert.assertTrue(relay.sessionStatusEntries("user-1").isEmpty());
+    }
+
+    @Test
+    public void foreignExtensionCannotCloseAnotherConnectionsSession() {
+        RecordingSink sinkB = new RecordingSink();
+        relay.registerSession("conn-1", null, "user-1", sink);
+        relay.registerSession("conn-2", null, "user-2", sinkB);
+        relay.handleHandshake("conn-1", handshakeFrame("hs-1"));
+        relay.handleHandshake("conn-2", handshakeFrame("hs-1"));
+        relay.registerSession("s1", "conn-1", 7L, new JSONObject());
+
+        JSONObject closed = event("session.window_closed", new JSONObject());
+        closed.getJSONObject("payload").put("session_id", "s1");
+        Assert.assertTrue(relay.handleEvent("conn-2", closed));
+
+        Assert.assertEquals(1, relay.sessionStatusEntries("user-1").size());
+    }
+
+    @Test
+    public void userMovedTabEventEndsTheOwningSession() {
+        relay.registerSession("conn-1", null, "user-1", sink);
+        relay.handleHandshake("conn-1", handshakeFrame("hs-1"));
+        relay.registerSession("s1", "conn-1", 7L, new JSONObject());
+
+        JSONObject ended = event("session.ended", new JSONObject());
+        ended.getJSONObject("payload").put("session_id", "s1");
+        ended.getJSONObject("payload").put("reason", "user_moved_tab");
+        ended.getJSONObject("payload").put("tab_id", 42);
+        Assert.assertTrue(relay.handleEvent("conn-1", ended));
+
+        Assert.assertTrue(relay.sessionStatusEntries("user-1").isEmpty());
+    }
+
+    @Test
     public void timeoutCompletesPendingCall() throws Exception {
         RecordingSink quietSink = new RecordingSink();
         BskFrameRelay timingRelay = new BskFrameRelay(
@@ -361,6 +434,13 @@ public class BskFrameRelayTest {
         frame.put("method", method);
         frame.put("params", params);
         return frame.toJSONString();
+    }
+
+    private static JSONObject event(String name, JSONObject payload) {
+        JSONObject frame = new JSONObject();
+        frame.put("event", name);
+        frame.put("payload", payload);
+        return frame;
     }
 
     // ── 测试替身 ─────────────────────────────────────────────

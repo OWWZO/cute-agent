@@ -88,22 +88,37 @@ public class BskCliWebSocketHandler extends TextWebSocketHandler {
         if (cli == null) {
             return;
         }
-        String sessionKey = cliRelay.sessionKeyOf(cli, payload);
         try {
-            sessionQueue.submit(sessionKey, () -> {
-                JSONObject response = cliRelay.forward(cli, payload);
-                try {
-                    cli.sink().send(response.toJSONString());
-                } catch (Exception e) {
-                    log.warn("bsk cli response write failed: session={} {}", cli.connectionId(), e.getMessage());
-                }
-            });
+            if (BskCliRelay.isIndependentMethod(payload)) {
+                sessionQueue.submitIndependent(() -> forwardAndReply(cli, payload));
+                return;
+            }
+            if (!cliRelay.registerQueued(cli, payload)) {
+                String rpcId = BskFrameRouter.idOf(payload);
+                JSONObject error = BskCliRelay.errorFrame(rpcId, "protocol_error",
+                        "duplicate or invalid rpc id", null);
+                sendQuietly(session, error.toJSONString());
+                return;
+            }
+            String sessionKey = cliRelay.sessionKeyOf(cli, payload);
+            sessionQueue.submit(sessionKey, () -> forwardAndReply(cli, payload));
         } catch (RejectedExecutionException e) {
             // 只在「忙即拒绝」模式下出现（对齐 bsk daemon 的 session_busy）。
+            cliRelay.unregisterQueued(cli, payload);
             String rpcId = BskFrameRouter.idOf(payload);
             JSONObject error = BskCliRelay.errorFrame(rpcId, "timeout",
                     "session is busy", java.util.Map.of("reason", "session_busy"));
             sendQuietly(session, error.toJSONString());
+        }
+    }
+
+    private void forwardAndReply(BskCliConnection cli, String payload) {
+        JSONObject response = cliRelay.forward(cli, payload);
+        try {
+            cli.sink().send(response.toJSONString());
+        } catch (Exception e) {
+            log.warn("bsk cli response write failed: session={} {}",
+                    cli.connectionId(), e.getMessage());
         }
     }
 
