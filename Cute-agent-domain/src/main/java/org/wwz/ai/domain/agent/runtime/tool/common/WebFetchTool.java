@@ -12,6 +12,7 @@ import org.wwz.ai.domain.agent.runtime.llm.LLM;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolArgs;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
+import org.wwz.ai.domain.agent.runtime.tool.access.ToolAccessPolicy;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 
 import java.net.URI;
@@ -81,6 +82,7 @@ public class WebFetchTool implements BaseTool {
         long start = System.currentTimeMillis();
         String rawUrl = "";
         String prompt = "";
+        ToolAccessPolicy.WebFetchDecision access = null;
         try {
             Map<String, Object> params = ToolArgs.mapStrict(input);
             rawUrl = StringUtils.trimToEmpty(valueAsString(params.get("url")));
@@ -93,8 +95,25 @@ public class WebFetchTool implements BaseTool {
             }
 
             validateUrl(rawUrl);
+            ToolAccessPolicy accessPolicy = context == null
+                    ? null
+                    : context.getToolAccessPolicy();
+            access = accessPolicy == null
+                    ? null
+                    : accessPolicy.beforeWebFetch(rawUrl);
+            if (access != null && !access.allowed()) {
+                Map<String, Object> detail = failureDetails(rawUrl, prompt);
+                detail.put("failureClass", access.reason());
+                detail.put("retryable", Boolean.FALSE);
+                detail.put("attempt", access.attempt());
+                detail.put("hint", access.hint());
+                return ToolResultPayload.failureFrom("WebFetch 失败：" + access.hint(), detail);
+            }
 
             FetchedPage fetch = fetchFromPython(rawUrl, context);
+            if (accessPolicy != null) {
+                accessPolicy.recordWebFetchSuccess();
+            }
             String markdown = truncateContent(fetch.content());
             ExtractOutcome extracted = applyPromptToContent(prompt, markdown, context);
             long durationMs = System.currentTimeMillis() - start;
@@ -125,16 +144,81 @@ public class WebFetchTool implements BaseTool {
             return ToolResultPayload.fromData(data);
         } catch (FetchHttpException e) {
             log.warn("{} WebFetch remote response failed, url={}, status={}", requestId(context), e.url, e.statusCode);
+            FetchFailureKind failureKind = classifyFailure(e.statusCode, e.responseBody);
+            recordAccessFailure(context, failureKind);
             Map<String, Object> detail = failureDetails(rawUrl, prompt);
             detail.put("status", e.statusCode);
             detail.put("statusText", StringUtils.defaultString(e.statusText));
             detail.put("responseBody", e.responseBody);
+            addFailurePolicy(detail, failureKind);
+            if (access != null) {
+                detail.put("attempt", access.attempt());
+            }
             return ToolResultPayload.failureFrom("WebFetch 失败：" + e.getMessage(), detail);
         } catch (Exception e) {
             log.error("{} WebFetch execute error, input={}", requestId(context), input, e);
-            return failure("WebFetch 失败：" + StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName()),
-                    rawUrl, prompt);
+            FetchFailureKind failureKind = classifyFailure(0, rootCauseSummary(e));
+            recordAccessFailure(context, failureKind);
+            Map<String, Object> detail = failureDetails(rawUrl, prompt);
+            addFailurePolicy(detail, failureKind);
+            if (access != null) {
+                detail.put("attempt", access.attempt());
+            }
+            return ToolResultPayload.failureFrom(
+                    "WebFetch 失败：" + StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName()),
+                    detail
+            );
         }
+    }
+
+    private static void recordAccessFailure(AgentContext context, FetchFailureKind failureKind) {
+        if (context != null
+                && context.getToolAccessPolicy() != null
+                && failureKind != null) {
+            context.getToolAccessPolicy().recordWebFetchFailure(
+                    failureKind.networkInfrastructure()
+            );
+        }
+    }
+
+    private static void addFailurePolicy(Map<String, Object> detail, FetchFailureKind failureKind) {
+        FetchFailureKind kind = failureKind == null ? FetchFailureKind.other() : failureKind;
+        detail.put("failureClass", kind.failureClass());
+        detail.put("retryable", kind.retryable());
+        detail.put("maxAttemptsPerUrl", ToolAccessPolicy.MAX_WEB_FETCH_ATTEMPTS_PER_URL);
+        detail.put("hint", kind.hint());
+    }
+
+    private static FetchFailureKind classifyFailure(int statusCode, String responseBody) {
+        String body = StringUtils.defaultString(responseBody).toLowerCase(Locale.ROOT);
+        if (body.contains("cannot connect to host")
+                || body.contains("connect call failed")
+                || body.contains("connection refused")
+                || body.contains("proxy")) {
+            return FetchFailureKind.proxy();
+        }
+        if (body.contains("403") || body.contains("forbidden") || statusCode == 403) {
+            return FetchFailureKind.forbidden();
+        }
+        if (body.contains("401") || body.contains("unauthorized") || statusCode == 401) {
+            return FetchFailureKind.unauthorized();
+        }
+        if (body.contains("404") || body.contains("not found") || statusCode == 404) {
+            return FetchFailureKind.notFound();
+        }
+        if (body.contains("429") || body.contains("rate limit") || statusCode == 429) {
+            return FetchFailureKind.rateLimited();
+        }
+        if (body.contains("timeout")
+                || body.contains("timed out")
+                || statusCode == 408
+                || statusCode == 504) {
+            return FetchFailureKind.timeout();
+        }
+        if (statusCode >= 500 || body.contains("502") || body.contains("503")) {
+            return FetchFailureKind.upstream();
+        }
+        return FetchFailureKind.other();
     }
 
     private FetchedPage fetchFromPython(String url, AgentContext context) throws Exception {
@@ -357,6 +441,83 @@ public class WebFetchTool implements BaseTool {
             this.url = url;
             this.statusText = statusText;
             this.responseBody = responseBody;
+        }
+    }
+
+    private record FetchFailureKind(String failureClass,
+                                    boolean networkInfrastructure,
+                                    boolean retryable,
+                                    String hint) {
+        private static FetchFailureKind proxy() {
+            return new FetchFailureKind(
+                    "network_proxy",
+                    true,
+                    false,
+                    "代理或网络链路不可用。不要重试同一地址；请换信息源或基于已有证据输出最终答案。"
+            );
+        }
+
+        private static FetchFailureKind timeout() {
+            return new FetchFailureKind(
+                    "network_timeout",
+                    true,
+                    true,
+                    "抓取超时。最多再尝试一次，之后必须换信息源或收尾。"
+            );
+        }
+
+        private static FetchFailureKind upstream() {
+            return new FetchFailureKind(
+                    "upstream_error",
+                    true,
+                    true,
+                    "上游服务异常。最多再尝试一次；连续失败后不要继续抓网页。"
+            );
+        }
+
+        private static FetchFailureKind forbidden() {
+            return new FetchFailureKind(
+                    "access_forbidden",
+                    false,
+                    false,
+                    "目标站点拒绝访问。不要重复抓同一 URL，请换公开信息源。"
+            );
+        }
+
+        private static FetchFailureKind unauthorized() {
+            return new FetchFailureKind(
+                    "access_unauthorized",
+                    false,
+                    false,
+                    "目标页面需要登录或授权。不要重复抓取，请换公开信息源。"
+            );
+        }
+
+        private static FetchFailureKind notFound() {
+            return new FetchFailureKind(
+                    "not_found",
+                    false,
+                    false,
+                    "目标页面不存在。不要重复抓同一 URL。"
+            );
+        }
+
+        private static FetchFailureKind rateLimited() {
+            return new FetchFailureKind(
+                    "rate_limited",
+                    false,
+                    true,
+                    "目标站点限流。最多再尝试一次，并优先换信息源。"
+            );
+        }
+
+        private static FetchFailureKind other() {
+            return new FetchFailureKind(
+                    "http_error",
+                    false,
+                    false,
+                    "抓取失败。不要重复相同请求，请换信息源或收尾。"
+            );
         }
     }
 

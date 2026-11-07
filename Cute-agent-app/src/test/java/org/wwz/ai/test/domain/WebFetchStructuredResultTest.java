@@ -15,6 +15,7 @@ import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.test.domain.support.CuteRuntimeTestSupport;
 
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Map;
 
 /**
@@ -126,5 +127,62 @@ public class WebFetchStructuredResultTest {
         String observation = ToolObservationSerializer.serializePayload(payload);
         Assert.assertTrue(observation.contains("\"tool_ok\":false"));
         Assert.assertTrue(observation.contains("\"status\":404"));
+    }
+
+    @Test
+    public void shouldOpenCircuitAfterRepeatedProxyFailures() {
+        AtomicInteger calls = new AtomicInteger();
+        RemoteHttpPort httpPort = new RemoteHttpPort() {
+            @Override
+            public String execute(RemoteHttpRequest request) {
+                return "";
+            }
+
+            @Override
+            public RemoteHttpResponse executeDetailed(RemoteHttpRequest request) {
+                calls.incrementAndGet();
+                return RemoteHttpResponse.builder()
+                        .statusCode(502)
+                        .statusText("Bad Gateway")
+                        .headers(Map.of("Content-Type", "application/json"))
+                        .body("""
+                                {"code":502,"message":"Cannot connect to host 127.0.0.1:7890 ssl:default"}
+                                """)
+                        .finalUrl(request.getUrl())
+                        .build();
+            }
+        };
+
+        CuteConfig config = new CuteConfig();
+        ReflectionTestUtils.setField(config, "webFetchUrl", "http://cute-tool:1601");
+        WebFetchTool tool = new WebFetchTool();
+        AgentContext context = AgentContext.builder()
+                .requestId("req-web-fetch-circuit")
+                .sessionId("session-web-fetch-circuit")
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .build();
+
+        ToolResultPayload first = (ToolResultPayload) tool.execute(Map.of(
+                "url", "https://example.com/a",
+                "prompt", "extract"
+        ), context);
+        ToolResultPayload second = (ToolResultPayload) tool.execute(Map.of(
+                "url", "https://example.com/b",
+                "prompt", "extract"
+        ), context);
+        ToolResultPayload third = (ToolResultPayload) tool.execute(Map.of(
+                "url", "https://example.com/c",
+                "prompt", "extract"
+        ), context);
+
+        Map<?, ?> firstDetail = (Map<?, ?>) first.getLlmData();
+        Map<?, ?> thirdDetail = (Map<?, ?>) third.getLlmData();
+        Assert.assertEquals("network_proxy", firstDetail.get("failureClass"));
+        Assert.assertEquals(Boolean.FALSE, firstDetail.get("retryable"));
+        Assert.assertEquals("network_circuit_open", thirdDetail.get("failureClass"));
+        Assert.assertEquals(Boolean.FALSE, thirdDetail.get("retryable"));
+        Assert.assertEquals(2, calls.get());
+        Assert.assertTrue(Boolean.TRUE.equals(second.getFailed()));
+        Assert.assertTrue(Boolean.TRUE.equals(third.getFailed()));
     }
 }
