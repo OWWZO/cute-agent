@@ -400,6 +400,10 @@ def test_spider2_executes_submitted_sql_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    pytest.importorskip(
+        "pandas",
+        reason="Spider2 official scoring requires the optional phase4 extra",
+    )
     adapter, _, _ = _fixtures(tmp_path)
     task = adapter.tasks("official-subset")[0]
     prepared = adapter.prepare(task, tmp_path / "workspace")
