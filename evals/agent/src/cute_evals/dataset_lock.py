@@ -15,7 +15,9 @@ def dataset_hash(cases_dir: Path, extra_files: Iterable[Path] = ()) -> str:
     for path in paths:
         digest.update(path.relative_to(cases_dir).as_posix().encode("utf-8"))
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        content = path.read_bytes()
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
     return f"sha256:{digest.hexdigest()}"
 
 

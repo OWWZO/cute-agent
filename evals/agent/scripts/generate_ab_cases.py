@@ -11,7 +11,7 @@ def case(
     message: str,
     final: str,
     *,
-    tools: list[tuple[str, dict, str]] = (),
+    tools: tuple[tuple[str, dict, str], ...] = (),
     required: list[str] | None = None,
     sequence: list[str] | None = None,
     forbidden: list[str] | None = None,

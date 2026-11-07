@@ -34,6 +34,10 @@ RETRYABLE_STATUSES = {"infra_error", "adapter_error"}
 FUSE_STATUSES = {"infra_error"}
 
 
+def _maven_repo_dir(output_dir: Path, arm: str) -> Path:
+    return output_dir / "maven-repos" / arm
+
+
 def _failure_result(
     cell: CellSpec,
     *,
@@ -107,6 +111,8 @@ def _default_executor(
             / cell.cell_key
             / f"attempt-{attempt:02d}"
         )
+        if work_dir.exists():
+            shutil.rmtree(work_dir)
         work_dir.mkdir(parents=True, exist_ok=True)
         spec_path = work_dir / "cell-spec.json"
         write_json_atomic(spec_path, cell.to_payload())
@@ -123,10 +129,17 @@ def _default_executor(
                 "CUTE_EVAL_RUN_PREFIX": f"{cell.experiment_id}-{cell.cell_key[:12]}",
                 "CUTE_EVAL_MODEL_ID": cell.model,
                 "CUTE_EVAL_SEED": str(spec.seed),
-                "CUTE_EVAL_DB_SCHEMA": "eval_"
-                + "".join(
-                    char if char.isalnum() else "_"
-                    for char in cell.experiment_id
+                "CUTE_EVAL_DB_SCHEMA": (
+                    "eval_" + cell.cell_key[:24]
+                    if spec.isolation.get("database") == "per-cell"
+                    else "eval_"
+                    + "".join(
+                        char if char.isalnum() else "_"
+                        for char in cell.experiment_id
+                    )
+                ),
+                "CUTE_EVAL_MAVEN_REPO": str(
+                    _maven_repo_dir(output_dir, cell.arm)
                 ),
             }
         )
@@ -312,16 +325,24 @@ def _run_loaded_experiment(
             pending.append(cell)
 
     if executor is None and pending:
-        for root in sorted({str(path) for path in roots.values()}):
-            previous = os.environ.get("CUTE_EVAL_REPO_ROOT")
+        for arm_name, root in sorted(roots.items()):
+            previous_root = os.environ.get("CUTE_EVAL_REPO_ROOT")
+            previous_repo = os.environ.get("CUTE_EVAL_MAVEN_REPO")
             os.environ["CUTE_EVAL_REPO_ROOT"] = root
+            os.environ["CUTE_EVAL_MAVEN_REPO"] = str(
+                _maven_repo_dir(output_dir, arm_name)
+            )
             try:
                 compile_java_fixture_runner()
             finally:
-                if previous is None:
+                if previous_root is None:
                     os.environ.pop("CUTE_EVAL_REPO_ROOT", None)
                 else:
-                    os.environ["CUTE_EVAL_REPO_ROOT"] = previous
+                    os.environ["CUTE_EVAL_REPO_ROOT"] = previous_root
+                if previous_repo is None:
+                    os.environ.pop("CUTE_EVAL_MAVEN_REPO", None)
+                else:
+                    os.environ["CUTE_EVAL_MAVEN_REPO"] = previous_repo
 
     started = time.monotonic()
     fuse_count = 0
@@ -363,7 +384,11 @@ def _run_loaded_experiment(
         if spent > float(spec.budgets["maxUsd"]):
             stopped_for_budget = True
 
-    report = build_ab_report(spec, results)
+    report = build_ab_report(
+        spec,
+        results,
+        case_ids=[case.id for case in cases],
+    )
     write_ab_report(output_dir, report)
     return report
 
@@ -397,7 +422,11 @@ def report_experiment(output_dir: Path) -> dict[str, Any]:
             experiment_spec_hash=spec.spec_hash,
         ).values()
     )
-    report = build_ab_report(spec, results)
+    report = build_ab_report(
+        spec,
+        results,
+        case_ids=[case.id for case in load_experiment_cases(spec)],
+    )
     write_ab_report(output_dir, report)
     return report
 

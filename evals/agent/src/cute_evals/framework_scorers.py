@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -317,18 +319,21 @@ def score_deepeval(
         cache_dir, case=case, trace=trace, judge=judge
     )
     if cache_path and cache_path.exists():
-        cached = json.loads(cache_path.read_text(encoding="utf-8"))
-        return _score(
-            case,
-            scorer="deepeval",
-            name="task_completion",
-            value=cached["value"],
-            unit="score",
-            passed=cached["passed"],
-            hard_gate=hard_gate,
-            status="verified",
-            evidence={**cached.get("evidence", {}), "cacheHit": True},
-        )
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            return _score(
+                case,
+                scorer="deepeval",
+                name="task_completion",
+                value=cached["value"],
+                unit="score",
+                passed=cached["passed"],
+                hard_gate=hard_gate,
+                status="verified",
+                evidence={**cached.get("evidence", {}), "cacheHit": True},
+            )
+        except (OSError, json.JSONDecodeError, KeyError, TypeError):
+            pass
 
     try:
         from deepeval.metrics import GEval
@@ -394,14 +399,32 @@ def score_deepeval(
         }
         if cache_path:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(
-                json.dumps(
-                    {"value": value, "passed": passed, "evidence": evidence},
-                    ensure_ascii=False,
-                    indent=2,
-                ),
+            with tempfile.NamedTemporaryFile(
+                mode="w",
                 encoding="utf-8",
-            )
+                dir=cache_path.parent,
+                prefix=f".{cache_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                try:
+                    json.dump(
+                        {
+                            "value": value,
+                            "passed": passed,
+                            "evidence": evidence,
+                        },
+                        handle,
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                    handle.write("\n")
+                except BaseException:
+                    handle.close()
+                    temporary.unlink(missing_ok=True)
+                    raise
+            os.replace(temporary, cache_path)
         return _score(
             case,
             scorer="deepeval",

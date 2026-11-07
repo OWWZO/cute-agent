@@ -36,7 +36,7 @@ def parse_daily_time(value: str) -> clock_time:
 
 def next_daily_run(now: datetime, at: clock_time, timezone: str) -> datetime:
     tz = ZoneInfo(timezone)
-    local_now = now.replace(tzinfo=tz) if now.tzinfo is None else now.astimezone(tz)
+    local_now = now.astimezone(tz)
     candidate = datetime.combine(local_now.date(), at, tzinfo=tz)
     if candidate <= local_now:
         candidate += timedelta(days=1)

@@ -2,8 +2,8 @@
   "name": "cute-agent-data-core",
   "version": 1,
   "revision": "2026-11-06",
-  "hashMode": "case-and-fixture-files-v1",
-  "datasetHash": "sha256:2cc9186b1d05843063b15f56922dfd0d2cd5bbbd46d725cff7f17116cc1e87c2",
+  "hashMode": "case-and-fixture-files-v2",
+  "datasetHash": "sha256:e705d495b14fcb739c38785780543ccc3721954309a7b4d03787947377fb962a",
   "metrics": {
     "execution": "sql_execution",
     "result": "sql_result"

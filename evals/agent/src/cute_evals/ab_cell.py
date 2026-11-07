@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import traceback
 from pathlib import Path
@@ -14,6 +15,7 @@ from .experiment import (
     write_json_atomic,
 )
 from .java_runner import EvalRunnerError, run_java_cases
+from .models import JudgeConfig
 from .scorers import score_case
 
 
@@ -106,6 +108,15 @@ def execute_cell(
     started_at = now_iso()
     work_dir.mkdir(parents=True, exist_ok=True)
     run_dir = work_dir / "run"
+    judge = None
+    judge_cache_dir = None
+    if require_judge:
+        judge = JudgeConfig(
+            model=os.environ.get("CUTE_EVAL_JUDGE_MODEL"),
+            base_url=os.environ.get("CUTE_EVAL_JUDGE_BASE_URL"),
+            api_key=os.environ.get("CUTE_EVAL_JUDGE_API_KEY"),
+        )
+        judge_cache_dir = work_dir.parent / "judge-cache"
     try:
         case = load_cell_case(payload)
         traces = run_java_cases(
@@ -129,8 +140,8 @@ def execute_cell(
             "trace.json",
             profile=profile,
             require_judge=require_judge,
-            judge=None,
-            judge_cache_dir=None,
+            judge=judge,
+            judge_cache_dir=judge_cache_dir,
             attempt=int(payload["repetition"]),
         )
         status, ownership, task_score = _status_for(case_result)

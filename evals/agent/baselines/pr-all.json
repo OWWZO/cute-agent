@@ -1,9 +1,9 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-11-07T00:57:46.902",
+  "generatedAt": "2026-11-08T00:07:03.860",
   "profile": "pr",
   "agent": "cute-agent",
-  "datasetHash": "sha256:68bbc02ee5d9ab6156e2840c028041d27588a33db89e7db2c9f7600ce32d4731",
+  "datasetHash": "sha256:ac6320241181ecee419a730b0152fea2303aba60740117b4b914910c34e68334",
   "environment": {
     "engine": "inspect",
     "javaMode": "fixture",
@@ -12,13 +12,13 @@
     "judgeBaseUrl": null,
     "requireJudge": false,
     "suite": "all",
-    "datasetHash": "sha256:68bbc02ee5d9ab6156e2840c028041d27588a33db89e7db2c9f7600ce32d4731",
+    "datasetHash": "sha256:ac6320241181ecee419a730b0152fea2303aba60740117b4b914910c34e68334",
     "ragDataset": {
       "name": "cute-agent-mrag-core",
       "version": 1,
       "revision": "2026-11-06",
-      "hashMode": "case-files-v1",
-      "datasetHash": "sha256:aa519dbb1b5e1766bf941537bee863601795bf0d26a42739aab787f3839f2129",
+      "hashMode": "case-files-v2",
+      "datasetHash": "sha256:1121a218ba89f246a5042303f73b1fa44a4e3bf23f2994b9133699139a6674be",
       "metrics": {
         "retrieval": "citation_recall",
         "citation": "citation_coverage",
@@ -78,8 +78,8 @@
       "name": "cute-agent-data-core",
       "version": 1,
       "revision": "2026-11-06",
-      "hashMode": "case-and-fixture-files-v1",
-      "datasetHash": "sha256:2cc9186b1d05843063b15f56922dfd0d2cd5bbbd46d725cff7f17116cc1e87c2",
+      "hashMode": "case-and-fixture-files-v2",
+      "datasetHash": "sha256:e705d495b14fcb739c38785780543ccc3721954309a7b4d03787947377fb962a",
       "metrics": {
         "execution": "sql_execution",
         "result": "sql_result"
@@ -115,45 +115,69 @@
   "summary": {
     "caseCount": 48,
     "passAt1": 1.0,
-    "passAtK": 1.0
+    "passAtK": 1.0,
+    "qualityPassAt1": 1.0,
+    "qualityPassAtK": 1.0,
+    "sloPassAt1": 1.0,
+    "sloPassAtK": 1.0
   },
   "cases": {
     "data.average-ticket": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 276.0,
-      "medianDurationMs": 370.0,
-      "medianFirstTokenMs": 3.503
+      "medianDurationMs": 238.0,
+      "medianFirstTokenMs": 4.824
     },
     "data.empty-result": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 276.0,
-      "medianDurationMs": 5.0,
-      "medianFirstTokenMs": 0.49850000000000005
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
     },
     "data.null-category": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 290.0,
-      "medianDurationMs": 3.0,
-      "medianFirstTokenMs": 0.49850000000000005
+      "medianDurationMs": 0.0,
+      "medianFirstTokenMs": 0.0
     },
     "data.region-revenue": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 290.0,
-      "medianDurationMs": 2.0,
-      "medianFirstTokenMs": 0.49700000000000005
+      "medianDurationMs": 0.0,
+      "medianFirstTokenMs": 0.0
     },
     "data.sales-trend": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 292.0,
       "medianDurationMs": 1.0,
       "medianFirstTokenMs": 0.0
@@ -162,102 +186,154 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 270.0,
-      "medianDurationMs": 14.0,
+      "medianDurationMs": 6.0,
       "medianFirstTokenMs": 0.0
     },
     "production.ambiguous-clarify": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 232.0,
-      "medianDurationMs": 5.0,
-      "medianFirstTokenMs": 0.0
+      "medianDurationMs": 1.0,
+      "medianFirstTokenMs": 0.079
     },
     "production.citation-artifact-research": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 392.0,
-      "medianDurationMs": 6.0,
+      "medianDurationMs": 2.0,
       "medianFirstTokenMs": 0.0
     },
     "production.conflicting-web-sources": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 340.0,
-      "medianDurationMs": 8.0,
-      "medianFirstTokenMs": 0.6666666666666666
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.0
     },
     "production.destructive-confirm": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 350.0,
-      "medianDurationMs": 4.0,
+      "medianDurationMs": 2.0,
       "medianFirstTokenMs": 0.0
     },
     "production.empty-data-honesty": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 220.0,
-      "medianDurationMs": 5.0,
-      "medianFirstTokenMs": 0.5005
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.0
     },
     "production.invalid-arguments-retry": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 358.0,
-      "medianDurationMs": 5.0,
-      "medianFirstTokenMs": 0.3333333333333333
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.18099999999999997
     },
     "production.large-file-recovery": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 404.0,
-      "medianDurationMs": 9.0,
-      "medianFirstTokenMs": 0.0
+      "medianDurationMs": 7.0,
+      "medianFirstTokenMs": 0.025333333333333333
     },
     "production.list-then-read": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 306.0,
-      "medianDurationMs": 3.0,
+      "medianDurationMs": 2.0,
       "medianFirstTokenMs": 0.0
     },
     "production.long-session-recall": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 368.0,
-      "medianDurationMs": 4.0,
-      "medianFirstTokenMs": 0.0
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.17
     },
     "production.malformed-recovery": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 356.0,
-      "medianDurationMs": 7.0,
-      "medianFirstTokenMs": 1.0010000000000001
+      "medianDurationMs": 4.0,
+      "medianFirstTokenMs": 0.0
     },
     "production.multifile-research": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 480.0,
-      "medianDurationMs": 3.0,
-      "medianFirstTokenMs": 0.33466666666666667
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.2183333333333333
     },
     "production.no-artifact-control": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 72.0,
       "medianDurationMs": 1.0,
       "medianFirstTokenMs": 0.0
@@ -266,54 +342,82 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 100.0,
-      "medianDurationMs": 0.0,
+      "medianDurationMs": 1.0,
       "medianFirstTokenMs": 0.0
     },
     "production.permission-fallback": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 338.0,
       "medianDurationMs": 7.0,
-      "medianFirstTokenMs": 0.3333333333333333
+      "medianFirstTokenMs": 0.0
     },
     "production.rag-conflict": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 444.0,
-      "medianDurationMs": 2.0,
+      "medianDurationMs": 3.0,
       "medianFirstTokenMs": 0.0
     },
     "production.rate-limit-backoff": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 356.0,
-      "medianDurationMs": 5.0,
-      "medianFirstTokenMs": 0.0
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.16866666666666666
     },
     "production.session-pagination": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 302.0,
-      "medianDurationMs": 3.0,
+      "medianDurationMs": 2.0,
       "medianFirstTokenMs": 0.0
     },
     "production.skill-budget": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 326.0,
-      "medianDurationMs": 3.0,
-      "medianFirstTokenMs": 0.3336666666666666
+      "medianDurationMs": 0.0,
+      "medianFirstTokenMs": 0.0
     },
     "production.skill-distractor": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 316.0,
       "medianDurationMs": 2.0,
       "medianFirstTokenMs": 0.0
@@ -322,46 +426,70 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 278.0,
-      "medianDurationMs": 3.0,
+      "medianDurationMs": 2.0,
       "medianFirstTokenMs": 0.0
     },
     "production.timeout-retry": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 356.0,
-      "medianDurationMs": 6.0,
+      "medianDurationMs": 3.0,
       "medianFirstTokenMs": 0.0
     },
     "production.tool-discovery-route": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 336.0,
       "medianDurationMs": 2.0,
-      "medianFirstTokenMs": 0.333
+      "medianFirstTokenMs": 0.0
     },
     "production.unit-conversion": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 208.0,
       "medianDurationMs": 2.0,
-      "medianFirstTokenMs": 0.5085
+      "medianFirstTokenMs": 0.0
     },
     "production.upstream-fallback": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 350.0,
-      "medianDurationMs": 2.0,
-      "medianFirstTokenMs": 0.33266666666666667
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
     },
     "rag.cited-answer": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 268.0,
       "medianDurationMs": 1.0,
       "medianFirstTokenMs": 0.0
@@ -370,6 +498,10 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 278.0,
       "medianDurationMs": 2.0,
       "medianFirstTokenMs": 0.0
@@ -378,14 +510,22 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 266.0,
       "medianDurationMs": 2.0,
-      "medianFirstTokenMs": 0.27799999999999997
+      "medianFirstTokenMs": 0.0
     },
     "rag.multi-source-policy": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 420.0,
       "medianDurationMs": 3.0,
       "medianFirstTokenMs": 0.0
@@ -394,30 +534,46 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 262.0,
       "medianDurationMs": 3.0,
-      "medianFirstTokenMs": 0.0
+      "medianFirstTokenMs": 0.2565
     },
     "rag.security-window": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 262.0,
-      "medianDurationMs": 3.0,
+      "medianDurationMs": 1.0,
       "medianFirstTokenMs": 0.0
     },
     "rag.table-threshold": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 262.0,
-      "medianDurationMs": 0.0,
-      "medianFirstTokenMs": 0.0
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.29
     },
     "react.direct-answer": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 104.0,
       "medianDurationMs": 0.0,
       "medianFirstTokenMs": 0.0
@@ -426,30 +582,46 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 210.0,
-      "medianDurationMs": 0.0,
+      "medianDurationMs": 1.0,
       "medianFirstTokenMs": 0.0
     },
     "react.malformed-json": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 356.0,
-      "medianDurationMs": 3.0,
-      "medianFirstTokenMs": 0.0
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.17666666666666667
     },
     "react.multi-result": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 420.0,
       "medianDurationMs": 3.0,
-      "medianFirstTokenMs": 0.0
+      "medianFirstTokenMs": 0.325
     },
     "react.permission-denied": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 224.0,
       "medianDurationMs": 1.0,
       "medianFirstTokenMs": 0.0
@@ -458,14 +630,22 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 364.0,
-      "medianDurationMs": 2.0,
+      "medianDurationMs": 1.0,
       "medianFirstTokenMs": 0.0
     },
     "react.serial-tools": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 398.0,
       "medianDurationMs": 3.0,
       "medianFirstTokenMs": 0.0
@@ -474,14 +654,22 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 230.0,
-      "medianDurationMs": 2.0,
+      "medianDurationMs": 1.0,
       "medianFirstTokenMs": 0.0
     },
     "react.timeout-recovery": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 364.0,
       "medianDurationMs": 2.0,
       "medianFirstTokenMs": 0.0
@@ -490,16 +678,24 @@
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 364.0,
-      "medianDurationMs": 2.0,
-      "medianFirstTokenMs": 0.333
+      "medianDurationMs": 1.0,
+      "medianFirstTokenMs": 0.0
     },
     "react.wrong-tool-correction": {
       "status": "passed",
       "passAt1": true,
       "passAtK": true,
+      "qualityPassAt1": true,
+      "qualityPassAtK": true,
+      "sloPassAt1": true,
+      "sloPassAtK": true,
       "medianTotalTokens": 364.0,
-      "medianDurationMs": 3.0,
+      "medianDurationMs": 2.0,
       "medianFirstTokenMs": 0.0
     }
   }

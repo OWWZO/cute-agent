@@ -2,15 +2,24 @@ name: agent-eval-pr
 
 on:
   pull_request:
+    paths:
+      - "evals/agent/**"
+      - "Cute-agent-*/**"
+      - "pom.xml"
+      - ".github/workflows/agent-eval-pr.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: agent-eval-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cute-agent-bench:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +29,7 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
         with:
           enable-cache: true
 
@@ -48,16 +57,7 @@ jobs:
 
       - name: Run Agent PR gate
         working-directory: evals/agent
-        env:
-          CUTE_EVAL_JUDGE_MODEL: ${{ vars.CUTE_EVAL_JUDGE_MODEL }}
-          CUTE_EVAL_JUDGE_BASE_URL: ${{ vars.CUTE_EVAL_JUDGE_BASE_URL }}
-          CUTE_EVAL_JUDGE_API_KEY: ${{ secrets.CUTE_EVAL_JUDGE_API_KEY }}
-        run: |
-          args="--profile pr --suite all --out .eval-runs/pr"
-          if [ -n "$CUTE_EVAL_JUDGE_MODEL" ]; then
-            args="$args --require-judge"
-          fi
-          uv run cute-evals run $args
+        run: uv run cute-evals run --profile pr --suite all --out .eval-runs/pr
 
       - name: Run local skill simulation
         working-directory: evals/agent
@@ -83,4 +83,49 @@ jobs:
             evals/agent/.eval-runs/skill-sim/report.json
             evals/agent/.eval-runs/skill-sim/report.html
             evals/agent/.eval-runs/skill-sim/attempts
+          if-no-files-found: warn
+
+  judge-gate:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
+        with:
+          enable-cache: true
+
+      - name: Install evaluation dependencies
+        working-directory: evals/agent
+        run: uv sync --frozen --extra dev --extra frameworks
+
+      - name: Run trusted judge gate
+        working-directory: evals/agent
+        env:
+          CUTE_EVAL_JUDGE_MODEL: ${{ vars.CUTE_EVAL_JUDGE_MODEL }}
+          CUTE_EVAL_JUDGE_BASE_URL: ${{ vars.CUTE_EVAL_JUDGE_BASE_URL }}
+          CUTE_EVAL_JUDGE_API_KEY: ${{ secrets.CUTE_EVAL_JUDGE_API_KEY }}
+        run: |
+          if [ -z "$CUTE_EVAL_JUDGE_MODEL" ] || [ -z "$CUTE_EVAL_JUDGE_BASE_URL" ] || [ -z "$CUTE_EVAL_JUDGE_API_KEY" ]; then
+            echo "judge gate requires CUTE_EVAL_JUDGE_MODEL, CUTE_EVAL_JUDGE_BASE_URL and CUTE_EVAL_JUDGE_API_KEY" >&2
+            exit 1
+          fi
+          uv run cute-evals run --profile pr --suite all --out .eval-runs/judge --require-judge
+
+      - name: Upload judge evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cute-agent-eval-judge
+          path: |
+            evals/agent/.eval-runs/judge/report.json
+            evals/agent/.eval-runs/judge/report.html
+            evals/agent/.eval-runs/judge/attempts
           if-no-files-found: warn

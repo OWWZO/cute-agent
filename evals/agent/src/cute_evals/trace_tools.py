@@ -9,18 +9,14 @@ from typing import Any
 import jsonschema
 import yaml
 
-from .case_loader import CASE_SCHEMA_PATH, load_case_file
+from .case_loader import CASE_SCHEMA_PATH, load_case_file, schema_path
 from .java_runner import compile_java_fixture_runner, run_java_cases
 from .models import EvalCase, JudgeConfig, RunTrace
 from .report import build_report
 from .scorers import score_case
 
-DRAFT_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[2] / "schemas" / "case-draft.schema.json"
-)
-TRACE_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[2] / "schemas" / "trace.schema.json"
-)
+DRAFT_SCHEMA_PATH = schema_path("case-draft.schema.json")
+TRACE_SCHEMA_PATH = schema_path("trace.schema.json")
 FAILURE_CLASSES = {"model", "tool", "environment", "persistence", "unknown"}
 EXPECTED_ORACLE_KEYS = {
     "finalContains",
@@ -38,6 +34,7 @@ EXPECTED_ORACLE_KEYS = {
     "requiredCitations",
     "noEvidence",
     "minArtifacts",
+    "subgoals",
     "sqlOracle",
 }
 

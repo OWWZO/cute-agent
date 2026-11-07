@@ -181,6 +181,10 @@ def _dataset_hash(cases) -> str:
             "budgets": asdict(case.budgets),
             "script": case.script,
             "metadata": case.metadata,
+            "hardGate": case.hard_gate,
+            "tools": case.tools,
+            "answerContract": case.answer_contract,
+            "baselineTrace": case.baseline_trace,
         }
         for case in cases
     ]
