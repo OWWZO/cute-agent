@@ -152,16 +152,6 @@
         LIMIT #{offset}, #{limit}
     </select>
 
-    <select id="queryByTimeRange" resultMap="DialogueRunViewMap">
-        SELECT <include refid="dialogueRunViewColumns"/>
-        FROM ai_agent_dialogue_run
-        WHERE deleted = 0
-          AND create_time &gt;= #{from}
-          AND create_time &lt; #{to}
-        ORDER BY create_time ASC, id ASC
-        LIMIT #{limit}
-    </select>
-
     <select id="queryByTimeRangeAfter" resultMap="DialogueRunViewMap">
         SELECT <include refid="dialogueRunViewColumns"/>
         FROM ai_agent_dialogue_run
