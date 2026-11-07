@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/trace.schema.json",
+  "title": "Cute Agent Evaluation Trace",
+  "type": "object",
+  "required": ["schemaVersion", "producer", "run", "llmInvocations", "toolInvocations", "artifacts", "environment"],
+  "properties": {
+    "schemaVersion": {"type": "string"},
+    "producer": {
+      "type": "object",
+      "required": ["agent"],
+      "properties": {
+        "agent": {"type": "string"},
+        "runtimeVersion": {"type": ["string", "null"]},
+        "exportedAt": {"type": ["string", "null"]}
+      }
+    },
+    "run": {
+      "type": "object",
+      "required": ["requestId", "sessionId", "status", "finalSummaryText"],
+      "properties": {
+        "caseId": {"type": ["string", "null"]},
+        "requestId": {"type": "string"},
+        "sessionId": {"type": "string"},
+        "entryAgent": {"type": ["string", "null"]},
+        "status": {"type": "string"},
+        "queryText": {"type": ["string", "null"]},
+        "finalSummaryText": {"type": ["string", "null"]},
+        "startedAt": {"type": ["string", "null"]},
+        "finishedAt": {"type": ["string", "null"]},
+        "createdAt": {"type": ["string", "null"]},
+        "durationMs": {"type": ["integer", "null"]},
+        "promptTokens": {"type": ["integer", "null"]},
+        "completionTokens": {"type": ["integer", "null"]},
+        "totalTokens": {"type": ["integer", "null"]},
+        "llmCallCount": {"type": ["integer", "null"]},
+        "toolCallCount": {"type": ["integer", "null"]},
+        "artifactCount": {"type": ["integer", "null"]}
+      }
+    },
+    "llmInvocations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": ["integer", "null"]},
+          "stepNo": {"type": ["integer", "null"]},
+          "streaming": {"type": ["integer", "null"]},
+          "status": {"type": "string"},
+          "startedAt": {"type": ["string", "null"]},
+          "firstTokenAt": {"type": ["string", "null"]},
+          "finishedAt": {"type": ["string", "null"]},
+          "totalTokens": {"type": ["integer", "null"]}
+        }
+      }
+    },
+    "toolInvocations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "toolCallId": {"type": ["string", "null"]},
+          "toolName": {"type": "string"},
+          "inputJson": {"type": ["string", "null"]},
+          "toolResult": {"type": ["string", "null"]},
+          "status": {"type": "string"},
+          "errorMsg": {"type": ["string", "null"]},
+          "durationMs": {"type": ["integer", "null"]}
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "conversation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["messageId", "role", "content"],
+        "properties": {
+          "messageId": {"type": "string"},
+          "conversationId": {"type": "string"},
+          "turnId": {"type": "string"},
+          "turnIndex": {"type": "integer"},
+          "role": {"type": "string"},
+          "actor": {"type": "string"},
+          "content": {"type": "string"},
+          "timestamp": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "environmentEvents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["eventId", "type"],
+        "properties": {
+          "eventId": {"type": "string"},
+          "conversationId": {"type": "string"},
+          "turnId": {"type": "string"},
+          "type": {"type": "string"},
+          "payload": {"type": "object"}
+        }
+      }
+    },
+    "environmentSnapshots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["snapshotId"],
+        "properties": {
+          "snapshotId": {"type": "string"},
+          "turnId": {"type": "string"},
+          "kind": {"type": "string"},
+          "sha256": {"type": ["string", "null"]},
+          "payload": {}
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "profile": {"type": ["string", "null"]},
+        "mode": {"type": ["string", "null"]},
+        "modelId": {"type": ["string", "null"]},
+        "springProfile": {"type": ["string", "null"]},
+        "evalProfile": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

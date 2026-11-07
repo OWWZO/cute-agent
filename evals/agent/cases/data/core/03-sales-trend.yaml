@@ -1,0 +1,42 @@
+id: data.sales-trend
+suite: data-core
+version: 1
+hardGate: true
+judgeTask: "查询从 2026-10-31 起（含当天）的每日销售额，并按日期顺序报告 80.25、300、150。"
+input:
+  message: "查询从 2026-10-31 起（含当天）的每日销售额，并按日期顺序给出趋势。"
+expected:
+  finalContains: ["2026-10-31", "80.25", "2026-11-01", "300", "2026-11-02", "150"]
+  maxSteps: 2
+  requiredTools: ["sql_query"]
+  requiredToolSequence: ["sql_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  sqlOracle:
+    fixture: fixtures/analytics.sql
+    expectedColumns: ["sale_date", "revenue"]
+    expectedRows:
+      - ["2026-10-31", 80.25]
+      - ["2026-11-01", 300.0]
+      - ["2026-11-02", 150.0]
+    numericTolerance: 0.001
+    ordered: true
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select sale_date, revenue from daily_sales where sale_date >= '2026-10-31' order by sale_date"
+    result: '{"rows":[{"sale_date":"2026-10-31","revenue":80.25},{"sale_date":"2026-11-01","revenue":300.0},{"sale_date":"2026-11-02","revenue":150.0}]}'
+    thought: "按日期筛选并排序每日销售数据。"
+    promptTokens: 140
+    completionTokens: 28
+    totalTokens: 168
+  - type: final
+    content: "2026-10-31 为 80.25，2026-11-01 为 300，2026-11-02 为 150。"
+    promptTokens: 100
+    completionTokens: 24
+    totalTokens: 124

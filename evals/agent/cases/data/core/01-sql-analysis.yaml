@@ -1,0 +1,44 @@
+id: data.sql-analysis
+suite: data-core
+version: 1
+hardGate: true
+judgeTask: "查询库存表，计算可用库存为 8，并基于查询结果给出结论。"
+input:
+  message: "查询库存表，计算可用库存并给出结论。"
+expected:
+  finalContains: ["8", "可用库存"]
+  maxSteps: 2
+  requiredTools: ["sql_query"]
+  requiredToolSequence: ["sql_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  minArtifacts: 1
+  sqlOracle:
+    fixture: fixtures/analytics.sql
+    expectedColumns: ["available"]
+    expectedRows:
+      - [8]
+    numericTolerance: 0.0
+    ordered: false
+budgets:
+  maxTotalTokens: 700
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select stock - ordered as available from inventory where product_id = 'P-100'"
+    result: "{\"rows\":[{\"available\":8}]}"
+    artifact:
+      fileName: "inventory-analysis.json"
+      downloadUrl: "https://eval.local/artifacts/inventory-analysis.json"
+    thought: "执行 SQL 计算可用库存。"
+    promptTokens: 120
+    completionTokens: 24
+    totalTokens: 144
+  - type: final
+    content: "查询结果显示可用库存为 8。"
+    promptTokens: 100
+    completionTokens: 26
+    totalTokens: 126

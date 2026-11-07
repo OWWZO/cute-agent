@@ -1,0 +1,110 @@
+name: bird
+version: mini-dev-2026-hf-5b256b5a
+upstream: https://github.com/bird-bench/mini_dev
+license: CC-BY-SA-4.0
+split: official-subset
+scoreLabel: official-subset
+runnerMode: official-sqlite-read-only
+environment: local-sqlite-seed
+officialEvaluator: true
+dataset:
+  kind: huggingface
+  repo: birdsql/bird_mini_dev
+  revision: 5b256b5a9c17478f06ed6912612e9a14d17065c8
+  file: data/mini_dev_sqlite.jsonl
+  url: https://huggingface.co/datasets/birdsql/bird_mini_dev/resolve/5b256b5a9c17478f06ed6912612e9a14d17065c8/data/mini_dev_sqlite.jsonl
+  sha256: 926af2a0d1b47e5d0d15a7aa8a34d4721007f4550a881555b6a89496b54a2606
+source:
+  kind: github-tar
+  commit: 1c49a375e76c471e218564da3f4617513d33e371
+  url: https://codeload.github.com/bird-bench/mini_dev/tar.gz/1c49a375e76c471e218564da3f4617513d33e371
+  sha256: 270ffdd1ec1204274d86c2ccfb7f7d102a6e0fb3742cef3732cffb58b41bb158
+evaluator:
+  entrypoint: evaluation/evaluation_ex.py
+  files:
+    evaluation/evaluation_ex.py: da1bbcd4530be83692d7c650c814ea9704bb710d0c953eb75d02ccb38233cf89
+    evaluation/evaluation_utils.py: f6943d249caac5aeaef9bce21d43dbf29dcef85a0c965a76df032a9542f308bf
+registry:
+  repo: 3036197201/bird-mini-dev-sqlite
+  platform: linux/amd64
+databases:
+  california_schools:
+    imageDigest: sha256:0bb601505723bbca82f3a1486ec455c0b0b22e8990ceb20b86fbc6d0e26c23de
+    seedLayer: sha256:8569ccfa46196208519bde00dc8b6e560678a03dc8eee9df99fcded4a3783c2b
+    seedSha256: c0903eec662e63068fd1d14403d3d6c1d473287fc10c4356333ea58f878db983
+  card_games:
+    imageDigest: sha256:e33b0bd6fbc89dabcbcfe056ce343db3729b6d07dd2294ccbc0662e148dd645a
+    seedLayer: sha256:0276b4212ff242b539f9e53b397fdf5fd5d2e6d9c856aeb8b5ae608d51ba8824
+    seedSha256: c98bdb57fe7474da798b407785544b9af0daaad5d61fd21e2a73309493bc1227
+  debit_card_specializing:
+    imageDigest: sha256:ca1ea58625c5665629bf7c22777ab6ee227613de0a48745058ad5eae62ebc7eb
+    seedLayer: sha256:5f5105b18d68ca94d8343f0149a1913c401edecdbf2bcc5794306321867ef83a
+    seedSha256: b3d149ad05746dbbe5116e229e17e18f09c39db43cf117d9ef3441753608b691
+  financial:
+    imageDigest: sha256:d56f3f6545e2535bec8fae451f40a5b0ad2a63fa263f9387efe93b5fc8b49352
+    seedLayer: sha256:da9a4cc478ae9e557ebe09c87bc5de73a6285efc73d5a74216fcda49c9e0ee71
+    seedSha256: d15d89cdb068a202b6f2b99342af44dffc1d52545b39ceaf62efdc0ba570101e
+taskIds:
+  - 0
+  - 1
+  - 49
+  - 50
+  - 149
+  - 194
+  - 195
+  - 196
+tools:
+  - name: list_tables
+    description: List the tables and views in the current read-only BIRD database.
+    parameters:
+      type: object
+      properties: {}
+      additionalProperties: false
+  - name: describe_table
+    description: Return column names, declared types, nullability, and keys for one table or view.
+    parameters:
+      type: object
+      properties:
+        table_name:
+          type: string
+          description: Exact table or view name from list_tables.
+      required:
+        - table_name
+      additionalProperties: false
+  - name: sql_query
+    description: Execute one read-only SELECT or WITH query and return bounded rows plus a truncation flag.
+    parameters:
+      type: object
+      properties:
+        sql:
+          type: string
+          description: A single SQLite SELECT or WITH statement.
+      required:
+        - sql
+      additionalProperties: false
+  - name: submit_sql
+    description: Submit the final single read-only SQLite query for official BIRD evaluation.
+    parameters:
+      type: object
+      properties:
+        sql:
+          type: string
+          description: The final single SQLite SELECT or WITH statement, with exactly the requested output columns.
+      required:
+        - sql
+      additionalProperties: false
+answerContract:
+  version: bird-final-sql-v1
+  instruction: |
+    BIRD submission contract: use the provided read-only tools to inspect the
+    database. When the analysis is complete, call `submit_sql` exactly once
+    with the final single SQLite SELECT or WITH statement. That statement must
+    return exactly the rows and columns requested by the question. Do not leave
+    the final SQL only in prose. After `submit_sql` succeeds, answer concisely.
+budgets:
+  maxWallMs: 300000
+  maxTokens: 60000
+  maxSteps: 16
+  maxToolCalls: 20
+  queryTimeoutSeconds: 30
+  maxResultRows: 200

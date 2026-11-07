@@ -1,0 +1,42 @@
+id: data.region-revenue
+suite: data-core
+version: 1
+hardGate: true
+judgeTask: "按区域汇总已完成订单收入，东区为 500，北区为 250，西区为 250，并给出区域维度结论。"
+input:
+  message: "按区域汇总已完成订单收入，并回答各区域收入。"
+expected:
+  finalContains: ["East", "500", "North", "250", "West"]
+  maxSteps: 2
+  requiredTools: ["sql_query"]
+  requiredToolSequence: ["sql_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  sqlOracle:
+    fixture: fixtures/analytics.sql
+    expectedColumns: ["region", "revenue"]
+    expectedRows:
+      - ["East", 500.0]
+      - ["North", 250.0]
+      - ["West", 250.0]
+    numericTolerance: 0.001
+    ordered: true
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select c.region, sum(o.amount) as revenue from orders o join customers c on c.id = o.customer_id where o.status = 'completed' group by c.region order by c.region"
+    result: '{"rows":[{"region":"East","revenue":500.0},{"region":"North","revenue":250.0},{"region":"West","revenue":250.0}]}'
+    thought: "按区域连接客户和订单表汇总收入。"
+    promptTokens: 140
+    completionTokens: 28
+    totalTokens: 168
+  - type: final
+    content: "East 为 500，North 为 250，West 为 250。"
+    promptTokens: 100
+    completionTokens: 22
+    totalTokens: 122

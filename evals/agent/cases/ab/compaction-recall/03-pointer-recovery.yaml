@@ -1,0 +1,48 @@
+id: compaction-recall.pointer-recovery
+suite: compaction-recall
+version: 1
+hardGate: true
+input:
+  message: 通过恢复指针读取原始记录
+expected:
+  finalContains:
+  - F-66
+  finalNotContains: []
+  maxSteps: 3
+  requiredTools:
+  - session_search
+  - read_file
+  requiredToolSequence:
+  - session_search
+  - read_file
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: session_search
+  arguments:
+    query: pointer
+  result: record-66
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: tool
+  tool: read_file
+  arguments:
+    path: record-66
+  result: F-66
+  thought: step 2
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: pointer F-66
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

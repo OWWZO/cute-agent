@@ -1,0 +1,71 @@
+name: cute-agent-bench
+kind: internal
+version: 1
+description: 项目专属评测题库；任何修改题、补题或改判分的测试都进入这里。
+suites:
+  - name: react-core
+    path: cases/react/core
+    stage: 1
+    gate: deterministic
+  - name: rag-core
+    path: cases/rag/core
+    stage: 1
+    gate: deterministic + judge-advisory
+  - name: data-core
+    path: cases/data/core
+    stage: 1
+    gate: deterministic
+  - name: production-core
+    path: cases/production/core
+    stage: 2
+    role: validation
+    gate: deterministic
+  - name: holdout-core
+    path: cases/private/holdout
+    stage: 2
+    role: holdout
+    gate: deterministic
+  - name: private-badcase
+    path: cases/private/badcase
+    stage: 1.5
+    gate: trace-replay
+  - name: hostile-files
+    path: cases/ab/hostile-files
+    stage: 2.5
+    gate: deterministic
+  - name: tool-discovery
+    path: cases/ab/tool-discovery
+    stage: 2.5
+    gate: deterministic
+  - name: session-recall
+    path: cases/ab/session-recall
+    stage: 2.5
+    gate: deterministic
+  - name: compaction-recall
+    path: cases/ab/compaction-recall
+    stage: 2.5
+    gate: deterministic
+  - name: clarify-multiturn
+    path: cases/ab/clarify-multiturn
+    stage: 2.5
+    gate: deterministic
+profiles:
+  pr:
+    engine: inspect
+    javaMode: fixture
+    repeat: 1
+  nightly:
+    engine: inspect
+    javaMode: live
+    repeat: 3
+  release:
+    engine: inspect
+    javaMode: live
+    repeat: 3
+publicBenchmarkPolicy:
+  modifyData: false
+  modifyTasks: false
+  modifyToolSchemas: false
+  modifyOracle: false
+  subsetAllowed: true
+  subsetLabel: official-subset

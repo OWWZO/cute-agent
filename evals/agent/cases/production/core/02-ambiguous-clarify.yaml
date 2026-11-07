@@ -1,0 +1,48 @@
+id: production.ambiguous-clarify
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: clarification
+  lengthBucket: short
+  toolCountBucket: single
+  risk: medium
+  failureMode: missing_time_range
+judgeTask: "用户没有给出月份时，先询问时间范围，再基于 2026-10 回答。"
+input:
+  message: "帮我看一下销售情况。"
+expected:
+  finalContains: ["2026-10", "销售"]
+  maxSteps: 3
+  requiredTools: ["ask_user"]
+  requiredToolSequence: ["ask_user"]
+  strictToolSequence: true
+  referenceToolSequence: ["ask_user"]
+  subgoals:
+    - id: clarify_scope
+      requiredTools: ["ask_user"]
+      minSuccessfulTools: 1
+    - id: answer_with_scope
+      finalContains: ["2026-10"]
+  forbiddenTools: ["sql_query"]
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 700
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: ask_user
+    arguments:
+      question: "请确认要查看哪个月份的销售数据。"
+    result: "2026-10"
+    thought: "先补全缺失的时间范围。"
+    promptTokens: 100
+    completionTokens: 18
+    totalTokens: 118
+  - type: final
+    content: "已按 2026-10 的销售范围完成查询。"
+    promptTokens: 90
+    completionTokens: 24
+    totalTokens: 114

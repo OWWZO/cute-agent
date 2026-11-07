@@ -1,0 +1,57 @@
+id: production.malformed-recovery
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: recovery
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: malformed_payload
+judgeTask: "SQL 工具首次返回畸形内容后改用合法查询，最终得到 36。"
+input:
+  message: "查询本月订单数，工具异常时自行修正。"
+expected:
+  finalContains: ["36", "订单"]
+  maxSteps: 3
+  requiredTools: ["sql_query"]
+  requiredToolSequence: ["sql_query", "sql_query"]
+  strictToolSequence: true
+  referenceToolSequence: ["sql_query", "sql_query"]
+  subgoals:
+    - id: recover_malformed_result
+      requiredTools: ["sql_query"]
+      minSuccessfulTools: 1
+    - id: report_order_count
+      finalContains: ["36"]
+  forbiddenTools: []
+  requireToolRecovery: true
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select count(*) from orders"
+    fault: malformed
+    thought: "先执行查询。"
+    promptTokens: 100
+    completionTokens: 18
+    totalTokens: 118
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select count(*) as order_count from orders"
+    result: '{"rows":[{"order_count":36}]}'
+    thought: "修正查询后重试。"
+    promptTokens: 110
+    completionTokens: 18
+    totalTokens: 128
+  - type: final
+    content: "本月订单数为 36。"
+    promptTokens: 90
+    completionTokens: 20
+    totalTokens: 110

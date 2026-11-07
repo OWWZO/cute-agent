@@ -1,0 +1,37 @@
+id: clarify-multiturn.missing-param
+suite: clarify-multiturn
+version: 1
+hardGate: true
+input:
+  message: 缺少参数时询问用户
+expected:
+  finalContains:
+  - confirmed
+  finalNotContains: []
+  maxSteps: 2
+  requiredTools:
+  - ask_user
+  requiredToolSequence:
+  - ask_user
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: ask_user
+  arguments:
+    question: 目标文件？
+  result: report.txt
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: parameter confirmed
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

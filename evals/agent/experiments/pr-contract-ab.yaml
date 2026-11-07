@@ -1,0 +1,31 @@
+schemaVersion: "1.0"
+experimentId: ab-contract-smoke
+suite: ab-contract
+caseDirs:
+  - evals/agent/cases/ab/contract
+profile: pr
+javaMode: fixture
+base:
+  source: local
+  root: .
+candidate:
+  source: local
+  root: .
+models:
+  - fixture-model
+repetitions: 1
+seed: 42
+parallelism: 2
+timeoutSeconds: 300
+retries: 0
+isolation:
+  mode: process
+  workspace: per-cell
+  database: experiment
+  allowDirty: true
+budgets:
+  maxUsd: 0
+  maxWallMinutes: 10
+thresholds:
+  maxAccuracyRegression: 0.05
+  maxTokenRegressionRatio: 0.10

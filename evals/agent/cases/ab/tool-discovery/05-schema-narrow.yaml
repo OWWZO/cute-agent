@@ -1,0 +1,37 @@
+id: tool-discovery.schema-narrow
+suite: tool-discovery
+version: 1
+hardGate: true
+input:
+  message: 使用库存工具查询可用量
+expected:
+  finalContains:
+  - '8'
+  finalNotContains: []
+  maxSteps: 2
+  requiredTools:
+  - inventory_query
+  requiredToolSequence:
+  - inventory_query
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: inventory_query
+  arguments:
+    sku: demo-001
+  result: '{"available":8}'
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: 库存 8
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

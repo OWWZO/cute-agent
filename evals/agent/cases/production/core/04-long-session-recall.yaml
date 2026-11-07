@@ -1,0 +1,58 @@
+id: production.long-session-recall
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: memory
+  lengthBucket: long
+  toolCountBucket: few
+  risk: medium
+  failureMode: stale_session_memory
+judgeTask: "最终回答只返回当前事故编号 INC-204；工具检索结果中出现旧编号不算最终回答违规。"
+input:
+  message: "继续上次的事故排查，找出当前事故编号。"
+expected:
+  finalContains: ["INC-204"]
+  finalNotContains: ["INC-101"]
+  maxSteps: 3
+  requiredTools: ["session_search"]
+  requiredToolSequence: ["session_search", "session_search"]
+  strictToolSequence: true
+  referenceToolSequence: ["session_search", "session_search"]
+  subgoals:
+    - id: search_current_incident
+      requiredTools: ["session_search"]
+      minSuccessfulTools: 2
+    - id: use_latest_incident
+      finalContains: ["INC-204"]
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 1000
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: session_search
+    arguments:
+      query: "事故"
+    result: "INC-101 (closed)"
+    thought: "先搜索历史记录。"
+    promptTokens: 100
+    completionTokens: 24
+    totalTokens: 124
+  - type: tool
+    tool: session_search
+    arguments:
+      query: "current OR INC-204"
+    result: "INC-204 (active)"
+    thought: "排除已关闭事故，查找当前事故。"
+    promptTokens: 110
+    completionTokens: 24
+    totalTokens: 134
+  - type: final
+    content: "当前事故编号是 INC-204。"
+    promptTokens: 90
+    completionTokens: 20
+    totalTokens: 110

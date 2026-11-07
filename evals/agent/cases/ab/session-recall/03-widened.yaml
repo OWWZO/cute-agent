@@ -1,0 +1,47 @@
+id: session-recall.widened
+suite: session-recall
+version: 1
+hardGate: true
+input:
+  message: 先窄查询再扩展查询
+expected:
+  finalContains:
+  - C-33
+  finalNotContains: []
+  maxSteps: 3
+  requiredTools:
+  - session_search
+  requiredToolSequence:
+  - session_search
+  - session_search
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: session_search
+  arguments:
+    query: C
+  result: empty
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: tool
+  tool: session_search
+  arguments:
+    query: C OR project
+  result: C-33
+  thought: step 2
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: 扩展后 C-33
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

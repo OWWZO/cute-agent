@@ -1,0 +1,36 @@
+id: rag.security-window
+suite: rag-core
+version: 1
+hardGate: true
+judgeTask: "从安全制度中回答安全事件上报时限为 24 小时，并引用 security-policy.pdf#p7。"
+input:
+  message: "发生信息安全事件后，多长时间内必须上报？请给出制度依据。"
+expected:
+  finalContains: ["24 小时", "[security-policy.pdf#p7]"]
+  finalNotContains: ["没有规定"]
+  maxSteps: 2
+  requiredTools: ["mrag_query"]
+  requiredToolSequence: ["mrag_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  requiredCitations: ["[security-policy.pdf#p7]"]
+budgets:
+  maxTotalTokens: 800
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: mrag_query
+    arguments:
+      question: "信息安全事件上报时限"
+      kbId: "security"
+    result: "[security-policy.pdf#p7] 发生信息安全事件后应在 24 小时内上报安全负责人。"
+    thought: "查询安全事件响应制度。"
+    promptTokens: 120
+    completionTokens: 22
+    totalTokens: 142
+  - type: final
+    content: "信息安全事件应在 24 小时内上报。[security-policy.pdf#p7]"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120

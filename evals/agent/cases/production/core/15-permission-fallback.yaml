@@ -1,0 +1,58 @@
+id: production.permission-fallback
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: recovery
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: high
+  failureMode: permission_fallback
+judgeTask: "直接读取受限文件失败后，改用可访问的替代检索找到同一凭据。"
+input:
+  message: "读取 secure/config.txt；如果没有权限，就查找可访问的公开副本并报告凭据。"
+expected:
+  finalContains: ["无权限", "OPS-77"]
+  finalNotContains: ["已读取 secure/config.txt"]
+  maxSteps: 3
+  requiredTools: ["read_file", "search_files"]
+  requiredToolSequence: ["read_file", "search_files"]
+  strictToolSequence: true
+  referenceToolSequence: ["read_file", "search_files"]
+  subgoals:
+    - id: find_accessible_copy
+      requiredTools: ["search_files"]
+      minSuccessfulTools: 1
+    - id: report_credential
+      finalContains: ["无权限", "OPS-77"]
+  forbiddenTools: ["delete_file"]
+  requireToolRecovery: true
+budgets:
+  maxTotalTokens: 1000
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: secure/config.txt
+    fault: permission
+    thought: "先尝试读取受限文件。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: tool
+    tool: search_files
+    arguments:
+      query: "config.txt public"
+    result: "public/config.copy: credential=OPS-77"
+    thought: "权限不足，改用替代检索。"
+    promptTokens: 100
+    completionTokens: 18
+    totalTokens: 118
+  - type: final
+    content: "读取原文件无权限，已从公开副本找到凭据 OPS-77。"
+    promptTokens: 90
+    completionTokens: 22
+    totalTokens: 112

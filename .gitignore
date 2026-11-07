@@ -78,12 +78,14 @@ Thumbs.db
 /Cute-agent-app/src/main/resources/*
 /Cute-agent-app/src/main/resources/application-dev.yml
 /Cute-agent-app/src/main/resources/application-test.yml
+/Cute-agent-app/src/main/resources/application-eval.yml
 /Cute-agent-app/src/main/resources/application-prod.yml.local
 
 # Java runtime resources are required for a reproducible build.
 !/Cute-agent-app/src/main/resources/
 !/Cute-agent-app/src/main/resources/application.yml
 !/Cute-agent-app/src/main/resources/application-prod.yml
+!/Cute-agent-app/src/main/resources/application-eval.yml
 !/Cute-agent-app/src/main/resources/logback-spring.xml
 !/Cute-agent-app/src/main/resources/db/
 !/Cute-agent-app/src/main/resources/db/**
@@ -114,6 +116,15 @@ Thumbs.db
 # 本地运行产物与分析图表，不纳入版本控制
 /.dogfood/
 /cute-tool/nl2sql-dataflow.*
+/.eval-runs/
+/evals/agent/.eval-runs/
+/evals/agent/.pytest_cache/
+/evals/agent/.judge-cache/
+/evals/agent/.deepeval/
+/evals/agent/cases/private/badcase/*.yaml
+!/evals/agent/cases/private/badcase/README.md
+/evals/agent/cases/private/holdout/*.yaml
+!/evals/agent/cases/private/holdout/README.md
 
 # 启动脚本的生成物（依赖 classpath 缓存与 JVM argfile），按需重建
 /scripts/.classpath.txt

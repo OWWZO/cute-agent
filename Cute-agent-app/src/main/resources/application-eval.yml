@@ -1,0 +1,55 @@
+# Nightly / Release 评测专用 profile。
+# 只允许连接显式指定的评测库，禁止复用 dev/prod 数据库。
+server:
+  port: 0
+
+spring:
+  datasource:
+    mysql:
+      username: ${CUTE_EVAL_DB_USER:root}
+      password: ${CUTE_EVAL_DB_PASSWORD:}
+      url: ${CUTE_EVAL_DB_URL:jdbc:mysql://127.0.0.1:3306/ai-agent-eval?useUnicode=true&characterEncoding=utf8&autoReconnect=true&zeroDateTimeBehavior=convertToNull&serverTimezone=Asia/Shanghai&useSSL=false}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      hikari:
+        minimum-idle: 1
+        idle-timeout: 60000
+        maximum-pool-size: 4
+        max-lifetime: 600000
+        connection-timeout: 10000
+
+cute:
+  file-artifact:
+    local-file-mode: register
+  opencli:
+    enabled: false
+  host-cli:
+    enabled: false
+  code-mode:
+    enabled: false
+  browser-relay:
+    enabled: false
+  agent-browser:
+    enabled: false
+
+memory:
+  ltm:
+    enabled: false
+
+autobots:
+  agent:
+    subagent-isolated-session: false
+    background:
+      auto-continuation: false
+    channel:
+      terminal-push: false
+  autoagent:
+    skill:
+      enabled: false
+    web_search:
+      mode: disabled
+
+logging:
+  level:
+    root: info
+    org.wwz.ai: info
+  config: classpath:logback-spring.xml

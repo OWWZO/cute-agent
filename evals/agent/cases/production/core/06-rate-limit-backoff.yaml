@@ -1,0 +1,57 @@
+id: production.rate-limit-backoff
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: recovery
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: rate_limit
+judgeTask: "遇到 429 限流后等待并重试，重试成功再给出结果。"
+input:
+  message: "搜索最新库存，遇到限流就重试一次。"
+expected:
+  finalContains: ["重试", "库存"]
+  maxSteps: 3
+  requiredTools: ["search_web"]
+  requiredToolSequence: ["search_web", "search_web"]
+  strictToolSequence: true
+  referenceToolSequence: ["search_web", "search_web"]
+  subgoals:
+    - id: backoff_and_retry
+      requiredTools: ["search_web"]
+      minSuccessfulTools: 1
+    - id: report_inventory
+      finalContains: ["库存"]
+  forbiddenTools: []
+  requireToolRecovery: true
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: search_web
+    arguments:
+      query: "latest inventory"
+    fault: rate_limit
+    thought: "先尝试搜索。"
+    promptTokens: 100
+    completionTokens: 18
+    totalTokens: 118
+  - type: tool
+    tool: search_web
+    arguments:
+      query: "latest inventory"
+    result: "库存可用：128 件"
+    thought: "限流后重试。"
+    promptTokens: 110
+    completionTokens: 18
+    totalTokens: 128
+  - type: final
+    content: "限流后重试成功，库存可用。"
+    promptTokens: 90
+    completionTokens: 20
+    totalTokens: 110

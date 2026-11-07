@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/case.schema.json",
+  "title": "Cute-Agent Bench Case",
+  "type": "object",
+  "required": ["id", "suite", "version", "hardGate", "input", "expected", "budgets", "script"],
+  "properties": {
+    "id": {"type": "string"},
+    "suite": {"type": "string"},
+    "version": {"type": "integer"},
+    "hardGate": {"type": "boolean"},
+    "judgeTask": {"type": ["string", "null"]},
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "role": {"enum": ["development", "validation", "holdout"]},
+        "source": {"type": "string"},
+        "taskType": {"type": "string"},
+        "lengthBucket": {"enum": ["short", "medium", "long"]},
+        "toolCountBucket": {"enum": ["none", "single", "few", "many"]},
+        "risk": {"enum": ["low", "medium", "high"]},
+        "failureMode": {"type": "string"}
+      }
+    },
+    "input": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {"message": {"type": "string"}}
+    },
+    "expected": {
+      "type": "object",
+      "properties": {
+        "finalContains": {"type": "array", "items": {"type": "string"}},
+        "finalNotContains": {"type": "array", "items": {"type": "string"}},
+        "maxSteps": {"type": ["integer", "null"], "minimum": 1},
+        "requiredTools": {"type": "array", "items": {"type": "string"}},
+        "requiredToolSequence": {"type": "array", "items": {"type": "string"}},
+        "strictToolSequence": {"type": "boolean"},
+        "referenceToolSequence": {"type": "array", "items": {"type": "string"}},
+        "subgoals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": {"type": "string"},
+              "requiredTools": {"type": "array", "items": {"type": "string"}},
+              "finalContains": {"type": "array", "items": {"type": "string"}},
+              "minSuccessfulTools": {"type": "integer", "minimum": 0}
+            },
+            "additionalProperties": false
+          }
+        },
+        "forbiddenTools": {"type": "array", "items": {"type": "string"}},
+        "requireToolRecovery": {"type": "boolean"},
+        "minToolSuccessRate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "requiredSkill": {"type": ["string", "null"]},
+        "forbiddenSkills": {"type": "array", "items": {"type": "string"}},
+        "maxSkillLoads": {"type": ["integer", "null"], "minimum": 0},
+        "requiredCitations": {"type": "array", "items": {"type": "string"}},
+        "noEvidence": {"type": "boolean"},
+        "minArtifacts": {"type": "integer", "minimum": 0},
+        "sqlOracle": {
+          "type": ["object", "null"],
+          "required": ["fixture", "expectedRows"],
+          "properties": {
+            "fixture": {"type": "string"},
+            "expectedColumns": {"type": "array", "items": {"type": "string"}},
+            "expectedRows": {"type": "array", "items": {"type": "array"}},
+            "numericTolerance": {"type": "number", "minimum": 0},
+            "ordered": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "properties": {
+        "maxTotalTokens": {"type": ["integer", "null"], "minimum": 1},
+        "maxWallMs": {"type": ["integer", "null"], "minimum": 1},
+        "maxToolCalls": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "answerContract": {
+      "type": ["object", "null"],
+      "properties": {
+        "version": {"type": "string"},
+        "linePrefix": {"type": "string"},
+        "instruction": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "script": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {"enum": ["tool", "final"]},
+          "tool": {"type": "string"},
+          "thought": {"type": "string"},
+          "content": {"type": "string"},
+          "arguments": {"type": "object"},
+          "result": {"type": "string"},
+          "fault": {
+            "enum": [
+              "timeout",
+              "rate_limit",
+              "permission",
+              "upstream",
+              "invalid_arguments",
+              "malformed"
+            ]
+          },
+          "artifact": {"type": "object"},
+          "promptTokens": {"type": "integer", "minimum": 0},
+          "completionTokens": {"type": "integer", "minimum": 0},
+          "totalTokens": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

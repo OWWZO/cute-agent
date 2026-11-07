@@ -1,0 +1,46 @@
+id: rag.multi-source-policy
+suite: rag-core
+version: 1
+hardGate: true
+judgeTask: "国内差旅住宿上限为 1200 元，海外差旅住宿上限为 1800 元，并分别给出可定位的制度引用。"
+input:
+  message: "查询国内和海外差旅住宿报销上限，并分别给出引用。"
+expected:
+  finalContains: ["1200", "1800", "[policy-domestic.pdf#p4]", "[policy-overseas.pdf#p8]"]
+  finalNotContains: ["没有引用"]
+  maxSteps: 3
+  requiredTools: ["mrag_query"]
+  requiredToolSequence: ["mrag_query", "mrag_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  requiredCitations: ["[policy-domestic.pdf#p4]", "[policy-overseas.pdf#p8]"]
+budgets:
+  maxTotalTokens: 1000
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: mrag_query
+    arguments:
+      question: "国内差旅住宿报销上限是多少？"
+      kbId: "policy"
+    result: "[policy-domestic.pdf#p4] 国内差旅住宿报销上限为 1200 元。"
+    thought: "检索国内差旅制度。"
+    promptTokens: 120
+    completionTokens: 24
+    totalTokens: 144
+  - type: tool
+    tool: mrag_query
+    arguments:
+      question: "海外差旅住宿报销上限是多少？"
+      kbId: "policy"
+    result: "[policy-overseas.pdf#p8] 海外差旅住宿报销上限为 1800 元。"
+    thought: "检索海外差旅制度。"
+    promptTokens: 120
+    completionTokens: 24
+    totalTokens: 144
+  - type: final
+    content: "国内住宿上限为 1200 元。[policy-domestic.pdf#p4] 海外住宿上限为 1800 元。[policy-overseas.pdf#p8]"
+    promptTokens: 100
+    completionTokens: 32
+    totalTokens: 132

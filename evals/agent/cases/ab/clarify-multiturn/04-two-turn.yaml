@@ -1,0 +1,47 @@
+id: clarify-multiturn.two-turn
+suite: clarify-multiturn
+version: 1
+hardGate: true
+input:
+  message: 多轮澄清后继续任务
+expected:
+  finalContains:
+  - confirmed
+  finalNotContains: []
+  maxSteps: 3
+  requiredTools:
+  - ask_user
+  requiredToolSequence:
+  - ask_user
+  - ask_user
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: ask_user
+  arguments:
+    question: 目标？
+  result: report
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: tool
+  tool: ask_user
+  arguments:
+    question: 确认？
+  result: 'yes'
+  thought: step 2
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: two turns confirmed
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

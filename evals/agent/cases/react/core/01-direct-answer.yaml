@@ -1,0 +1,23 @@
+id: react.direct-answer
+suite: react-core
+version: 1
+hardGate: true
+judgeTask: "用一句话解释幂等操作，必须包含重复执行后结果不变的含义；本任务不应调用工具。"
+input:
+  message: "用一句话说明什么是幂等操作。"
+expected:
+  finalContains: ["重复执行", "结果"]
+  maxSteps: 1
+  requiredTools: []
+  requiredToolSequence: []
+  forbiddenTools: ["read_file", "search_web"]
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 300
+  maxWallMs: 60000
+script:
+  - type: final
+    content: "幂等操作是指重复执行后结果保持不变的操作用法。"
+    promptTokens: 80
+    completionTokens: 24
+    totalTokens: 104

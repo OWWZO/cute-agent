@@ -1,0 +1,22 @@
+schemaVersion: 1
+lookbackHours: 24
+maxCandidates: 300
+failureQuota: 20
+healthQuota: 10
+seed: 42
+statuses:
+  - SUCCESS
+  - FAILED
+  - TIMEOUT
+  - STOPPED
+retentionDays: 14
+schedule:
+  enabled: false
+  at: "02:30"
+  timezone: Asia/Shanghai
+thresholds:
+  maxTotalTokens: 50000
+  maxWallMs: 300000
+  maxFirstTokenMs: 30000
+  maxRepeatedToolCalls: 3
+  minToolSuccessRate: 1.0

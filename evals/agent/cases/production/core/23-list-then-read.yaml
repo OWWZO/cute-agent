@@ -1,0 +1,60 @@
+id: production.list-then-read
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: file_analysis
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: wrong_file_selection
+judgeTask: "先列目录，再从多个文件中定位最新发布说明并提取恢复时间。"
+input:
+  message: "先查看 releases 目录，再读取最新发布说明并告诉我恢复时间。"
+expected:
+  finalContains: ["2026-11", "恢复"]
+  maxSteps: 3
+  requiredTools: ["list_dir", "read_file"]
+  requiredToolSequence: ["list_dir", "read_file"]
+  strictToolSequence: true
+  referenceToolSequence: ["list_dir", "read_file"]
+  subgoals:
+    - id: list_releases
+      requiredTools: ["list_dir"]
+      minSuccessfulTools: 1
+    - id: read_latest_release
+      requiredTools: ["read_file"]
+      minSuccessfulTools: 1
+    - id: report_recovery_time
+      finalContains: ["2026-11", "恢复"]
+  forbiddenTools: ["delete_file"]
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: list_dir
+    arguments:
+      path: releases
+    result: "release-2026-10.md\nrelease-2026-11.md"
+    thought: "先列出发布说明文件。"
+    promptTokens: 80
+    completionTokens: 18
+    totalTokens: 98
+  - type: tool
+    tool: read_file
+    arguments:
+      path: releases/release-2026-11.md
+    result: "Incident recovery completed at 2026-11-02 03:20."
+    thought: "选择最新的 2026-11 文件。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: final
+    content: "最新发布说明显示，2026-11 的故障恢复已完成。"
+    promptTokens: 80
+    completionTokens: 20
+    totalTokens: 100

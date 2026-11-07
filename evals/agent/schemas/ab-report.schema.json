@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/ab-report.schema.json",
+  "title": "Cute-Agent Bench A/B Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "experimentId",
+    "experimentSpecHash",
+    "generatedAt",
+    "summary",
+    "arms",
+    "tasks",
+    "statusCounts",
+    "anomalies",
+    "recommendation"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "string", "pattern": "^1\\.[0-9]+$"},
+    "experimentId": {"type": "string", "minLength": 1},
+    "experimentSpecHash": {"type": "string", "minLength": 1},
+    "generatedAt": {"type": "string"},
+    "summary": {"type": "object"},
+    "arms": {"type": "object"},
+    "tasks": {"type": "array", "items": {"type": "object"}},
+    "statusCounts": {"type": "object"},
+    "metricDeltas": {"type": "object"},
+    "anomalies": {"type": "array", "items": {"type": "object"}},
+    "recommendation": {
+      "enum": ["ship", "block", "needs-more-runs", "inconclusive"]
+    },
+    "cells": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

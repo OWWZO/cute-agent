@@ -1,0 +1,31 @@
+schemaVersion: "1.0"
+experimentId: tool-discovery-local-ab
+suite: tool-discovery
+caseDirs:
+  - evals/agent/cases/ab/tool-discovery
+profile: pr
+javaMode: fixture
+base:
+  source: local
+  root: .
+candidate:
+  source: local
+  root: .
+models:
+  - group/deepseek
+repetitions: 1
+seed: 42
+parallelism: 2
+timeoutSeconds: 600
+retries: 1
+isolation:
+  mode: process
+  workspace: per-cell
+  database: experiment
+  allowDirty: true
+budgets:
+  maxUsd: 20
+  maxWallMinutes: 30
+thresholds:
+  maxAccuracyRegression: 0.05
+  maxTokenRegressionRatio: 0.10

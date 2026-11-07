@@ -1,0 +1,27 @@
+id: session-recall.no-tool
+suite: session-recall
+version: 1
+hardGate: true
+input:
+  message: 直接回答已知会话事实
+expected:
+  finalContains:
+  - known
+  finalNotContains: []
+  maxSteps: 1
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools:
+  - session_search
+  requireToolRecovery: false
+  minToolSuccessRate: null
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: final
+  content: known fact
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

@@ -1,0 +1,196 @@
+name: spider2
+version: lite-cafb8673-subset-8-v1
+upstream: https://github.com/xlang-ai/Spider2
+license: MIT
+split: official-subset
+scoreLabel: official-subset
+runnerMode: official-sqlite-read-only
+environment: official-sqlite-local
+officialEvaluator: true
+dataset:
+  commit: cafb867313aab4e674652054198f383cf4018943
+  file: spider2-lite.jsonl
+  apiPath: spider2-lite/spider2-lite.jsonl
+  sha256: 4ba48916576fbd60311a2478c6d4550b5d8cf3fcbc512457ea493b5941ca009d
+source:
+  apiRoot: spider2-lite
+  files:
+    evaluation_suite/evaluate.py:
+      path: spider2-lite/evaluation_suite/evaluate.py
+      sha256: e93624e4ffa00e51c67bdee1d9e42b534630087cb453270c0dedc0c73e618480
+    evaluation_suite/evaluate_utils.py:
+      path: spider2-lite/evaluation_suite/evaluate_utils.py
+      sha256: d740984e9097b29aa8d9d01e1b978ae71163309dce1954eaff84cdf2e9834053
+    evaluation_suite/gold/spider2lite_eval.jsonl:
+      path: spider2-lite/evaluation_suite/gold/spider2lite_eval.jsonl
+      sha256: 5113ddaea6107492c08a898241a9f69ec99b03bc60d014e9f0b12ec59fa28970
+evaluator:
+  entrypoint: evaluation_suite/evaluate.py
+  functions:
+    - extract_sql_query
+    - compare_pandas_table
+    - compare_multi_pandas_table
+databaseArchive:
+  file: local_sqlite.zip
+  url: https://drive.usercontent.google.com/download?id=1coEVsCZq-Xvj9p2TnhBFoFTsY-UoYGmG&export=download&confirm=t
+  sha256: d56acf7c9d89be4bdf1f4f1281f4a03d91735f1858f6d6d0cfe0f9d562e3a94f
+  size: 456643204
+databases:
+  E_commerce:
+    sha256: 49446afd935721ee12fc95316fbee9666a3e1bd4872dfa194fe4625d6762a81a
+  Baseball:
+    sha256: 4784826541ea40d76dd9c2da2812e189ec351ca79e2738916da5587b465341cd
+  WWE:
+    sha256: 5e21654b3ea344583c921864c499ea984e66fb46579f7d4e74f531d0f415a52a
+  IPL:
+    sha256: bf5ddbf887bbf992a091ef31ee681b9339ba716c327263fce0f3b4da924f22c1
+  Pagila:
+    sha256: dbca3837b9965d75fbc2b4af1b2daec57d841f95942e656cea44db997e05da88
+  education_business:
+    sha256: d3498b07f44a4ac1757798d70f4cac7c44d16082c0608c58a74d5aa0d6d058f9
+  bank_sales_trading:
+    sha256: 10c8b8136486902a19c3f974f210e9fb7c8f98918ae0313114c720219b02e18c
+  sqlite-sakila:
+    sha256: dbca3837b9965d75fbc2b4af1b2daec57d841f95942e656cea44db997e05da88
+taskIds:
+  - local004
+  - local008
+  - local019
+  - local022
+  - local039
+  - local058
+  - local078
+  - local199
+tasks:
+  local004:
+    database: E_commerce
+    goldSql:
+      path: evaluation_suite/gold/sql/local004.sql
+      sha256: b3e78ed7f258a28c92ca4b461617cfe37cba59dfc90138c748d059f160eb32f2
+    goldResults:
+      - path: evaluation_suite/gold/exec_result/local004_a.csv
+        sha256: 7f1b06203ef6e8400537f3ee59295b0794edaf2c4d20cbf428b742205dc79745
+      - path: evaluation_suite/gold/exec_result/local004_b.csv
+        sha256: b727d6aaccf9806451d3aa60f21c4830c51268a8c4ba1c2373bb20b02e4b8ad2
+  local008:
+    database: Baseball
+    goldSql:
+      path: evaluation_suite/gold/sql/local008.sql
+      sha256: abb8032d9ad38e58a97f61e9a823a7362be46c1f7c558bce3efd35e05c11156c
+    goldResults:
+      - path: evaluation_suite/gold/exec_result/local008_a.csv
+        sha256: 89ca9045bc066b6f9e407b19bcf51f3972bf6d60c34cb423333ec675489ff9cc
+      - path: evaluation_suite/gold/exec_result/local008_b.csv
+        sha256: ec056a18be1876a4d931f0a3470e972c83ecda7b2b398b1075f7568e4ccf5815
+      - path: evaluation_suite/gold/exec_result/local008_c.csv
+        sha256: fd4647652ddd17aafd4e2ee4e2beffd47405db36edf56ca756f8e12839f3b65b
+  local019:
+    database: WWE
+    goldSql:
+      path: evaluation_suite/gold/sql/local019.sql
+      sha256: 19543eeba511dcb2791feff45585f498376b5b548b6c1e8cdf39f1eb5d6c4222
+    goldResults:
+      - path: evaluation_suite/gold/exec_result/local019_a.csv
+        sha256: 6094d8e25f80e75f1c7b91b27d5943e71eb63acd8407c0e7165644787b77cbbd
+      - path: evaluation_suite/gold/exec_result/local019_b.csv
+        sha256: 5a3e07334d13b00ed6b6f0b6ead9542dac5da69a4320e71d942235514a3fb231
+  local022:
+    database: IPL
+    goldSql:
+      path: evaluation_suite/gold/sql/local022.sql
+      sha256: a97273bb3e75acbe32acf715c5f9e494696739b4b59772305e2fc82a47ef3542
+    goldResults:
+      - path: evaluation_suite/gold/exec_result/local022_a.csv
+        sha256: 5b0274a5bdf4cb2da91e1cb86da639d2788ff6c9ce12be709c89ebe431a405cc
+  local039:
+    database: Pagila
+    goldSql:
+      path: evaluation_suite/gold/sql/local039.sql
+      sha256: b2e6eb0b30f98e1e56db8be36d9be2c291b11783cf80877073ec4252e475415e
+    goldResults:
+      - path: evaluation_suite/gold/exec_result/local039_a.csv
+        sha256: ab6af5a1dc6c24ddae09852a5538b7552f5c153eab566e861fe8276c6dcef087
+      - path: evaluation_suite/gold/exec_result/local039_b.csv
+        sha256: cd3cbdb9528d7a50197836db8f6abb45ab59241d6bf8035915fba312c52fc892
+  local058:
+    database: education_business
+    goldSql:
+      path: evaluation_suite/gold/sql/local058.sql
+      sha256: cdcea4164191ee84a593106ad1d42f2b4664e16d9dcfd3527b9a607927759a33
+    goldResults:
+      - path: evaluation_suite/gold/exec_result/local058_a.csv
+        sha256: c74e9663427d34d34cb641480e4807b0459db608f792c2f35b2d072a94b489fd
+  local078:
+    database: bank_sales_trading
+    goldSql:
+      path: evaluation_suite/gold/sql/local078.sql
+      sha256: 5c4435b4afa4eb8f73af1b09fdacd77dc7b67621ff36dcace4118f6e9986e5e8
+    goldResults:
+      - path: evaluation_suite/gold/exec_result/local078_a.csv
+        sha256: 22e33a0e482aa13b1e3d59b4363c04dc1d39eeb3d0b18fdb7fd7ea1077dd1b95
+  local199:
+    database: sqlite-sakila
+    goldSql:
+      path: evaluation_suite/gold/sql/local199.sql
+      sha256: 129f589db7f6caab7288491bc73bdc5b0db85089cae7b59c0558356ec89e7832
+    goldResults:
+      - path: evaluation_suite/gold/exec_result/local199_a.csv
+        sha256: d5d43158a754df4985bc9101e86b2b48adfad69dbfe3a266fd7f8b804fbc26e9
+      - path: evaluation_suite/gold/exec_result/local199_b.csv
+        sha256: 96914152da9b1d4229b1cb32cfc6ec24ee49187fe3036783a7a34512b44bb40c
+tools:
+  - name: list_tables
+    description: List the tables and views in the current read-only Spider2-Lite database.
+    parameters:
+      type: object
+      properties: {}
+      additionalProperties: false
+  - name: describe_table
+    description: Return column names, declared types, nullability, and keys for one table or view.
+    parameters:
+      type: object
+      properties:
+        table_name:
+          type: string
+          description: Exact table or view name from list_tables.
+      required:
+        - table_name
+      additionalProperties: false
+  - name: sql_query
+    description: Execute one read-only SELECT or WITH query and return bounded rows plus a truncation flag.
+    parameters:
+      type: object
+      properties:
+        sql:
+          type: string
+          description: A single SQLite SELECT or WITH statement.
+      required:
+        - sql
+      additionalProperties: false
+  - name: submit_sql
+    description: Submit the final single read-only SQLite query for official Spider2-Lite evaluation.
+    parameters:
+      type: object
+      properties:
+        sql:
+          type: string
+          description: The final single SQLite SELECT or WITH statement, with exactly the requested output columns.
+      required:
+        - sql
+      additionalProperties: false
+answerContract:
+  version: spider2-final-sql-v1
+  instruction: |
+    Spider2-Lite submission contract: use the provided read-only tools to
+    inspect the database. When the analysis is complete, call `submit_sql`
+    exactly once with the final single SQLite SELECT or WITH statement. That
+    statement must return exactly the rows and columns requested by the
+    question. Do not leave the final SQL only in prose. After `submit_sql`
+    succeeds, answer concisely.
+budgets:
+  maxWallMs: 300000
+  maxTokens: 60000
+  maxSteps: 16
+  maxToolCalls: 20
+  queryTimeoutSeconds: 30
+  maxResultRows: 200

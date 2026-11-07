@@ -1,0 +1,34 @@
+id: react.empty-result
+suite: react-core
+version: 1
+hardGate: true
+judgeTask: "查找 project-x 的配置；如果搜索工具返回空结果，必须明确报告未找到，不能伪造配置内容。"
+input:
+  message: "查找 project-x 的配置。"
+expected:
+  finalContains: ["未找到", "project-x"]
+  finalNotContains: ["已找到配置"]
+  maxSteps: 2
+  requiredTools: ["search_files"]
+  requiredToolSequence: ["search_files"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 400
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: search_files
+    arguments:
+      query: project-x
+    result: ""
+    thought: "搜索项目配置。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: final
+    content: "未找到 project-x 的配置文件。"
+    promptTokens: 80
+    completionTokens: 22
+    totalTokens: 102

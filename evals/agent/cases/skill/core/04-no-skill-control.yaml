@@ -1,0 +1,26 @@
+id: skill.no-skill-control
+suite: skill-sim
+version: 1
+hardGate: true
+judgeTask: "这是一个不需要 skill 的任务，Agent 不应加载任何 skill。"
+input:
+  message: "直接回答：2 + 2 等于多少？本任务不需要加载任何 skill。"
+expected:
+  finalContains: ["4"]
+  maxSteps: 1
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: true
+  forbiddenTools: ["skill_view", "skills_search"]
+  minToolSuccessRate: 1.0
+  forbiddenSkills: ["pdf", "xlsx", "docx"]
+  maxSkillLoads: 0
+budgets:
+  maxTotalTokens: 200
+  maxWallMs: 60000
+script:
+  - type: final
+    content: "2 + 2 等于 4。"
+    promptTokens: 80
+    completionTokens: 24
+    totalTokens: 104

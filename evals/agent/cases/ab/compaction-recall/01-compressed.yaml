@@ -1,0 +1,37 @@
+id: compaction-recall.compressed
+suite: compaction-recall
+version: 1
+hardGate: true
+input:
+  message: 从压缩摘要恢复关键事实
+expected:
+  finalContains:
+  - E-55
+  finalNotContains: []
+  maxSteps: 2
+  requiredTools:
+  - session_search
+  requiredToolSequence:
+  - session_search
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: session_search
+  arguments:
+    query: 摘要
+  result: E-55
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: fact E-55
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

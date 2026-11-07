@@ -1,0 +1,57 @@
+id: production.multifile-research
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: research
+  lengthBucket: long
+  toolCountBucket: few
+  risk: medium
+  failureMode: multi_source_synthesis
+judgeTask: "最终回答只要同时包含 Q3 收入 42 万和截止日期 2026-09-30，即视为完成；不要求额外展开。"
+input:
+  message: "阅读 docs/q3.md 和 docs/calendar.md，汇总 Q3 收入与报告截止日期。"
+expected:
+  finalContains: ["42", "2026-09-30"]
+  maxSteps: 4
+  requiredTools: ["read_file"]
+  requiredToolSequence: ["read_file", "read_file"]
+  strictToolSequence: true
+  referenceToolSequence: ["read_file", "read_file"]
+  subgoals:
+    - id: collect_sources
+      requiredTools: ["read_file"]
+      minSuccessfulTools: 2
+    - id: synthesize_answer
+      finalContains: ["42", "2026-09-30"]
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 1400
+  maxWallMs: 90000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: docs/q3.md
+    result: "Q3 revenue: 42 (unit: 10k CNY)."
+    thought: "读取季度业务数据。"
+    promptTokens: 140
+    completionTokens: 24
+    totalTokens: 164
+  - type: tool
+    tool: read_file
+    arguments:
+      path: docs/calendar.md
+    result: "Reporting deadline: 2026-09-30."
+    thought: "读取报告日历。"
+    promptTokens: 140
+    completionTokens: 24
+    totalTokens: 164
+  - type: final
+    content: "Q3 收入为 42 万，报告截止日期为 2026-09-30。"
+    promptTokens: 120
+    completionTokens: 32
+    totalTokens: 152

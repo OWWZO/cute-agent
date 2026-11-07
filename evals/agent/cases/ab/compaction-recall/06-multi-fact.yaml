@@ -1,0 +1,48 @@
+id: compaction-recall.multi-fact
+suite: compaction-recall
+version: 1
+hardGate: true
+input:
+  message: 恢复两个独立事实
+expected:
+  finalContains:
+  - G-77
+  - H-88
+  finalNotContains: []
+  maxSteps: 3
+  requiredTools:
+  - session_search
+  requiredToolSequence:
+  - session_search
+  - session_search
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: session_search
+  arguments:
+    query: G
+  result: G-77
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: tool
+  tool: session_search
+  arguments:
+    query: H
+  result: H-88
+  thought: step 2
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: G-77 and H-88
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

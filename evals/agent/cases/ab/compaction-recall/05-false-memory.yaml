@@ -1,0 +1,28 @@
+id: compaction-recall.false-memory
+suite: compaction-recall
+version: 1
+hardGate: true
+input:
+  message: 不能编造压缩摘要里的事实
+expected:
+  finalContains:
+  - not found
+  finalNotContains:
+  - invented
+  maxSteps: 1
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools:
+  - session_search
+  requireToolRecovery: false
+  minToolSuccessRate: null
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: final
+  content: not found
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

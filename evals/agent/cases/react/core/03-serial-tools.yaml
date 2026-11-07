@@ -1,0 +1,42 @@
+id: react.serial-tools
+suite: react-core
+version: 1
+hardGate: true
+judgeTask: "先列出项目目录，再读取 README.md；最终回答要同时说明目录中存在 README.md、pom.xml，以及 README 的项目说明。"
+input:
+  message: "先列出目录，再读取 README.md。"
+expected:
+  finalContains: ["README", "pom.xml", "项目"]
+  maxSteps: 3
+  requiredTools: ["list_dir", "read_file"]
+  requiredToolSequence: ["list_dir", "read_file"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 700
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: list_dir
+    arguments:
+      path: "."
+    result: "README.md\npom.xml"
+    thought: "先查看目录。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: tool
+    tool: read_file
+    arguments:
+      path: README.md
+    result: "# Demo\n这是一个演示项目。"
+    thought: "读取 README。"
+    promptTokens: 130
+    completionTokens: 22
+    totalTokens: 152
+  - type: final
+    content: "目录中包含 README.md 和 pom.xml；README 说明这是一个项目。"
+    promptTokens: 100
+    completionTokens: 26
+    totalTokens: 126

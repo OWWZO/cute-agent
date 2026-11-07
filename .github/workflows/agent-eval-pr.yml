@@ -1,0 +1,86 @@
+name: agent-eval-pr
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cute-agent-bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install evaluation dependencies
+        working-directory: evals/agent
+        run: uv sync --frozen --extra dev --extra frameworks
+
+      - name: Run scorer unit tests
+        working-directory: evals/agent
+        run: uv run pytest
+
+      - name: Run A/B contract smoke
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals ab run
+          --experiment experiments/pr-contract-ab.yaml
+          --out .eval-runs/ab-pr
+
+      - name: Run trace export and replay tests
+        run: >-
+          mvn -pl Cute-agent-app -am test
+          -DskipTests=false -Dskip.tests=false
+          -Dtest=EvalTraceSanitizerTest,EvalTraceExportCliTest,ExecutionLedgerQueryServiceTimeRangeTest,EvalFixtureRunnerCliTest
+          -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Run Agent PR gate
+        working-directory: evals/agent
+        env:
+          CUTE_EVAL_JUDGE_MODEL: ${{ vars.CUTE_EVAL_JUDGE_MODEL }}
+          CUTE_EVAL_JUDGE_BASE_URL: ${{ vars.CUTE_EVAL_JUDGE_BASE_URL }}
+          CUTE_EVAL_JUDGE_API_KEY: ${{ secrets.CUTE_EVAL_JUDGE_API_KEY }}
+        run: |
+          args="--profile pr --suite all --out .eval-runs/pr"
+          if [ -n "$CUTE_EVAL_JUDGE_MODEL" ]; then
+            args="$args --require-judge"
+          fi
+          uv run cute-evals run $args
+
+      - name: Run local skill simulation
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals run
+          --profile pr
+          --suite skill-sim
+          --out .eval-runs/skill-sim
+          --skip-build
+
+      - name: Upload evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cute-agent-eval-pr
+          path: |
+            evals/agent/.eval-runs/pr/report.json
+            evals/agent/.eval-runs/pr/report.html
+            evals/agent/.eval-runs/pr/attempts
+            evals/agent/.eval-runs/ab-pr/report.json
+            evals/agent/.eval-runs/ab-pr/report.html
+            evals/agent/.eval-runs/ab-pr/audit.md
+            evals/agent/.eval-runs/skill-sim/report.json
+            evals/agent/.eval-runs/skill-sim/report.html
+            evals/agent/.eval-runs/skill-sim/attempts
+          if-no-files-found: warn

@@ -1,0 +1,27 @@
+id: compaction-recall.uncompressed-control
+suite: compaction-recall
+version: 1
+hardGate: true
+input:
+  message: 从未压缩上下文回答关键事实
+expected:
+  finalContains:
+  - E-55
+  finalNotContains: []
+  maxSteps: 1
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools:
+  - session_search
+  requireToolRecovery: false
+  minToolSuccessRate: null
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: final
+  content: fact E-55
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

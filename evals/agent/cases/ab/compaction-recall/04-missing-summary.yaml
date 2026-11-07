@@ -1,0 +1,38 @@
+id: compaction-recall.missing-summary
+suite: compaction-recall
+version: 1
+hardGate: true
+input:
+  message: 摘要缺失时明确报告未知
+expected:
+  finalContains:
+  - unknown
+  finalNotContains:
+  - invented
+  maxSteps: 2
+  requiredTools:
+  - session_search
+  requiredToolSequence:
+  - session_search
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: session_search
+  arguments:
+    query: summary
+  result: ''
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: unknown
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

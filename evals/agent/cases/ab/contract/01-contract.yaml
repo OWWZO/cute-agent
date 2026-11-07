@@ -1,0 +1,18 @@
+id: ab-contract.smoke
+suite: ab-contract
+version: 1
+hardGate: true
+input:
+  message: "返回 OK"
+expected:
+  finalContains: ["OK"]
+  maxSteps: 1
+budgets:
+  maxTotalTokens: 200
+  maxWallMs: 60000
+script:
+  - type: final
+    content: "OK"
+    promptTokens: 40
+    completionTokens: 8
+    totalTokens: 48

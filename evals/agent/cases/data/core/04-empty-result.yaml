@@ -1,0 +1,40 @@
+id: data.empty-result
+suite: data-core
+version: 1
+hardGate: true
+judgeTask: "查询不存在的商品库存时，应明确说明没有查询结果，不能编造库存。"
+input:
+  message: "查询商品 P-404 的库存；如果不存在，请明确说明。"
+expected:
+  finalContains: ["没有查询结果", "P-404"]
+  finalNotContains: ["库存为 0", "库存充足"]
+  maxSteps: 2
+  requiredTools: ["sql_query"]
+  requiredToolSequence: ["sql_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  sqlOracle:
+    fixture: fixtures/analytics.sql
+    expectedColumns: ["product_id"]
+    expectedRows: []
+    numericTolerance: 0.0
+    ordered: false
+budgets:
+  maxTotalTokens: 800
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select product_id from inventory where product_id = 'P-404'"
+    result: '{"rows":[]}'
+    thought: "查询指定商品库存。"
+    promptTokens: 140
+    completionTokens: 20
+    totalTokens: 160
+  - type: final
+    content: "P-404 没有查询结果。"
+    promptTokens: 100
+    completionTokens: 16
+    totalTokens: 116

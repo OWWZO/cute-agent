@@ -1,0 +1,62 @@
+id: production.skill-budget
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: skill_use
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: low
+  failureMode: unnecessary_skill_loads
+judgeTask: "工具轨迹中只加载 xlsx skill 且不超过 2 次，最终回答给出增长趋势，即视为完成。"
+input:
+  message: "分析 sales.xlsx 的月度趋势，只加载必要的 skill。"
+expected:
+  finalContains: ["趋势", "增长"]
+  maxSteps: 3
+  requiredTools: ["skills_search", "skill_view"]
+  requiredToolSequence: ["skills_search", "skill_view"]
+  strictToolSequence: true
+  referenceToolSequence: ["skills_search", "skill_view"]
+  subgoals:
+    - id: find_skill
+      requiredTools: ["skills_search"]
+      minSuccessfulTools: 1
+    - id: load_xlsx
+      requiredTools: ["skill_view"]
+      finalContains: ["趋势", "增长"]
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  requiredSkill: "xlsx"
+  forbiddenSkills: ["pdf", "docx"]
+  maxSkillLoads: 1
+budgets:
+  maxTotalTokens: 700
+  maxWallMs: 60000
+  maxToolCalls: 3
+script:
+  - type: tool
+    tool: skills_search
+    arguments:
+      query: "Excel 月度趋势"
+    result: "xlsx: 读取 Excel 并计算月度趋势。"
+    thought: "先搜索所需 skill。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: tool
+    tool: skill_view
+    arguments:
+      name: "xlsx"
+    result: "xlsx skill loaded"
+    thought: "只加载 xlsx skill。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: final
+    content: "月度趋势显示销售额持续增长。"
+    promptTokens: 90
+    completionTokens: 20
+    totalTokens: 110

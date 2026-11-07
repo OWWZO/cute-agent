@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/cell.schema.json",
+  "title": "Cute-Agent Bench A/B Cell",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "cellKey",
+    "experimentId",
+    "experimentSpecHash",
+    "arm",
+    "model",
+    "caseId",
+    "repetition",
+    "status",
+    "taskScore",
+    "hardGatePassed",
+    "inAccuracyDenominator",
+    "failureOwnership",
+    "metrics",
+    "scores",
+    "retryHistory",
+    "startedAt",
+    "finishedAt",
+    "sourceFingerprint"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "string", "pattern": "^1\\.[0-9]+$"},
+    "cellKey": {"type": "string", "minLength": 1},
+    "experimentId": {"type": "string", "minLength": 1},
+    "experimentSpecHash": {"type": "string", "minLength": 1},
+    "arm": {"enum": ["base", "candidate"]},
+    "model": {"type": "string", "minLength": 1},
+    "caseId": {"type": "string", "minLength": 1},
+    "suite": {"type": "string"},
+    "repetition": {"type": "integer", "minimum": 1},
+    "status": {
+      "enum": [
+        "passed",
+        "failed",
+        "unverified",
+        "model_error",
+        "infra_error",
+        "adapter_error",
+        "oracle_error",
+        "skipped"
+      ]
+    },
+    "taskScore": {"type": "number", "minimum": 0, "maximum": 1},
+    "hardGatePassed": {"type": "boolean"},
+    "inAccuracyDenominator": {"type": "boolean"},
+    "failureOwnership": {
+      "enum": ["none", "model", "tool", "environment", "adapter", "oracle", "unknown"]
+    },
+    "tracePath": {"type": ["string", "null"]},
+    "transcriptPath": {"type": ["string", "null"]},
+    "artifactRefs": {"type": "array", "items": {"type": "object"}},
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "apiTurns": {"type": ["integer", "null"]},
+        "toolCalls": {"type": ["integer", "null"]},
+        "toolErrors": {"type": ["integer", "null"]},
+        "retries": {"type": "integer", "minimum": 0},
+        "totalTokens": {"type": ["integer", "null"]},
+        "wallMs": {"type": ["integer", "null"]},
+        "firstTokenMs": {"type": ["number", "null"]},
+        "estimatedCost": {"type": ["number", "null"]}
+      }
+    },
+    "scores": {"type": "array", "items": {"type": "object"}},
+    "retryHistory": {"type": "array", "items": {"type": "object"}},
+    "startedAt": {"type": "string"},
+    "finishedAt": {"type": "string"},
+    "sourceFingerprint": {"type": "string", "minLength": 1},
+    "error": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,60 @@
+id: production.tool-discovery-route
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: tool_discovery
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: deferred_tool_discovery
+judgeTask: "先发现延迟加载的读取工具，再读取本地配置并回答端口。"
+input:
+  message: "配置在 local.txt 中。工具列表是延迟加载的，请先找到读取文件的工具，再告诉我 PORT。"
+expected:
+  finalContains: ["PORT", "5432"]
+  maxSteps: 3
+  requiredTools: ["search_tools", "read_file"]
+  requiredToolSequence: ["search_tools", "read_file"]
+  strictToolSequence: true
+  referenceToolSequence: ["search_tools", "read_file"]
+  subgoals:
+    - id: discover_read_tool
+      requiredTools: ["search_tools"]
+      minSuccessfulTools: 1
+    - id: read_config
+      requiredTools: ["read_file"]
+      minSuccessfulTools: 1
+    - id: answer_port
+      finalContains: ["PORT", "5432"]
+  forbiddenTools: ["sql_query"]
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 1000
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: search_tools
+    arguments:
+      query: "读取本地文件"
+    result: "read_file"
+    thought: "先发现延迟加载的读取工具。"
+    promptTokens: 100
+    completionTokens: 18
+    totalTokens: 118
+  - type: tool
+    tool: read_file
+    arguments:
+      path: local.txt
+    result: "HOST=127.0.0.1\nPORT=5432"
+    thought: "读取配置。"
+    promptTokens: 100
+    completionTokens: 18
+    totalTokens: 118
+  - type: final
+    content: "配置中的 PORT 是 5432。"
+    promptTokens: 80
+    completionTokens: 20
+    totalTokens: 100

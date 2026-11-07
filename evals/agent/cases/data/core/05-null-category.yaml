@@ -1,0 +1,42 @@
+id: data.null-category
+suite: data-core
+version: 1
+hardGate: true
+judgeTask: "左连接商品和分类，缺失分类显示为“未分类”，并报告 Widget、Gadget、Mystery 的分类。"
+input:
+  message: "列出商品及其分类；没有分类的商品请显示为“未分类”。"
+expected:
+  finalContains: ["Widget", "Hardware", "Gadget", "Software", "Mystery", "未分类"]
+  maxSteps: 2
+  requiredTools: ["sql_query"]
+  requiredToolSequence: ["sql_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  sqlOracle:
+    fixture: fixtures/analytics.sql
+    expectedColumns: ["name", "category"]
+    expectedRows:
+      - ["Widget", "Hardware"]
+      - ["Gadget", "Software"]
+      - ["Mystery", "未分类"]
+    numericTolerance: 0.0
+    ordered: true
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select p.name, coalesce(c.category, '未分类') as category from products p left join categories c on c.id = p.category_id order by p.id"
+    result: '{"rows":[{"name":"Widget","category":"Hardware"},{"name":"Gadget","category":"Software"},{"name":"Mystery","category":"未分类"}]}'
+    thought: "使用左连接并处理空分类。"
+    promptTokens: 140
+    completionTokens: 28
+    totalTokens: 168
+  - type: final
+    content: "Widget 为 Hardware，Gadget 为 Software，Mystery 为未分类。"
+    promptTokens: 100
+    completionTokens: 22
+    totalTokens: 122

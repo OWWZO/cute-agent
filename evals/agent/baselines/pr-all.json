@@ -1,0 +1,506 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-11-07T00:57:46.902",
+  "profile": "pr",
+  "agent": "cute-agent",
+  "datasetHash": "sha256:68bbc02ee5d9ab6156e2840c028041d27588a33db89e7db2c9f7600ce32d4731",
+  "environment": {
+    "engine": "inspect",
+    "javaMode": "fixture",
+    "repeat": 1,
+    "judgeModel": null,
+    "judgeBaseUrl": null,
+    "requireJudge": false,
+    "suite": "all",
+    "datasetHash": "sha256:68bbc02ee5d9ab6156e2840c028041d27588a33db89e7db2c9f7600ce32d4731",
+    "ragDataset": {
+      "name": "cute-agent-mrag-core",
+      "version": 1,
+      "revision": "2026-11-06",
+      "hashMode": "case-files-v1",
+      "datasetHash": "sha256:aa519dbb1b5e1766bf941537bee863601795bf0d26a42739aab787f3839f2129",
+      "metrics": {
+        "retrieval": "citation_recall",
+        "citation": "citation_coverage",
+        "generation": "faithfulness"
+      },
+      "labels": [
+        {
+          "caseId": "rag.cited-answer",
+          "scenario": "direct-page",
+          "evidenceTypes": [
+            "page"
+          ]
+        },
+        {
+          "caseId": "rag.multi-source-policy",
+          "scenario": "multi-source",
+          "evidenceTypes": [
+            "page"
+          ]
+        },
+        {
+          "caseId": "rag.conflicting-versions",
+          "scenario": "source-conflict",
+          "evidenceTypes": [
+            "page"
+          ]
+        },
+        {
+          "caseId": "rag.table-threshold",
+          "scenario": "table-row",
+          "evidenceTypes": [
+            "table"
+          ]
+        },
+        {
+          "caseId": "rag.image-evidence",
+          "scenario": "image-evidence",
+          "evidenceTypes": [
+            "image"
+          ]
+        },
+        {
+          "caseId": "rag.security-window",
+          "scenario": "time-window",
+          "evidenceTypes": [
+            "page"
+          ]
+        },
+        {
+          "caseId": "rag.no-evidence",
+          "scenario": "abstention",
+          "evidenceTypes": []
+        }
+      ]
+    },
+    "dataDataset": {
+      "name": "cute-agent-data-core",
+      "version": 1,
+      "revision": "2026-11-06",
+      "hashMode": "case-and-fixture-files-v1",
+      "datasetHash": "sha256:2cc9186b1d05843063b15f56922dfd0d2cd5bbbd46d725cff7f17116cc1e87c2",
+      "metrics": {
+        "execution": "sql_execution",
+        "result": "sql_result"
+      },
+      "labels": [
+        {
+          "caseId": "data.sql-analysis",
+          "scenario": "single-table"
+        },
+        {
+          "caseId": "data.region-revenue",
+          "scenario": "join-aggregate"
+        },
+        {
+          "caseId": "data.sales-trend",
+          "scenario": "time-window"
+        },
+        {
+          "caseId": "data.empty-result",
+          "scenario": "empty-result"
+        },
+        {
+          "caseId": "data.null-category",
+          "scenario": "null-handling"
+        },
+        {
+          "caseId": "data.average-ticket",
+          "scenario": "numeric-aggregate"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "caseCount": 48,
+    "passAt1": 1.0,
+    "passAtK": 1.0
+  },
+  "cases": {
+    "data.average-ticket": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 276.0,
+      "medianDurationMs": 370.0,
+      "medianFirstTokenMs": 3.503
+    },
+    "data.empty-result": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 276.0,
+      "medianDurationMs": 5.0,
+      "medianFirstTokenMs": 0.49850000000000005
+    },
+    "data.null-category": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 290.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.49850000000000005
+    },
+    "data.region-revenue": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 290.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.49700000000000005
+    },
+    "data.sales-trend": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 292.0,
+      "medianDurationMs": 1.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "data.sql-analysis": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 270.0,
+      "medianDurationMs": 14.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.ambiguous-clarify": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 232.0,
+      "medianDurationMs": 5.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.citation-artifact-research": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 392.0,
+      "medianDurationMs": 6.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.conflicting-web-sources": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 340.0,
+      "medianDurationMs": 8.0,
+      "medianFirstTokenMs": 0.6666666666666666
+    },
+    "production.destructive-confirm": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 350.0,
+      "medianDurationMs": 4.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.empty-data-honesty": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 220.0,
+      "medianDurationMs": 5.0,
+      "medianFirstTokenMs": 0.5005
+    },
+    "production.invalid-arguments-retry": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 358.0,
+      "medianDurationMs": 5.0,
+      "medianFirstTokenMs": 0.3333333333333333
+    },
+    "production.large-file-recovery": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 404.0,
+      "medianDurationMs": 9.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.list-then-read": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 306.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.long-session-recall": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 368.0,
+      "medianDurationMs": 4.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.malformed-recovery": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 356.0,
+      "medianDurationMs": 7.0,
+      "medianFirstTokenMs": 1.0010000000000001
+    },
+    "production.multifile-research": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 480.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.33466666666666667
+    },
+    "production.no-artifact-control": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 72.0,
+      "medianDurationMs": 1.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.no-tool-control": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 100.0,
+      "medianDurationMs": 0.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.permission-fallback": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 338.0,
+      "medianDurationMs": 7.0,
+      "medianFirstTokenMs": 0.3333333333333333
+    },
+    "production.rag-conflict": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 444.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.rate-limit-backoff": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 356.0,
+      "medianDurationMs": 5.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.session-pagination": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 302.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.skill-budget": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 326.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.3336666666666666
+    },
+    "production.skill-distractor": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 316.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.sql-chart-artifact": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 278.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.timeout-retry": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 356.0,
+      "medianDurationMs": 6.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "production.tool-discovery-route": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 336.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.333
+    },
+    "production.unit-conversion": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 208.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.5085
+    },
+    "production.upstream-fallback": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 350.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.33266666666666667
+    },
+    "rag.cited-answer": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 268.0,
+      "medianDurationMs": 1.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "rag.conflicting-versions": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 278.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "rag.image-evidence": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 266.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.27799999999999997
+    },
+    "rag.multi-source-policy": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 420.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "rag.no-evidence": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 262.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "rag.security-window": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 262.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "rag.table-threshold": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 262.0,
+      "medianDurationMs": 0.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.direct-answer": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 104.0,
+      "medianDurationMs": 0.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.empty-result": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 210.0,
+      "medianDurationMs": 0.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.malformed-json": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 356.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.multi-result": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 420.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.permission-denied": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 224.0,
+      "medianDurationMs": 1.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.rate-limit-recovery": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 364.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.serial-tools": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 398.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.single-tool": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 230.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.timeout-recovery": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 364.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.0
+    },
+    "react.upstream-recovery": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 364.0,
+      "medianDurationMs": 2.0,
+      "medianFirstTokenMs": 0.333
+    },
+    "react.wrong-tool-correction": {
+      "status": "passed",
+      "passAt1": true,
+      "passAtK": true,
+      "medianTotalTokens": 364.0,
+      "medianDurationMs": 3.0,
+      "medianFirstTokenMs": 0.0
+    }
+  }
+}

@@ -1,0 +1,57 @@
+id: production.invalid-arguments-retry
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: recovery
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: invalid_tool_arguments
+judgeTask: "SQL 参数错误后修正查询条件，再次查询并返回正确数量。"
+input:
+  message: "统计 ACTIVE 用户数；如果 SQL 参数报错，修正后只重试一次。"
+expected:
+  finalContains: ["修正", "7"]
+  maxSteps: 3
+  requiredTools: ["sql_query"]
+  requiredToolSequence: ["sql_query", "sql_query"]
+  strictToolSequence: true
+  referenceToolSequence: ["sql_query", "sql_query"]
+  subgoals:
+    - id: correct_query
+      requiredTools: ["sql_query"]
+      minSuccessfulTools: 1
+    - id: report_count
+      finalContains: ["修正", "7"]
+  forbiddenTools: ["delete_file"]
+  requireToolRecovery: true
+budgets:
+  maxTotalTokens: 1100
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select count(*) from users where status ="
+    fault: invalid_arguments
+    thought: "第一次查询参数不完整。"
+    promptTokens: 100
+    completionTokens: 18
+    totalTokens: 118
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select count(*) as active_users from users where status = 'ACTIVE'"
+    result: '{"rows":[{"active_users":7}]}'
+    thought: "修正 SQL 后重试。"
+    promptTokens: 110
+    completionTokens: 20
+    totalTokens: 130
+  - type: final
+    content: "修正查询参数后，ACTIVE 用户数为 7。"
+    promptTokens: 90
+    completionTokens: 20
+    totalTokens: 110

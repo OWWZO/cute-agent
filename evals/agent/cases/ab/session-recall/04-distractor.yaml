@@ -1,0 +1,37 @@
+id: session-recall.distractor
+suite: session-recall
+version: 1
+hardGate: true
+input:
+  message: 检索干扰信息后报告未找到
+expected:
+  finalContains:
+  - not found
+  finalNotContains: []
+  maxSteps: 2
+  requiredTools:
+  - session_search
+  requiredToolSequence:
+  - session_search
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: session_search
+  arguments:
+    query: missing
+  result: noise only
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: not found
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

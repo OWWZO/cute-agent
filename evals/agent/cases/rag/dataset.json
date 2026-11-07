@@ -1,0 +1,21 @@
+{
+  "name": "cute-agent-mrag-core",
+  "version": 1,
+  "revision": "2026-11-06",
+  "hashMode": "case-files-v1",
+  "datasetHash": "sha256:aa519dbb1b5e1766bf941537bee863601795bf0d26a42739aab787f3839f2129",
+  "metrics": {
+    "retrieval": "citation_recall",
+    "citation": "citation_coverage",
+    "generation": "faithfulness"
+  },
+  "labels": [
+    {"caseId": "rag.cited-answer", "scenario": "direct-page", "evidenceTypes": ["page"]},
+    {"caseId": "rag.multi-source-policy", "scenario": "multi-source", "evidenceTypes": ["page"]},
+    {"caseId": "rag.conflicting-versions", "scenario": "source-conflict", "evidenceTypes": ["page"]},
+    {"caseId": "rag.table-threshold", "scenario": "table-row", "evidenceTypes": ["table"]},
+    {"caseId": "rag.image-evidence", "scenario": "image-evidence", "evidenceTypes": ["image"]},
+    {"caseId": "rag.security-window", "scenario": "time-window", "evidenceTypes": ["page"]},
+    {"caseId": "rag.no-evidence", "scenario": "abstention", "evidenceTypes": []}
+  ]
+}

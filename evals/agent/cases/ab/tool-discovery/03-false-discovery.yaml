@@ -1,0 +1,28 @@
+id: tool-discovery.false-discovery
+suite: tool-discovery
+version: 1
+hardGate: true
+input:
+  message: 不需要工具，直接说明结果
+expected:
+  finalContains:
+  - no tool
+  finalNotContains: []
+  maxSteps: 1
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools:
+  - search_tools
+  - read_file
+  requireToolRecovery: false
+  minToolSuccessRate: null
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: final
+  content: no tool needed
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

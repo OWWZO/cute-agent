@@ -1,0 +1,49 @@
+id: session-recall.pagination
+suite: session-recall
+version: 1
+hardGate: true
+input:
+  message: 分页检索历史会话
+expected:
+  finalContains:
+  - B-22
+  finalNotContains: []
+  maxSteps: 3
+  requiredTools:
+  - session_search
+  requiredToolSequence:
+  - session_search
+  - session_search
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: session_search
+  arguments:
+    query: 历史
+    page: 1
+  result: first page
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: tool
+  tool: session_search
+  arguments:
+    query: 历史
+    page: 2
+  result: B-22
+  thought: step 2
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: 历史事实 B-22
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

@@ -1,0 +1,60 @@
+id: production.rag-conflict
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: rag
+  lengthBucket: long
+  toolCountBucket: few
+  risk: high
+  failureMode: conflicting_versions
+judgeTask: "Pass only if the final answer contains CITATION-1, CITATION-2, amount=800, amount=1200, and ACTIVE=2026."
+input:
+  message: "差旅报销标准是什么？如果有版本冲突，请分别列出。"
+expected:
+  finalContains: ["2025", "2026", "CITATION-1", "CITATION-2", "ACTIVE=2026", "[policy-2025.pdf#p2]", "[policy-2026.pdf#p5]"]
+  maxSteps: 4
+  requiredTools: ["mrag_query"]
+  requiredToolSequence: ["mrag_query", "mrag_query"]
+  strictToolSequence: true
+  referenceToolSequence: ["mrag_query", "mrag_query"]
+  subgoals:
+    - id: retrieve_both_versions
+      requiredTools: ["mrag_query"]
+      minSuccessfulTools: 2
+    - id: explain_conflict
+      finalContains: ["2025", "2026"]
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  requiredCitations: ["[policy-2025.pdf#p2]", "[policy-2026.pdf#p5]"]
+budgets:
+  maxTotalTokens: 1200
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: mrag_query
+    arguments:
+      question: "差旅报销标准 2025"
+      kbId: policy
+    result: "[policy-2025.pdf#p2] 2025 版标准为 800 元。"
+    thought: "先检索旧版本。"
+    promptTokens: 120
+    completionTokens: 24
+    totalTokens: 144
+  - type: tool
+    tool: mrag_query
+    arguments:
+      question: "差旅报销标准 2026"
+      kbId: policy
+    result: "[policy-2026.pdf#p5] 2026 版标准为 1200 元。"
+    thought: "再检索当前版本。"
+    promptTokens: 120
+    completionTokens: 24
+    totalTokens: 144
+  - type: final
+    content: "CITATION-1=[policy-2025.pdf#p2] 2025 版 amount=800。CITATION-2=[policy-2026.pdf#p5] 2026 版 amount=1200。ACTIVE=2026，2026 版已生效。"
+    promptTokens: 120
+    completionTokens: 36
+    totalTokens: 156

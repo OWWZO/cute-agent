@@ -1,0 +1,42 @@
+id: react.timeout-recovery
+suite: react-core
+version: 1
+hardGate: true
+judgeTask: "读取 remote.txt；首次超时后重试一次，重试成功并总结任务完成。"
+input:
+  message: "读取 remote.txt，超时就重试一次并总结。"
+expected:
+  finalContains: ["重试", "完成"]
+  maxSteps: 3
+  requiredTools: ["read_file"]
+  requiredToolSequence: ["read_file", "read_file"]
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: true
+budgets:
+  maxTotalTokens: 700
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: remote.txt
+    fault: timeout
+    thought: "先尝试读取。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: tool
+    tool: read_file
+    arguments:
+      path: remote.txt
+    result: "remote ready"
+    thought: "超时后重试。"
+    promptTokens: 120
+    completionTokens: 20
+    totalTokens: 140
+  - type: final
+    content: "读取超时后已重试，任务完成。"
+    promptTokens: 80
+    completionTokens: 24
+    totalTokens: 104

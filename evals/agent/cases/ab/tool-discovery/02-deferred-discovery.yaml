@@ -1,0 +1,48 @@
+id: tool-discovery.deferred-discovery
+suite: tool-discovery
+version: 1
+hardGate: true
+input:
+  message: 先发现工具再读取配置
+expected:
+  finalContains:
+  - DEFERRED_FILE
+  finalNotContains: []
+  maxSteps: 3
+  requiredTools:
+  - search_tools
+  - read_file
+  requiredToolSequence:
+  - search_tools
+  - read_file
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: search_tools
+  arguments:
+    query: read file
+  result: read_file
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: tool
+  tool: read_file
+  arguments:
+    path: local.txt
+  result: DEFERRED_FILE
+  thought: step 2
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: DEFERRED_FILE
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

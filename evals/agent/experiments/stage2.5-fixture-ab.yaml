@@ -1,0 +1,35 @@
+schemaVersion: "1.0"
+experimentId: stage2.5-fixture-ab
+suite: stage2.5
+caseDirs:
+  - evals/agent/cases/ab/hostile-files
+  - evals/agent/cases/ab/tool-discovery
+  - evals/agent/cases/ab/session-recall
+  - evals/agent/cases/ab/compaction-recall
+  - evals/agent/cases/ab/clarify-multiturn
+profile: pr
+javaMode: fixture
+base:
+  source: local
+  root: .
+candidate:
+  source: local
+  root: .
+models:
+  - fixture-model
+repetitions: 1
+seed: 42
+parallelism: 4
+timeoutSeconds: 600
+retries: 1
+isolation:
+  mode: process
+  workspace: per-cell
+  database: experiment
+  allowDirty: true
+budgets:
+  maxUsd: 0
+  maxWallMinutes: 20
+thresholds:
+  maxAccuracyRegression: 0.05
+  maxTokenRegressionRatio: 0.10

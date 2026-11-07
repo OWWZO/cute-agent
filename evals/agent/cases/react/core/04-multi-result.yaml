@@ -1,0 +1,42 @@
+id: react.multi-result
+suite: react-core
+version: 1
+hardGate: true
+judgeTask: "读取订单和库存数据，计算出可用数量 8，并在最终回答中说明订单、库存和可用数量。"
+input:
+  message: "分别读取订单和库存，汇总可用数量。"
+expected:
+  finalContains: ["订单", "库存", "8"]
+  maxSteps: 3
+  requiredTools: ["read_file"]
+  requiredToolSequence: ["read_file", "read_file"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 700
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: orders.json
+    result: "{\"ordered\": 12}"
+    thought: "读取订单数量。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: tool
+    tool: read_file
+    arguments:
+      path: stock.json
+    result: "{\"stock\": 20}"
+    thought: "读取库存数量。"
+    promptTokens: 130
+    completionTokens: 20
+    totalTokens: 150
+  - type: final
+    content: "订单需要 12 件，库存有 20 件，可用数量为 8。"
+    promptTokens: 120
+    completionTokens: 30
+    totalTokens: 150

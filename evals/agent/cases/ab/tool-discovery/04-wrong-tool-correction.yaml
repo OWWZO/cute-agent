@@ -1,0 +1,48 @@
+id: tool-discovery.wrong-tool-correction
+suite: tool-discovery
+version: 1
+hardGate: true
+input:
+  message: 先搜索，发现不相关后读取本地文件
+expected:
+  finalContains:
+  - CORRECTED
+  finalNotContains: []
+  maxSteps: 3
+  requiredTools:
+  - search_web
+  - read_file
+  requiredToolSequence:
+  - search_web
+  - read_file
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: search_web
+  arguments:
+    query: entry
+  result: irrelevant
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: tool
+  tool: read_file
+  arguments:
+    path: entry.txt
+  result: CORRECTED
+  thought: step 2
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: CORRECTED
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

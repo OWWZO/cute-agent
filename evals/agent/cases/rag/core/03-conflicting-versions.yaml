@@ -1,0 +1,36 @@
+id: rag.conflicting-versions
+suite: rag-core
+version: 1
+hardGate: true
+judgeTask: "按最新版本员工手册回答年假天数，使用 handbook-v2.pdf#p2，不能把旧版年假天数当成当前答案。"
+input:
+  message: "员工当前享受多少天年假？知识库里可能有多个版本，请按最新版回答并给出引用。"
+expected:
+  finalContains: ["10 天", "[handbook-v2.pdf#p2]"]
+  finalNotContains: ["5 天", "[handbook-v1.pdf#p2]"]
+  maxSteps: 2
+  requiredTools: ["mrag_query"]
+  requiredToolSequence: ["mrag_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  requiredCitations: ["[handbook-v2.pdf#p2]"]
+budgets:
+  maxTotalTokens: 800
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: mrag_query
+    arguments:
+      question: "员工年假天数，注意版本"
+      kbId: "handbook"
+    result: "[handbook-v1.pdf#p2] 旧版年假为 5 天。 [handbook-v2.pdf#p2] 最新版年假为 10 天。"
+    thought: "检索员工手册并核对版本。"
+    promptTokens: 130
+    completionTokens: 28
+    totalTokens: 158
+  - type: final
+    content: "当前员工年假为 10 天。[handbook-v2.pdf#p2]"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120

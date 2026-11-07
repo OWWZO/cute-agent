@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/experiment.schema.json",
+  "title": "Cute-Agent Bench A/B Experiment",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "experimentId",
+    "suite",
+    "base",
+    "candidate",
+    "models",
+    "repetitions",
+    "seed",
+    "parallelism",
+    "timeoutSeconds",
+    "isolation",
+    "budgets",
+    "thresholds"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "string", "pattern": "^1\\.[0-9]+$"},
+    "experimentId": {"type": "string", "minLength": 1},
+    "suite": {"type": "string", "minLength": 1},
+    "caseDirs": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "profile": {"enum": ["pr", "nightly", "release"], "default": "pr"},
+    "javaMode": {"enum": ["fixture", "live"], "default": "fixture"},
+    "models": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "repetitions": {"type": "integer", "minimum": 1, "maximum": 10},
+    "seed": {"type": "integer"},
+    "parallelism": {"type": "integer", "minimum": 1, "maximum": 16},
+    "timeoutSeconds": {"type": "integer", "minimum": 1},
+    "retries": {"type": "integer", "minimum": 0, "maximum": 5, "default": 2},
+    "requireJudge": {"type": "boolean", "default": false},
+    "isolation": {
+      "type": "object",
+      "required": ["mode", "workspace", "database"],
+      "properties": {
+        "mode": {"enum": ["process"]},
+        "workspace": {"enum": ["per-cell", "per-run"]},
+        "database": {"enum": ["experiment", "per-cell"]},
+        "allowDirty": {"type": "boolean", "default": false}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "required": ["maxUsd", "maxWallMinutes"],
+      "properties": {
+        "maxUsd": {"type": "number", "minimum": 0},
+        "maxWallMinutes": {"type": "number", "minimum": 0}
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "required": ["maxAccuracyRegression", "maxTokenRegressionRatio"],
+      "properties": {
+        "maxAccuracyRegression": {"type": "number", "minimum": 0, "maximum": 1},
+        "maxTokenRegressionRatio": {"type": "number", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "arm": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": {"enum": ["git", "local"]},
+        "ref": {"type": "string", "minLength": 1},
+        "root": {"type": "string", "minLength": 1},
+        "env": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"source": {"const": "git"}}},
+          "then": {"required": ["ref"]}
+        },
+        {
+          "if": {"properties": {"source": {"const": "local"}}},
+          "then": {"required": ["root"]}
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "base": {"$ref": "#/$defs/arm"},
+        "candidate": {"$ref": "#/$defs/arm"}
+      }
+    }
+  ],
+  "additionalProperties": true
+}

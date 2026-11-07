@@ -1,0 +1,63 @@
+id: production.skill-distractor
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: skill_use
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: wrong_skill_selection
+judgeTask: "在相似 Skill 中只加载销售数据清理 Skill，不加载财务报告 Skill。"
+input:
+  message: "清理 sales.xlsx 的重复客户记录，只加载真正需要的 Skill。"
+expected:
+  finalContains: ["sales-cleanup", "重复"]
+  maxSteps: 3
+  requiredTools: ["skills_search", "skill_view"]
+  requiredToolSequence: ["skills_search", "skill_view"]
+  strictToolSequence: true
+  referenceToolSequence: ["skills_search", "skill_view"]
+  subgoals:
+    - id: discover_skills
+      requiredTools: ["skills_search"]
+      minSuccessfulTools: 1
+    - id: load_sales_skill
+      requiredTools: ["skill_view"]
+      minSuccessfulTools: 1
+    - id: explain_cleanup
+      finalContains: ["sales-cleanup", "重复"]
+  forbiddenTools: ["delete_file"]
+  requiredSkill: sales-cleanup
+  forbiddenSkills: ["finance-report"]
+  maxSkillLoads: 1
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: skills_search
+    arguments:
+      query: "清理销售 Excel 重复记录"
+    result: "sales-cleanup\nfinance-report"
+    thought: "先搜索可用 Skill。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: tool
+    tool: skill_view
+    arguments:
+      name: sales-cleanup
+    result: "Use dedupe workflow for customer records."
+    thought: "只加载真正相关的 sales-cleanup。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: final
+    content: "使用 sales-cleanup 清理重复客户记录。"
+    promptTokens: 80
+    completionTokens: 20
+    totalTokens: 100

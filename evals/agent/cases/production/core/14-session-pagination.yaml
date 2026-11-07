@@ -1,0 +1,59 @@
+id: production.session-pagination
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: memory
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: incomplete_pagination
+judgeTask: "历史记录第一页没有目标部署单号时继续翻页，最终找到 B-22。"
+input:
+  message: "在历史会话里找上次部署单号；第一页没有就继续翻页。"
+expected:
+  finalContains: ["B-22"]
+  maxSteps: 3
+  requiredTools: ["session_search"]
+  requiredToolSequence: ["session_search", "session_search"]
+  strictToolSequence: true
+  referenceToolSequence: ["session_search", "session_search"]
+  subgoals:
+    - id: paginate_history
+      requiredTools: ["session_search"]
+      minSuccessfulTools: 2
+    - id: return_deploy_id
+      finalContains: ["B-22"]
+  forbiddenTools: ["read_file", "sql_query"]
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: session_search
+    arguments:
+      query: "上次部署单号"
+      page: 1
+    result: "page 1: no deployment found"
+    thought: "第一页没有目标。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: tool
+    tool: session_search
+    arguments:
+      query: "上次部署单号"
+      page: 2
+    result: "deployment B-22"
+    thought: "继续翻页并找到部署单号。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: final
+    content: "上次部署单号是 B-22。"
+    promptTokens: 70
+    completionTokens: 16
+    totalTokens: 86

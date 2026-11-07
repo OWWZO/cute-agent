@@ -1,0 +1,36 @@
+id: skill.load-budget
+suite: skill-sim
+version: 1
+hardGate: true
+judgeTask: "只加载一次 xlsx skill，在步骤和 token 预算内完成任务。"
+input:
+  message: "使用 xlsx skill 生成销售趋势摘要；只加载一次 skill，控制步骤和 token。"
+expected:
+  finalContains: ["趋势", "完成"]
+  maxSteps: 2
+  requiredTools: ["skill_view"]
+  requiredToolSequence: ["skill_view"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  requiredSkill: "xlsx"
+  forbiddenSkills: ["pdf", "docx"]
+  maxSkillLoads: 1
+budgets:
+  maxTotalTokens: 300
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: skill_view
+    arguments:
+      name: "xlsx"
+    result: "xlsx skill：读取销售表并计算趋势。"
+    thought: "只加载一次需要的 xlsx skill。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: final
+    content: "已使用 xlsx skill 完成销售趋势摘要。"
+    promptTokens: 100
+    completionTokens: 10
+    totalTokens: 110

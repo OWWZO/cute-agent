@@ -1,0 +1,52 @@
+id: production.sql-chart-artifact
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: data_analysis
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: result_without_artifact
+judgeTask: "查询每日销售并生成图表文件，最终说明最高日期和金额。"
+input:
+  message: "查询每日销售额，生成图表并说明最高的一天。"
+expected:
+  finalContains: ["2026-11-01", "300", "daily-sales.svg"]
+  maxSteps: 3
+  requiredTools: ["sql_query"]
+  requiredToolSequence: ["sql_query"]
+  strictToolSequence: true
+  referenceToolSequence: ["sql_query"]
+  subgoals:
+    - id: query_daily_sales
+      requiredTools: ["sql_query"]
+      minSuccessfulTools: 1
+    - id: produce_chart
+      finalContains: ["2026-11-01", "300"]
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  minArtifacts: 1
+budgets:
+  maxTotalTokens: 1000
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select sale_date, revenue from daily_sales order by sale_date"
+    result: '{"rows":[{"sale_date":"2026-10-31","revenue":80.25},{"sale_date":"2026-11-01","revenue":300.0}],"artifact":"daily-sales.svg"}'
+    artifact:
+      fileName: "daily-sales.svg"
+      downloadUrl: "https://eval.local/artifacts/daily-sales.svg"
+    thought: "执行查询并生成图表。"
+    promptTokens: 130
+    completionTokens: 24
+    totalTokens: 154
+  - type: final
+    content: "最高销售额出现在 2026-11-01，金额为 300，图表已生成：daily-sales.svg。"
+    promptTokens: 100
+    completionTokens: 24
+    totalTokens: 124

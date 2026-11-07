@@ -1,0 +1,48 @@
+id: session-recall.recover
+suite: session-recall
+version: 1
+hardGate: true
+input:
+  message: 检索超时后重试并恢复
+expected:
+  finalContains:
+  - D-44
+  finalNotContains: []
+  maxSteps: 3
+  requiredTools:
+  - session_search
+  requiredToolSequence:
+  - session_search
+  - session_search
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: true
+  minToolSuccessRate: 0.5
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: session_search
+  arguments:
+    query: D
+  result: ''
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+  fault: timeout
+- type: tool
+  tool: session_search
+  arguments:
+    query: D
+  result: D-44
+  thought: step 2
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: recovered D-44
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

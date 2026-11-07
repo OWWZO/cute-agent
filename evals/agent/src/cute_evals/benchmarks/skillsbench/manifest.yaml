@@ -1,0 +1,23 @@
+name: skillsbench
+version: 8fcf87c5ca46285bdd5d4ab12d890cf70ee2b80f
+upstream: https://github.com/benchflow-ai/skillsbench
+license: Apache-2.0
+split: official-subset
+scoreLabel: official-subset
+runnerMode: docker-verifier
+environment: docker
+officialEvaluator: true
+source:
+  kind: github-tar
+  url: https://api.github.com/repos/benchflow-ai/skillsbench/tarball/8fcf87c5ca46285bdd5d4ab12d890cf70ee2b80f
+  sha256: 21666646d2bd57dacd031f17396dd8acbd009810130d01feffc94ee178345739
+taskIds:
+  - organize-messy-files
+  - travel-planning
+  - offer-letter-generator
+  - xlsx-recover-data
+  - python-scala-translation
+budgets:
+  maxWallMs: 900000
+  maxTokens: 60000
+  maxSteps: 32

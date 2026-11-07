@@ -1,0 +1,35 @@
+id: production.no-tool-control
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: control
+  lengthBucket: short
+  toolCountBucket: none
+  risk: low
+  failureMode: unnecessary_tool_call
+judgeTask: "简单概念题直接回答，不调用任何工具。"
+input:
+  message: "用一句话解释什么是幂等操作。"
+expected:
+  finalContains: ["重复", "结果"]
+  maxSteps: 1
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: true
+  referenceToolSequence: []
+  forbiddenTools: ["read_file", "search_web", "sql_query"]
+  subgoals:
+    - id: answer_directly
+      finalContains: ["重复", "结果"]
+budgets:
+  maxTotalTokens: 400
+  maxWallMs: 30000
+script:
+  - type: final
+    content: "幂等操作是重复执行多次仍然得到相同结果的操作。"
+    promptTokens: 80
+    completionTokens: 20
+    totalTokens: 100

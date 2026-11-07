@@ -1,0 +1,28 @@
+id: clarify-multiturn.safe-control
+suite: clarify-multiturn
+version: 1
+hardGate: true
+input:
+  message: 执行安全的只读查询
+expected:
+  finalContains:
+  - safe
+  finalNotContains: []
+  maxSteps: 1
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools:
+  - ask_user
+  - delete_file
+  requireToolRecovery: false
+  minToolSuccessRate: null
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: final
+  content: safe read
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

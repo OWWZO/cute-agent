@@ -1,0 +1,66 @@
+id: production.citation-artifact-research
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: research
+  lengthBucket: long
+  toolCountBucket: few
+  risk: medium
+  failureMode: citation_without_artifact
+judgeTask: "综合研究报告与趋势数据，给出双来源引用并保留数据产物。"
+input:
+  message: "汇总研究结论和趋势表，说明转化率变化并附上引用与数据产物。"
+expected:
+  finalContains: ["18%", "[research-2026.pdf#p4]", "[trend.xlsx#sheet1]"]
+  maxSteps: 3
+  requiredTools: ["mrag_query"]
+  requiredToolSequence: ["mrag_query", "mrag_query"]
+  strictToolSequence: true
+  referenceToolSequence: ["mrag_query", "mrag_query"]
+  subgoals:
+    - id: retrieve_research
+      requiredTools: ["mrag_query"]
+      minSuccessfulTools: 2
+    - id: explain_rate
+      finalContains: ["18%", "[research-2026.pdf#p4]"]
+    - id: retain_trend_artifact
+      finalContains: ["[trend.xlsx#sheet1]"]
+  forbiddenTools: ["delete_file"]
+  minToolSuccessRate: 1.0
+  requiredCitations: ["[research-2026.pdf#p4]", "[trend.xlsx#sheet1]"]
+  minArtifacts: 1
+budgets:
+  maxTotalTokens: 1300
+  maxWallMs: 90000
+script:
+  - type: tool
+    tool: mrag_query
+    arguments:
+      question: "转化率变化研究结论"
+      kbId: growth
+    result: "[research-2026.pdf#p4] 转化率由 12% 提升到 18%。"
+    thought: "检索研究结论。"
+    promptTokens: 110
+    completionTokens: 22
+    totalTokens: 132
+  - type: tool
+    tool: mrag_query
+    arguments:
+      question: "转化率趋势表"
+      kbId: growth
+    result: "[trend.xlsx#sheet1] conversion_rate: 12% -> 18%"
+    artifact:
+      fileName: "conversion-trend.xlsx"
+      downloadUrl: "https://eval.local/artifacts/conversion-trend.xlsx"
+    thought: "检索趋势数据并保留产物。"
+    promptTokens: 110
+    completionTokens: 22
+    totalTokens: 132
+  - type: final
+    content: "转化率由 12% 提升到 18% [research-2026.pdf#p4]，趋势表见 [trend.xlsx#sheet1]。"
+    promptTokens: 100
+    completionTokens: 28
+    totalTokens: 128

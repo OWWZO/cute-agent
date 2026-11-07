@@ -1,0 +1,57 @@
+id: production.conflicting-web-sources
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: research
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: high
+  failureMode: conflicting_sources
+judgeTask: "对比两份接口文档的版本差异，明确报告冲突而不是任选一个。"
+input:
+  message: "对比两份接口文档，说明版本冲突以及各自字段。"
+expected:
+  finalContains: ["v2.3", "v2.4", "冲突"]
+  maxSteps: 3
+  requiredTools: ["read_file"]
+  requiredToolSequence: ["read_file", "read_file"]
+  strictToolSequence: true
+  referenceToolSequence: ["read_file", "read_file"]
+  subgoals:
+    - id: read_both_sources
+      requiredTools: ["read_file"]
+      minSuccessfulTools: 2
+    - id: explain_conflict
+      finalContains: ["v2.3", "v2.4", "冲突"]
+  forbiddenTools: ["sql_query"]
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 1000
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: docs/interface-a.md
+    result: "version=v2.3; field=user_id"
+    thought: "读取第一份接口文档。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: tool
+    tool: read_file
+    arguments:
+      path: docs/interface-b.md
+    result: "version=v2.4; field=account_id"
+    thought: "读取第二份接口文档。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: final
+    content: "v2.3 使用 user_id，v2.4 使用 account_id，两份文档存在字段冲突。"
+    promptTokens: 100
+    completionTokens: 24
+    totalTokens: 124

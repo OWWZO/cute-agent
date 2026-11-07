@@ -1,0 +1,48 @@
+id: production.unit-conversion
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: data_analysis
+  lengthBucket: short
+  toolCountBucket: single
+  risk: medium
+  failureMode: wrong_unit_conversion
+judgeTask: "读取美元收入和汇率，换算为人民币并保留正确单位。"
+input:
+  message: "读取 revenue.json，把美元收入按给定汇率换算成人民币。"
+expected:
+  finalContains: ["9000", "人民币"]
+  maxSteps: 2
+  requiredTools: ["read_file"]
+  requiredToolSequence: ["read_file"]
+  strictToolSequence: true
+  referenceToolSequence: ["read_file"]
+  subgoals:
+    - id: read_revenue
+      requiredTools: ["read_file"]
+      minSuccessfulTools: 1
+    - id: convert_currency
+      finalContains: ["9000", "人民币"]
+  forbiddenTools: ["search_web"]
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 700
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: revenue.json
+    result: '{"revenue_usd":1250,"usd_to_cny":7.2}'
+    thought: "读取收入和汇率。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: final
+    content: "1250 美元按 7.2 汇率换算为 9000 人民币。"
+    promptTokens: 80
+    completionTokens: 20
+    totalTokens: 100

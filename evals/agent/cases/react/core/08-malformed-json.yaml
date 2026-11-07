@@ -1,0 +1,44 @@
+id: react.malformed-json
+suite: react-core
+version: 1
+hardGate: true
+judgeTask: "读取 data.json；JSON 格式损坏后切换到 raw 模式继续读取，并明确说明格式错误与恢复方式。"
+input:
+  message: "读取 data.json；如果格式坏了，换用 raw 模式读取。"
+expected:
+  finalContains: ["格式错误", "raw"]
+  maxSteps: 3
+  requiredTools: ["read_file"]
+  requiredToolSequence: ["read_file", "read_file"]
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: true
+budgets:
+  maxTotalTokens: 700
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: data.json
+      mode: json
+    fault: malformed
+    thought: "尝试按 JSON 读取。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: tool
+    tool: read_file
+    arguments:
+      path: data.json
+      mode: raw
+    result: "plain text content"
+    thought: "改用 raw 模式。"
+    promptTokens: 110
+    completionTokens: 20
+    totalTokens: 130
+  - type: final
+    content: "JSON 格式错误，已切换为 raw 模式读取。"
+    promptTokens: 80
+    completionTokens: 26
+    totalTokens: 106

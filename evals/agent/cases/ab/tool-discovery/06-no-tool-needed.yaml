@@ -1,0 +1,28 @@
+id: tool-discovery.no-tool-needed
+suite: tool-discovery
+version: 1
+hardGate: true
+input:
+  message: 解释一个概念，不要调用工具
+expected:
+  finalContains:
+  - explanation
+  finalNotContains: []
+  maxSteps: 1
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools:
+  - search_tools
+  - read_file
+  requireToolRecovery: false
+  minToolSuccessRate: null
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: final
+  content: explanation only
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

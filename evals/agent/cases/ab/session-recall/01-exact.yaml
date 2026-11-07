@@ -1,0 +1,37 @@
+id: session-recall.exact
+suite: session-recall
+version: 1
+hardGate: true
+input:
+  message: 检索上次会话的订单号
+expected:
+  finalContains:
+  - A-17
+  finalNotContains: []
+  maxSteps: 2
+  requiredTools:
+  - session_search
+  requiredToolSequence:
+  - session_search
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+- type: tool
+  tool: session_search
+  arguments:
+    query: 订单号
+  result: A-17
+  thought: step 1
+  promptTokens: 80
+  completionTokens: 20
+  totalTokens: 100
+- type: final
+  content: 订单 A-17
+  promptTokens: 60
+  completionTokens: 20
+  totalTokens: 80

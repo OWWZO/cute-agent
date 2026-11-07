@@ -1,0 +1,41 @@
+name: gaia
+version: hf-682dd723ee1e1697e00360edccf2366dc8418dd9
+upstream: https://huggingface.co/datasets/gaia-benchmark/GAIA
+license: gated-research-use
+split: validation
+scoreLabel: official-subset
+runnerMode: workspace-tools
+environment: isolated-workspace
+officialEvaluator: true
+dataset:
+  kind: huggingface
+  repo: gaia-benchmark/GAIA
+  revision: 682dd723ee1e1697e00360edccf2366dc8418dd9
+  configs:
+    "2023_level1": 2
+    "2023_level2": 2
+    "2023_level3": 1
+  subsetLimits:
+    "2023_level1": 2
+    "2023_level2": 2
+    "2023_level3": 1
+  selection: first-by-task-id
+scorer:
+  file: official_scorer.py
+  symbol: question_scorer
+  source: https://huggingface.co/spaces/gaia-benchmark/leaderboard/raw/main/scorer.py
+  sha256: 0d44c07f3046eec521697c22e3eaca8719cc81e422a8eaf32695c5f22bdac6e2
+answerContract:
+  version: gaia-final-answer-v1
+  linePrefix: "FINAL_ANSWER:"
+  instruction: |
+    GAIA evaluation answer contract: after all research and reasoning, finish with
+    exactly one line of the form `FINAL_ANSWER: <answer>`. The value must contain
+    only the answer requested by the question. Do not use Markdown around the
+    answer, do not add explanations, sources, units, or punctuation that were
+    not requested. If the question asks for a number, return the bare number.
+budgets:
+  maxWallMs: 300000
+  maxTokens: 80000
+  maxSteps: 12
+  maxToolCalls: 12

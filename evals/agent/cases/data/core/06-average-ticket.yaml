@@ -1,0 +1,41 @@
+id: data.average-ticket
+suite: data-core
+version: 1
+hardGate: true
+judgeTask: "计算已完成订单的平均金额，结果应为 200，并报告计算结论。"
+input:
+  message: "计算已完成订单的平均金额，并报告结果。"
+expected:
+  finalContains: ["200", "平均"]
+  finalNotContains: ["179.17"]
+  maxSteps: 2
+  requiredTools: ["sql_query"]
+  requiredToolSequence: ["sql_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  sqlOracle:
+    fixture: fixtures/analytics.sql
+    expectedColumns: ["avg_amount"]
+    expectedRows:
+      - [200.0]
+    numericTolerance: 0.01
+    ordered: false
+budgets:
+  maxTotalTokens: 800
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: sql_query
+    arguments:
+      sql: "select round(avg(amount), 2) as avg_amount from orders where status = 'completed'"
+    result: '{"rows":[{"avg_amount":200.0}]}'
+    thought: "对已完成订单计算平均金额。"
+    promptTokens: 140
+    completionTokens: 20
+    totalTokens: 160
+  - type: final
+    content: "已完成订单的平均金额为 200。"
+    promptTokens: 100
+    completionTokens: 16
+    totalTokens: 116

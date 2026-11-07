@@ -1,0 +1,36 @@
+id: skill.correct-selection
+suite: skill-sim
+version: 1
+hardGate: true
+judgeTask: "任务需要 PDF 处理，加载 pdf skill，并从表格中生成摘要。"
+input:
+  message: "读取 report.pdf，提取表格内容并生成摘要。"
+expected:
+  finalContains: ["表格", "摘要"]
+  maxSteps: 2
+  requiredTools: ["skill_view"]
+  requiredToolSequence: ["skill_view"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  requiredSkill: "pdf"
+  forbiddenSkills: ["docx", "xlsx"]
+  maxSkillLoads: 1
+budgets:
+  maxTotalTokens: 300
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: skill_view
+    arguments:
+      name: "pdf"
+    result: "PDF skill：读取 PDF 表格，提取单元格并保留页码。"
+    thought: "任务需要 PDF 处理，加载 pdf skill。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: final
+    content: "已加载 PDF skill，提取表格内容并生成摘要。"
+    promptTokens: 100
+    completionTokens: 10
+    totalTokens: 110

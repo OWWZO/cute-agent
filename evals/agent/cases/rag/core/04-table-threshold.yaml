@@ -1,0 +1,36 @@
+id: rag.table-threshold
+suite: rag-core
+version: 1
+hardGate: true
+judgeTask: "从费用标准表中查出交通费上限为 800 元，并带上表格行引用。"
+input:
+  message: "差旅交通费的报销上限是多少？请从费用标准表中查询并给出引用。"
+expected:
+  finalContains: ["800 元", "[expense-table.csv#row12]"]
+  finalNotContains: ["没有上限"]
+  maxSteps: 2
+  requiredTools: ["mrag_query"]
+  requiredToolSequence: ["mrag_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  requiredCitations: ["[expense-table.csv#row12]"]
+budgets:
+  maxTotalTokens: 800
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: mrag_query
+    arguments:
+      question: "交通费报销上限"
+      kbId: "finance"
+    result: "[expense-table.csv#row12] 交通费报销上限为 800 元。"
+    thought: "查询费用标准表。"
+    promptTokens: 120
+    completionTokens: 22
+    totalTokens: 142
+  - type: final
+    content: "交通费报销上限为 800 元。[expense-table.csv#row12]"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120

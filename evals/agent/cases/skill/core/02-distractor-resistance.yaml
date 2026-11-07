@@ -1,0 +1,45 @@
+id: skill.distractor-resistance
+suite: skill-sim
+version: 1
+hardGate: true
+judgeTask: "任务只需要 xlsx skill，先搜索再加载 xlsx，不得加载 pdf 或 docx。"
+input:
+  message: "分析 sales.xlsx 的月度趋势。不要加载无关的 PDF 或 DOCX skill。"
+expected:
+  finalContains: ["趋势", "xlsx"]
+  maxSteps: 3
+  requiredTools: ["skills_search", "skill_view"]
+  requiredToolSequence: ["skills_search", "skill_view"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+  requiredSkill: "xlsx"
+  forbiddenSkills: ["pdf", "docx"]
+  maxSkillLoads: 1
+budgets:
+  maxTotalTokens: 450
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: skills_search
+    arguments:
+      query: "Excel 月度趋势分析"
+    result: "xlsx: 处理 Excel 表格并计算月度趋势。"
+    thought: "先搜索匹配的 skill。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: tool
+    tool: skill_view
+    arguments:
+      name: "xlsx"
+    result: "xlsx skill：按月份聚合并生成趋势摘要。"
+    thought: "加载匹配的 xlsx skill。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: final
+    content: "已使用 xlsx skill 得到月度趋势。"
+    promptTokens: 100
+    completionTokens: 10
+    totalTokens: 110

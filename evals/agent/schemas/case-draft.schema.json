@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/case-draft.schema.json",
+  "title": "Cute Agent Private Badcase Draft",
+  "type": "object",
+  "required": [
+    "id",
+    "suite",
+    "version",
+    "hardGate",
+    "status",
+    "manualReviewRequired",
+    "source",
+    "input",
+    "observed",
+    "expected",
+    "budgets",
+    "script",
+    "replay"
+  ],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "suite": {"const": "private-badcase"},
+    "version": {"type": "integer", "minimum": 1},
+    "hardGate": {"type": "boolean"},
+    "status": {"const": "draft"},
+    "manualReviewRequired": {"const": true},
+    "source": {
+      "type": "object",
+      "required": ["trace", "requestId", "failureClass"],
+      "properties": {
+        "trace": {"type": "string"},
+        "requestId": {"type": "string"},
+        "sessionId": {"type": "string"},
+        "failureClass": {
+          "enum": ["model", "tool", "environment", "persistence", "unknown"]
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {"message": {"type": "string", "minLength": 1}}
+    },
+    "observed": {"type": "object"},
+    "expected": {"type": "object"},
+    "budgets": {
+      "type": "object",
+      "properties": {
+        "maxTotalTokens": {"type": ["integer", "null"]},
+        "maxWallMs": {"type": ["integer", "null"]}
+      }
+    },
+    "script": {"type": "array"},
+    "replay": {
+      "type": "object",
+      "required": ["mode", "oracleReviewed"],
+      "properties": {
+        "mode": {"const": "badcase-regression"},
+        "oracleReviewed": {"type": "boolean"},
+        "baselineTrace": {"type": "string"},
+        "counterfactualModel": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

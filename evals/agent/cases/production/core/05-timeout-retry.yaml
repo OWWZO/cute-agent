@@ -1,0 +1,57 @@
+id: production.timeout-retry
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: recovery
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: tool_timeout
+judgeTask: "读取远端文件首次超时后重试成功，并说明恢复完成。"
+input:
+  message: "读取 reports/latest.json；如果超时就重试一次。"
+expected:
+  finalContains: ["重试", "成功"]
+  maxSteps: 3
+  requiredTools: ["read_file"]
+  requiredToolSequence: ["read_file", "read_file"]
+  strictToolSequence: true
+  referenceToolSequence: ["read_file", "read_file"]
+  subgoals:
+    - id: retry_after_timeout
+      requiredTools: ["read_file"]
+      minSuccessfulTools: 1
+    - id: report_recovery
+      finalContains: ["重试", "成功"]
+  forbiddenTools: []
+  requireToolRecovery: true
+budgets:
+  maxTotalTokens: 900
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: reports/latest.json
+    fault: timeout
+    thought: "首次读取。"
+    promptTokens: 100
+    completionTokens: 18
+    totalTokens: 118
+  - type: tool
+    tool: read_file
+    arguments:
+      path: reports/latest.json
+    result: '{"status":"ok"}'
+    thought: "超时后重试。"
+    promptTokens: 110
+    completionTokens: 18
+    totalTokens: 128
+  - type: final
+    content: "首次读取超时，重试后成功。"
+    promptTokens: 90
+    completionTokens: 20
+    totalTokens: 110

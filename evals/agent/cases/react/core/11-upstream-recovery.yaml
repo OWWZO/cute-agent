@@ -1,0 +1,43 @@
+id: react.upstream-recovery
+suite: react-core
+version: 1
+hardGate: true
+judgeTask: "调用库存服务；首次遇到上游 503 后重试成功，并说明上游短暂不可用。"
+input:
+  message: "查询库存服务，上游 503 时重试一次并总结。"
+expected:
+  finalContains: ["上游", "重试"]
+  maxSteps: 3
+  requiredTools: ["inventory_query"]
+  requiredToolSequence: ["inventory_query", "inventory_query"]
+  strictToolSequence: true
+  forbiddenTools: []
+  requireToolRecovery: true
+  minToolSuccessRate: 0.5
+budgets:
+  maxTotalTokens: 700
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: inventory_query
+    arguments:
+      sku: demo-001
+    fault: upstream
+    thought: "先查询库存服务。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: tool
+    tool: inventory_query
+    arguments:
+      sku: demo-001
+    result: "{\"available\":8}"
+    thought: "上游恢复后重试。"
+    promptTokens: 120
+    completionTokens: 20
+    totalTokens: 140
+  - type: final
+    content: "上游服务短暂不可用，重试后已查询到可用库存 8。"
+    promptTokens: 80
+    completionTokens: 24
+    totalTokens: 104

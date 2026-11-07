@@ -1,0 +1,57 @@
+id: production.upstream-fallback
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: recovery
+  lengthBucket: medium
+  toolCountBucket: few
+  risk: medium
+  failureMode: upstream_unavailable
+judgeTask: "线上搜索上游不可用后使用本地缓存，明确说明降级来源。"
+input:
+  message: "查最新维护窗口；线上搜索不可用时读取本地维护缓存。"
+expected:
+  finalContains: ["上游不可用", "2026-11-08", "02:00"]
+  maxSteps: 3
+  requiredTools: ["search_web", "read_file"]
+  requiredToolSequence: ["search_web", "read_file"]
+  strictToolSequence: true
+  referenceToolSequence: ["search_web", "read_file"]
+  subgoals:
+    - id: use_cache_after_upstream
+      requiredTools: ["read_file"]
+      minSuccessfulTools: 1
+    - id: report_window
+      finalContains: ["上游不可用", "2026-11-08", "02:00"]
+  forbiddenTools: ["delete_file"]
+  requireToolRecovery: true
+budgets:
+  maxTotalTokens: 1000
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: search_web
+    arguments:
+      query: "最新维护窗口"
+    fault: upstream
+    thought: "先尝试线上搜索。"
+    promptTokens: 90
+    completionTokens: 18
+    totalTokens: 108
+  - type: tool
+    tool: read_file
+    arguments:
+      path: maintenance-cache.json
+    result: '{"window":"2026-11-08 02:00-04:00"}'
+    thought: "线上不可用，读取本地缓存。"
+    promptTokens: 100
+    completionTokens: 18
+    totalTokens: 118
+  - type: final
+    content: "搜索上游不可用，已从本地缓存确认维护窗口为 2026-11-08 02:00-04:00。"
+    promptTokens: 100
+    completionTokens: 24
+    totalTokens: 124

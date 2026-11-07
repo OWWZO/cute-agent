@@ -1,0 +1,33 @@
+id: react.single-tool
+suite: react-core
+version: 1
+hardGate: true
+judgeTask: "读取 config.yaml，并在最终回答中说明数据库主机 localhost 和端口 3306。"
+input:
+  message: "读取 config.yaml 并说明数据库主机和端口。"
+expected:
+  finalContains: ["localhost", "3306"]
+  maxSteps: 2
+  requiredTools: ["read_file"]
+  requiredToolSequence: ["read_file"]
+  strictToolSequence: true
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 400
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: config.yaml
+    result: "db.host=localhost\ndb.port=3306"
+    thought: "先读取配置文件。"
+    promptTokens: 100
+    completionTokens: 20
+    totalTokens: 120
+  - type: final
+    content: "数据库主机是 localhost，端口是 3306。"
+    promptTokens: 80
+    completionTokens: 30
+    totalTokens: 110

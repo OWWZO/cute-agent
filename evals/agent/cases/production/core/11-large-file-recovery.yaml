@@ -1,0 +1,59 @@
+id: production.large-file-recovery
+suite: production-core
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: curated-production-like
+  taskType: file_analysis
+  lengthBucket: long
+  toolCountBucket: few
+  risk: medium
+  failureMode: truncated_result
+judgeTask: "首次读取被截断后按偏移继续读取，找到第 7 页的结论。"
+input:
+  message: "读取 handbook.md，找到第 7 页的结论；内容太长可以分段读取。"
+expected:
+  finalContains: ["第 7 页", "灰度发布"]
+  maxSteps: 3
+  requiredTools: ["read_file"]
+  requiredToolSequence: ["read_file", "read_file"]
+  strictToolSequence: true
+  referenceToolSequence: ["read_file", "read_file"]
+  subgoals:
+    - id: continue_after_truncation
+      requiredTools: ["read_file"]
+      minSuccessfulTools: 2
+    - id: extract_page_7
+      finalContains: ["第 7 页", "灰度发布"]
+  forbiddenTools: []
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 1000
+  maxWallMs: 60000
+script:
+  - type: tool
+    tool: read_file
+    arguments:
+      path: handbook.md
+      offset: 0
+    result: "TRUNCATED: only pages 1-4 returned"
+    thought: "首次读取被截断。"
+    promptTokens: 120
+    completionTokens: 20
+    totalTokens: 140
+  - type: tool
+    tool: read_file
+    arguments:
+      path: handbook.md
+      offset: 4
+    result: "Page 7: 灰度发布必须先小流量验证。"
+    thought: "按偏移继续读取后续页面。"
+    promptTokens: 120
+    completionTokens: 20
+    totalTokens: 140
+  - type: final
+    content: "第 7 页的结论是灰度发布必须先小流量验证。"
+    promptTokens: 100
+    completionTokens: 24
+    totalTokens: 124

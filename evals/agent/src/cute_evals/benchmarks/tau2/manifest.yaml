@@ -1,0 +1,28 @@
+name: tau2
+version: v1.0.1
+upstream: https://github.com/sierra-research/tau2-bench
+license: MIT
+split: official-subset
+scoreLabel: official-subset
+runnerMode: official-environment
+environment: task-server
+officialEvaluator: true
+domain: airline
+domains:
+  - airline
+  - banking_knowledge
+  - retail
+  - telecom
+source:
+  kind: github-tar
+  url: https://api.github.com/repos/sierra-research/tau2-bench/tarball/refs/tags/v1.0.1
+  sha256: 0b6d0937cf154fe686e3f0d6fabeb6c3c4e608defeec84ab18f797a5b636117a
+taskIds:
+  - "0"
+  - "1"
+  - "3"
+budgets:
+  maxWallMs: 600000
+  maxTokens: 40000
+  maxSteps: 24
+  maxTurns: 20
