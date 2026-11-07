@@ -179,11 +179,15 @@ public class CuteRuntimeAutoConfiguration {
             }
 
             @Override
-            public void onInboxChanged(String sessionId) {
+            public boolean onInboxChanged(String sessionId) {
                 BackgroundTaskWakeAdapter adapter = adapterProvider.getIfAvailable();
-                if (adapter != null) {
-                    adapter.onInboxChanged(sessionId);
-                }
+                return adapter != null && adapter.onInboxChanged(sessionId);
+            }
+
+            @Override
+            public boolean isAutoWakePaused(String sessionId) {
+                BackgroundTaskWakeAdapter adapter = adapterProvider.getIfAvailable();
+                return adapter != null && adapter.isAutoWakePaused(sessionId);
             }
         };
     }

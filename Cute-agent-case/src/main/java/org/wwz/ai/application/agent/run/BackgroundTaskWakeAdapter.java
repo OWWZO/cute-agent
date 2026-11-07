@@ -12,6 +12,7 @@ import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
+import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem;
@@ -126,34 +127,42 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
         if (sessionYieldGate.hasOpenYield(sid)) {
             return;
         }
-        if (isAutoWakePaused(sid)) {
+        boolean autoWakePaused = isAutoWakePaused(sid);
+        if (autoWakePaused) {
             completeStaleProjections(sid, stale);
             return;
         }
-        if (hasWakeablePending(sid)) {
-            scheduleWake(sid);
+        if (hasWakeablePending(sid, autoWakePaused)) {
+            scheduleWake(sid, autoWakePaused);
             return;
         }
         completeStaleProjections(sid, stale);
     }
 
     @Override
-    public void onInboxChanged(String sessionId) {
+    public boolean onInboxChanged(String sessionId) {
         if (StringUtils.isBlank(sessionId)) {
-            return;
+            return false;
         }
         String sid = sessionId.trim();
         if (activeAgentRunRegistry.findBySessionId(sid).isPresent()
-                || sessionYieldGate.hasOpenYield(sid)
-                || !hasWakeablePending(sid)) {
-            return;
+                || sessionYieldGate.hasOpenYield(sid)) {
+            return false;
         }
-        scheduleWake(sid);
+        boolean autoWakePaused = isAutoWakePaused(sid);
+        if (!hasWakeablePending(sid, autoWakePaused)) {
+            return false;
+        }
+        return scheduleWake(sid, autoWakePaused);
     }
 
-    private void scheduleWake(String sessionId) {
-        if (!hasWakeablePending(sessionId)) {
-            return;
+    private boolean scheduleWake(String sessionId) {
+        return scheduleWake(sessionId, isAutoWakePaused(sessionId));
+    }
+
+    private boolean scheduleWake(String sessionId, boolean autoWakePaused) {
+        if (!hasWakeablePending(sessionId, autoWakePaused)) {
+            return false;
         }
         long delayMs = Math.max(0L, cuteConfig.getBackgroundAutoContinuationDelayMs());
         ScheduledFuture<?> previous = pendingWakes.remove(sessionId);
@@ -169,8 +178,10 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
                     delayMs,
                     TimeUnit.MILLISECONDS);
             pendingWakes.put(sessionId, scheduled);
+            return true;
         } catch (RejectedExecutionException e) {
             log.warn("background wake schedule rejected sessionId={}", sessionId, e);
+            return false;
         }
     }
 
@@ -183,7 +194,8 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
         if (sessionYieldGate.hasOpenYield(sessionId)) {
             return;
         }
-        if (isAutoWakePaused(sessionId) || !hasWakeablePending(sessionId)) {
+        boolean autoWakePaused = isAutoWakePaused(sessionId);
+        if (!hasWakeablePending(sessionId, autoWakePaused)) {
             completeStaleProjections(sessionId, stale);
             return;
         }
@@ -201,8 +213,8 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
         }
     }
 
-    private boolean hasWakeablePending(String sessionId) {
-        if (isAutoWakePaused(sessionId)) {
+    private boolean hasWakeablePending(String sessionId, boolean autoWakePaused) {
+        if (autoWakePaused) {
             return false;
         }
         if (hasPendingKind(sessionId, SessionInboxItem.KIND_USER_MESSAGE)) {
@@ -221,7 +233,8 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
                 && SessionNotificationHub.hasPending(sessionId);
     }
 
-    private boolean isAutoWakePaused(String sessionId) {
+    @Override
+    public boolean isAutoWakePaused(String sessionId) {
         if (sessionInboxPort != null && sessionInboxPort.hasHeldUserMessage(sessionId)) {
             return true;
         }
@@ -231,7 +244,7 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
         try {
             DialogueSession session = executionLedgerReadRepository.querySessionEntity(sessionId);
             return session != null && session.getStatus() != null
-                    && session.getStatus() == org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants.STATUS_STOPPED;
+                    && session.getStatus() == ExecutionLedgerConstants.STATUS_STOPPED;
         } catch (Exception e) {
             log.debug("session state check failed sessionId={}", sessionId, e);
             return false;

@@ -28,6 +28,7 @@ import java.util.UUID;
 public class AgentRunInjectApplicationService {
 
     private static final int MAX_TEXT_CHARS = 8000;
+    private static final int MAX_CLIENT_MESSAGE_ID_CHARS = 160;
 
     private final ActiveAgentRunRegistry activeAgentRunRegistry;
 
@@ -74,8 +75,15 @@ public class AgentRunInjectApplicationService {
             }
         }
 
+        String normalizedClientMessageId = StringUtils.trimToNull(clientMessageId);
+        if (normalizedClientMessageId != null
+                && normalizedClientMessageId.length() > MAX_CLIENT_MESSAGE_ID_CHARS) {
+            result.put("accepted", false);
+            result.put("message", "clientMessageId 长度不能超过160");
+            return result;
+        }
         String idempotencyKey = StringUtils.defaultIfBlank(
-                StringUtils.trimToNull(clientMessageId), newClientMessageId());
+                normalizedClientMessageId, newClientMessageId());
         if (sessionInboxPort != null) {
             return injectThroughInbox(result, found, sessionId, body, idempotencyKey);
         }
@@ -141,19 +149,31 @@ public class AgentRunInjectApplicationService {
             result.put("message", "该消息已处理");
             return result;
         }
+        boolean autoWakePaused = backgroundTaskWakePort != null
+                && backgroundTaskWakePort.isAutoWakePaused(sessionId);
+        if (autoWakePaused) {
+            sessionInboxPort.holdPendingUserMessages(sessionId);
+            result.put("accepted", true);
+            result.put("queued", true);
+            result.put("held", true);
+            result.put("wakeScheduled", false);
+            result.put("message", "消息已保留，需你确认后继续");
+            return result;
+        }
         if (queued.isHeld()) {
             sessionInboxPort.releaseHeldUserMessages(sessionId, idempotencyKey);
         }
 
         // 入队提交之后必须再判活。入队前拿到的 ActiveRun 可能已经在 offer 期间结束，
         // 若继续信任旧快照，消息会错过本轮收尾复查，也不会安排下一次唤醒。
-        scheduleInboxWake(sessionId, result);
+        boolean wakeScheduled = scheduleInboxWake(sessionId, result);
         Optional<ActiveAgentRunRegistry.ActiveRun> current =
                 activeAgentRunRegistry.findBySessionId(sessionId);
         if (current.isEmpty()) {
             result.put("accepted", true);
             result.put("queued", true);
-            result.put("message", "已排队，将自动继续处理");
+            result.put("message", wakeScheduled
+                    ? "已排队，将自动继续处理" : "消息已排队");
             return result;
         }
 
@@ -180,21 +200,24 @@ public class AgentRunInjectApplicationService {
         // turnClosed 后 ActiveRun 可能尚未 end：先入队，再由 end 后的 onRunSettled 复查唤醒。
         result.put("accepted", true);
         result.put("queued", true);
-        result.put("message", "当前回复已收尾，消息已排队并继续处理");
+        result.put("message", wakeScheduled
+                ? "当前回复已收尾，消息已排队并继续处理" : "当前回复已收尾，消息已排队");
         return result;
     }
 
-    private void scheduleInboxWake(String sessionId, Map<String, Object> result) {
+    private boolean scheduleInboxWake(String sessionId, Map<String, Object> result) {
         if (backgroundTaskWakePort == null) {
             result.put("wakeScheduled", false);
-            return;
+            return false;
         }
         try {
-            backgroundTaskWakePort.onInboxChanged(sessionId);
-            result.put("wakeScheduled", true);
+            boolean scheduled = backgroundTaskWakePort.onInboxChanged(sessionId);
+            result.put("wakeScheduled", scheduled);
+            return scheduled;
         } catch (Exception e) {
             log.warn("schedule inbox wake failed sessionId={}", sessionId, e);
             result.put("wakeScheduled", false);
+            return false;
         }
     }
 

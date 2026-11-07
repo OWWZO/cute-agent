@@ -8,6 +8,8 @@ import org.wwz.ai.application.agent.run.BackgroundTaskWakeAdapter;
 import org.wwz.ai.application.agent.run.SessionYieldGate;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
+import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 
@@ -16,6 +18,7 @@ import java.util.function.Consumer;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -54,6 +57,40 @@ public class SessionInboxWakeAdapterTest {
             adapter.onInboxChanged("sess-user-wake");
             verify(continuation, timeout(1000)).dispatchWake(
                     eq("sess-user-wake"), any(), eq("user_inbox"), eq("继续处理"), any(Consumer.class));
+        } finally {
+            adapter.shutdown();
+        }
+    }
+
+    @Test
+    public void settlementQueriesPausedStateOnlyOnce() {
+        String sessionId = "sess-single-query";
+        SessionInboxPort inbox = Mockito.mock(SessionInboxPort.class);
+        when(inbox.hasDeliverableKind(sessionId, "USER_MESSAGE")).thenReturn(true);
+        IExecutionLedgerReadRepository readRepository = Mockito.mock(IExecutionLedgerReadRepository.class);
+        when(readRepository.querySessionEntity(sessionId))
+                .thenReturn(DialogueSession.builder().sessionId(sessionId).userId("user-1").build());
+
+        CuteConfig config = new CuteConfig();
+        config.setBackgroundAutoContinuation(true);
+        config.setBackgroundAutoContinuationDelayMs(3_600_000L);
+        BackgroundTaskWakeAdapter adapter = new BackgroundTaskWakeAdapter(
+                new ActiveAgentRunRegistry(),
+                new SessionYieldGate() {
+                    @Override
+                    public boolean hasOpenYield(String ignoredSessionId) {
+                        return false;
+                    }
+                },
+                Mockito.mock(BackgroundTaskAutoContinuationApplicationService.class),
+                new SessionProjectionRegistry(),
+                config);
+        ReflectionTestUtils.setField(adapter, "sessionInboxPort", inbox);
+        ReflectionTestUtils.setField(adapter, "executionLedgerReadRepository", readRepository);
+
+        try {
+            adapter.onRunSettled(sessionId);
+            verify(readRepository, times(1)).querySessionEntity(sessionId);
         } finally {
             adapter.shutdown();
         }

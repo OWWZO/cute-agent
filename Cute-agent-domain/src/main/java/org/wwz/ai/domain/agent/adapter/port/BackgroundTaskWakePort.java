@@ -26,6 +26,14 @@ public interface BackgroundTaskWakePort {
     /**
      * 用户消息已持久化到 Session Inbox 后触发判活。
      */
-    default void onInboxChanged(String sessionId) {
+    default boolean onInboxChanged(String sessionId) {
+        return false;
+    }
+
+    /**
+     * 当前会话是否暂停自动唤醒：用户已 Stop，或仍有 HELD 用户消息。
+     */
+    default boolean isAutoWakePaused(String sessionId) {
+        return false;
     }
 }

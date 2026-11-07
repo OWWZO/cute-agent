@@ -28,6 +28,7 @@ import org.wwz.ai.domain.agent.runtime.tasklist.TaskNotification;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -149,6 +150,48 @@ public class BackgroundTaskAutoContinuationSettlementTest {
         Assert.assertNotNull(dispatched.get());
         Assert.assertEquals("", dispatched.get().getQuery());
         Assert.assertEquals("继续处理", dispatched.get().getLedgerQueryText());
+    }
+
+    @Test
+    public void busyWakeDoesNotImmediatelyResettleIntoAnotherWake() {
+        String sessionId = "session-wake-busy";
+        ActiveAgentRunRegistry activeRuns = new ActiveAgentRunRegistry();
+        SessionProjectionRegistry projections = new SessionProjectionRegistry();
+        AgentSessionEventBus eventBus = (ignoredSessionId, ignoredFrame) -> {
+        };
+        IExecutionLedgerReadRepository readRepository = Mockito.mock(IExecutionLedgerReadRepository.class);
+        Mockito.when(readRepository.querySessionEntity(sessionId))
+                .thenReturn(DialogueSession.builder().sessionId(sessionId).userId("user-1").build());
+
+        CuteConfig config = new CuteConfig();
+        config.setBackgroundAutoContinuation(true);
+        BackgroundTaskAutoContinuationApplicationService continuation =
+                new BackgroundTaskAutoContinuationApplicationService(
+                        readRepository,
+                        (request, stream) -> {
+                        },
+                        activeRuns,
+                        eventBus,
+                        new AgentRunLaunchGate(0),
+                        new SessionEventClock(
+                                readRepository,
+                                Mockito.mock(IExecutionLedgerWriteRepository.class)),
+                        projections,
+                        config);
+        ReflectionTestUtils.setField(continuation, "handlerMap", Collections.emptyMap());
+        ReflectionTestUtils.setField(continuation, "dispatchExecutor", (Executor) command -> {
+            throw new RejectedExecutionException("busy");
+        });
+        ReflectionTestUtils.setField(continuation, "agentTimelineEventProjector",
+                Mockito.mock(AgentTimelineEventProjector.class));
+        AtomicInteger settleCount = new AtomicInteger();
+
+        boolean accepted = continuation.dispatchWake(
+                sessionId, null, "background_task", null, requestId -> settleCount.incrementAndGet());
+
+        Assert.assertTrue(accepted);
+        Assert.assertEquals(0, settleCount.get());
+        Assert.assertTrue(activeRuns.findBySessionId(sessionId).isEmpty());
     }
 
     private static BackgroundTaskCompletionEvent event(String sessionId, String taskId) {
