@@ -160,6 +160,7 @@ public class SessionInboxInjectReliabilityTest {
                 new AgentRunInjectApplicationService(registry);
         ReflectionTestUtils.setField(service, "sessionInboxPort", inbox);
         ReflectionTestUtils.setField(service, "backgroundTaskWakePort", wakePort);
+        when(wakePort.onInboxChanged("sess-race")).thenReturn(true);
 
         Map<String, Object> result = service.inject(
                 "sess-race", "req-race", "继续", "client-race-1");
@@ -168,6 +169,54 @@ public class SessionInboxInjectReliabilityTest {
         order.verify(inbox).offer(any());
         order.verify(wakePort).onInboxChanged("sess-race");
         Assert.assertEquals("已排队，将自动继续处理", result.get("message"));
+    }
+
+    @Test
+    public void overlongClientMessageIdIsRejectedBeforeInboxWrite() {
+        AgentRunInjectApplicationService service =
+                new AgentRunInjectApplicationService(new ActiveAgentRunRegistry());
+        SessionInboxPort inbox = Mockito.mock(SessionInboxPort.class);
+        ReflectionTestUtils.setField(service, "sessionInboxPort", inbox);
+
+        Map<String, Object> result = service.inject(
+                "sess-long-key", "req-long-key", "继续", "x".repeat(161));
+
+        Assert.assertEquals(false, result.get("accepted"));
+        Assert.assertEquals("clientMessageId 长度不能超过160", result.get("message"));
+        verify(inbox, Mockito.never()).offer(any());
+    }
+
+    @Test
+    public void pausedSessionInjectionIsReportedAsHeldWithoutSchedulingWake() {
+        ActiveAgentRunRegistry registry = new ActiveAgentRunRegistry();
+        SessionInboxPort inbox = Mockito.mock(SessionInboxPort.class);
+        BackgroundTaskWakePort wakePort = Mockito.mock(BackgroundTaskWakePort.class);
+        when(wakePort.isAutoWakePaused("sess-paused")).thenReturn(true);
+        when(inbox.offer(any())).thenAnswer(invocation -> {
+            SessionInboxItem offered = invocation.getArgument(0);
+            return SessionInboxItem.builder()
+                    .id(13L)
+                    .state(offered.getState())
+                    .kind(offered.getKind())
+                    .idempotencyKey(offered.getIdempotencyKey())
+                    .build();
+        });
+
+        AgentRunInjectApplicationService service =
+                new AgentRunInjectApplicationService(registry);
+        ReflectionTestUtils.setField(service, "sessionInboxPort", inbox);
+        ReflectionTestUtils.setField(service, "backgroundTaskWakePort", wakePort);
+
+        Map<String, Object> result = service.inject(
+                "sess-paused", "req-ended", "继续", "client-paused-1");
+
+        Assert.assertEquals(true, result.get("accepted"));
+        Assert.assertEquals(true, result.get("queued"));
+        Assert.assertEquals(true, result.get("held"));
+        Assert.assertEquals(false, result.get("wakeScheduled"));
+        Assert.assertEquals("消息已保留，需你确认后继续", result.get("message"));
+        verify(inbox).holdPendingUserMessages("sess-paused");
+        verify(wakePort, Mockito.never()).onInboxChanged("sess-paused");
     }
 
     @Test
