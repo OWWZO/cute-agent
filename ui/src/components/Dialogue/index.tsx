@@ -236,7 +236,7 @@ const DialogueComponent: FC<Props> = (props) => {
       ) : null}
 
       {/* 后台任务唤醒轮：没有用户提问，只标注来源 */}
-      {chat.backgroundWake ? (
+      {chat.backgroundWake && !chat.loading ? (
         <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
           <Sparkles className="size-4" aria-hidden="true" />
           <span>后台任务已完成</span>
@@ -244,7 +244,7 @@ const DialogueComponent: FC<Props> = (props) => {
       ) : null}
 
       {/* 用户消息 */}
-      {chat.query ? (
+      {chat.query && !chat.backgroundWake ? (
         <div
           className="user-message-enter mt-5 ml-auto flex w-full max-w-[78%] flex-col items-end gap-1"
           data-user-message-anchor
