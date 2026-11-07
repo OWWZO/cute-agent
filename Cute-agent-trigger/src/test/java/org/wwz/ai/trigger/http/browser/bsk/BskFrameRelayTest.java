@@ -275,6 +275,37 @@ public class BskFrameRelayTest {
     }
 
     @Test
+    public void sameRpcIdOnDifferentConnectionsIsIndependent() {
+        RecordingSink sinkB = new RecordingSink();
+        relay.registerSession("conn-1", null, "user-1", sink);
+        relay.registerSession("conn-2", null, "user-2", sinkB);
+        relay.handleHandshake("conn-1", handshakeFrame("hs-1"));
+        relay.handleHandshake("conn-2", handshakeFrame("hs-2"));
+
+        CompletableFuture<JSONObject> first =
+                relay.dispatch("conn-1", "rpc-shared", toolRequest("rpc-shared"));
+        CompletableFuture<JSONObject> second =
+                relay.dispatch("conn-2", "rpc-shared", toolRequest("rpc-shared"));
+
+        Assert.assertNotNull(first);
+        Assert.assertNotNull(second);
+        Assert.assertFalse(first.isDone());
+        Assert.assertFalse(second.isDone());
+        Assert.assertEquals(2, relay.pendingCount());
+
+        JSONObject firstResponse = new JSONObject();
+        firstResponse.put("id", "rpc-shared");
+        firstResponse.put("result", "first");
+        JSONObject secondResponse = new JSONObject();
+        secondResponse.put("id", "rpc-shared");
+        secondResponse.put("result", "second");
+        Assert.assertTrue(relay.routeResponse("conn-1", "rpc-shared", firstResponse));
+        Assert.assertTrue(relay.routeResponse("conn-2", "rpc-shared", secondResponse));
+        Assert.assertEquals("first", first.join().getString("result"));
+        Assert.assertEquals("second", second.join().getString("result"));
+    }
+
+    @Test
     public void sessionEventsUpdateInteractionAndDropClosedSessions() {
         relay.registerSession("conn-1", null, "user-1", sink);
         relay.handleHandshake("conn-1", handshakeFrame("hs-1"));
@@ -295,6 +326,23 @@ public class BskFrameRelayTest {
         closed.getJSONObject("payload").put("session_id", "s1");
         Assert.assertTrue(relay.handleEvent("conn-1", closed));
         Assert.assertTrue(relay.sessionStatusEntries("user-1").isEmpty());
+    }
+
+    @Test
+    public void statusEntriesExposeLastSeenAndIdleProtection() {
+        relay.registerSession("conn-1", null, "user-1", sink);
+        relay.handleHandshake("conn-1", handshakeFrame("hs-1"));
+        relay.registerSession("s1", "conn-1", 7L, new JSONObject());
+        JSONObject activity = event("session.activity", new JSONObject());
+        activity.getJSONObject("payload").put("session_id", "s1");
+        activity.getJSONObject("payload").put("idle_protected", true);
+
+        Assert.assertTrue(relay.handleEvent("conn-1", activity));
+
+        JSONObject browser = relay.browserStatusEntries("user-1").get(0);
+        JSONObject session = relay.sessionStatusEntries("user-1").get(0);
+        Assert.assertTrue(browser.getLongValue("last_seen_at_ms") > 0);
+        Assert.assertTrue(session.getBooleanValue("idle_protected"));
     }
 
     @Test

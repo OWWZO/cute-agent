@@ -150,8 +150,11 @@ public class BskCliRelay {
         this.awaitTimeoutSeconds = awaitTimeoutSeconds;
         this.frameRelay.setSessionEventListener(new BskFrameRelay.SessionEventListener() {
             @Override
-            public void onDialogChanged(JSONObject payload) {
-                dialogOperations.dialogChanged(payload);
+            public void onDialogChanged(String extensionConnectionId, JSONObject payload) {
+                if (!dialogOperations.dialogChanged(extensionConnectionId, payload)) {
+                    log.warn("ignoring dialog.changed from connection {} without a matching operation",
+                            extensionConnectionId);
+                }
             }
 
             @Override
@@ -258,7 +261,8 @@ public class BskCliRelay {
             for (Map.Entry<String, InFlightCall> entry : inFlight.entrySet()) {
                 if (connectionId.equals(entry.getValue().cliConnectionId)
                         && inFlight.remove(entry.getKey(), entry.getValue())) {
-                    frameRelay.failPending(entry.getKey(), "protocol_error",
+                    frameRelay.failPending(entry.getValue().extensionConnectionId,
+                            entry.getValue().rpcId, "protocol_error",
                             "cli disconnected before response arrived",
                             Map.of("reason", REASON_CLI_DISCONNECTED));
                 }
@@ -324,31 +328,100 @@ public class BskCliRelay {
         }
         InFlightCall call = new InFlightCall(
                 cli.connectionId(), targetConnectionId, sessionIdOf(rawFrame), rpcId);
+        String inFlightKey = callKey(cli.connectionId(), rpcId);
+        BskDialogOperations.Operation operation = null;
+        CompletableFuture<JSONObject> future;
         synchronized (cli) {
-            // 排队期间连接可能已经断开；检查与 inFlight 登记必须和 unregister
-            // 串行，否则会漏掉「检查通过后、登记前」这一个小窗口。
+            // 检查、登记和真正发包必须在同一把连接锁内完成，否则 unregister
+            // 可以插在“检查通过”和 dispatch 之间，让已断开的 CLI 继续操作浏览器。
             if (!isCurrentConnection(cli)) {
                 return cliDisconnectedFrame(rpcId);
             }
-            InFlightCall existing = inFlight.putIfAbsent(rpcId, call);
+            InFlightCall existing = inFlight.putIfAbsent(inFlightKey, call);
             if (existing != null) {
                 return errorFrame(rpcId, "protocol_error", "duplicate rpc id: " + rpcId, null);
             }
+            if (isDialogAware(method)) {
+                String sessionId = sessionIdOf(rawFrame);
+                if (StringUtils.isBlank(sessionId)) {
+                    inFlight.remove(inFlightKey, call);
+                    return errorFrame(rpcId, "invalid_params",
+                            "tool.* RPC requires non-empty session_id", null);
+                }
+                operation = dialogOperations.register(
+                        sessionId, cli.connectionId(), targetConnectionId, rpcId, method);
+                if (operation != null) {
+                    String forwardedFrame = withOperationId(frame, operation.id);
+                    if (forwardedFrame == null) {
+                        dialogOperations.remove(operation.id);
+                        inFlight.remove(inFlightKey, call);
+                        return errorFrame(rpcId, "invalid_params",
+                                "tool.* params must be a JSON object", null);
+                    }
+                    // 人工处理 dialog 的时间不受普通传输超时约束；结果由 operation 等待。
+                    future = frameRelay.dispatchWithoutTimeout(
+                            targetConnectionId, rpcId, forwardedFrame);
+                } else {
+                    // 配额满时降级为普通转发，确保动作仍只派发一次。
+                    future = frameRelay.dispatch(targetConnectionId, rpcId, rawFrame);
+                }
+            } else {
+                future = frameRelay.dispatch(targetConnectionId, rpcId, rawFrame);
+            }
+            if (future == null) {
+                if (operation != null) {
+                    dialogOperations.remove(operation.id);
+                }
+                inFlight.remove(inFlightKey, call);
+                return errorFrame(rpcId, "protocol_error", "extension is not connected",
+                        Map.of("reason", REASON_EXTENSION_DISCONNECTED));
+            }
         }
-        if (isDialogAware(method)) {
-            return dispatchDialogAware(cli, rawFrame, frame, rpcId,
-                    method, targetConnectionId, call);
+
+        if (operation != null) {
+            BskDialogOperations.Operation dialogOperation = operation;
+            future.whenComplete((value, error) -> {
+                inFlight.remove(inFlightKey, call);
+                JSONObject wire = error == null
+                        ? wireResponse(rpcId, value)
+                        : BskFrameRelay.completedError(
+                                rpcId, "protocol_error", String.valueOf(error), null);
+                if (error == null) {
+                    trackFailureOutcome(wire, rawFrame, targetConnectionId);
+                    if (wire.get("error") == null) {
+                        trackSessionOutcome(method, rawFrame, targetConnectionId, value);
+                    }
+                }
+                dialogOperation.finish(wire);
+            });
+            try {
+                boolean finished = dialogOperation.awaitInitial(awaitTimeoutSecondsFor(rawFrame));
+                if (finished) {
+                    dialogOperations.remove(dialogOperation.id);
+                    return dialogOperation.response.join();
+                }
+                return errorFrame(rpcId, "dialog_pending", DIALOG_PENDING_MESSAGE,
+                        dialogOperation.pendingData(dialogOperation.dialog.get()));
+            } catch (TimeoutException e) {
+                dialogOperations.remove(dialogOperation.id);
+                frameRelay.failPending(targetConnectionId, rpcId,
+                        "timeout", "extension did not respond in time", null);
+                return errorFrame(rpcId, "timeout", "extension did not respond in time", null);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                dialogOperations.remove(dialogOperation.id);
+                frameRelay.failPending(targetConnectionId, rpcId,
+                        "cancelled", "interrupted while waiting", null);
+                return errorFrame(rpcId, "protocol_error",
+                        "interrupted while waiting for extension", null);
+            }
         }
-        CompletableFuture<JSONObject> future = frameRelay.dispatch(targetConnectionId, rpcId, rawFrame);
-        if (future == null) {
-            inFlight.remove(rpcId, call);
-            return errorFrame(rpcId, "protocol_error", "extension is not connected",
-                    Map.of("reason", REASON_EXTENSION_DISCONNECTED));
-        }
-        future.whenComplete((value, error) -> inFlight.remove(rpcId, call));
+
+        future.whenComplete((value, error) -> inFlight.remove(inFlightKey, call));
         JSONObject value = await(future, rawFrame);
         if (value == null) {
-            frameRelay.failPending(rpcId, "timeout", "extension did not respond in time", null);
+            frameRelay.failPending(targetConnectionId, rpcId,
+                    "timeout", "extension did not respond in time", null);
             return errorFrame(rpcId, "timeout", "extension did not respond in time", null);
         }
         if (value.containsKey("__gateway_error")) {
@@ -361,73 +434,6 @@ public class BskCliRelay {
             trackSessionOutcome(method, rawFrame, targetConnectionId, value);
         }
         return answer;
-    }
-
-    /**
-     * 为会产生页面副作用的方法注册 operation，并注入内部 {@code _operation_id}。
-     *
-     * <p>原动作只派发一次。若扩展先报告 dialog，CLI 立即收到
-     * {@code dialog_pending}；扩展最终返回的原请求结果留在 registry，供
-     * {@code tool.operation_await} 读取。</p>
-     */
-    private JSONObject dispatchDialogAware(BskCliConnection cli, String rawFrame,
-                                           JSONObject frame, String rpcId, String method,
-                                           String targetConnectionId, InFlightCall call) {
-        String sessionId = sessionIdOf(rawFrame);
-        if (StringUtils.isBlank(sessionId)) {
-            inFlight.remove(rpcId, call);
-            return errorFrame(rpcId, "invalid_params",
-                    "tool.* RPC requires non-empty session_id", null);
-        }
-        BskDialogOperations.Operation operation = dialogOperations.register(
-                sessionId, cli.connectionId(), targetConnectionId, rpcId, method);
-        if (operation == null) {
-            inFlight.remove(rpcId, call);
-            return errorFrame(rpcId, "protocol_error",
-                    "dialog operation capacity reached; action was not dispatched",
-                    Map.of("dispatched", false));
-        }
-        String forwardedFrame = withOperationId(frame, operation.id);
-        if (forwardedFrame == null) {
-            dialogOperations.remove(operation.id);
-            inFlight.remove(rpcId, call);
-            return errorFrame(rpcId, "invalid_params",
-                    "tool.* params must be a JSON object", null);
-        }
-        CompletableFuture<JSONObject> future =
-                frameRelay.dispatch(targetConnectionId, rpcId, forwardedFrame);
-        if (future == null) {
-            dialogOperations.remove(operation.id);
-            inFlight.remove(rpcId, call);
-            return errorFrame(rpcId, "protocol_error", "extension is not connected",
-                    Map.of("reason", REASON_EXTENSION_DISCONNECTED));
-        }
-        future.whenComplete((value, error) -> {
-            inFlight.remove(rpcId, call);
-            JSONObject wire = error == null
-                    ? wireResponse(rpcId, value)
-                    : BskFrameRelay.completedError(
-                            rpcId, "protocol_error", String.valueOf(error), null);
-            operation.finish(wire);
-        });
-        try {
-            boolean finished = operation.awaitInitial(awaitTimeoutSecondsFor(rawFrame));
-            if (finished) {
-                dialogOperations.remove(operation.id);
-                return operation.response.join();
-            }
-            return errorFrame(rpcId, "dialog_pending", DIALOG_PENDING_MESSAGE,
-                    operation.pendingData(operation.dialog.get()));
-        } catch (TimeoutException e) {
-            dialogOperations.remove(operation.id);
-            frameRelay.failPending(rpcId, "timeout", "extension did not respond in time", null);
-            return errorFrame(rpcId, "timeout", "extension did not respond in time", null);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            dialogOperations.remove(operation.id);
-            frameRelay.failPending(rpcId, "cancelled", "interrupted while waiting", null);
-            return errorFrame(rpcId, "protocol_error", "interrupted while waiting for extension", null);
-        }
     }
 
     private QueuedCall claimQueued(BskCliConnection cli, String rpcId) {
@@ -613,7 +619,7 @@ public class BskCliRelay {
                 return cancelledResult(rpcId, true);
             }
         }
-        InFlightCall call = inFlight.get(targetRpcId);
+        InFlightCall call = inFlight.get(callKey(cli.connectionId(), targetRpcId));
         boolean cancelled = call != null
                 && cli.connectionId().equals(call.cliConnectionId)
                 && sendCancelToExtension(call);
@@ -699,7 +705,7 @@ public class BskCliRelay {
                     "operation not found in this session or its retained result expired; "
                             + "do not replay an action with unknown effects", null);
         }
-        InFlightCall call = inFlight.get(operation.cliRpcId);
+        InFlightCall call = inFlight.get(callKey(operation.cliConnectionId, operation.cliRpcId));
         boolean cancelled = call != null
                 && operation.extensionConnectionId.equals(call.extensionConnectionId)
                 && sendCancelToExtension(call);
@@ -905,7 +911,8 @@ public class BskCliRelay {
             }
             sendCancelToExtension(call);
             if (inFlight.remove(entry.getKey(), call)) {
-                frameRelay.failPending(entry.getKey(), code, message, data);
+                frameRelay.failPending(call.extensionConnectionId, call.rpcId,
+                        code, message, data);
             }
         }
     }

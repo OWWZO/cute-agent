@@ -95,17 +95,20 @@ final class BskDialogOperations {
         }
     }
 
-    void dialogChanged(JSONObject payload) {
+    boolean dialogChanged(String extensionConnectionId, JSONObject payload) {
         if (payload == null) {
-            return;
+            return false;
         }
         String sessionId = payload.getString("session_id");
         String operationId = payload.getString("operation_id");
         Operation operation = get(sessionId, operationId);
-        if (operation != null) {
-            JSONObject current = payload.get("dialog") instanceof JSONObject object ? object : null;
-            operation.dialogChanged(current);
+        if (operation == null || extensionConnectionId == null
+                || !extensionConnectionId.equals(operation.extensionConnectionId)) {
+            return false;
         }
+        JSONObject current = payload.get("dialog") instanceof JSONObject object ? object : null;
+        operation.dialogChanged(current);
+        return true;
     }
 
     private void pruneExpired() {

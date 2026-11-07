@@ -14,6 +14,7 @@ import org.wwz.ai.domain.agent.runtime.tool.common.WebFetchTool;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.test.domain.support.CuteRuntimeTestSupport;
 
+import java.net.UnknownHostException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Map;
@@ -130,7 +131,7 @@ public class WebFetchStructuredResultTest {
     }
 
     @Test
-    public void shouldOpenCircuitAfterRepeatedProxyFailures() {
+    public void shouldOpenCircuitAfterRepeatedUpstreamFailures() {
         AtomicInteger calls = new AtomicInteger();
         RemoteHttpPort httpPort = new RemoteHttpPort() {
             @Override
@@ -177,12 +178,102 @@ public class WebFetchStructuredResultTest {
 
         Map<?, ?> firstDetail = (Map<?, ?>) first.getLlmData();
         Map<?, ?> thirdDetail = (Map<?, ?>) third.getLlmData();
-        Assert.assertEquals("network_proxy", firstDetail.get("failureClass"));
-        Assert.assertEquals(Boolean.FALSE, firstDetail.get("retryable"));
+        Assert.assertEquals("upstream_error", firstDetail.get("failureClass"));
+        Assert.assertEquals(Boolean.TRUE, firstDetail.get("retryable"));
         Assert.assertEquals("network_circuit_open", thirdDetail.get("failureClass"));
         Assert.assertEquals(Boolean.FALSE, thirdDetail.get("retryable"));
+        Assert.assertFalse(thirdDetail.containsKey("attempt"));
         Assert.assertEquals(2, calls.get());
         Assert.assertTrue(Boolean.TRUE.equals(second.getFailed()));
         Assert.assertTrue(Boolean.TRUE.equals(third.getFailed()));
+    }
+
+    @Test
+    public void shouldTreatJvmDnsFailureAsNetworkInfrastructure() {
+        RemoteHttpPort httpPort = new RemoteHttpPort() {
+            @Override
+            public String execute(RemoteHttpRequest request) {
+                return "";
+            }
+
+            @Override
+            public RemoteHttpResponse executeDetailed(RemoteHttpRequest request) {
+                throw new IllegalStateException("request failed",
+                        new UnknownHostException("cute-tool"));
+            }
+        };
+
+        CuteConfig config = new CuteConfig();
+        ReflectionTestUtils.setField(config, "webFetchUrl", "http://cute-tool:1601");
+        WebFetchTool tool = new WebFetchTool();
+        AgentContext context = AgentContext.builder()
+                .requestId("req-web-fetch-dns")
+                .sessionId("session-web-fetch-dns")
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .build();
+
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
+                "url", "https://example.com/a",
+                "prompt", "extract"
+        ), context);
+
+        Map<?, ?> detail = (Map<?, ?>) payload.getLlmData();
+        Assert.assertEquals("network_proxy", detail.get("failureClass"));
+        Assert.assertEquals(Boolean.FALSE, detail.get("retryable"));
+        Assert.assertEquals(1, context.getToolAccessPolicy().getConsecutiveNetworkFailures());
+    }
+
+    @Test
+    public void shouldUseStatusCodeBeforeResponseBodyKeywords() {
+        AtomicInteger calls = new AtomicInteger();
+        RemoteHttpPort httpPort = new RemoteHttpPort() {
+            @Override
+            public String execute(RemoteHttpRequest request) {
+                return "";
+            }
+
+            @Override
+            public RemoteHttpResponse executeDetailed(RemoteHttpRequest request) {
+                if (calls.incrementAndGet() == 1) {
+                    return RemoteHttpResponse.builder()
+                            .statusCode(500)
+                            .statusText("Internal Server Error")
+                            .headers(Map.of("Content-Type", "text/html"))
+                            .body("404 proxy upstream failed")
+                            .finalUrl(request.getUrl())
+                            .build();
+                }
+                return RemoteHttpResponse.builder()
+                        .statusCode(404)
+                        .statusText("Not Found")
+                        .headers(Map.of("Content-Type", "text/html"))
+                        .body("proxy page is missing")
+                        .finalUrl(request.getUrl())
+                        .build();
+            }
+        };
+
+        CuteConfig config = new CuteConfig();
+        ReflectionTestUtils.setField(config, "webFetchUrl", "http://cute-tool:1601");
+        WebFetchTool tool = new WebFetchTool();
+        AgentContext context = AgentContext.builder()
+                .requestId("req-web-fetch-status")
+                .sessionId("session-web-fetch-status")
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .build();
+
+        ToolResultPayload first = (ToolResultPayload) tool.execute(Map.of(
+                "url", "https://example.com/a",
+                "prompt", "extract"
+        ), context);
+        ToolResultPayload second = (ToolResultPayload) tool.execute(Map.of(
+                "url", "https://example.com/b",
+                "prompt", "extract"
+        ), context);
+
+        Assert.assertEquals("upstream_error", ((Map<?, ?>) first.getLlmData()).get("failureClass"));
+        Assert.assertEquals("not_found", ((Map<?, ?>) second.getLlmData()).get("failureClass"));
+        Assert.assertEquals(0, context.getToolAccessPolicy().getConsecutiveNetworkFailures());
+        Assert.assertFalse(context.getToolAccessPolicy().isWebFetchCircuitOpen());
     }
 }

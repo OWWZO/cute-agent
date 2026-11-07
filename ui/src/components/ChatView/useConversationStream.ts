@@ -169,6 +169,7 @@ type UseConversationStreamResult = {
 const CONNECTION_LOST_HINT = "连接暂时断开，任务仍在后台执行";
 const CONCURRENT_RUN_HINT =
   "已有任务在进行中，请等待完成或先停止后再试";
+const HELD_MESSAGE_HINT = "消息已保留，发送新消息后继续";
 
 /** inject 应答 new_run 后允许重开新 run 的次数上限，防止后端持续应答时无限递归。 */
 const MESSAGE_INJECT_RETRY_CAP = 3;
@@ -2729,12 +2730,12 @@ export function useConversationStream(
       if (data?.mode === "new_run") {
         return "new_run";
       }
+      if (data?.held === true) {
+        return "held";
+      }
       if (!data || data.accepted !== true) {
         console.warn("inject run rejected", data);
         return false;
-      }
-      if (data.held === true) {
-        return "held";
       }
       return true;
     } catch (error) {
@@ -2777,7 +2778,7 @@ export function useConversationStream(
           return;
         }
         if (outcome === "held") {
-          toast.warning("消息已保留，发送新消息后继续");
+          toast.warning(HELD_MESSAGE_HINT);
           return;
         }
         toast.warning(CONCURRENT_RUN_HINT);
@@ -2786,6 +2787,7 @@ export function useConversationStream(
     }
 
     const requestId = getUniqId();
+    const clientMessageId = getUniqId();
     clearFollowReconnectTimer(requestId);
     followReconnectAttemptsRef.current.delete(requestId);
     followReconnectContextsRef.current.delete(requestId);
@@ -3433,7 +3435,7 @@ export function useConversationStream(
               sessionId: baseConversation.sessionId,
               requestId: activeRequestId,
               text: message,
-              clientMessageId: requestId,
+              clientMessageId,
             });
             if (data?.mode === "new_run") {
               // 旧 run 已结束：撤回乐观壳，有界重试一次正常提交。
@@ -3444,7 +3446,7 @@ export function useConversationStream(
             }
             if (data?.held === true) {
               rollbackBeforeStreamOpened();
-              toast.warning("消息已保留，发送新消息后继续");
+              toast.warning(HELD_MESSAGE_HINT);
               return;
             }
             if (data && data.accepted === true) {

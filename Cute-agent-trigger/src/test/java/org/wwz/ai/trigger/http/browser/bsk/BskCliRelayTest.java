@@ -7,6 +7,11 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -127,6 +132,42 @@ public class BskCliRelayTest {
         Assert.assertNotNull(awaitRequestFrame(extensionSink, 2000));
         // inst-1 那条连接只收到过握手应答，没收到转发过去的请求帧。
         Assert.assertNull(awaitRequestFrame(first, 200));
+    }
+
+    @Test
+    public void sameRpcIdFromDifferentCliConnectionsDoesNotCollide() throws Exception {
+        RecordingSink secondSink = new RecordingSink();
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.registerSession("ext-2", null, "user-2", secondSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        frameRelay.handleHandshake("ext-2", handshakeFrame("hs-2", "inst-2"));
+        BskCliConnection firstCli = registerCli("cli-1", "user-1", null);
+        BskCliConnection secondCli = registerCli("cli-2", "user-2", null);
+
+        AtomicReference<JSONObject> firstAnswer = new AtomicReference<>();
+        AtomicReference<JSONObject> secondAnswer = new AtomicReference<>();
+        Thread firstForwarder = new Thread(() ->
+                firstAnswer.set(cliRelay.forward(firstCli, toolRequest("rpc-shared", "s1"))));
+        Thread secondForwarder = new Thread(() ->
+                secondAnswer.set(cliRelay.forward(secondCli, toolRequest("rpc-shared", "s2"))));
+        firstForwarder.start();
+        secondForwarder.start();
+        Assert.assertNotNull(awaitMethodFrame(extensionSink, "tool.navigate", 5000));
+        Assert.assertNotNull(awaitMethodFrame(secondSink, "tool.navigate", 5000));
+
+        JSONObject firstResponse = new JSONObject();
+        firstResponse.put("id", "rpc-shared");
+        firstResponse.put("result", "first");
+        JSONObject secondResponse = new JSONObject();
+        secondResponse.put("id", "rpc-shared");
+        secondResponse.put("result", "second");
+        Assert.assertTrue(frameRelay.routeResponse("ext-1", "rpc-shared", firstResponse));
+        Assert.assertTrue(frameRelay.routeResponse("ext-2", "rpc-shared", secondResponse));
+        firstForwarder.join(5000);
+        secondForwarder.join(5000);
+
+        Assert.assertEquals("first", firstAnswer.get().getString("result"));
+        Assert.assertEquals("second", secondAnswer.get().getString("result"));
     }
 
     @Test
@@ -494,6 +535,27 @@ public class BskCliRelayTest {
             }
         }
         return null;
+    }
+
+    private static boolean awaitMethodFrameCount(RecordingSink sink, String method,
+                                                 int count, long timeoutMillis) {
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        String marker = "\"method\":\"" + method + "\"";
+        while (System.currentTimeMillis() < deadline) {
+            synchronized (sink.frames) {
+                long matched = sink.frames.stream().filter(frame -> frame.contains(marker)).count();
+                if (matched >= count) {
+                    return true;
+                }
+            }
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     private static String browserListRequest(String id) {
@@ -872,6 +934,161 @@ public class BskCliRelayTest {
         Assert.assertTrue(relay.awaitTimeoutSecondsFor(request.toJSONString())
                 > relay60.timeoutSecondsFor(request.toJSONString()));
         Assert.assertTrue(relay.awaitTimeoutSecondsFor(request.toJSONString()) > 315);
+    }
+
+    @Test
+    public void dialogEventIsAcceptedWhenTheOperationExistsButSessionListDoesNot() throws Exception {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+
+        AtomicReference<JSONObject> initial = new AtomicReference<>();
+        Thread forwarder = new Thread(() ->
+                initial.set(cliRelay.forward(cli, toolRequest("rpc-dialog-orphan", "s1"))));
+        forwarder.start();
+        JSONObject forwarded = JSONObject.parseObject(
+                awaitMethodFrame(extensionSink, "tool.navigate", 5000));
+        String operationId = forwarded.getJSONObject("params").getString("_operation_id");
+
+        Assert.assertTrue(frameRelay.handleEvent("ext-1",
+                dialogChangedEvent("s1", operationId, "dialog-orphan")));
+        forwarder.join(5000);
+
+        Assert.assertEquals("dialog_pending",
+                initial.get().getJSONObject("error").getString("code"));
+    }
+
+    @Test
+    public void pendingDialogIsNotTimedOutByTheTransportBudget() throws Exception {
+        BskFrameRelay timingRelay = new BskFrameRelay(
+                new BskSessionQueue(), new BskHandshakeResponder(), 1);
+        BskCliRelay timingCliRelay = new BskCliRelay(timingRelay, 2);
+        RecordingSink timingSink = new RecordingSink();
+        timingRelay.registerSession("ext-1", null, "user-1", timingSink);
+        timingRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        timingRelay.registerSession("s1", "ext-1", 1L, new JSONObject());
+        BskCliConnection cli = new BskCliConnection(
+                "cli-timing", "user-1", null, new RecordingSink());
+        timingCliRelay.register(cli);
+
+        AtomicReference<JSONObject> initial = new AtomicReference<>();
+        Thread forwarder = new Thread(() ->
+                initial.set(timingCliRelay.forward(cli, toolRequest("rpc-dialog-slow", "s1"))));
+        forwarder.start();
+        JSONObject forwarded = JSONObject.parseObject(
+                awaitMethodFrame(timingSink, "tool.navigate", 5000));
+        String operationId = forwarded.getJSONObject("params").getString("_operation_id");
+        Thread.sleep(1_200);
+        Assert.assertTrue(timingRelay.handleEvent("ext-1",
+                dialogChangedEvent("s1", operationId, "dialog-slow")));
+        forwarder.join(5000);
+
+        Assert.assertEquals("dialog_pending",
+                initial.get().getJSONObject("error").getString("code"));
+    }
+
+    @Test
+    public void dialogAwareNotFoundResponseDropsTheTrackedSession() throws Exception {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        frameRelay.registerSession("s1", "ext-1", 1L, new JSONObject());
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+        int startIndex = extensionSink.frameCount();
+        Thread responder = new Thread(() -> {
+            String request = awaitMethodFrameFrom(
+                    extensionSink, startIndex, "tool.navigate", 5000);
+            if (request == null) {
+                return;
+            }
+            String id = JSONObject.parseObject(request).getString("id");
+            JSONObject response = new JSONObject();
+            response.put("id", id);
+            JSONObject error = new JSONObject();
+            error.put("code", "not_found");
+            error.put("message", "session vanished");
+            response.put("error", error);
+            frameRelay.routeResponse("ext-1", id, response);
+        });
+        responder.start();
+
+        JSONObject answer = cliRelay.forward(cli, toolRequest("rpc-dialog-not-found", "s1"));
+        responder.join(5000);
+
+        Assert.assertEquals("not_found", answer.getJSONObject("error").getString("code"));
+        Assert.assertTrue(frameRelay.sessionStatusEntries("user-1").isEmpty());
+    }
+
+    @Test
+    public void cliCannotUnregisterWhileItsForwardIsStillSending() throws Exception {
+        CountDownLatch sendEntered = new CountDownLatch(1);
+        CountDownLatch releaseSend = new CountDownLatch(1);
+        AtomicBoolean unregisterReturned = new AtomicBoolean();
+        BskSink blockingSink = new BskSink() {
+            @Override
+            public void send(String json) {
+                if (json.contains("\"method\":\"tool.navigate\"")) {
+                    sendEntered.countDown();
+                    try {
+                        releaseSend.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        frameRelay.registerSession("ext-1", null, "user-1", blockingSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+
+        Thread forwarder = new Thread(() ->
+                cliRelay.forward(cli, toolRequest("rpc-blocked-send", "s1")));
+        forwarder.start();
+        Assert.assertTrue(sendEntered.await(5, TimeUnit.SECONDS));
+
+        Thread unregister = new Thread(() -> {
+            cliRelay.unregister("cli-1");
+            unregisterReturned.set(true);
+        });
+        unregister.start();
+        Thread.sleep(150);
+        Assert.assertFalse(unregisterReturned.get());
+
+        releaseSend.countDown();
+        unregister.join(5000);
+        forwarder.join(5000);
+        Assert.assertTrue(unregisterReturned.get());
+    }
+
+    @Test
+    public void dialogOperationCapacityFallsBackToPlainDispatch() throws Exception {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        frameRelay.registerSession("s1", "ext-1", 1L, new JSONObject());
+        BskCliRelay capacityRelay = new BskCliRelay(frameRelay, 10);
+        BskCliConnection cli = new BskCliConnection(
+                "cli-capacity", "user-1", null, new RecordingSink());
+        capacityRelay.register(cli);
+        ExecutorService workers = Executors.newFixedThreadPool(65);
+        try {
+            for (int i = 0; i < BskDialogOperations.MAX_OPERATIONS; i++) {
+                String rpcId = "rpc-capacity-" + i;
+                workers.submit(() -> capacityRelay.forward(cli, toolRequest(rpcId, "s1")));
+            }
+            Assert.assertTrue(awaitMethodFrameCount(
+                    extensionSink, "tool.navigate", BskDialogOperations.MAX_OPERATIONS, 5000));
+
+            workers.submit(() -> capacityRelay.forward(
+                    cli, toolRequest("rpc-capacity-overflow", "s1")));
+            Assert.assertTrue(awaitMethodFrameCount(
+                    extensionSink, "tool.navigate", BskDialogOperations.MAX_OPERATIONS + 1, 5000));
+        } finally {
+            frameRelay.handleDisconnect("ext-1");
+            workers.shutdownNow();
+        }
     }
 
     private static JSONObject dialogChangedEvent(String sessionId, String operationId,
