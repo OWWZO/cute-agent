@@ -10,9 +10,20 @@ import yaml
 from .models import EvalCase
 
 CASE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-CASE_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[2] / "schemas" / "case.schema.json"
-)
+
+
+def schema_path(name: str) -> Path:
+    candidates = (
+        Path(__file__).resolve().parent / "schemas" / name,
+        Path(__file__).resolve().parents[2] / "schemas" / name,
+    )
+    for path in candidates:
+        if path.exists():
+            return path
+    raise FileNotFoundError(f"schema not found: {name}")
+
+
+CASE_SCHEMA_PATH = schema_path("case.schema.json")
 
 
 def load_cases(path: Path, suite: str | None = None) -> list[EvalCase]:

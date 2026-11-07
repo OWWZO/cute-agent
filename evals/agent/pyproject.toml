@@ -52,6 +52,9 @@ packages = ["src/cute_evals"]
 "schemas/experiment.schema.json" = "cute_evals/schemas/experiment.schema.json"
 "schemas/cell.schema.json" = "cute_evals/schemas/cell.schema.json"
 "schemas/ab-report.schema.json" = "cute_evals/schemas/ab-report.schema.json"
+"schemas/case.schema.json" = "cute_evals/schemas/case.schema.json"
+"schemas/case-draft.schema.json" = "cute_evals/schemas/case-draft.schema.json"
+"schemas/trace.schema.json" = "cute_evals/schemas/trace.schema.json"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

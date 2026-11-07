@@ -11,12 +11,11 @@ from pathlib import Path
 
 import jsonschema
 
+from .case_loader import schema_path
 from .models import EvalCase, RunTrace
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-TRACE_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[2] / "schemas" / "trace.schema.json"
-)
+TRACE_SCHEMA_PATH = schema_path("trace.schema.json")
 
 
 class EvalRunnerError(RuntimeError):
@@ -41,6 +40,23 @@ class JavaConversationResult:
 
 def _maven_command() -> str:
     return shutil.which("mvn.cmd") or shutil.which("mvn") or "mvn"
+
+
+def _maven_repo_args() -> list[str]:
+    repo = os.environ.get("CUTE_EVAL_MAVEN_REPO")
+    return [f"-Dmaven.repo.local={repo}"] if repo else []
+
+
+def _has_whitespace(value: str) -> bool:
+    return any(character.isspace() for character in value)
+
+
+def _require_space_free_path(path: Path, label: str) -> None:
+    if _has_whitespace(str(path)):
+        raise EvalRunnerError(
+            "adapter",
+            f"{label} must not contain whitespace; set CUTE_EVAL_JAVA_TMP",
+        )
 
 
 def _repo_root() -> Path:
@@ -75,6 +91,7 @@ def compile_java_fixture_runner() -> None:
         [
             _maven_command(),
             "-q",
+            *_maven_repo_args(),
             "-pl",
             "Cute-agent-app",
             "-am",
@@ -94,6 +111,7 @@ def compile_java_fixture_runner() -> None:
         [
             _maven_command(),
             "-q",
+            *_maven_repo_args(),
             "-pl",
             "Cute-agent-app",
             "test-compile",
@@ -135,8 +153,14 @@ def export_ledger_traces(
     )
     if selectors != 1:
         raise ValueError("choose exactly one: run-id, session-id, or from/to")
-    if any(" " in value for value in (run_id, session_id) if value):
-        raise ValueError("run-id/session-id must not contain spaces")
+    if any(
+        _has_whitespace(value)
+        for value in (run_id, session_id, from_time, to_time, spring_profile)
+        if value
+    ):
+        raise ValueError(
+            "run-id/session-id/from/to/spring-profile must not contain whitespace"
+        )
     if from_time and to_time:
         start = datetime.fromisoformat(from_time)
         end = datetime.fromisoformat(to_time)
@@ -156,8 +180,13 @@ def export_ledger_traces(
     if build:
         compile_java_fixture_runner()
 
-    with tempfile.TemporaryDirectory(prefix="cute-evals-ledger-") as tmp:
+    temp_root = os.environ.get("CUTE_EVAL_JAVA_TMP")
+    with tempfile.TemporaryDirectory(
+        prefix="cute-evals-ledger-",
+        dir=temp_root if temp_root else None,
+    ) as tmp:
         java_out = Path(tmp) / "out"
+        _require_space_free_path(java_out, "ledger export path")
         exec_args = f"--out {java_out} --limit {limit} --spring-profile {spring_profile}"
         if normalized_statuses:
             exec_args += f" --status {','.join(normalized_statuses)}"
@@ -171,6 +200,7 @@ def export_ledger_traces(
             [
                 _maven_command(),
                 "-q",
+                *_maven_repo_args(),
                 "-pl",
                 "Cute-agent-app",
                 "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
@@ -227,6 +257,7 @@ def run_java_cases(
         dir=temp_root if temp_root else None,
     ) as tmp:
         stage = Path(tmp)
+        _require_space_free_path(stage, "Java eval temp dir")
         manifest = {
             "schemaVersion": "1.0",
             "runner": "cute-agent-java-fixture",
@@ -284,6 +315,7 @@ def run_java_cases(
             [
                 _maven_command(),
                 "-q",
+                *_maven_repo_args(),
                 "-pl",
                 "Cute-agent-app",
                 "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
@@ -421,6 +453,7 @@ def run_java_conversation(
             [
                 _maven_command(),
                 "-q",
+                *_maven_repo_args(),
                 "-pl",
                 "Cute-agent-app",
                 "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",

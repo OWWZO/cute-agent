@@ -187,6 +187,37 @@ def test_badcase_approval_can_finalize_draft_in_place(tmp_path: Path) -> None:
     )
 
 
+def test_badcase_approval_accepts_subgoals_as_deterministic_oracle(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "trace.json"
+    trace_path.write_text(json.dumps(_trace(failed_tool=True)), encoding="utf-8")
+    draft_path = tmp_path / "draft.yaml"
+    write_case_draft(trace_path, draft_path)
+    draft = yaml.safe_load(draft_path.read_text(encoding="utf-8"))
+    draft["expected"] = {
+        "subgoals": [
+            {
+                "id": "answer",
+                "finalContains": ["读取失败"],
+            }
+        ]
+    }
+    draft["replay"]["oracleReviewed"] = True
+    draft_path.write_text(
+        yaml.safe_dump(draft, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    approved = approve_case_draft(
+        draft_path,
+        tmp_path / "approved.yaml",
+        reviewer="reviewer",
+    )
+
+    assert approved["expected"]["subgoals"][0]["id"] == "answer"
+
+
 def test_compare_runs_reports_tool_sequence_and_cost_deltas() -> None:
     baseline = RunTrace.from_dict(_trace(failed_tool=True))
     candidate_payload = _trace(failed_tool=False)
