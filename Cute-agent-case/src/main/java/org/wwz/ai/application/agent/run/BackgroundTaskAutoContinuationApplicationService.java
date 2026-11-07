@@ -69,19 +69,6 @@ public class BackgroundTaskAutoContinuationApplicationService {
     private SessionInboxPort sessionInboxPort;
 
     /**
-     * 派发唤醒轮。
-     *
-     * @return true 表示 run 已被受理（或已接管），false 表示当前无法派发
-     */
-    public boolean dispatchWake(String sessionId, String taskId, Runnable onRunSettled) {
-        return dispatchWake(sessionId, taskId, "background_task", null, requestId -> {
-            if (onRunSettled != null) {
-                onRunSettled.run();
-            }
-        });
-    }
-
-    /**
      * @param displayQuery 唤醒控制帧展示文本；实际投递仍以 Session Inbox claim 为准。
      * @param onRunSettled 唤醒轮收口回调，参数是本次唤醒 requestId。
      */
@@ -133,17 +120,14 @@ public class BackgroundTaskAutoContinuationApplicationService {
                 } catch (AgentExecutorBusyException e) {
                     log.warn("background wake deferred launch busy requestId={}", request.getRequestId(), e);
                     failWake(sessionId, request.getRequestId(), projectingStream, e);
-                    notifyRunSettled(request.getRequestId(), onRunSettled);
                 } catch (RuntimeException e) {
                     log.error("background wake deferred launch failed requestId={}", request.getRequestId(), e);
                     failWake(sessionId, request.getRequestId(), projectingStream, e);
-                    notifyRunSettled(request.getRequestId(), onRunSettled);
                 }
             });
         } catch (RuntimeException e) {
             log.error("background wake launch scheduling failed requestId={}", request.getRequestId(), e);
             failWake(sessionId, request.getRequestId(), projectingStream, e);
-            notifyRunSettled(request.getRequestId(), onRunSettled);
         }
         log.info("background wake dispatched sessionId={} requestId={} taskId={}",
                 sessionId, request.getRequestId(), taskId);
@@ -153,8 +137,10 @@ public class BackgroundTaskAutoContinuationApplicationService {
     private void dispatch(AgentExecutionCommand request,
                           AgentStreamProjection projectingStream,
                           Consumer<String> onRunSettled) {
+        boolean runStarted = false;
         try {
             agentDispatchService.dispatch(request, projectingStream);
+            runStarted = true;
             GptQueryApplicationService.completeProjectionUnlessBackgroundRunning(
                     request, projectingStream, activeAgentRunRegistry, sessionInboxPort);
         } catch (Exception e) {
@@ -162,7 +148,9 @@ public class BackgroundTaskAutoContinuationApplicationService {
             failWake(request.getSessionId(), request.getRequestId(), projectingStream, e);
         } finally {
             // 唤醒轮也是普通 run：释放 ActiveRun 后必须重新判活，避免终答期间到达的通知滞留。
-            notifyRunSettled(request.getRequestId(), onRunSettled);
+            if (runStarted) {
+                notifyRunSettled(request.getRequestId(), onRunSettled);
+            }
         }
     }
 
