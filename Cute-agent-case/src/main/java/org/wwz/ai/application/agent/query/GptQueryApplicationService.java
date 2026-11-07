@@ -349,11 +349,23 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         }
     }
 
+    /**
+     * 仅供测试使用（BackgroundStreamSettleTest）。
+     * 生产代码必须使用带 {@link SessionInboxPort} 的 4 参重载，否则会话收件箱检查被绕过，
+     * 投影可能在仍有待投递消息时被关闭。
+     */
+    @Deprecated
     public static void completeProjectionUnlessBackgroundRunning(AgentExecutionCommand agentRequest,
                                                                  AgentStreamProjection projectingStream) {
         completeProjectionUnlessBackgroundRunning(agentRequest, projectingStream, null);
     }
 
+    /**
+     * 仅供测试使用（BackgroundStreamSettleTest）。
+     * 生产代码必须使用带 {@link SessionInboxPort} 的 4 参重载，否则会话收件箱检查被绕过，
+     * 投影可能在仍有待投递消息时被关闭。
+     */
+    @Deprecated
     public static void completeProjectionUnlessBackgroundRunning(AgentExecutionCommand agentRequest,
                                                                  AgentStreamProjection projectingStream,
                                                                  ActiveAgentRunRegistry runRegistry) {

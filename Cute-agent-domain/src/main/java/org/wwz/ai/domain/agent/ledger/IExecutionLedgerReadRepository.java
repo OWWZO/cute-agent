@@ -83,11 +83,6 @@ public interface IExecutionLedgerReadRepository {
      */
     List<DialogueRunView> queryRunsBySessionId(String sessionId, int offset, int limit);
 
-    /** 按 create_time 左闭右开窗口读取 run 摘要，limit 由实现层收敛。 */
-    List<DialogueRunView> queryRunsByTimeRange(LocalDateTime from,
-                                               LocalDateTime to,
-                                               int limit);
-
     /**
      * 运维导出专用：按状态和 {@code (create_time, id)} keyset 读取时间窗口。
      *

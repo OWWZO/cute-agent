@@ -518,21 +518,6 @@ public final class ExecutionLedgerFixtureFactory {
         }
 
         @Override
-        public List<DialogueRunView> queryByTimeRange(LocalDateTime from,
-                                                       LocalDateTime to,
-                                                       int limit) {
-            return store.runs.values().stream()
-                    .filter(item -> item.getDeleted() == 0)
-                    .filter(item -> !item.getCreateTime().isBefore(from)
-                            && item.getCreateTime().isBefore(to))
-                    .sorted(Comparator.comparing(DialogueRun::getCreateTime)
-                            .thenComparing(DialogueRun::getId))
-                    .limit(limit)
-                    .map(ExecutionLedgerFixtureFactory::toRunView)
-                    .toList();
-        }
-
-        @Override
         public List<DialogueRunView> queryByTimeRangeAfter(
                 LocalDateTime from,
                 LocalDateTime to,

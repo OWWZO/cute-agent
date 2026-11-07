@@ -33,10 +33,6 @@ public interface IDialogueRunLedgerDao {
                                             @Param("offset") int offset,
                                             @Param("limit") int limit);
 
-    List<DialogueRunView> queryByTimeRange(@Param("from") LocalDateTime from,
-                                           @Param("to") LocalDateTime to,
-                                           @Param("limit") int limit);
-
     /**
      * 运维导出专用 keyset 查询。状态为空时返回全部状态，游标为空时从窗口起点开始。
      */

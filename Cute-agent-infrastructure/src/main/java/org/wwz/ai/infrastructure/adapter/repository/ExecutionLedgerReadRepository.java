@@ -103,14 +103,6 @@ public class ExecutionLedgerReadRepository implements IExecutionLedgerReadReposi
     }
 
     @Override
-    public List<DialogueRunView> queryRunsByTimeRange(LocalDateTime from,
-                                                       LocalDateTime to,
-                                                       int limit) {
-        int normalizedLimit = limit <= 0 ? 100 : Math.min(limit, 100);
-        return dialogueRunLedgerDao.queryByTimeRange(from, to, normalizedLimit);
-    }
-
-    @Override
     public List<DialogueRunView> queryRunsByTimeRangeAfter(
             LocalDateTime from,
             LocalDateTime to,
