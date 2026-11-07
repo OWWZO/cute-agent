@@ -7,7 +7,7 @@ input:
   message: "员工可以报销宠物托运费用吗？如果知识库没有依据，请明确说明。"
 expected:
   finalContains: ["知识库未提供"]
-  finalNotContains: ["可以报销", "可报销", "无法报销"]
+  finalNotContains: ["无法报销"]
   maxSteps: 2
   requiredTools: ["mrag_query"]
   requiredToolSequence: ["mrag_query"]

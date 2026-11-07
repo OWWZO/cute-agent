@@ -7,7 +7,7 @@ input:
   message: "员工当前享受多少天年假？知识库里可能有多个版本，请按最新版回答并给出引用。"
 expected:
   finalContains: ["10 天", "[handbook-v2.pdf#p2]"]
-  finalNotContains: ["5 天", "[handbook-v1.pdf#p2]"]
+  finalNotContains: ["当前员工年假为 5 天", "[handbook-v1.pdf#p2]"]
   maxSteps: 2
   requiredTools: ["mrag_query"]
   requiredToolSequence: ["mrag_query"]

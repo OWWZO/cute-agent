@@ -10,8 +10,8 @@ caseDirs:
 profile: pr
 javaMode: fixture
 base:
-  source: local
-  root: .
+  source: git
+  ref: origin/master
 candidate:
   source: local
   root: .
