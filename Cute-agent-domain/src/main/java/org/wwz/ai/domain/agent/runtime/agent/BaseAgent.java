@@ -127,10 +127,9 @@ public abstract class BaseAgent {
      */
     public abstract String step();
 
-    /**
-     * 预算进入收尾阶段时由子类生成最终答案。默认不处理，不影响普通 Agent。
-     */
+    /** 预算进入收尾阶段时由子类生成最终答案；默认直接结束本轮。 */
     protected String finalizeAfterBudget(String reason) {
+        setState(AgentState.FINISHED);
         return null;
     }
 
@@ -291,7 +290,8 @@ public abstract class BaseAgent {
                     runBudget.completeFinalization(this, finalized);
                     if (finalized) {
                         results.add(finalText);
-                    } else {
+                    } else if (state != AgentState.FINISHED) {
+                        // 只有真正尝试收尾且没有进入终态时，才追加失败结果。
                         results.add("Terminated: Budget finalization failed (" + finalizationReason + ")");
                     }
                     log.info("{} {} budget finalization reason={} success={} tokens={} tools={}",
@@ -340,20 +340,17 @@ public abstract class BaseAgent {
         }
         SessionInboxPort inbox = context.sessionInboxPort();
         if (inbox != null) {
-            List<SessionInboxItem> items = inbox.claimPending(
-                    context.getSessionId(),
-                    context.getRequestId(),
-                    SessionInboxItem.KIND_USER_MESSAGE,
-                    100);
-            if (items == null || items.isEmpty()) {
-                return;
-            }
+            List<SessionInboxItem> items = claimInboxSafely(
+                    inbox, SessionInboxItem.KIND_USER_MESSAGE);
             List<Long> consumedIds = new ArrayList<>();
             for (SessionInboxItem item : items) {
                 String text = item == null ? null : SessionInboxPayloads.userText(item.getPayloadJson());
                 if (StringUtils.isBlank(text)) {
                     log.warn("{} {} ignored empty inbox user message id={}",
                             context.getRequestId(), getName(), item == null ? null : item.getId());
+                    if (item != null && item.getId() != null) {
+                        consumedIds.add(item.getId());
+                    }
                     continue;
                 }
                 String wrapped = "<system-reminder>\n"
@@ -367,8 +364,8 @@ public abstract class BaseAgent {
                         context.getRequestId(), getName(), item.getId(), text.length());
             }
             context.control().addConsumedInboxItemIds(consumedIds);
-            return;
         }
+        // Inbox 只承载主会话用户输入；子 Agent 的 SendMessage 邮箱仍在内存队列，必须继续 drain。
         List<PendingInjectMessage> injects = context.drainPendingInjects();
         if (injects == null || injects.isEmpty()) {
             return;
@@ -418,27 +415,26 @@ public abstract class BaseAgent {
             }
         }
         if (inbox != null) {
-            List<SessionInboxItem> items = inbox.claimPending(
-                    context.getSessionId(),
-                    context.getRequestId(),
-                    SessionInboxItem.KIND_BACKGROUND_NOTIFICATION,
-                    100);
-            if (items != null) {
-                for (SessionInboxItem item : items) {
-                    TaskNotification notification = item == null
-                            ? null : SessionInboxPayloads.backgroundNotification(item.getPayloadJson());
-                    if (notification == null || StringUtils.isBlank(notification.taskId())) {
-                        log.warn("{} {} ignored malformed inbox background notification id={}",
-                                context.getRequestId(), getName(), item == null ? null : item.getId());
-                        continue;
+            List<SessionInboxItem> items = claimInboxSafely(
+                    inbox, SessionInboxItem.KIND_BACKGROUND_NOTIFICATION);
+            for (SessionInboxItem item : items) {
+                TaskNotification notification = item == null
+                        ? null : SessionInboxPayloads.backgroundNotification(item.getPayloadJson());
+                if (notification == null || StringUtils.isBlank(notification.taskId())) {
+                    log.warn("{} {} ignored malformed inbox background notification id={}",
+                            context.getRequestId(), getName(), item == null ? null : item.getId());
+                    if (item != null && item.getId() != null) {
+                        consumedIds.add(item.getId());
                     }
-                    if (batchTaskIds.add(notification.taskId())) {
-                        batch.add(notification);
-                    }
-                    consumedIds.add(item.getId());
+                    continue;
                 }
+                if (batchTaskIds.add(notification.taskId())) {
+                    batch.add(notification);
+                }
+                consumedIds.add(item.getId());
             }
         }
+        context.control().addConsumedInboxItemIds(consumedIds);
         if (!context.isSubAgent() && !backgroundNotificationBackfillDone) {
             // run 级只扫一次：之后新完成的任务都会走完成路径入队。
             // 子 Agent 与父会话共享 registry，但补投只归主会话：否则父会话未投递的通知
@@ -479,9 +475,39 @@ public abstract class BaseAgent {
                 + formatted;
         memory.addMessage(Message.modelOnlyUserMessage(wrapped));
         context.control().addConsumedBackgroundNotifications(batchTaskIds);
-        context.control().addConsumedInboxItemIds(consumedIds);
         log.info("{} {} drained background notifications count={} taskIds={}",
                 context.getRequestId(), getName(), batch.size(), batchTaskIds);
+    }
+
+    private List<SessionInboxItem> claimInboxSafely(SessionInboxPort inbox, String kind) {
+        try {
+            List<SessionInboxItem> items = inbox.claimPending(
+                    context.getSessionId(),
+                    context.getRequestId(),
+                    kind,
+                    100);
+            if (items == null || items.isEmpty()) {
+                return List.of();
+            }
+            List<SessionInboxItem> fresh = new ArrayList<>(items.size());
+            for (SessionInboxItem item : items) {
+                if (item == null) {
+                    continue;
+                }
+                Long itemId = item.getId();
+                if (itemId == null || context.control().markInboxItemClaimed(itemId)) {
+                    fresh.add(item);
+                } else {
+                    log.warn("{} {} skipped duplicate inbox claim id={} kind={}",
+                            context.getRequestId(), getName(), itemId, kind);
+                }
+            }
+            return fresh;
+        } catch (Exception e) {
+            log.warn("{} {} session inbox claim failed kind={}",
+                    context.getRequestId(), getName(), kind, e);
+            return List.of();
+        }
     }
 
     /**

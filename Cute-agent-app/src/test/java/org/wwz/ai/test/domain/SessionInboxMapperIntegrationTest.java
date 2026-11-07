@@ -6,6 +6,7 @@ import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -33,6 +34,7 @@ public class SessionInboxMapperIntegrationTest {
             SessionInboxItem first = inbox.offer(userItem("client-1", "用户指导"));
             SessionInboxItem duplicate = inbox.offer(userItem("client-1", "重复内容不覆盖"));
             Assert.assertEquals(first.getId(), duplicate.getId());
+            Assert.assertEquals("用户指导", SessionInboxPayloads.userText(duplicate.getPayloadJson()));
 
             List<SessionInboxItem> claimed = inbox.claimPending(
                     "sess-inbox", "run-1", SessionInboxItem.KIND_USER_MESSAGE, 10);
@@ -45,6 +47,49 @@ public class SessionInboxMapperIntegrationTest {
                     "sess-inbox", List.of(claimed.get(0).getId()), "run-1"));
             Assert.assertFalse(inbox.hasOutstanding("sess-inbox"));
         }
+    }
+
+    @Test
+    public void sameRunDoesNotReclaimItsExpiredLease() throws Exception {
+        DataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:session_inbox_same_run;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        createSchema(jdbc);
+
+        try (SqlSession session = mapperFactory(dataSource).openSession(true)) {
+            MyBatisSessionInboxPersistence inbox =
+                    new MyBatisSessionInboxPersistence(session.getMapper(ISessionInboxDao.class));
+            SessionInboxItem first = inbox.offer(userItem("client-expired", "指导"));
+            List<SessionInboxItem> claimed = inbox.claimPending(
+                    "sess-inbox", "run-1", SessionInboxItem.KIND_USER_MESSAGE, 10);
+            Assert.assertEquals(1, claimed.size());
+            jdbc.update("UPDATE ai_agent_session_inbox SET lease_until_ms = 0 WHERE id = ?", first.getId());
+
+            Assert.assertTrue("同一 run 不得重复认领自己已投递但未 ACK 的行",
+                    inbox.claimPending(
+                            "sess-inbox", "run-1", SessionInboxItem.KIND_USER_MESSAGE, 10).isEmpty());
+            Assert.assertEquals("租约过期后可由其它 run 接管",
+                    1, inbox.claimPending(
+                            "sess-inbox", "run-2", SessionInboxItem.KIND_USER_MESSAGE, 10).size());
+        }
+    }
+
+    @Test
+    public void offerRejectsValuesThatWouldBeTruncatedOrBreakEnums() {
+        ISessionInboxDao dao = Mockito.mock(ISessionInboxDao.class);
+        MyBatisSessionInboxPersistence inbox = new MyBatisSessionInboxPersistence(dao);
+
+        Assert.assertNull(inbox.offer(userItem("x".repeat(161), "指导")));
+        Assert.assertNull(inbox.offer(SessionInboxItem.builder()
+                .sessionId("sess-inbox")
+                .kind(" ")
+                .visibility(SessionInboxItem.VISIBILITY_ALL)
+                .state(SessionInboxItem.STATE_PENDING)
+                .idempotencyKey("client-invalid-kind")
+                .payloadJson(SessionInboxPayloads.userMessage("指导"))
+                .build()));
+
+        Mockito.verifyNoInteractions(dao);
     }
 
     @Test

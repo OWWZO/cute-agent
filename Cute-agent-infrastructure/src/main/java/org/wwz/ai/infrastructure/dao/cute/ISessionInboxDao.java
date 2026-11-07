@@ -10,13 +10,14 @@ import java.util.List;
 @Mapper
 public interface ISessionInboxDao {
 
-    int insertIgnore(SessionInboxPO row);
+    int insertIfAbsent(SessionInboxPO row);
 
     SessionInboxPO selectByKey(@Param("sessionId") String sessionId,
                                @Param("idempotencyKey") String idempotencyKey);
 
     List<SessionInboxPO> selectClaimableForUpdate(@Param("sessionId") String sessionId,
                                                   @Param("kind") String kind,
+                                                  @Param("runId") String runId,
                                                   @Param("nowMs") long nowMs,
                                                   @Param("limit") int limit);
 

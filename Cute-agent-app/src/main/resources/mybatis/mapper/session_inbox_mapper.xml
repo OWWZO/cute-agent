@@ -26,14 +26,15 @@
         delivered_at_ms, create_time, update_time, deleted
     </sql>
 
-    <insert id="insertIgnore" parameterType="org.wwz.ai.infrastructure.dao.cute.po.SessionInboxPO">
-        INSERT IGNORE INTO ai_agent_session_inbox (
+    <insert id="insertIfAbsent" parameterType="org.wwz.ai.infrastructure.dao.cute.po.SessionInboxPO">
+        INSERT INTO ai_agent_session_inbox (
             session_id, kind, visibility, state, idempotency_key, payload_json,
             source_run_id, created_at_ms, create_time, update_time, deleted
         ) VALUES (
             #{sessionId}, #{kind}, #{visibility}, #{state}, #{idempotencyKey}, #{payloadJson},
             #{sourceRunId}, #{createdAtMs}, NOW(), NOW(), 0
         )
+        ON DUPLICATE KEY UPDATE id = id
     </insert>
 
     <select id="selectByKey" resultMap="SessionInboxMap">
@@ -53,7 +54,8 @@
           AND deleted = 0
           AND (
             state = 'PENDING'
-            OR (state = 'CLAIMED' AND lease_until_ms &lt; #{nowMs})
+            OR (state = 'CLAIMED' AND lease_until_ms &lt; #{nowMs}
+                AND (claimed_by_run_id IS NULL OR claimed_by_run_id &lt;&gt; #{runId}))
           )
         ORDER BY id ASC
         LIMIT #{limit}
@@ -73,7 +75,8 @@
           AND deleted = 0
           AND (
             state = 'PENDING'
-            OR (state = 'CLAIMED' AND lease_until_ms &lt; #{nowMs})
+            OR (state = 'CLAIMED' AND lease_until_ms &lt; #{nowMs}
+                AND (claimed_by_run_id IS NULL OR claimed_by_run_id &lt;&gt; #{runId}))
           )
     </update>
 

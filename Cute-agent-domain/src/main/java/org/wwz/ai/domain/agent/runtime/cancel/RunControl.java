@@ -48,6 +48,9 @@ public final class RunControl {
     /** 本轮已写入 Memory、等待工作记忆落库后 ACK 的 Session Inbox 行。 */
     private final Set<Long> consumedInboxItemIds = ConcurrentHashMap.newKeySet();
 
+    /** 本 run 已认领过的 Inbox 行，防止租约过期后被同 run 重复注入。 */
+    private final Set<Long> claimedInboxItemIds = ConcurrentHashMap.newKeySet();
+
     public RunControl() {
     }
 
@@ -73,8 +76,9 @@ public final class RunControl {
     }
 
     /**
-     * 把在途工作挂到取消令牌链上：own 与 parent 两个令牌都注册同一钩子，
-     * 任一侧 cancel 都能中止在途工作。返回的注销句柄同时从两者移除。
+     * 把在途工作挂到取消令牌链上：own 与 parent 的非任务级令牌都会中止在途工作；
+     * parent 的 task_stop 只终止被点名的子 Agent，不级联到它的后代。
+     * 返回的注销句柄同时从两者移除。
      */
     public Runnable registerAbort(Runnable hook) {
         RunCancellation own = ownCancellation;
@@ -252,6 +256,11 @@ public final class RunControl {
         Set<Long> drained = Set.copyOf(consumedInboxItemIds);
         consumedInboxItemIds.clear();
         return drained;
+    }
+
+    /** 记录本 run 已认领的 Inbox 行；重复认领返回 false。 */
+    public boolean markInboxItemClaimed(Long itemId) {
+        return itemId != null && claimedInboxItemIds.add(itemId);
     }
 
     /** 取出并清空待注入消息（步进边界调用）。 */
