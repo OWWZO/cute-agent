@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -97,7 +98,7 @@ class DockerVerifier:
         workspace.mkdir(parents=True, exist_ok=True)
         build = self.build(task_dir, out_dir)
         image = str(build["image"])
-        name = f"cute-skillsbench-seed-{_sha256_path(task_dir / 'task.md')[:12]}"
+        name = f"cute-skillsbench-seed-{uuid.uuid4().hex[:12]}"
         try:
             created = self._run(
                 ["create", "--name", name, image],
@@ -116,7 +117,10 @@ class DockerVerifier:
                     f"docker copy seed workspace failed: {copied.stderr[-4000:]}"
                 )
         finally:
-            self._run(["rm", "-f", name], timeout=60)
+            try:
+                self._run(["rm", "-f", name], timeout=60)
+            except subprocess.TimeoutExpired:
+                pass
         return {
             "image": image,
             "status": "materialized",
@@ -161,7 +165,7 @@ class DockerVerifier:
                 }
         logs = out_dir / "logs"
         logs.mkdir(parents=True, exist_ok=True)
-        name = f"cute-skillsbench-verify-{_sha256_path(task_dir / 'task.md')[:12]}"
+        name = f"cute-skillsbench-verify-{uuid.uuid4().hex[:12]}"
         try:
             created = self._run(
                 [
@@ -220,7 +224,10 @@ class DockerVerifier:
                 "image": image,
             }
         finally:
-            self._run(["rm", "-f", name], timeout=60)
+            try:
+                self._run(["rm", "-f", name], timeout=60)
+            except subprocess.TimeoutExpired:
+                pass
         reward_path = logs / "verifier" / "reward.txt"
         reward_text = reward_path.read_text(encoding="utf-8").strip() if reward_path.exists() else ""
         if not reward_text:
@@ -476,27 +483,30 @@ class SkillsBenchAdapter:
         available = sorted(
             str(item) for item in run.metadata.get("skills") or [] if str(item)
         )
+        canonical = {skill.lower(): skill for skill in available}
         mentioned: list[str] = []
-        load_count = 0
+        loads: dict[str, int] = {}
         for invocation in run.trace.tool_invocations:
             haystack = " ".join(
                 str(invocation.get(key) or "")
                 for key in ("toolName", "inputJson", "toolResult", "llmObservation")
             ).lower()
-            matches = set(
-                re.findall(
+            matches = {
+                canonical.get(name, name)
+                for name in re.findall(
                     r"(?:^|[/\\\"'])skills[/\\]([^/\\\s\"']+)",
                     haystack,
                 )
-            )
+            }
             matches.update(skill for skill in available if skill.lower() in haystack)
             for skill in sorted(matches):
-                load_count += 1
+                loads[skill] = loads.get(skill, 0) + 1
                 if skill not in mentioned:
                     mentioned.append(skill)
         used = [skill for skill in mentioned if skill in available]
         wrong_skill = [skill for skill in mentioned if skill not in available]
-        repeated = max(0, load_count - len(used))
+        load_count = sum(loads.values())
+        repeated = max(0, sum(loads[skill] for skill in used) - len(used))
         selection_ok = bool(used) if available else True
         return [
             ScoreRecord(
