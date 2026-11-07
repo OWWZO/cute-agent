@@ -327,6 +327,7 @@ public class ReplayProjector {
                 .resultMap(buildLlmResponse(bundle, invocation, messageType, plannerRoundId, parentToolUseId))
                 .timing(resolveReplayTiming(
                         invocation.getStartedAt(),
+                        invocation.getFirstTokenAt(),
                         invocation.getFinishedAt(),
                         invocation.getDurationMs()
                 ))
@@ -721,6 +722,7 @@ public class ReplayProjector {
     }
 
     private ReplayTiming resolveReplayTiming(java.time.LocalDateTime startedAt,
+                                             java.time.LocalDateTime firstTokenAt,
                                              java.time.LocalDateTime finishedAt,
                                              Long durationMs) {
         String source = ReplayTiming.SOURCE_LEDGER;
@@ -728,11 +730,12 @@ public class ReplayProjector {
             durationMs = Duration.between(startedAt, finishedAt).toMillis();
             source = ReplayTiming.SOURCE_INFERRED;
         }
-        if (startedAt == null && finishedAt == null && durationMs == null) {
+        if (startedAt == null && firstTokenAt == null && finishedAt == null && durationMs == null) {
             return null;
         }
         return ReplayTiming.builder()
                 .startedAt(startedAt)
+                .firstTokenAt(firstTokenAt)
                 .finishedAt(finishedAt)
                 .durationMs(durationMs)
                 .source(source)
