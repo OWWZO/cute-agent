@@ -402,8 +402,15 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         if (agentRequest == null || !StreamSettlePolicy.deferBackgroundSettle()) {
             return false;
         }
-        if (sessionInboxPort != null && sessionInboxPort.hasOutstanding(agentRequest.getSessionId())) {
-            return true;
+        if (sessionInboxPort != null) {
+            try {
+                if (sessionInboxPort.hasOutstanding(agentRequest.getSessionId())) {
+                    return true;
+                }
+            } catch (Exception e) {
+                log.warn("{} session inbox outstanding check failed sessionId={}",
+                        agentRequest.getRequestId(), agentRequest.getSessionId(), e);
+            }
         }
         // 收尾窗口内完成的通知也需要保持连接：500ms 后 run_wake 要靠它送达前端。
         if (SessionNotificationHub.hasPending(agentRequest.getSessionId())) {

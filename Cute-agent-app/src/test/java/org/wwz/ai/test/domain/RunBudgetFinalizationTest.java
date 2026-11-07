@@ -41,6 +41,25 @@ public class RunBudgetFinalizationTest {
     }
 
     @Test
+    public void defaultFinalizationNoopClosesRunWithoutFabricatingFailureAnswer() {
+        RunBudget budget = RunBudget.create(10_000, 60_000, 10, 2);
+        NoopAgent agent = new NoopAgent();
+        agent.setContext(AgentContext.builder()
+                .requestId("req-budget-noop")
+                .sessionId("session-budget-noop")
+                .query("answer")
+                .runBudget(budget)
+                .build());
+        agent.setMaxSteps(2);
+
+        String result = agent.run("answer");
+
+        assertEquals("step 1", result);
+        assertEquals(AgentState.FINISHED, agent.getState());
+        assertTrue(budget.isFinalizationStarted());
+    }
+
+    @Test
     public void parallelAgentContextSharesSameRunBudget() {
         RunBudget budget = RunBudget.create(10_000, 60_000, 10, 3);
         AgentContext parent = AgentContext.builder()
@@ -104,6 +123,16 @@ public class RunBudgetFinalizationTest {
             finalizationReason = reason;
             setState(AgentState.FINISHED);
             return "FINAL_ANSWER: ok";
+        }
+    }
+
+    private static final class NoopAgent extends BaseAgent {
+        private int steps;
+
+        @Override
+        public String step() {
+            steps++;
+            return "step " + steps;
         }
     }
 

@@ -165,6 +165,7 @@ final class LlmInvocationLedger {
         completeTiming(handle);
         LlmUsageSnapshot snapshot = usage == null ? LlmUsageSnapshot.empty() : usage;
         if (context == null || handle == null) {
+            LlmPromptObservability.clear();
             return;
         }
         // 预算必须按真实供应商用量累计；即使账本句柄因观测失败被禁用，
@@ -173,6 +174,7 @@ final class LlmInvocationLedger {
             context.getRunBudget().recordTokens(snapshot.getTotalTokens());
         }
         if (!handle.enabled()) {
+            LlmPromptObservability.clear();
             return;
         }
         try {
