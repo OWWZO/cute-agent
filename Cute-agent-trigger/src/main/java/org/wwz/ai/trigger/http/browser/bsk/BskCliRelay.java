@@ -124,13 +124,23 @@ public class BskCliRelay {
         if (StringUtils.isBlank(connectionId)) {
             return;
         }
-        cliConnections.remove(connectionId);
-        for (Map.Entry<String, InFlightCall> entry : inFlight.entrySet()) {
-            if (connectionId.equals(entry.getValue().cliConnectionId)
-                    && inFlight.remove(entry.getKey(), entry.getValue())) {
-                frameRelay.failPending(entry.getKey(), "protocol_error",
-                        "cli disconnected before response arrived",
-                        Map.of("reason", REASON_CLI_DISCONNECTED));
+        BskCliConnection connection = cliConnections.get(connectionId);
+        if (connection == null) {
+            return;
+        }
+        // forward 在同一连接锁内完成「仍在线检查 + 登记 inFlight + dispatch」。
+        // 注销也必须在锁内完成，否则两者之间仍会留下一个可发包的窗口。
+        synchronized (connection) {
+            if (!cliConnections.remove(connectionId, connection)) {
+                return;
+            }
+            for (Map.Entry<String, InFlightCall> entry : inFlight.entrySet()) {
+                if (connectionId.equals(entry.getValue().cliConnectionId)
+                        && inFlight.remove(entry.getKey(), entry.getValue())) {
+                    frameRelay.failPending(entry.getKey(), "protocol_error",
+                            "cli disconnected before response arrived",
+                            Map.of("reason", REASON_CLI_DISCONNECTED));
+                }
             }
         }
     }
@@ -146,6 +156,9 @@ public class BskCliRelay {
             return errorFrame(null, "protocol_error", "malformed bsk frame", null);
         }
         String rpcId = frame.getString("id");
+        if (!isCurrentConnection(cli)) {
+            return cliDisconnectedFrame(rpcId);
+        }
         String method = frame.getString("method");
         if (METHOD_BROWSER_LIST.equals(method)) {
             // browser.list 是 daemon 层的方法：Java 网关顶替了 Rust daemon 的位置，
@@ -176,8 +189,16 @@ public class BskCliRelay {
             return errorFrame(rpcId, "protocol_error", "extension is not connected",
                     Map.of("reason", REASON_EXTENSION_DISCONNECTED));
         }
-        inFlight.put(rpcId, new InFlightCall(cli.connectionId(), targetConnectionId));
-        CompletableFuture<JSONObject> future = frameRelay.dispatch(targetConnectionId, rpcId, rawFrame);
+        CompletableFuture<JSONObject> future;
+        synchronized (cli) {
+            // 排队期间连接可能已经断开；检查与 inFlight 登记必须和 unregister
+            // 串行，否则会漏掉「检查通过后、登记前」这一个小窗口。
+            if (!isCurrentConnection(cli)) {
+                return cliDisconnectedFrame(rpcId);
+            }
+            inFlight.put(rpcId, new InFlightCall(cli.connectionId(), targetConnectionId));
+            future = frameRelay.dispatch(targetConnectionId, rpcId, rawFrame);
+        }
         if (future == null) {
             inFlight.remove(rpcId);
             return errorFrame(rpcId, "protocol_error", "extension is not connected",
@@ -219,6 +240,16 @@ public class BskCliRelay {
         }
         trackSessionOutcome(method, rawFrame, targetConnectionId, value);
         return value;
+    }
+
+    private boolean isCurrentConnection(BskCliConnection cli) {
+        return cli != null && cliConnections.get(cli.connectionId()) == cli;
+    }
+
+    private static JSONObject cliDisconnectedFrame(String rpcId) {
+        return errorFrame(rpcId, "protocol_error",
+                "cli disconnected before command started",
+                Map.of("reason", REASON_CLI_DISCONNECTED));
     }
 
     /** 从请求帧里取 {@code params.session_id}；缺失返回 null。 */

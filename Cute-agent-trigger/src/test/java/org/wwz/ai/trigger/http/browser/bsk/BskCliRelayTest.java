@@ -174,6 +174,25 @@ public class BskCliRelayTest {
     }
 
     @Test
+    public void cliDisconnectRejectsLaterQueuedForward() {
+        frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
+        frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
+        BskCliConnection cli = registerCli("cli-1", "user-1", null);
+
+        cliRelay.unregister("cli-1");
+        JSONObject answer = cliRelay.forward(cli, toolRequest("rpc-after-close", "s1"));
+
+        Assert.assertEquals("rpc-after-close", answer.getString("id"));
+        JSONObject error = answer.getJSONObject("error");
+        Assert.assertNotNull(error);
+        Assert.assertEquals("protocol_error", error.getString("code"));
+        Assert.assertEquals(BskCliRelay.REASON_CLI_DISCONNECTED,
+                error.getJSONObject("data").getString("reason"));
+        // 断开后的残留队列任务不能落到扩展上。
+        Assert.assertNull(awaitRequestFrame(extensionSink, 200));
+    }
+
+    @Test
     public void browserListIsAnsweredByTheGatewayNotForwardedToTheExtension() {
         frameRelay.registerSession("ext-1", null, "user-1", extensionSink);
         frameRelay.handleHandshake("ext-1", handshakeFrame("hs-1", "inst-1"));
