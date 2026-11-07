@@ -536,6 +536,7 @@ source = { editable = "." }
 dependencies = [
     { name = "jinja2" },
     { name = "jsonschema" },
+    { name = "numpy" },
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
@@ -573,6 +574,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
     { name = "langchain-community", marker = "extra == 'frameworks'", specifier = ">=0.3.31,<0.4" },
+    { name = "numpy", specifier = ">=1.26,<3" },
     { name = "pandas", marker = "extra == 'phase4'", specifier = ">=2.2,<4" },
     { name = "psycopg2-binary", marker = "extra == 'phase4'", specifier = ">=2.9,<3" },
     { name = "pydantic", specifier = ">=2.8,<3" },
