@@ -21,6 +21,7 @@ import org.wwz.ai.infrastructure.dao.cute.IDialogueSessionLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.ILlmInvocationLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.IToolInvocationLedgerDao;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,6 +100,33 @@ public class ExecutionLedgerReadRepository implements IExecutionLedgerReadReposi
         int normalizedOffset = Math.max(offset, 0);
         int normalizedLimit = limit <= 0 ? 100 : Math.min(limit, 100);
         return dialogueRunLedgerDao.queryBySessionId(sessionId, normalizedOffset, normalizedLimit);
+    }
+
+    @Override
+    public List<DialogueRunView> queryRunsByTimeRange(LocalDateTime from,
+                                                       LocalDateTime to,
+                                                       int limit) {
+        int normalizedLimit = limit <= 0 ? 100 : Math.min(limit, 100);
+        return dialogueRunLedgerDao.queryByTimeRange(from, to, normalizedLimit);
+    }
+
+    @Override
+    public List<DialogueRunView> queryRunsByTimeRangeAfter(
+            LocalDateTime from,
+            LocalDateTime to,
+            List<Integer> statuses,
+            LocalDateTime afterCreateTime,
+            Long afterId,
+            int limit) {
+        int normalizedLimit = limit <= 0 ? 100 : Math.min(limit, 100);
+        return dialogueRunLedgerDao.queryByTimeRangeAfter(
+                from,
+                to,
+                statuses,
+                afterCreateTime,
+                afterId,
+                normalizedLimit
+        );
     }
 
     @Override

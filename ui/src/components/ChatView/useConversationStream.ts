@@ -160,7 +160,7 @@ type UseConversationStreamResult = {
   sendMessage: (inputInfo: CHAT.TInputInfo) => void;
   stopActiveRun: () => Promise<void>;
   /** 向进行中的 run 注入用户指导（不开新 SSE） */
-  injectActiveRun: (text: string) => Promise<boolean | "new_run">;
+  injectActiveRun: (text: string, clientMessageId?: string) => Promise<boolean | "new_run" | "held">;
   regenerateLastMessage: () => void;
   /** 撤销末轮并返回 user query；busy 时返回 null */
   undoLastUserTurn: () => string | null;
@@ -1933,7 +1933,11 @@ export function useConversationStream(
       const deepThink = Boolean(snapshot.deepThink);
       const wakeChat: CHAT.ChatItem = {
         ...createRunningChat(
-          { message: "", files: [], deepThink },
+          {
+            message: String(resultMap.query || ""),
+            files: [],
+            deepThink,
+          },
           sessionId,
           requestId,
           deepThink
@@ -2707,7 +2711,7 @@ export function useConversationStream(
     return lastRunning?.requestId || null;
   });
 
-  const injectActiveRun = useMemoizedFn(async (text: string) => {
+  const injectActiveRun = useMemoizedFn(async (text: string, clientMessageId?: string) => {
     const activeConversation = conversationRef.current;
     const requestId = resolveActiveRequestId(activeConversation.id);
     const trimmed = (text || "").trim();
@@ -2720,6 +2724,7 @@ export function useConversationStream(
         sessionId: activeConversation.sessionId,
         requestId,
         text: trimmed,
+        clientMessageId: clientMessageId || getUniqId(),
       });
       if (data?.mode === "new_run") {
         return "new_run";
@@ -2727,6 +2732,9 @@ export function useConversationStream(
       if (!data || data.accepted !== true) {
         console.warn("inject run rejected", data);
         return false;
+      }
+      if (data.held === true) {
+        return "held";
       }
       return true;
     } catch (error) {
@@ -2766,6 +2774,10 @@ export function useConversationStream(
           }
           skipInjectRef.current = true;
           sendMessage(inputInfo, injectRetryDepth + 1);
+          return;
+        }
+        if (outcome === "held") {
+          toast.warning("消息已保留，发送新消息后继续");
           return;
         }
         toast.warning(CONCURRENT_RUN_HINT);
@@ -3421,12 +3433,18 @@ export function useConversationStream(
               sessionId: baseConversation.sessionId,
               requestId: activeRequestId,
               text: message,
+              clientMessageId: requestId,
             });
             if (data?.mode === "new_run") {
               // 旧 run 已结束：撤回乐观壳，有界重试一次正常提交。
               rollbackBeforeStreamOpened();
               skipInjectRef.current = true;
               sendMessage(inputInfo, injectRetryDepth + 1);
+              return;
+            }
+            if (data?.held === true) {
+              rollbackBeforeStreamOpened();
+              toast.warning("消息已保留，发送新消息后继续");
               return;
             }
             if (data && data.accepted === true) {

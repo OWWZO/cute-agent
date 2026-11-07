@@ -45,6 +45,9 @@ public final class RunControl {
     /** 本轮已注入的后台任务通知 taskId；run 成功收口后据此 markNotified。 */
     private final Set<String> consumedBackgroundNotificationTaskIds = ConcurrentHashMap.newKeySet();
 
+    /** 本轮已写入 Memory、等待工作记忆落库后 ACK 的 Session Inbox 行。 */
+    private final Set<Long> consumedInboxItemIds = ConcurrentHashMap.newKeySet();
+
     public RunControl() {
     }
 
@@ -60,6 +63,9 @@ public final class RunControl {
         }
         for (RunCancellation cancellation : parentCancellations) {
             if (cancellation.isCancelled()) {
+                if (isTaskStop(cancellation)) {
+                    continue;
+                }
                 return cancellation.getReason();
             }
         }
@@ -75,7 +81,12 @@ public final class RunControl {
         Runnable removeFromOwn = own == null ? () -> { } : own.registerAbort(hook);
         List<Runnable> parentRemovers = new ArrayList<>(parentCancellations.size());
         for (RunCancellation cancellation : parentCancellations) {
-            parentRemovers.add(cancellation.registerAbort(hook));
+            parentRemovers.add(cancellation.registerAbort(() -> {
+                // TaskStop 只终止被点名的后台子 Agent，不级联终止它的孙 Agent。
+                if (!isTaskStop(cancellation)) {
+                    hook.run();
+                }
+            }));
         }
         return () -> {
             removeFromOwn.run();
@@ -148,10 +159,18 @@ public final class RunControl {
     private boolean isParentCancelled() {
         for (RunCancellation cancellation : parentCancellations) {
             if (cancellation.isCancelled()) {
+                if (isTaskStop(cancellation)) {
+                    continue;
+                }
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean isTaskStop(RunCancellation cancellation) {
+        return cancellation != null
+                && RunCancellation.REASON_TASK_STOP.equals(cancellation.getReason());
     }
 
     // ---- 协作式关闭 ----
@@ -214,6 +233,24 @@ public final class RunControl {
     public Set<String> drainConsumedBackgroundNotifications() {
         Set<String> drained = Set.copyOf(consumedBackgroundNotificationTaskIds);
         consumedBackgroundNotificationTaskIds.clear();
+        return drained;
+    }
+
+    public void addConsumedInboxItemIds(Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return;
+        }
+        for (Long itemId : itemIds) {
+            if (itemId != null) {
+                consumedInboxItemIds.add(itemId);
+            }
+        }
+    }
+
+    /** 取出并清空待 ACK 的 Inbox 行；仅在 working memory 持久化成功后调用。 */
+    public Set<Long> drainConsumedInboxItemIds() {
+        Set<Long> drained = Set.copyOf(consumedInboxItemIds);
+        consumedInboxItemIds.clear();
         return drained;
     }
 

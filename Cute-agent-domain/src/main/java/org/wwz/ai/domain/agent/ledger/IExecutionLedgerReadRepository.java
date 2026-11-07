@@ -11,6 +11,7 @@ import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -81,6 +82,24 @@ public interface IExecutionLedgerReadRepository {
      * 任意大 limit 原样下推到 SQL。</p>
      */
     List<DialogueRunView> queryRunsBySessionId(String sessionId, int offset, int limit);
+
+    /** 按 create_time 左闭右开窗口读取 run 摘要，limit 由实现层收敛。 */
+    List<DialogueRunView> queryRunsByTimeRange(LocalDateTime from,
+                                               LocalDateTime to,
+                                               int limit);
+
+    /**
+     * 运维导出专用：按状态和 {@code (create_time, id)} keyset 读取时间窗口。
+     *
+     * <p>{@code statuses} 为空表示不筛状态；游标为空表示从窗口起点开始。</p>
+     */
+    List<DialogueRunView> queryRunsByTimeRangeAfter(
+            LocalDateTime from,
+            LocalDateTime to,
+            List<Integer> statuses,
+            LocalDateTime afterCreateTime,
+            Long afterId,
+            int limit);
 
     /**
      * 按 create_time/id 正序读取 session run，cursor 为空时从头开始。

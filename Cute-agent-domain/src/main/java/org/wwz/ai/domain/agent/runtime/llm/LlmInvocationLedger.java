@@ -163,14 +163,22 @@ final class LlmInvocationLedger {
                String finishReason,
                String errorMsg) {
         completeTiming(handle);
+        LlmUsageSnapshot snapshot = usage == null ? LlmUsageSnapshot.empty() : usage;
+        if (context == null || handle == null) {
+            return;
+        }
+        // 预算必须按真实供应商用量累计；即使账本句柄因观测失败被禁用，
+        // 也不能漏掉这次调用对 run 总成本的影响。
+        if (context.getRunBudget() != null && snapshot.getTotalTokens() != null) {
+            context.getRunBudget().recordTokens(snapshot.getTotalTokens());
+        }
+        if (!handle.enabled()) {
+            return;
+        }
         try {
-            if (context == null || handle == null || !handle.enabled()) {
-                return;
-            }
             // 完成时重新取回 invocation 创建阶段的观测快照，合并最终 token/cache 信息后一次性落账本。
             // 清理当前线程观测是必要的，否则复用线程会把本次模型调用的数据带进下一请求。
             restoreObservation(handle);
-            LlmUsageSnapshot snapshot = usage == null ? LlmUsageSnapshot.empty() : usage;
             LlmPromptObservability.ObservationBundle obs = LlmPromptObservability.current();
             if (obs == null || obs.getUsage() == null || obs.getUsage().isEmpty()) {
                 if (!snapshot.isEmpty()) {
@@ -200,6 +208,9 @@ final class LlmInvocationLedger {
                     .cacheRiskFlags(obs == null ? null : obs.getCacheRiskFlags())
                     .finishReason(finishReason)
                     .errorMsg(errorMsg)
+                    .firstTokenAt(handle.runtimeTiming() == null
+                            ? null
+                            : handle.runtimeTiming().getFirstTokenAt())
                     .finishedAt(handle.runtimeTiming() == null || handle.runtimeTiming().getFinishedAt() == null
                             ? LocalDateTime.now()
                             : handle.runtimeTiming().getFinishedAt())
@@ -221,6 +232,9 @@ final class LlmInvocationLedger {
                             .toolCallCount(toolCallCount)
                             .finishReason(finishReason)
                             .errorMsg(errorMsg)
+                            .firstTokenAt(handle.runtimeTiming() == null
+                                    ? null
+                                    : handle.runtimeTiming().getFirstTokenAt())
                             .finishedAt(handle.runtimeTiming() == null
                                     || handle.runtimeTiming().getFinishedAt() == null
                                     ? LocalDateTime.now()

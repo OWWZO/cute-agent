@@ -1,8 +1,8 @@
-# Reactor-agent（现 Cute-agent）UI 重构  剩余任务交接书
+# Cute Agent UI 重构  剩余任务交接书
 
 > 交接时间：2026-10-24 22:50
 > 项目路径：`D:\Java Code\ai-agent\Cute-agent\ui`（Vite + React + TS + Tailwind v4）
->  注意：项目目录已由 `Reactor-agent` 重命名为 `Cute-agent`，旧路径已失效。
+>  注意：项目目录统一为 `Cute-agent`，旧路径已失效。
 > 前置背景：已完成整体代码评审（主页 / Agent 执行界面 / 工作区），用户确认按 6 项优先级修复，执行到第 2 项中途因终端环境变化中断。
 
 ##  接手前必读  环境状态

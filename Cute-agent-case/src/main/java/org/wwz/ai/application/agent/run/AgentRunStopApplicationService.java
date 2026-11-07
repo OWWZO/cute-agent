@@ -3,6 +3,7 @@ package org.wwz.ai.application.agent.run;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.domain.agent.adapter.port.AgentMessageStream;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
@@ -10,6 +11,7 @@ import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.StreamSettlePolicy;
@@ -28,6 +30,9 @@ public class AgentRunStopApplicationService {
 
     private final ActiveAgentRunRegistry activeAgentRunRegistry;
     private final AgentRunLaunchGate agentRunLaunchGate;
+
+    @Autowired(required = false)
+    private SessionInboxPort sessionInboxPort;
 
     public Map<String, Object> stop(String sessionId, String requestId) {
         // 停止先置取消令牌（在途模型请求会立刻 dispose / cancel），再写 stopped ledger。
@@ -59,6 +64,13 @@ public class AgentRunStopApplicationService {
         }
 
         boolean first = activeAgentRunRegistry.cancel(requestId, RunCancellation.REASON_USER_STOP);
+        if (sessionInboxPort != null) {
+            try {
+                sessionInboxPort.holdPendingUserMessages(sessionId);
+            } catch (Exception e) {
+                log.warn("hold session inbox failed sessionId={} requestId={}", sessionId, requestId, e);
+            }
+        }
         boolean launchStillPending = agentRunLaunchGate.cancel(requestId);
         AgentContext ctx = run.getAgentContext();
         if (ctx == null && launchStillPending) {

@@ -3,6 +3,7 @@ package org.wwz.ai.application.agent.planmode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.application.agent.dispatch.IAgentDispatchService;
@@ -23,6 +24,7 @@ import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
 import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
 import org.wwz.ai.domain.agent.runtime.handler.AgentStreamEventHandler;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.planmode.IPlanApprovalRepository;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanApprovalObservationSupport;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanApprovalRecord;
@@ -69,6 +71,9 @@ public class PlanApprovalResumeApplicationService {
     @Resource
     private AgentTimelineEventProjector agentTimelineEventProjector;
 
+    @Autowired(required = false)
+    private SessionInboxPort sessionInboxPort;
+
     public AgentQuerySubmitResult resume(String resumeRequestId) {
         if (StringUtils.isBlank(resumeRequestId)) {
             throw new IllegalArgumentException("resumeRequestId 不能为空");
@@ -114,6 +119,7 @@ public class PlanApprovalResumeApplicationService {
         try {
             activeAgentRunRegistry.begin(
                     agentRequest.getRequestId(), agentRequest.getSessionId(), userId);
+            releaseHeldInboxMessages(agentRequest.getSessionId());
         } catch (AgentConcurrentRunException e) {
             planApprovalRepository.markStatus(record.getApprovalId(), PlanApprovalStatuses.RESUME_PENDING);
             throw e;
@@ -129,12 +135,26 @@ public class PlanApprovalResumeApplicationService {
                         () -> dispatchContinuation(record, agentRequest, projectingStream));
             } catch (AgentExecutorBusyException e) {
                 log.warn("{} deferred plan-approval resume busy", agentRequest.getRequestId(), e);
-                activeAgentRunRegistry.end(agentRequest.getRequestId());
-                planApprovalRepository.markStatus(record.getApprovalId(), PlanApprovalStatuses.RESUME_PENDING);
-                projectingStream.completeWithError(e);
+                cleanupFailedResume(record, agentRequest, projectingStream, e);
+            } catch (RuntimeException e) {
+                log.error("{} deferred plan-approval resume failed", agentRequest.getRequestId(), e);
+                cleanupFailedResume(record, agentRequest, projectingStream, e);
             }
         });
         return accepted(record);
+    }
+
+    private void cleanupFailedResume(PlanApprovalRecord record,
+                                     AgentExecutionCommand agentRequest,
+                                     AgentStreamProjection projectingStream,
+                                     RuntimeException error) {
+        activeAgentRunRegistry.end(agentRequest.getRequestId());
+        try {
+            planApprovalRepository.markStatus(record.getApprovalId(), PlanApprovalStatuses.RESUME_PENDING);
+            projectingStream.completeWithError(error);
+        } finally {
+            notifyRunSettled(agentRequest);
+        }
     }
 
     private static AgentQuerySubmitResult accepted(PlanApprovalRecord record) {
@@ -152,7 +172,7 @@ public class PlanApprovalResumeApplicationService {
             agentDispatchService.dispatch(agentRequest, projectingStream);
             planApprovalRepository.markAnswered(record.getApprovalId());
             GptQueryApplicationService.completeProjectionUnlessBackgroundRunning(
-                    agentRequest, projectingStream, activeAgentRunRegistry);
+                    agentRequest, projectingStream, activeAgentRunRegistry, sessionInboxPort);
         } catch (Exception e) {
             log.error("{} plan-approval resume failed approvalId={}",
                     agentRequest.getRequestId(), record.getApprovalId(), e);
@@ -175,9 +195,21 @@ public class PlanApprovalResumeApplicationService {
             return;
         }
         try {
-            backgroundTaskWakePort.onRunSettled(agentRequest.getSessionId());
+            backgroundTaskWakePort.onRunSettled(
+                    agentRequest.getSessionId(), agentRequest.getRequestId());
         } catch (Exception e) {
             log.warn("{} plan-approval resume settle check failed", agentRequest.getRequestId(), e);
+        }
+    }
+
+    private void releaseHeldInboxMessages(String sessionId) {
+        if (sessionInboxPort == null || StringUtils.isBlank(sessionId)) {
+            return;
+        }
+        try {
+            sessionInboxPort.releaseHeldUserMessages(sessionId, null);
+        } catch (Exception e) {
+            log.warn("release held session inbox failed sessionId={}", sessionId, e);
         }
     }
 

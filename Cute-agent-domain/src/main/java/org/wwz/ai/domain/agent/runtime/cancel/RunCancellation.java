@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class RunCancellation {
 
     public static final String REASON_USER_STOP = "user_stop";
+    public static final String REASON_TASK_STOP = "task_stop";
 
     /** 取消标记与元数据作为一个不可变整体发布，读者不会看到「已取消但原因为空」。 */
     private record State(boolean cancelled, String reason, long cancelledAtMs) {

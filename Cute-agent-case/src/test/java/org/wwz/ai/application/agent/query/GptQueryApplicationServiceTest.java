@@ -4,6 +4,8 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.wwz.ai.application.agent.run.AgentRunLaunchGate;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskCompletionEvent;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 
@@ -22,6 +24,8 @@ public class GptQueryApplicationServiceTest {
                 throw new IllegalStateException("registry unavailable");
             }
         }, new AgentRunLaunchGate(0));
+        RecordingWakePort wakePort = new RecordingWakePort();
+        setField(service, "backgroundTaskWakePort", wakePort);
         AgentExecutionCommand request = request();
         registry.begin(request.getRequestId(), request.getSessionId(), request.getUserId());
 
@@ -32,6 +36,9 @@ public class GptQueryApplicationServiceTest {
             Assert.assertTrue(e.getCause() instanceof IllegalStateException);
         }
         Assert.assertTrue(registry.find(request.getRequestId()).isEmpty());
+        Assert.assertEquals(1, wakePort.settleCount);
+        Assert.assertEquals("session-1", wakePort.sessionId);
+        Assert.assertEquals("request-1", wakePort.requestId);
     }
 
     @Test
@@ -39,12 +46,17 @@ public class GptQueryApplicationServiceTest {
         ActiveAgentRunRegistry registry = new ActiveAgentRunRegistry();
         GptQueryApplicationService service =
                 service(registry, new SessionProjectionRegistry(), new AgentRunLaunchGate(0));
+        RecordingWakePort wakePort = new RecordingWakePort();
+        setField(service, "backgroundTaskWakePort", wakePort);
         AgentExecutionCommand request = request();
         registry.begin(request.getRequestId(), request.getSessionId(), request.getUserId());
 
         schedule(service, request);
 
         Assert.assertTrue(registry.find(request.getRequestId()).isEmpty());
+        Assert.assertEquals(1, wakePort.settleCount);
+        Assert.assertEquals("session-1", wakePort.sessionId);
+        Assert.assertEquals("request-1", wakePort.requestId);
     }
 
     private static GptQueryApplicationService service(ActiveAgentRunRegistry registry,
@@ -83,6 +95,30 @@ public class GptQueryApplicationServiceTest {
             field.set(target, value);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);
+        }
+    }
+
+    private static final class RecordingWakePort implements BackgroundTaskWakePort {
+        private int settleCount;
+        private String sessionId;
+        private String requestId;
+
+        @Override
+        public boolean onBackgroundTaskCompleted(BackgroundTaskCompletionEvent event) {
+            return false;
+        }
+
+        @Override
+        public void onRunSettled(String sessionId) {
+            settleCount++;
+            this.sessionId = sessionId;
+        }
+
+        @Override
+        public void onRunSettled(String sessionId, String requestId) {
+            settleCount++;
+            this.sessionId = sessionId;
+            this.requestId = requestId;
         }
     }
 }

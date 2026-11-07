@@ -29,6 +29,7 @@ public class ReplayTiming implements Serializable {
      * <p>调用方仍不得在多个线程间随意共享可变实例；需要快照请用 {@link #copyOf}。</p>
      */
     private volatile LocalDateTime startedAt;
+    private volatile LocalDateTime firstTokenAt;
     private volatile LocalDateTime finishedAt;
     private volatile Long durationMs;
     private volatile String source;
@@ -57,6 +58,17 @@ public class ReplayTiming implements Serializable {
         return timing;
     }
 
+    /**
+     * 记录流式响应中首个有效增量到达时间。
+     * <p>只写一次；startedAt 为空或已经记录过时保持原值。</p>
+     */
+    public synchronized void markFirstToken() {
+        if (startedAt == null || firstTokenAt != null) {
+            return;
+        }
+        firstTokenAt = LocalDateTime.now();
+    }
+
     /** 复制一份独立计时，避免下游改动污染原对象。 */
     public static ReplayTiming copyOf(ReplayTiming timing) {
         if (timing == null) {
@@ -64,6 +76,7 @@ public class ReplayTiming implements Serializable {
         }
         return ReplayTiming.builder()
                 .startedAt(timing.getStartedAt())
+                .firstTokenAt(timing.getFirstTokenAt())
                 .finishedAt(timing.getFinishedAt())
                 .durationMs(timing.getDurationMs())
                 .source(timing.getSource())

@@ -11,6 +11,7 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.agent.ReActAgent;
 import org.wwz.ai.domain.agent.runtime.artifact.TaskSummaryArtifactProtocol;
 import org.wwz.ai.domain.agent.runtime.dto.TaskSummaryResult;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadStateStore;
 
 import jakarta.annotation.Resource;
@@ -101,6 +102,19 @@ public class ReactTurnCloseSupport {
             log.warn("working memory persist failed, background notifications stay unnotified requestId={}",
                     agentContext.getRequestId());
             return;
+        }
+        Set<Long> consumedInboxIds = agentContext.control().drainConsumedInboxItemIds();
+        SessionInboxPort inbox = agentContext.sessionInboxPort();
+        if (inbox != null && !consumedInboxIds.isEmpty()) {
+            int acked = inbox.ackDelivered(
+                    agentContext.getSessionId(),
+                    consumedInboxIds,
+                    agentContext.getRequestId());
+            if (acked < consumedInboxIds.size()) {
+                log.warn("session inbox ack incomplete requestId={} expected={} acked={}",
+                        agentContext.getRequestId(), consumedInboxIds.size(), acked);
+                return;
+            }
         }
         // 通知只有随工作记忆落库后才算「已投递」；失败时保持 0，下一轮补投。
         Set<String> consumedTaskIds = agentContext.control().drainConsumedBackgroundNotifications();

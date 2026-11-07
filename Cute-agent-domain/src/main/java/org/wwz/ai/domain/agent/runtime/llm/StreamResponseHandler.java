@@ -122,6 +122,9 @@ public class StreamResponseHandler {
                     if (StringUtils.isBlank(chunkContent)) {
                         return;
                     }
+                    if (runtimeTiming != null) {
+                        runtimeTiming.markFirstToken();
+                    }
                     boolean emitted = appendVisibleContent(allContent, chunkContent, hiddenStartMarker,
                             hiddenMarkerIndex, streamBuffer, emittedLength, pushToClient && messageId != null);
                     if (emitted) {
@@ -254,10 +257,17 @@ public class StreamResponseHandler {
                     if (toolCalls != null) {
                         toolDeltaCount[0] += toolCalls.size();
                         mergeToolCalls(toolCalls, toolCallAccumulators);
+                        if (!toolCalls.isEmpty() && runtimeTiming != null) {
+                            runtimeTiming.markFirstToken();
+                        }
                     }
 
                     String chunkReasoning = ReasoningContentExtractor.extractDeltaReasoning(event);
                     String chunkContent = ReasoningContentExtractor.extractDeltaContent(event);
+                    if ((StringUtils.isNotEmpty(chunkReasoning) || StringUtils.isNotEmpty(chunkContent))
+                            && runtimeTiming != null) {
+                        runtimeTiming.markFirstToken();
+                    }
                     if (StringUtils.isNotEmpty(chunkContent)
                             && StringUtils.containsIgnoreCase(chunkContent, "<think>")) {
                         ReasoningContentExtractor.SplitResult tagged =

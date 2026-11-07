@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.wwz.ai.infrastructure.dao.cute.ISessionInboxDao">
+
+    <resultMap id="SessionInboxMap" type="org.wwz.ai.infrastructure.dao.cute.po.SessionInboxPO">
+        <id column="id" property="id"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="kind" property="kind"/>
+        <result column="visibility" property="visibility"/>
+        <result column="state" property="state"/>
+        <result column="idempotency_key" property="idempotencyKey"/>
+        <result column="payload_json" property="payloadJson"/>
+        <result column="source_run_id" property="sourceRunId"/>
+        <result column="claimed_by_run_id" property="claimedByRunId"/>
+        <result column="lease_until_ms" property="leaseUntilMs"/>
+        <result column="created_at_ms" property="createdAtMs"/>
+        <result column="delivered_at_ms" property="deliveredAtMs"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="columns">
+        id, session_id, kind, visibility, state, idempotency_key, payload_json,
+        source_run_id, claimed_by_run_id, lease_until_ms, created_at_ms,
+        delivered_at_ms, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insertIgnore" parameterType="org.wwz.ai.infrastructure.dao.cute.po.SessionInboxPO">
+        INSERT IGNORE INTO ai_agent_session_inbox (
+            session_id, kind, visibility, state, idempotency_key, payload_json,
+            source_run_id, created_at_ms, create_time, update_time, deleted
+        ) VALUES (
+            #{sessionId}, #{kind}, #{visibility}, #{state}, #{idempotencyKey}, #{payloadJson},
+            #{sourceRunId}, #{createdAtMs}, NOW(), NOW(), 0
+        )
+    </insert>
+
+    <select id="selectByKey" resultMap="SessionInboxMap">
+        SELECT <include refid="columns"/>
+        FROM ai_agent_session_inbox
+        WHERE session_id = #{sessionId}
+          AND idempotency_key = #{idempotencyKey}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectClaimableForUpdate" resultMap="SessionInboxMap">
+        SELECT <include refid="columns"/>
+        FROM ai_agent_session_inbox
+        WHERE session_id = #{sessionId}
+          AND kind = #{kind}
+          AND deleted = 0
+          AND (
+            state = 'PENDING'
+            OR (state = 'CLAIMED' AND lease_until_ms &lt; #{nowMs})
+          )
+        ORDER BY id ASC
+        LIMIT #{limit}
+        FOR UPDATE
+    </select>
+
+    <update id="markClaimed">
+        UPDATE ai_agent_session_inbox
+        SET state = 'CLAIMED',
+            claimed_by_run_id = #{runId},
+            lease_until_ms = #{leaseUntilMs},
+            update_time = NOW()
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND deleted = 0
+          AND (
+            state = 'PENDING'
+            OR (state = 'CLAIMED' AND lease_until_ms &lt; #{nowMs})
+          )
+    </update>
+
+    <update id="ackDelivered">
+        UPDATE ai_agent_session_inbox
+        SET state = 'DELIVERED',
+            delivered_at_ms = #{deliveredAtMs},
+            claimed_by_run_id = NULL,
+            lease_until_ms = NULL,
+            update_time = NOW()
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND state = 'CLAIMED'
+          AND claimed_by_run_id = #{runId}
+          AND deleted = 0
+    </update>
+
+    <update id="releaseClaims">
+        UPDATE ai_agent_session_inbox
+        SET state = 'PENDING',
+            claimed_by_run_id = NULL,
+            lease_until_ms = NULL,
+            update_time = NOW()
+        WHERE session_id = #{sessionId}
+          AND claimed_by_run_id = #{runId}
+          AND state = 'CLAIMED'
+          AND deleted = 0
+    </update>
+
+    <update id="holdPendingUserMessages">
+        UPDATE ai_agent_session_inbox
+        SET state = 'HELD',
+            claimed_by_run_id = NULL,
+            lease_until_ms = NULL,
+            update_time = NOW()
+        WHERE session_id = #{sessionId}
+          AND kind = 'USER_MESSAGE'
+          AND state IN ('PENDING', 'CLAIMED')
+          AND deleted = 0
+    </update>
+
+    <update id="releaseHeldUserMessages">
+        UPDATE ai_agent_session_inbox
+        SET state = 'PENDING',
+            update_time = NOW()
+        WHERE session_id = #{sessionId}
+          AND kind = 'USER_MESSAGE'
+          AND state = 'HELD'
+          AND deleted = 0
+        <if test="idempotencyKey != null and idempotencyKey != ''">
+          AND idempotency_key = #{idempotencyKey}
+        </if>
+    </update>
+
+    <select id="countOutstanding" resultType="int">
+        SELECT COUNT(*)
+        FROM ai_agent_session_inbox
+        WHERE session_id = #{sessionId}
+          AND state IN ('PENDING', 'CLAIMED')
+          AND deleted = 0
+    </select>
+
+    <select id="countDeliverableKind" resultType="int">
+        SELECT COUNT(*)
+        FROM ai_agent_session_inbox
+        WHERE session_id = #{sessionId}
+          AND kind = #{kind}
+          AND deleted = 0
+          AND (
+            state = 'PENDING'
+            OR (state = 'CLAIMED' AND lease_until_ms &lt; #{nowMs})
+          )
+    </select>
+
+    <select id="countHeldUserMessages" resultType="int">
+        SELECT COUNT(*)
+        FROM ai_agent_session_inbox
+        WHERE session_id = #{sessionId}
+          AND kind = 'USER_MESSAGE'
+          AND state = 'HELD'
+          AND deleted = 0
+    </select>
+
+    <select id="selectFirstDeliverableUser" resultMap="SessionInboxMap">
+        SELECT <include refid="columns"/>
+        FROM ai_agent_session_inbox
+        WHERE session_id = #{sessionId}
+          AND kind = 'USER_MESSAGE'
+          AND deleted = 0
+          AND (
+            state = 'PENDING'
+            OR (state = 'CLAIMED' AND lease_until_ms &lt; #{nowMs})
+          )
+        ORDER BY id ASC
+        LIMIT 1
+    </select>
+</mapper>

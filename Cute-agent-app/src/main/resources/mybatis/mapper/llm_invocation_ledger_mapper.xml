@@ -37,6 +37,7 @@
         <result column="status" property="status"/>
         <result column="error_msg" property="errorMsg"/>
         <result column="started_at" property="startedAt"/>
+        <result column="first_token_at" property="firstTokenAt"/>
         <result column="finished_at" property="finishedAt"/>
         <result column="duration_ms" property="durationMs"/>
         <result column="create_time" property="createTime"/>
@@ -51,7 +52,7 @@
         completion_text_tokens, completion_audio_tokens, reasoning_tokens, system_fingerprint,
         est_total_tokens, est_system_tokens, est_message_tokens, est_tool_tokens,
         message_count, tool_count, cache_status, cache_risk_flags, finish_reason, status, error_msg,
-        started_at, finished_at, duration_ms, create_time, update_time, deleted
+        started_at, first_token_at, finished_at, duration_ms, create_time, update_time, deleted
     </sql>
 
     <insert id="insertLlmInvocation" parameterType="org.wwz.ai.domain.agent.ledger.entity.LlmInvocation" useGeneratedKeys="true" keyProperty="id">
@@ -63,7 +64,7 @@
             system_fingerprint, est_total_tokens, est_system_tokens, est_message_tokens, est_tool_tokens,
             message_count, tool_count, cache_status, cache_risk_flags,
             finish_reason, status, error_msg,
-            started_at, finished_at, duration_ms, create_time, update_time, deleted
+            started_at, first_token_at, finished_at, duration_ms, create_time, update_time, deleted
         ) VALUES (
             #{runId}, #{invocationSeq}, #{agentName}, #{stepNo}, #{callKind}, #{streaming}, #{modelName}, #{responseText}, #{reasoningContent},
             #{toolCallCount}, #{promptTokens}, #{completionTokens}, #{totalTokens},
@@ -72,7 +73,7 @@
             #{systemFingerprint}, #{estTotalTokens}, #{estSystemTokens}, #{estMessageTokens}, #{estToolTokens},
             #{messageCount}, #{toolCount}, #{cacheStatus}, #{cacheRiskFlags},
             #{finishReason}, #{status}, #{errorMsg},
-            #{startedAt}, #{finishedAt}, #{durationMs}, NOW(), NOW(), 0
+            #{startedAt}, #{firstTokenAt}, #{finishedAt}, #{durationMs}, NOW(), NOW(), 0
         )
     </insert>
 
@@ -96,6 +97,7 @@
             cache_risk_flags = #{cacheRiskFlags},
             finish_reason = #{finishReason},
             error_msg = #{errorMsg},
+            first_token_at = #{firstTokenAt},
             finished_at = #{finishedAt},
             duration_ms = CASE
                 WHEN started_at IS NULL OR #{finishedAt} IS NULL THEN duration_ms

@@ -152,6 +152,36 @@
         LIMIT #{offset}, #{limit}
     </select>
 
+    <select id="queryByTimeRange" resultMap="DialogueRunViewMap">
+        SELECT <include refid="dialogueRunViewColumns"/>
+        FROM ai_agent_dialogue_run
+        WHERE deleted = 0
+          AND create_time &gt;= #{from}
+          AND create_time &lt; #{to}
+        ORDER BY create_time ASC, id ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="queryByTimeRangeAfter" resultMap="DialogueRunViewMap">
+        SELECT <include refid="dialogueRunViewColumns"/>
+        FROM ai_agent_dialogue_run
+        WHERE deleted = 0
+          AND create_time &gt;= #{from}
+          AND create_time &lt; #{to}
+          <if test="statuses != null and !statuses.isEmpty()">
+              AND status IN
+              <foreach collection="statuses" item="status" open="(" separator="," close=")">
+                  #{status}
+              </foreach>
+          </if>
+          <if test="afterCreateTime != null and afterId != null">
+              AND (create_time &gt; #{afterCreateTime}
+                   OR (create_time = #{afterCreateTime} AND id &gt; #{afterId}))
+          </if>
+        ORDER BY create_time ASC, id ASC
+        LIMIT #{limit}
+    </select>
+
     <select id="queryOrphanedRunningRuns" resultMap="DialogueRunMap">
         SELECT <include refid="dialogueRunColumns"/>
         FROM ai_agent_dialogue_run

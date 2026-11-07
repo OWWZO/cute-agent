@@ -180,6 +180,10 @@ public class SubAgentRunner {
         if (StringUtils.isBlank(prompt)) {
             return failed(agentId, childSessionId, definition, description, prompt, start, "prompt 不能为空");
         }
+        if (parentContext.isRunCancelled()) {
+            return failed(agentId, childSessionId, definition, description, prompt, start,
+                    "父 run 已停止，取消子 Agent 启动");
+        }
         if (parentContext.getToolCollection() == null
                 && parentContext.getSubAgentToolCollection() == null) {
             return failed(agentId, childSessionId, definition, description, prompt, start, "父 Agent 工具池为空");

@@ -16,6 +16,7 @@ import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionPort;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionStreamPort;
 import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner;
@@ -130,6 +131,9 @@ public class CuteRuntimeDependencies {
     /** 可选：会话 Todo / 后台任务持久化 */
     TasklistPersistencePort tasklistPersistencePort;
 
+    /** 可选：会话级用户输入 / 后台通知统一投递队列 */
+    SessionInboxPort sessionInboxPort;
+
     /**
      * 可选：子智能体隐藏会话身份落库端口。
      * 缺失时子 Agent 退化为不落子会话（仅日志告警），不阻断运行。
@@ -178,6 +182,10 @@ public class CuteRuntimeDependencies {
 
     public BackgroundTaskWakePort getOptionalBackgroundTaskWakePort() {
         return backgroundTaskWakePort;
+    }
+
+    public SessionInboxPort getOptionalSessionInboxPort() {
+        return sessionInboxPort;
     }
 
     /** 自动续跑开关；未装配配置时默认开启。 */

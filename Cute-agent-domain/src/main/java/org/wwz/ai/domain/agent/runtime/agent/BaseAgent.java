@@ -8,6 +8,7 @@ import org.wwz.ai.domain.agent.memory.ltm.LtmMemoryGuard;
 import org.wwz.ai.domain.agent.memory.ltm.LtmPromptGuidance;
 import org.wwz.ai.domain.agent.runtime.stream.ToolResultStreamPayload;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactFormatter;
+import org.wwz.ai.domain.agent.runtime.budget.RunBudget;
 import org.wwz.ai.domain.agent.runtime.cancel.PendingInjectMessage;
 import org.wwz.ai.domain.agent.runtime.dto.Memory;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
@@ -22,6 +23,9 @@ import org.wwz.ai.domain.agent.runtime.llm.LlmToolCallbackProvider;
 import org.wwz.ai.domain.agent.runtime.llm.PromptShape;
 import org.wwz.ai.domain.agent.runtime.llm.TokenCounter;
 import org.wwz.ai.domain.agent.runtime.llm.SessionPromptFreeze;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPayloads;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanModePromptInjector;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.prompt.AgentPrompt;
@@ -122,6 +126,13 @@ public abstract class BaseAgent {
      * 子类定义单步执行逻辑。
      */
     public abstract String step();
+
+    /**
+     * 预算进入收尾阶段时由子类生成最终答案。默认不处理，不影响普通 Agent。
+     */
+    protected String finalizeAfterBudget(String reason) {
+        return null;
+    }
 
     protected <T> T awaitFuture(CompletableFuture<T> future) {
         try {
@@ -269,6 +280,25 @@ public abstract class BaseAgent {
                             context.getRequestId(), getName(), context.getRunCancelReason());
                     break;
                 }
+                RunBudget runBudget = context == null ? null : context.getRunBudget();
+                String finalizationReason = runBudget == null
+                        ? null
+                        : runBudget.claimFinalization(this, currentStep);
+                if (finalizationReason != null) {
+                    String finalText = finalizeAfterBudget(finalizationReason);
+                    boolean finalized = StringUtils.isNotBlank(finalText)
+                            && state == AgentState.FINISHED;
+                    runBudget.completeFinalization(this, finalized);
+                    if (finalized) {
+                        results.add(finalText);
+                    } else {
+                        results.add("Terminated: Budget finalization failed (" + finalizationReason + ")");
+                    }
+                    log.info("{} {} budget finalization reason={} success={} tokens={} tools={}",
+                            context.getRequestId(), getName(), finalizationReason, finalized,
+                            runBudget.getTotalTokens(), runBudget.getToolCalls());
+                    break;
+                }
                 currentStep++;
                 if (context != null) {
                     // 步进边界 drain 控制面 inject（用户中途指导），再进入 think
@@ -308,6 +338,37 @@ public abstract class BaseAgent {
         if (context == null) {
             return;
         }
+        SessionInboxPort inbox = context.sessionInboxPort();
+        if (inbox != null) {
+            List<SessionInboxItem> items = inbox.claimPending(
+                    context.getSessionId(),
+                    context.getRequestId(),
+                    SessionInboxItem.KIND_USER_MESSAGE,
+                    100);
+            if (items == null || items.isEmpty()) {
+                return;
+            }
+            List<Long> consumedIds = new ArrayList<>();
+            for (SessionInboxItem item : items) {
+                String text = item == null ? null : SessionInboxPayloads.userText(item.getPayloadJson());
+                if (StringUtils.isBlank(text)) {
+                    log.warn("{} {} ignored empty inbox user message id={}",
+                            context.getRequestId(), getName(), item == null ? null : item.getId());
+                    continue;
+                }
+                String wrapped = "<system-reminder>\n"
+                        + "The user sent a mid-run guidance message. "
+                        + "Follow it carefully for the rest of this run.\n"
+                        + "</system-reminder>\n\n"
+                        + text.trim();
+                updateMemory(RoleType.USER, wrapped, null);
+                consumedIds.add(item.getId());
+                log.info("{} {} drained inbox user message id={} chars={}",
+                        context.getRequestId(), getName(), item.getId(), text.length());
+            }
+            context.control().addConsumedInboxItemIds(consumedIds);
+            return;
+        }
         List<PendingInjectMessage> injects = context.drainPendingInjects();
         if (injects == null || injects.isEmpty()) {
             return;
@@ -345,13 +406,37 @@ public abstract class BaseAgent {
                 && !context.getRuntimeDependencies().getCuteConfig().isBackgroundAutoContinuation()) {
             return;
         }
+        SessionInboxPort inbox = context.sessionInboxPort();
         String sessionKey = SessionBackgroundTaskHub.keyFor(
                 context.getSessionId(), context.getRequestId());
         List<TaskNotification> batch = new ArrayList<>(SessionNotificationHub.drain(sessionKey));
         Set<String> batchTaskIds = new LinkedHashSet<>();
+        List<Long> consumedIds = new ArrayList<>();
         for (TaskNotification notification : batch) {
             if (notification != null && StringUtils.isNotBlank(notification.taskId())) {
                 batchTaskIds.add(notification.taskId());
+            }
+        }
+        if (inbox != null) {
+            List<SessionInboxItem> items = inbox.claimPending(
+                    context.getSessionId(),
+                    context.getRequestId(),
+                    SessionInboxItem.KIND_BACKGROUND_NOTIFICATION,
+                    100);
+            if (items != null) {
+                for (SessionInboxItem item : items) {
+                    TaskNotification notification = item == null
+                            ? null : SessionInboxPayloads.backgroundNotification(item.getPayloadJson());
+                    if (notification == null || StringUtils.isBlank(notification.taskId())) {
+                        log.warn("{} {} ignored malformed inbox background notification id={}",
+                                context.getRequestId(), getName(), item == null ? null : item.getId());
+                        continue;
+                    }
+                    if (batchTaskIds.add(notification.taskId())) {
+                        batch.add(notification);
+                    }
+                    consumedIds.add(item.getId());
+                }
             }
         }
         if (!context.isSubAgent() && !backgroundNotificationBackfillDone) {
@@ -374,8 +459,9 @@ public abstract class BaseAgent {
                 // 同一轮内由 batchTaskIds 去重；会话单 run 仲裁保证不会并发补投。
                 TaskNotification notification = TaskNotification.from(task, null);
                 if (notification != null) {
-                    batch.add(notification);
-                    batchTaskIds.add(task.getId());
+                    if (batchTaskIds.add(task.getId())) {
+                        batch.add(notification);
+                    }
                 }
             }
         }
@@ -393,6 +479,7 @@ public abstract class BaseAgent {
                 + formatted;
         memory.addMessage(Message.modelOnlyUserMessage(wrapped));
         context.control().addConsumedBackgroundNotifications(batchTaskIds);
+        context.control().addConsumedInboxItemIds(consumedIds);
         log.info("{} {} drained background notifications count={} taskIds={}",
                 context.getRequestId(), getName(), batch.size(), batchTaskIds);
     }

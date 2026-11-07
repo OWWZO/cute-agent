@@ -333,6 +333,7 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
                     .cacheRiskFlags(record.getCacheRiskFlags())
                     .finishReason(record.getFinishReason())
                     .errorMsg(trimText(record.getErrorMsg(), 2000))
+                    .firstTokenAt(record.getFirstTokenAt())
                     .finishedAt(finishedAt)
                     .build());
             if (writeTimeline) {

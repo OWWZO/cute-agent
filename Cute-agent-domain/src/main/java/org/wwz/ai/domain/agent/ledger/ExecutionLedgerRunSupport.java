@@ -55,7 +55,7 @@ public final class ExecutionLedgerRunSupport {
                 .sessionId(request.getSessionId())
                 .userId(request.getUserId())
                 .entryAgent(entryAgent)
-                .queryText(request.getQuery())
+                .queryText(StringUtils.defaultIfBlank(request.getLedgerQueryText(), request.getQuery()))
                 .build());
         agentContext.activateLedgerRun(runId, request.getRequestId());
         recordInputArtifacts(recorder, request.getSessionFiles(), runId, request.getRequestId());

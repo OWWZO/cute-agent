@@ -28,6 +28,7 @@ import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolStructuredOutput;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.domain.agent.ledger.tooloutput.ToolOutputReader;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -235,6 +236,39 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
         }
         return attachArtifactSummaries(executionLedgerReadRepository.queryRunsBySessionId(
                 sessionId, normalizeOffset(offset), normalizeSessionRunLimit(limit)));
+    }
+
+    @Override
+    public List<DialogueRunView> queryRunsByTimeRange(LocalDateTime from,
+                                                      LocalDateTime to,
+                                                      int limit) {
+        return queryRunsByTimeRange(from, to, null, null, null, limit);
+    }
+
+    @Override
+    public List<DialogueRunView> queryRunsByTimeRange(
+            LocalDateTime from,
+            LocalDateTime to,
+            List<Integer> statuses,
+            LocalDateTime afterCreateTime,
+            Long afterId,
+            int limit) {
+        if (from == null || to == null || !from.isBefore(to)) {
+            throw new IllegalArgumentException("time range must satisfy from < to");
+        }
+        if ((afterCreateTime == null) != (afterId == null)) {
+            throw new IllegalArgumentException(
+                    "time range cursor requires createTime and id together"
+            );
+        }
+        return executionLedgerReadRepository.queryRunsByTimeRangeAfter(
+                from,
+                to,
+                statuses,
+                afterCreateTime,
+                afterId,
+                normalizeSessionRunLimit(limit)
+        );
     }
 
     @Override
@@ -585,6 +619,7 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
                     .status(invocation.getStatus())
                     .errorMsg(invocation.getErrorMsg())
                     .startedAt(invocation.getStartedAt())
+                    .firstTokenAt(invocation.getFirstTokenAt())
                     .finishedAt(invocation.getFinishedAt())
                     .durationMs(invocation.getDurationMs())
                     .createTime(invocation.getCreateTime())

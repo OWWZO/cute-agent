@@ -103,7 +103,10 @@ public class AgentRunController {
                     req.getSessionId()
             );
             Map<String, Object> data = agentRunInjectApplicationService.inject(
-                    req.getSessionId(), req.getRequestId(), req.getText());
+                    req.getSessionId(),
+                    req.getRequestId(),
+                    req.getText(),
+                    req.getClientMessageId());
             boolean accepted = Boolean.TRUE.equals(data.get("accepted"));
             boolean newRun = "new_run".equals(data.get("mode"));
             return Response.<Map<String, Object>>builder()

@@ -15,6 +15,7 @@ import org.wwz.ai.domain.agent.runtime.tool.common.AgentDispatchTool;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 子 Agent 控制面隔离回归（026）：SubAgentContextFactory 不得把 run 级控制面共享给子 Agent。
@@ -332,6 +333,27 @@ public class SubAgentControlIsolationTest {
 
         userToken.cancel(RunCancellation.REASON_USER_STOP);
         Assert.assertTrue("用户 stop 仍应杀得到孙 Agent", grandchild.isRunCancelled());
+    }
+
+    @Test
+    public void taskStopMustNotRunGrandchildAbortHooks() {
+        AgentContext root = newParent("sess-iso-18");
+        RunCancellation userToken = new RunCancellation();
+        root.control().bindCancellation(userToken);
+
+        AgentContext background = spawnChild(root, "agent-iso-18");
+        RunCancellation taskCancel = new RunCancellation();
+        background.control().bindCancellation(taskCancel);
+        AgentContext grandchild = spawnChild(background, "agent-iso-18a");
+        AtomicBoolean aborted = new AtomicBoolean();
+        grandchild.registerRunAbort(() -> aborted.set(true));
+
+        taskCancel.cancel(RunCancellation.REASON_TASK_STOP);
+
+        Assert.assertFalse("TaskStop 不得中断孙 Agent 的在途工具或模型请求", aborted.get());
+
+        userToken.cancel(RunCancellation.REASON_USER_STOP);
+        Assert.assertTrue("用户 stop 仍必须中断孙 Agent 的在途工作", aborted.get());
     }
 
     // ---- dateInfo：每次现算，不继承父 ----

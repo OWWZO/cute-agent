@@ -3,6 +3,7 @@ package org.wwz.ai.application.agent.desktopcontrol;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.application.agent.dispatch.IAgentDispatchService;
@@ -28,6 +29,7 @@ import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
 import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
 import org.wwz.ai.domain.agent.runtime.handler.AgentStreamEventHandler;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.types.agent.config.AgentExecutorNames;
 import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
 import org.wwz.ai.types.agent.exception.AgentExecutorBusyException;
@@ -65,6 +67,9 @@ public class DesktopControlResumeApplicationService {
 
     @Resource
     private AgentTimelineEventProjector agentTimelineEventProjector;
+
+    @Autowired(required = false)
+    private SessionInboxPort sessionInboxPort;
 
     public AgentQuerySubmitResult resume(String resumeRequestId) {
         if (StringUtils.isBlank(resumeRequestId)) {
@@ -111,6 +116,7 @@ public class DesktopControlResumeApplicationService {
         try {
             activeAgentRunRegistry.begin(
                     agentRequest.getRequestId(), agentRequest.getSessionId(), userId);
+            releaseHeldInboxMessages(agentRequest.getSessionId());
         } catch (AgentConcurrentRunException e) {
             desktopControlRepository.markStatus(record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
             throw e;
@@ -127,20 +133,28 @@ public class DesktopControlResumeApplicationService {
             } catch (AgentExecutorBusyException e) {
                 log.warn("{} deferred desktop-control resume busy", agentRequest.getRequestId(), e);
                 activeAgentRunRegistry.end(agentRequest.getRequestId());
-                desktopControlRepository.markStatus(record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
-                projectingStream.completeWithError(e);
+                try {
+                    desktopControlRepository.markStatus(record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
+                    projectingStream.completeWithError(e);
+                } finally {
+                    notifyRunSettled(agentRequest);
+                }
             } catch (RuntimeException e) {
                 log.error("{} deferred desktop-control resume failed", agentRequest.getRequestId(), e);
                 activeAgentRunRegistry.end(agentRequest.getRequestId());
                 try {
-                    desktopControlRepository.markStatus(
-                            record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
-                } catch (RuntimeException resetError) {
-                    log.error("{} desktop-control resume status reset failed controlId={}",
-                            agentRequest.getRequestId(), record.getControlId(), resetError);
-                    e.addSuppressed(resetError);
+                    try {
+                        desktopControlRepository.markStatus(
+                                record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
+                    } catch (RuntimeException resetError) {
+                        log.error("{} desktop-control resume status reset failed controlId={}",
+                                agentRequest.getRequestId(), record.getControlId(), resetError);
+                        e.addSuppressed(resetError);
+                    }
+                    projectingStream.completeWithError(e);
+                } finally {
+                    notifyRunSettled(agentRequest);
                 }
-                projectingStream.completeWithError(e);
             }
         });
         return accepted(record);
@@ -161,7 +175,7 @@ public class DesktopControlResumeApplicationService {
             agentDispatchService.dispatch(agentRequest, projectingStream);
             desktopControlRepository.markCompleted(record.getControlId(), record.getUserId());
             GptQueryApplicationService.completeProjectionUnlessBackgroundRunning(
-                    agentRequest, projectingStream, activeAgentRunRegistry);
+                    agentRequest, projectingStream, activeAgentRunRegistry, sessionInboxPort);
         } catch (Exception e) {
             log.error("{} desktop-control resume failed controlId={}",
                     agentRequest.getRequestId(), record.getControlId(), e);
@@ -184,9 +198,21 @@ public class DesktopControlResumeApplicationService {
             return;
         }
         try {
-            backgroundTaskWakePort.onRunSettled(agentRequest.getSessionId());
+            backgroundTaskWakePort.onRunSettled(
+                    agentRequest.getSessionId(), agentRequest.getRequestId());
         } catch (Exception e) {
             log.warn("{} desktop-control resume settle check failed", agentRequest.getRequestId(), e);
+        }
+    }
+
+    private void releaseHeldInboxMessages(String sessionId) {
+        if (sessionInboxPort == null || StringUtils.isBlank(sessionId)) {
+            return;
+        }
+        try {
+            sessionInboxPort.releaseHeldUserMessages(sessionId, null);
+        } catch (Exception e) {
+            log.warn("release held session inbox failed sessionId={}", sessionId, e);
         }
     }
 

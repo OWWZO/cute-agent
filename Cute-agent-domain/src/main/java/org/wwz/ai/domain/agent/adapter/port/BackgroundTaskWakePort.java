@@ -15,4 +15,17 @@ public interface BackgroundTaskWakePort {
 
     /** run 收口后复查：仍有未投递通知且当前空闲时补一次判活。 */
     void onRunSettled(String sessionId);
+
+    /**
+     * run 收口后复查，并释放本 run 未 ACK 的 Inbox 认领。
+     */
+    default void onRunSettled(String sessionId, String requestId) {
+        onRunSettled(sessionId);
+    }
+
+    /**
+     * 用户消息已持久化到 Session Inbox 后触发判活。
+     */
+    default void onInboxChanged(String sessionId) {
+    }
 }

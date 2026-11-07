@@ -13,6 +13,9 @@ import org.wwz.ai.domain.agent.runtime.stream.ToolResultStreamPayload;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPayloads;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
@@ -275,6 +278,14 @@ public final class BackgroundSubAgentExecutor {
     }
 
     public static boolean shouldSettleParentStream(AgentContext parent) {
+        if (!shouldReleaseParentRun(parent)) {
+            return false;
+        }
+        SessionInboxPort inbox = parent.sessionInboxPort();
+        return inbox == null || !inbox.hasOutstanding(parent.getSessionId());
+    }
+
+    private static boolean shouldReleaseParentRun(AgentContext parent) {
         // 传输层默认挂起（deferBackgroundSettle=true，对齐 ZCode 推送 UX）：父回合关闭且
         // 后台空闲时才发 stream_settle 关流——这之前投影一直活着，结算 tool_result
         // 才能经活连接推送。flag=false 时全解耦：root result 即关流，无需 settle。
@@ -286,7 +297,10 @@ public final class BackgroundSubAgentExecutor {
         if (SessionNotificationHub.hasPending(sessionKey)) {
             return false;
         }
-        return !SessionBackgroundTaskHub.hasRunning(sessionKey);
+        if (SessionBackgroundTaskHub.hasRunning(sessionKey)) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -315,7 +329,26 @@ public final class BackgroundSubAgentExecutor {
             return false;
         }
         String sessionKey = SessionBackgroundTaskHub.keyFor(parent.getSessionId(), parent.getRequestId());
-        SessionNotificationHub.offer(sessionKey, TaskNotification.from(task, parentToolUseId));
+        TaskNotification notification = TaskNotification.from(task, parentToolUseId);
+        SessionInboxPort inbox = deps == null ? null : deps.getOptionalSessionInboxPort();
+        if (inbox != null) {
+            try {
+                inbox.offer(SessionInboxItem.builder()
+                        .sessionId(parent.getSessionId())
+                        .kind(SessionInboxItem.KIND_BACKGROUND_NOTIFICATION)
+                        .visibility(SessionInboxItem.VISIBILITY_MODEL_ONLY)
+                        .state(SessionInboxItem.STATE_PENDING)
+                        .idempotencyKey("background:" + task.getId())
+                        .payloadJson(SessionInboxPayloads.backgroundNotification(notification))
+                        .sourceRunId(parent.getRequestId())
+                        .build());
+            } catch (Exception e) {
+                // 通知仍会进入进程内队列；后台任务表的 notified=0 负责下一次补投。
+                log.warn("persist session inbox background notification failed taskId={}", task.getId(), e);
+            }
+        }
+        // 进程内队列保留为即时唤醒提示；数据库 Inbox 才负责跨 run/重启补投。
+        SessionNotificationHub.offer(sessionKey, notification);
         BackgroundTaskWakePort wakePort = deps == null ? null : deps.getOptionalBackgroundTaskWakePort();
         if (wakePort == null) {
             return false;
@@ -469,16 +502,33 @@ public final class BackgroundSubAgentExecutor {
                 extra.put("isFinal", true);
                 printer.send(parentToolUseId, "tool_result", toolResult, extra, null, true);
             }
-            if (settleAllowed && shouldSettleParentStream(parent)) {
-                Map<String, Object> settle = new LinkedHashMap<>();
-                settle.put("reason", "background_idle");
-                printer.send("stream_settle", settle);
+            if (settleAllowed && shouldReleaseParentRun(parent)) {
+                if (shouldSettleParentStream(parent)) {
+                    Map<String, Object> settle = new LinkedHashMap<>();
+                    settle.put("reason", "background_idle");
+                    printer.send("stream_settle", settle);
+                }
                 if (runRegistry != null && StringUtils.isNotBlank(parent.getRequestId())) {
                     runRegistry.end(parent.getRequestId());
+                    notifyRunSettled(parent);
                 }
             }
         } catch (Exception e) {
             log.debug("background settlement emit skipped: {}", e.getMessage());
+        }
+    }
+
+    private static void notifyRunSettled(AgentContext parent) {
+        CuteRuntimeDependencies deps = parent.getRuntimeDependencies();
+        BackgroundTaskWakePort wakePort = deps == null ? null : deps.getOptionalBackgroundTaskWakePort();
+        if (wakePort == null) {
+            return;
+        }
+        try {
+            wakePort.onRunSettled(parent.getSessionId(), parent.getRequestId());
+        } catch (Exception e) {
+            log.warn("background settlement wake check failed sessionId={} requestId={}",
+                    parent.getSessionId(), parent.getRequestId(), e);
         }
     }
 

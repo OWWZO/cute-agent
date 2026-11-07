@@ -24,6 +24,7 @@ import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
 import org.wwz.ai.domain.agent.memory.ltm.LtmRuntimeBootstrap;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
@@ -110,7 +111,9 @@ public class PrepareAgentContextAssembly {
                 .disabledSkillNames(disabled.skills())
                 .disabledMcpIds(disabled.mcps())
                 .dateInfo(DateUtil.CurrentDateInfo())
-                .workspaceRoot(resolveWorkspaceRoot(request.getSessionId()))
+                .workspaceRoot(StringUtils.isNotBlank(request.getWorkspaceRoot())
+                        ? Path.of(request.getWorkspaceRoot()).toAbsolutePath().normalize().toString()
+                        : resolveWorkspaceRoot(request.getSessionId()))
                 .basePrompt(request.getBasePrompt())
                 .workingMemoryMessages(request.getWorkingMemoryMessages())
                 .agentType(request.getAgentType())

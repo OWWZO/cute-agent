@@ -24,9 +24,18 @@ public class AgentExecutionCommand {
     private String userId;
     private String erp;
     private String query;
+    /**
+     * 写入 Execution Ledger 的展示查询。唤醒轮的输入已经持久化在 Session Inbox，
+     * 不能再次放进 {@link #query} 触发内存重复追加，但历史回放仍需要原文。
+     */
+    private String ledgerQueryText;
     private Integer agentType;
     private String outputStyle;
     private String basePrompt;
+    /**
+     * 隔离评测任务的工作区根目录。为空时沿用会话解析出的默认工作区。
+     */
+    private String workspaceRoot;
     private List<org.wwz.ai.domain.agent.runtime.dto.Message> workingMemoryMessages;
     /**
      * 是否流式输出。{@code null} 与 {@code false} 等价（消费方一律用 {@code Boolean.TRUE.equals} 判定），

@@ -39,6 +39,7 @@ import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.wwz.ai.domain.agent.image.service.IImageGenerationExecutionKernel;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentConcurrencyGate;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
@@ -168,6 +169,22 @@ public class CuteRuntimeAutoConfiguration {
                     adapter.onRunSettled(sessionId);
                 }
             }
+
+            @Override
+            public void onRunSettled(String sessionId, String requestId) {
+                BackgroundTaskWakeAdapter adapter = adapterProvider.getIfAvailable();
+                if (adapter != null) {
+                    adapter.onRunSettled(sessionId, requestId);
+                }
+            }
+
+            @Override
+            public void onInboxChanged(String sessionId) {
+                BackgroundTaskWakeAdapter adapter = adapterProvider.getIfAvailable();
+                if (adapter != null) {
+                    adapter.onInboxChanged(sessionId);
+                }
+            }
         };
     }
 
@@ -202,6 +219,7 @@ public class CuteRuntimeAutoConfiguration {
                                                                    ObjectProvider<BackgroundReviewService> backgroundReviewServiceProvider,
                                                                    ObjectProvider<LtmProperties> ltmPropertiesProvider,
                                                                    ObjectProvider<TasklistPersistencePort> tasklistPersistencePortProvider,
+                                                                   ObjectProvider<SessionInboxPort> sessionInboxPortProvider,
                                                                    ObjectProvider<SubAgentSessionPort> subAgentSessionPortProvider,
                                                                    ObjectProvider<SubAgentSessionStreamPort> subAgentSessionStreamPortProvider,
                                                                    ObjectProvider<SubAgentRunner> subAgentRunnerProvider,
@@ -243,6 +261,7 @@ public class CuteRuntimeAutoConfiguration {
                 .memoryFlushService(memoryFlushServiceProvider.getIfAvailable())
                 .backgroundReviewService(backgroundReviewServiceProvider.getIfAvailable())
                 .tasklistPersistencePort(tasklistPersistencePortProvider.getIfAvailable())
+                .sessionInboxPort(sessionInboxPortProvider.getIfAvailable())
                 .subAgentSessionPort(subAgentSessionPortProvider.getIfAvailable())
                 .subAgentSessionStreamPort(subAgentSessionStreamPortProvider.getIfAvailable())
                 .subAgentRunner(subAgentRunnerProvider.getIfAvailable())

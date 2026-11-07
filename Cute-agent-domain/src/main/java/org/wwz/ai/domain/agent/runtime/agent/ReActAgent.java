@@ -11,7 +11,9 @@ import org.wwz.ai.domain.agent.runtime.enums.AgentState;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -97,6 +99,63 @@ public abstract class ReActAgent extends BaseAgent {
         }
         // 2. 执行行动阶段并返回结果
         return act();
+    }
+
+    /**
+     * 预算收尾：停止工具探索，用一次纯文本 LLM 调用把已有证据压成最终答案。
+     */
+    @Override
+    protected String finalizeAfterBudget(String reason) {
+        if (context == null || getLlm() == null || getMemory() == null) {
+            return null;
+        }
+        if (context.isRunCancelled()) {
+            setState(AgentState.FINISHED);
+            return null;
+        }
+        String guidance = """
+                Execution budget is now in its finalization reserve.
+                STOP all exploration and do not request or call any tool.
+                Using only the evidence already in this conversation, produce the final answer now.
+                Follow the answer contract from the user message exactly.
+                If the contract requires `FINAL_ANSWER:`, output exactly one such line and no extra text.
+                """;
+        List<Message> messages = new ArrayList<>(getMemory().getMessages());
+        messages.add(Message.userMessage(guidance, null));
+        String systemPrompt = StringUtils.defaultIfBlank(
+                getSystemPrompt(),
+                "You are a helpful agent. Answer with the best evidence already gathered."
+        );
+        try {
+            String answer = awaitFuture(getLlm().ask(
+                    context,
+                    messages,
+                    Collections.singletonList(Message.systemMessage(systemPrompt, null)),
+                    true,
+                    false,
+                    0.0,
+                    ExecutionLedgerConstants.CALL_KIND_ASK
+            ));
+            String normalized = StringUtils.trimToEmpty(answer);
+            if (StringUtils.isBlank(normalized)) {
+                return null;
+            }
+            getMemory().addMessage(Message.assistantMessage(normalized, null));
+            setState(AgentState.FINISHED);
+            return normalized;
+        } catch (Exception e) {
+            if (context.isRunCancelled()) {
+                setState(AgentState.FINISHED);
+                return null;
+            }
+            setThinkFailureReason(StringUtils.defaultIfBlank(
+                    e.getMessage(),
+                    e.getClass().getSimpleName()
+            ));
+            setState(AgentState.ERROR);
+            log.warn("{} budget finalization failed reason={}", context.getRequestId(), reason, e);
+            return null;
+        }
     }
 
     /**

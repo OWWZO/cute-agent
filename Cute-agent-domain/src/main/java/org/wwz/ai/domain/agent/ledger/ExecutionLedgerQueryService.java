@@ -9,6 +9,7 @@ import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -88,6 +89,25 @@ public interface ExecutionLedgerQueryService {
 
     /** 按创建时间正序读取 session run 页面，limit 会在实现层强制限制。 */
     List<DialogueRunView> querySessionRuns(String sessionId, int offset, int limit);
+
+    /**
+     * 按 run 创建时间窗口读取轻量摘要，供运维/测试专用只读导出使用。
+     *
+     * <p>时间范围左闭右开：{@code [from, to)}。返回项不附加 artifact 摘要，
+     * 调用方需要完整事实时应继续调用 {@link #queryRunDetails(List)}。</p>
+     */
+    List<DialogueRunView> queryRunsByTimeRange(LocalDateTime from, LocalDateTime to, int limit);
+
+    /**
+     * 运维/测试专用 keyset 分页；时间范围左闭右开，状态为空表示不筛状态。
+     */
+    List<DialogueRunView> queryRunsByTimeRange(
+            LocalDateTime from,
+            LocalDateTime to,
+            List<Integer> statuses,
+            LocalDateTime afterCreateTime,
+            Long afterId,
+            int limit);
 
     /** 按 create_time/id 正序读取 keyset 页面，返回数量可能为 limit+1。 */
     List<DialogueRunView> querySessionRuns(String sessionId, RunCursor after, int limit);

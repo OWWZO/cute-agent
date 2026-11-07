@@ -3,6 +3,7 @@ package org.wwz.ai.application.agent.run;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.application.agent.dispatch.IAgentDispatchService;
@@ -21,6 +22,7 @@ import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
 import org.wwz.ai.domain.agent.runtime.handler.AgentStreamEventHandler;
 import org.wwz.ai.types.agent.config.AgentExecutorNames;
@@ -32,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * 空闲唤醒：为一个已有通知排队的会话开一轮新的 run。
@@ -62,12 +65,31 @@ public class BackgroundTaskAutoContinuationApplicationService {
     @Resource
     private AgentTimelineEventProjector agentTimelineEventProjector;
 
+    @Autowired(required = false)
+    private SessionInboxPort sessionInboxPort;
+
     /**
      * 派发唤醒轮。
      *
      * @return true 表示 run 已被受理（或已接管），false 表示当前无法派发
      */
-    public boolean dispatchWake(String sessionId, String taskId) {
+    public boolean dispatchWake(String sessionId, String taskId, Runnable onRunSettled) {
+        return dispatchWake(sessionId, taskId, "background_task", null, requestId -> {
+            if (onRunSettled != null) {
+                onRunSettled.run();
+            }
+        });
+    }
+
+    /**
+     * @param displayQuery 唤醒控制帧展示文本；实际投递仍以 Session Inbox claim 为准。
+     * @param onRunSettled 唤醒轮收口回调，参数是本次唤醒 requestId。
+     */
+    public boolean dispatchWake(String sessionId,
+                                String taskId,
+                                String triggerSource,
+                                String displayQuery,
+                                Consumer<String> onRunSettled) {
         if (StringUtils.isBlank(sessionId)) {
             return false;
         }
@@ -86,7 +108,7 @@ public class BackgroundTaskAutoContinuationApplicationService {
             return false;
         }
 
-        AgentExecutionCommand request = buildWakeRequest(session);
+        AgentExecutionCommand request = buildWakeRequest(session, triggerSource, displayQuery);
         try {
             activeAgentRunRegistry.begin(request.getRequestId(), sessionId, request.getUserId());
         } catch (AgentConcurrentRunException e) {
@@ -100,31 +122,58 @@ public class BackgroundTaskAutoContinuationApplicationService {
                         sessionEventClock, agentTimelineEventProjector)
                         .bindRegistry(sessionProjectionRegistry);
         // 先发控制帧，前端据此建占位 chat 并重新订阅；再结束旧投影的观察流。
-        publishWakeFrame(sessionId, request.getRequestId(), taskId);
+        publishWakeFrame(sessionId, request.getRequestId(), taskId, triggerSource, displayQuery);
         completeStaleProjections(sessionId, projectingStream);
 
-        agentRunLaunchGate.defer(request.getRequestId(), sessionId, () -> {
-            try {
-                AgentExecutorSupport.execute(dispatchExecutor, "backgroundTaskWake", request.getRequestId(),
-                        () -> dispatch(request, projectingStream));
-            } catch (AgentExecutorBusyException e) {
-                log.warn("background wake deferred launch busy requestId={}", request.getRequestId(), e);
-                failWake(sessionId, request.getRequestId(), projectingStream, e);
-            }
-        });
+        try {
+            agentRunLaunchGate.defer(request.getRequestId(), sessionId, () -> {
+                try {
+                    AgentExecutorSupport.execute(dispatchExecutor, "backgroundTaskWake", request.getRequestId(),
+                            () -> dispatch(request, projectingStream, onRunSettled));
+                } catch (AgentExecutorBusyException e) {
+                    log.warn("background wake deferred launch busy requestId={}", request.getRequestId(), e);
+                    failWake(sessionId, request.getRequestId(), projectingStream, e);
+                    notifyRunSettled(request.getRequestId(), onRunSettled);
+                } catch (RuntimeException e) {
+                    log.error("background wake deferred launch failed requestId={}", request.getRequestId(), e);
+                    failWake(sessionId, request.getRequestId(), projectingStream, e);
+                    notifyRunSettled(request.getRequestId(), onRunSettled);
+                }
+            });
+        } catch (RuntimeException e) {
+            log.error("background wake launch scheduling failed requestId={}", request.getRequestId(), e);
+            failWake(sessionId, request.getRequestId(), projectingStream, e);
+            notifyRunSettled(request.getRequestId(), onRunSettled);
+        }
         log.info("background wake dispatched sessionId={} requestId={} taskId={}",
                 sessionId, request.getRequestId(), taskId);
         return true;
     }
 
-    private void dispatch(AgentExecutionCommand request, AgentStreamProjection projectingStream) {
+    private void dispatch(AgentExecutionCommand request,
+                          AgentStreamProjection projectingStream,
+                          Consumer<String> onRunSettled) {
         try {
             agentDispatchService.dispatch(request, projectingStream);
             GptQueryApplicationService.completeProjectionUnlessBackgroundRunning(
-                    request, projectingStream, activeAgentRunRegistry);
+                    request, projectingStream, activeAgentRunRegistry, sessionInboxPort);
         } catch (Exception e) {
             log.error("{} background wake failed", request.getRequestId(), e);
             failWake(request.getSessionId(), request.getRequestId(), projectingStream, e);
+        } finally {
+            // 唤醒轮也是普通 run：释放 ActiveRun 后必须重新判活，避免终答期间到达的通知滞留。
+            notifyRunSettled(request.getRequestId(), onRunSettled);
+        }
+    }
+
+    private void notifyRunSettled(String requestId, Consumer<String> onRunSettled) {
+        if (onRunSettled == null) {
+            return;
+        }
+        try {
+            onRunSettled.accept(requestId);
+        } catch (Exception e) {
+            log.warn("background wake settle check failed", e);
         }
     }
 
@@ -143,7 +192,9 @@ public class BackgroundTaskAutoContinuationApplicationService {
         completeStaleProjections(sessionId, null);
     }
 
-    private AgentExecutionCommand buildWakeRequest(DialogueSession session) {
+    private AgentExecutionCommand buildWakeRequest(DialogueSession session,
+                                                   String triggerSource,
+                                                   String displayQuery) {
         boolean deepThink = session.getDeepThink() != null && session.getDeepThink() != 0;
         String basePrompt = deepThink ? "" : StringUtils.defaultString(cuteConfig.getCuteBasePrompt());
         return AgentExecutionCommand.builder()
@@ -151,23 +202,31 @@ public class BackgroundTaskAutoContinuationApplicationService {
                 .sessionId(session.getSessionId())
                 .userId(session.getUserId())
                 .query("")
+                .ledgerQueryText(displayQuery)
                 .model(session.getModel())
                 .thinking(session.getThinking())
                 .thinkingEffort(session.getThinkingEffort())
                 .agentType(deepThink ? AgentType.PLAN_SOLVE.getValue() : AgentType.REACT.getValue())
                 .basePrompt(basePrompt)
                 .isStream(true)
-                .triggerSource("background_task")
+                .triggerSource(StringUtils.defaultIfBlank(triggerSource, "background_task"))
                 .build();
     }
 
-    private void publishWakeFrame(String sessionId, String requestId, String taskId) {
+    private void publishWakeFrame(String sessionId,
+                                  String requestId,
+                                  String taskId,
+                                  String triggerSource,
+                                  String displayQuery) {
         Map<String, Object> resultMap = new LinkedHashMap<>();
         resultMap.put("requestId", requestId);
         resultMap.put("sessionId", sessionId);
-        resultMap.put("triggerSource", "background_task");
+        resultMap.put("triggerSource", StringUtils.defaultIfBlank(triggerSource, "background_task"));
         if (StringUtils.isNotBlank(taskId)) {
             resultMap.put("taskId", taskId);
+        }
+        if (StringUtils.isNotBlank(displayQuery)) {
+            resultMap.put("query", displayQuery);
         }
         agentSessionEventBus.publish(sessionId, AgentSessionStreamFrame.builder()
                 .reqId(requestId)

@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
+import org.wwz.ai.domain.agent.runtime.budget.RunBudget;
 import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
 import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanModeToolPolicy;
@@ -223,6 +224,20 @@ final class ToolExecutionPipeline {
         String toolName = dispatch == null ? command.getFunction().getName() : dispatch.toolName;
         if (context != null && context.isRunCancelled()) {
             return userStopOutcome("工具未执行：用户已停止本轮对话");
+        }
+        if (context != null && context.getRunBudget() != null) {
+            RunBudget.ToolDecision decision = context.getRunBudget().tryAcquireTool();
+            if (!decision.allowed()) {
+                String code = decision.hardLimit()
+                        ? "EVAL_BUDGET_EXCEEDED"
+                        : "EVAL_BUDGET_RESERVE";
+                return ToolExecutionOutcome.failure(
+                        decision.message(),
+                        decision.message(),
+                        null,
+                        code
+                );
+            }
         }
         try {
             Object args = dispatch != null && dispatch.argsReady

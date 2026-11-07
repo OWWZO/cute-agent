@@ -120,6 +120,9 @@ public class LlmInvocation {
     /** 开始时间 */
     private LocalDateTime startedAt;
 
+    /** 首个流式有效增量到达时间；非流式或未观测到增量为空 */
+    private LocalDateTime firstTokenAt;
+
     /** 结束时间 */
     private LocalDateTime finishedAt;
 

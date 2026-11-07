@@ -3,14 +3,19 @@ package org.wwz.ai.application.agent.run;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskCompletionEvent;
 import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
+import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionNotificationHub;
@@ -40,6 +45,12 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
     private final BackgroundTaskAutoContinuationApplicationService autoContinuationService;
     private final SessionProjectionRegistry sessionProjectionRegistry;
     private final CuteConfig cuteConfig;
+
+    @Autowired(required = false)
+    private SessionInboxPort sessionInboxPort;
+
+    @Autowired(required = false)
+    private IExecutionLedgerReadRepository executionLedgerReadRepository;
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "background-task-wake");
@@ -86,11 +97,25 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
 
     @Override
     public void onRunSettled(String sessionId) {
-        if (StringUtils.isBlank(sessionId) || !cuteConfig.isBackgroundAutoContinuation()) {
+        onRunSettled(sessionId, null);
+    }
+
+    @Override
+    public void onRunSettled(String sessionId, String requestId) {
+        if (StringUtils.isBlank(sessionId)) {
             return;
         }
         String sid = sessionId.trim();
-        if (SessionBackgroundTaskHub.hasRunning(sid)) {
+        if (sessionInboxPort != null && StringUtils.isNotBlank(requestId)) {
+            try {
+                sessionInboxPort.releaseClaims(sid, requestId.trim());
+            } catch (Exception e) {
+                log.warn("session inbox release claims failed sessionId={} requestId={}",
+                        sid, requestId, e);
+            }
+        }
+        if (SessionBackgroundTaskHub.hasRunning(sid)
+                && !hasPendingKind(sid, SessionInboxItem.KIND_USER_MESSAGE)) {
             // 仍有后台任务在飞：等最后一个完成时再判活。
             return;
         }
@@ -101,15 +126,33 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
         if (sessionYieldGate.hasOpenYield(sid)) {
             return;
         }
-        if (SessionNotificationHub.hasPending(sid)) {
+        if (isAutoWakePaused(sid)) {
+            completeStaleProjections(sid, stale);
+            return;
+        }
+        if (hasWakeablePending(sid)) {
             scheduleWake(sid);
             return;
         }
         completeStaleProjections(sid, stale);
     }
 
+    @Override
+    public void onInboxChanged(String sessionId) {
+        if (StringUtils.isBlank(sessionId)) {
+            return;
+        }
+        String sid = sessionId.trim();
+        if (activeAgentRunRegistry.findBySessionId(sid).isPresent()
+                || sessionYieldGate.hasOpenYield(sid)
+                || !hasWakeablePending(sid)) {
+            return;
+        }
+        scheduleWake(sid);
+    }
+
     private void scheduleWake(String sessionId) {
-        if (!SessionNotificationHub.hasPending(sessionId)) {
+        if (!hasWakeablePending(sessionId)) {
             return;
         }
         long delayMs = Math.max(0L, cuteConfig.getBackgroundAutoContinuationDelayMs());
@@ -132,9 +175,6 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
     }
 
     private void dispatchIfStillIdle(String sessionId) {
-        if (!cuteConfig.isBackgroundAutoContinuation()) {
-            return;
-        }
         List<AgentStreamProjection> stale = sessionProjectionRegistry.listLive(sessionId);
         if (activeAgentRunRegistry.findBySessionId(sessionId).isPresent()) {
             // 用户抢先开了一轮：让位，通知由这一轮的 drain 取走。
@@ -143,14 +183,58 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
         if (sessionYieldGate.hasOpenYield(sessionId)) {
             return;
         }
-        if (!SessionNotificationHub.hasPending(sessionId)) {
+        if (isAutoWakePaused(sessionId) || !hasWakeablePending(sessionId)) {
             completeStaleProjections(sessionId, stale);
             return;
         }
-        boolean dispatched = autoContinuationService.dispatchWake(sessionId, null);
+        boolean userPending = hasPendingKind(sessionId, SessionInboxItem.KIND_USER_MESSAGE);
+        String triggerSource = userPending ? "user_inbox" : "background_task";
+        String displayQuery = userPending && sessionInboxPort != null
+                ? sessionInboxPort.peekFirstDeliverableUserText(sessionId)
+                : null;
+        boolean dispatched = autoContinuationService.dispatchWake(
+                sessionId, null, triggerSource, displayQuery,
+                requestId -> onRunSettled(sessionId, requestId));
         if (!dispatched) {
             // 通知仍留在 hub，等下一次用户交互或收口复查；先清掉无人接收的旧投影。
             completeStaleProjections(sessionId, stale);
+        }
+    }
+
+    private boolean hasWakeablePending(String sessionId) {
+        if (isAutoWakePaused(sessionId)) {
+            return false;
+        }
+        if (hasPendingKind(sessionId, SessionInboxItem.KIND_USER_MESSAGE)) {
+            return true;
+        }
+        return cuteConfig.isBackgroundAutoContinuation()
+                && hasPendingKind(sessionId, SessionInboxItem.KIND_BACKGROUND_NOTIFICATION);
+    }
+
+    private boolean hasPendingKind(String sessionId, String kind) {
+        if (sessionInboxPort != null) {
+            return sessionInboxPort.hasDeliverableKind(sessionId, kind);
+        }
+        // 兼容未装配 Inbox 的单元测试/旧运行时：只保留后台通知内存队列语义。
+        return SessionInboxItem.KIND_BACKGROUND_NOTIFICATION.equals(kind)
+                && SessionNotificationHub.hasPending(sessionId);
+    }
+
+    private boolean isAutoWakePaused(String sessionId) {
+        if (sessionInboxPort != null && sessionInboxPort.hasHeldUserMessage(sessionId)) {
+            return true;
+        }
+        if (executionLedgerReadRepository == null) {
+            return false;
+        }
+        try {
+            DialogueSession session = executionLedgerReadRepository.querySessionEntity(sessionId);
+            return session != null && session.getStatus() != null
+                    && session.getStatus() == org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants.STATUS_STOPPED;
+        } catch (Exception e) {
+            log.debug("session state check failed sessionId={}", sessionId, e);
+            return false;
         }
     }
 

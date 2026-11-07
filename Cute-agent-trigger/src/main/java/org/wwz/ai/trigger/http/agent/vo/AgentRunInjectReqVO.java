@@ -13,4 +13,6 @@ public class AgentRunInjectReqVO {
     private String requestId;
     /** 指导文本 */
     private String text;
+    /** 前端生成的稳定消息 ID；同一消息重试时必须保持不变 */
+    private String clientMessageId;
 }

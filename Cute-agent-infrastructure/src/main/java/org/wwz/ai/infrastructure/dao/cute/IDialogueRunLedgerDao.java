@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Param;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -31,6 +32,21 @@ public interface IDialogueRunLedgerDao {
     List<DialogueRunView> queryBySessionId(@Param("sessionId") String sessionId,
                                             @Param("offset") int offset,
                                             @Param("limit") int limit);
+
+    List<DialogueRunView> queryByTimeRange(@Param("from") LocalDateTime from,
+                                           @Param("to") LocalDateTime to,
+                                           @Param("limit") int limit);
+
+    /**
+     * 运维导出专用 keyset 查询。状态为空时返回全部状态，游标为空时从窗口起点开始。
+     */
+    List<DialogueRunView> queryByTimeRangeAfter(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("statuses") List<Integer> statuses,
+            @Param("afterCreateTime") LocalDateTime afterCreateTime,
+            @Param("afterId") Long afterId,
+            @Param("limit") int limit);
 
     /**
      * 按 {@code (create_time, id)} keyset 分页。

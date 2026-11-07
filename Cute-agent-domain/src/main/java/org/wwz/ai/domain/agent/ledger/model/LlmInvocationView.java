@@ -62,6 +62,9 @@ public class LlmInvocationView {
 
     private LocalDateTime startedAt;
 
+    /** 首个流式有效增量到达时间；非流式或未观测到增量为空 */
+    private LocalDateTime firstTokenAt;
+
     private LocalDateTime finishedAt;
 
     private Long durationMs;

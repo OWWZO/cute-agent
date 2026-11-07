@@ -2,6 +2,7 @@ package org.wwz.ai.application.agent.query;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.application.agent.askuser.AskUserQuestionApplicationService;
@@ -22,6 +23,7 @@ import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
 import org.wwz.ai.domain.agent.runtime.handler.AgentStreamEventHandler;
 import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
@@ -97,6 +99,9 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
     @Resource
     private BackgroundTaskWakePort backgroundTaskWakePort;
 
+    @Autowired(required = false)
+    private SessionInboxPort sessionInboxPort;
+
     @Override
     public AgentQuerySubmitResult submitAgentQuery(GptQueryCommand params) {
         AgentExecutionCommand agentRequest = agentExecutionCommandMapper.toExecutionCommand(
@@ -143,6 +148,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                 agentRequest.getRequestId(),
                 agentRequest.getSessionId(),
                 runUserId);
+        releaseHeldInboxMessages(agentRequest.getSessionId());
 
         scheduleDispatch(agentRequest, runUserId);
         return AgentQuerySubmitResult.builder()
@@ -206,6 +212,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         }
 
         activeAgentRunRegistry.begin(agentRequest.getRequestId(), sessionId, runUserId);
+        releaseHeldInboxMessages(sessionId);
         scheduleDispatch(agentRequest, runUserId);
         return AgentQuerySubmitResult.builder()
                 .accepted(true)
@@ -233,17 +240,29 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                 } catch (AgentExecutorBusyException e) {
                     log.warn("{} deferred dispatch busy", agentRequest.getRequestId(), e);
                     activeAgentRunRegistry.end(agentRequest.getRequestId());
-                    deferredStream.completeWithError(e);
+                    try {
+                        deferredStream.completeWithError(e);
+                    } finally {
+                        notifyRunSettled(agentRequest);
+                    }
                 } catch (RuntimeException e) {
                     log.error("{} deferred dispatch failed", agentRequest.getRequestId(), e);
                     activeAgentRunRegistry.end(agentRequest.getRequestId());
-                    deferredStream.completeWithError(e);
+                    try {
+                        deferredStream.completeWithError(e);
+                    } finally {
+                        notifyRunSettled(agentRequest);
+                    }
                 }
             });
         } catch (RuntimeException e) {
             activeAgentRunRegistry.end(agentRequest.getRequestId());
-            if (projectingStream != null) {
-                projectingStream.completeWithError(e);
+            try {
+                if (projectingStream != null) {
+                    projectingStream.completeWithError(e);
+                }
+            } finally {
+                notifyRunSettled(agentRequest);
             }
             throw e;
         }
@@ -271,11 +290,12 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                                     AgentStreamProjection projectingStream) {
         try {
             agentDispatchService.dispatch(agentRequest, projectingStream);
-            completeProjectionUnlessBackgroundRunning(agentRequest, projectingStream, activeAgentRunRegistry);
+            completeProjectionUnlessBackgroundRunning(
+                    agentRequest, projectingStream, activeAgentRunRegistry, sessionInboxPort);
         } catch (Exception e) {
             if (projectingStream.isAborted()) {
                 log.info("{} dispatch error occurred after projection closed", agentRequest.getRequestId());
-                if (!shouldDeferProjectionComplete(agentRequest)) {
+                if (!shouldDeferProjectionComplete(agentRequest, sessionInboxPort)) {
                     projectingStream.complete();
                 }
                 endRunUnlessBackground(agentRequest, activeAgentRunRegistry);
@@ -301,7 +321,8 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
             return;
         }
         try {
-            backgroundTaskWakePort.onRunSettled(agentRequest.getSessionId());
+            backgroundTaskWakePort.onRunSettled(
+                    agentRequest.getSessionId(), agentRequest.getRequestId());
         } catch (Exception e) {
             log.warn("{} background run settle check failed", agentRequest.getRequestId(), e);
         }
@@ -316,6 +337,18 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         return userId;
     }
 
+    private void releaseHeldInboxMessages(String sessionId) {
+        if (sessionInboxPort == null || StringUtils.isBlank(sessionId)) {
+            return;
+        }
+        try {
+            // 用户显式发送新消息视为确认继续；HELD 只用于 Stop 后阻止静默自动续跑。
+            sessionInboxPort.releaseHeldUserMessages(sessionId, null);
+        } catch (Exception e) {
+            log.warn("release held session inbox failed sessionId={}", sessionId, e);
+        }
+    }
+
     public static void completeProjectionUnlessBackgroundRunning(AgentExecutionCommand agentRequest,
                                                                  AgentStreamProjection projectingStream) {
         completeProjectionUnlessBackgroundRunning(agentRequest, projectingStream, null);
@@ -324,7 +357,14 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
     public static void completeProjectionUnlessBackgroundRunning(AgentExecutionCommand agentRequest,
                                                                  AgentStreamProjection projectingStream,
                                                                  ActiveAgentRunRegistry runRegistry) {
-        if (shouldDeferProjectionComplete(agentRequest)) {
+        completeProjectionUnlessBackgroundRunning(agentRequest, projectingStream, runRegistry, null);
+    }
+
+    public static void completeProjectionUnlessBackgroundRunning(AgentExecutionCommand agentRequest,
+                                                                 AgentStreamProjection projectingStream,
+                                                                 ActiveAgentRunRegistry runRegistry,
+                                                                 SessionInboxPort sessionInboxPort) {
+        if (shouldDeferProjectionComplete(agentRequest, sessionInboxPort)) {
             log.info("{} defer projection complete: background work still pending sessionId={}",
                     agentRequest == null ? "-" : agentRequest.getRequestId(),
                     agentRequest == null ? null : agentRequest.getSessionId());
@@ -338,12 +378,20 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
     }
 
     public static boolean shouldDeferProjectionComplete(AgentExecutionCommand agentRequest) {
+        return shouldDeferProjectionComplete(agentRequest, null);
+    }
+
+    public static boolean shouldDeferProjectionComplete(AgentExecutionCommand agentRequest,
+                                                        SessionInboxPort sessionInboxPort) {
         // 传输层默认挂起（deferBackgroundSettle=true）：后台在飞时投影保持打开，
         // 结算 tool_result / stream_settle 才有活连接推送到前端（ZCode delta 推送的等价物），
         // 父卡秒级刷新。业务态不受影响——root result 帧恒 finish，前端 loading 已立即收口。
         // flag=false 时全解耦：root result 即 complete，父卡改由前端冷路径刷新。
         if (agentRequest == null || !StreamSettlePolicy.deferBackgroundSettle()) {
             return false;
+        }
+        if (sessionInboxPort != null && sessionInboxPort.hasOutstanding(agentRequest.getSessionId())) {
+            return true;
         }
         // 收尾窗口内完成的通知也需要保持连接：500ms 后 run_wake 要靠它送达前端。
         if (SessionNotificationHub.hasPending(agentRequest.getSessionId())) {

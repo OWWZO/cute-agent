@@ -146,6 +146,12 @@ public class AgentDispatchTool implements BaseTool {
             if (StringUtils.isBlank(description)) {
                 description = StringUtils.defaultIfBlank(subagentType, "subagent-task");
             }
+            if (agentContext.isRunCancelled()) {
+                return ToolResultPayload.failureFrom(
+                        "Agent 执行失败：父 run 已停止，不再创建子 Agent",
+                        Map.of("cancelled", Boolean.TRUE)
+                );
+            }
             SubAgentRunner subAgentRunner = agentContext.subAgentRunner();
             if (subAgentRunner == null) {
                 return ToolResultPayload.failureFrom("Agent 执行失败：SubAgentRunner 未注入", null);

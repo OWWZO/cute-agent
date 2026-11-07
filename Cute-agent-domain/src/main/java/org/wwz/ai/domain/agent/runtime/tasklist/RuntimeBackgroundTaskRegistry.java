@@ -369,7 +369,7 @@ public class RuntimeBackgroundTaskRegistry {
         }
         // 取消钩子/中断 Future 可能是阻塞动作，放到锁外执行。
         if (task.getCancellation() != null) {
-            task.getCancellation().cancel("task_stop");
+            task.getCancellation().cancel(RunCancellation.REASON_TASK_STOP);
         }
         Future<?> future = task.getFuture();
         if (future != null) {

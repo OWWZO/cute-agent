@@ -116,6 +116,8 @@ public final class SubAgentContextFactory {
                         .withSessionTaskList(parent.requireSessionTaskList())
                         .withBackgroundTasks(parent.requireBackgroundTasks()))
                 .control(childRunControl(parent))
+                .runBudget(parent.getRunBudget())
+                .toolAccessPolicy(parent.getToolAccessPolicy())
                 .planModeState(PlanModeState.builder().build())
                 .workspaceRoot(parent.getWorkspaceRoot())
                 // 子 Agent 必须自己读取文件，不能复用主 Agent 的 unchanged 判定。

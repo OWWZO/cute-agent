@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactBinding;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactRegistry;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
+import org.wwz.ai.domain.agent.runtime.budget.RunBudget;
 import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.ledger.model.AgentRunState;
@@ -13,6 +14,7 @@ import org.wwz.ai.domain.agent.runtime.cancel.PendingInjectMessage;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.cancel.RunControl;
 import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanModeState;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
@@ -20,6 +22,7 @@ import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionTaskListStore;
 import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
+import org.wwz.ai.domain.agent.runtime.tool.access.ToolAccessPolicy;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceFileReadState;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.llm.ContextTokenTracker;
@@ -324,6 +327,20 @@ public class AgentContext {
     RunControl control = new RunControl();
 
     /**
+     * 可选的 run 级预算控制器。只有评测等需要硬门禁的入口会挂载；
+     * 子 Agent 与并发 fork 共享同一实例，保证总成本口径一致。
+     */
+    @JSONField(serialize = false)
+    RunBudget runBudget;
+
+    /**
+     * run 级工具访问策略。默认启用，子 Agent 共享，避免网络故障时反复重试。
+     */
+    @Builder.Default
+    @JSONField(serialize = false)
+    ToolAccessPolicy toolAccessPolicy = new ToolAccessPolicy();
+
+    /**
      * 获取或懒创建 run 级控制面。
      */
     public synchronized RunControl control() {
@@ -522,6 +539,10 @@ public class AgentContext {
         return runtimeDependencies == null ? null : runtimeDependencies.getOptionalPlanArtifactStore();
     }
 
+    public SessionInboxPort sessionInboxPort() {
+        return runtimeDependencies == null ? null : runtimeDependencies.getOptionalSessionInboxPort();
+    }
+
     // ---- 控制面 facade：委托给 {@link RunControl}，保持调用方签名不变 ----
     public void markTurnClosed() {
         control().markTurnClosed();
@@ -573,6 +594,10 @@ public class AgentContext {
 
     public ConcurrentLinkedQueue<PendingInjectMessage> requirePendingInjects() {
         return control().requirePendingInjects();
+    }
+
+    public void setRunBudget(RunBudget runBudget) {
+        this.runBudget = runBudget;
     }
 
     public void offerInject(PendingInjectMessage message) {
@@ -762,6 +787,8 @@ public class AgentContext {
                 // 父的取消令牌经 parentCancellation 只读透传：/stop 仍杀得到并发子任务。
                 // 会话级控制面共享：TaskList / 后台任务表必须命中同一份。
                 .control(new RunControl().withParentCancellation(getRunCancellation()))
+                .runBudget(runBudget)
+                .toolAccessPolicy(toolAccessPolicy)
                 .sessionControl(sessionControl())
                 .build();
     }

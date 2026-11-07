@@ -111,11 +111,18 @@ public final class ExecutionLedgerFixtureFactory {
     }
 
     static AgentContext newAgentContext(String requestId, String sessionId, AgentExecutionRecorder recorder) {
+        return newAgentContext(requestId, sessionId, "测试执行账本", recorder);
+    }
+
+    static AgentContext newAgentContext(String requestId,
+                                        String sessionId,
+                                        String query,
+                                        AgentExecutionRecorder recorder) {
         ToolCollection toolCollection = new ToolCollection();
         AgentContext context = AgentContext.builder()
                 .requestId(requestId)
                 .sessionId(sessionId)
-                .query("测试执行账本")
+                .query(query)
                 .toolCollection(toolCollection)
                 .executionRecorder(recorder)
                 .build();
@@ -149,6 +156,18 @@ public final class ExecutionLedgerFixtureFactory {
                                     String agentName,
                                     Integer stepNo,
                                     String callKind) {
+        return createLlmInvocation(context, recorder, agentName, stepNo, callKind,
+                false, LocalDateTime.now(), "test-model");
+    }
+
+    static Long createLlmInvocation(AgentContext context,
+                                    AgentExecutionRecorder recorder,
+                                    String agentName,
+                                    Integer stepNo,
+                                    String callKind,
+                                    boolean streaming,
+                                    LocalDateTime startedAt,
+                                    String modelName) {
         context.markExecutionPosition(agentName, stepNo);
         Long llmInvocationId = recorder.createLlmInvocation(LlmInvocationStartRecord.builder()
                 .runId(context.getAgentRunState().getRunId())
@@ -157,9 +176,9 @@ public final class ExecutionLedgerFixtureFactory {
                 .agentName(agentName)
                 .stepNo(stepNo)
                 .callKind(callKind)
-                .streaming(false)
-                .modelName("test-model")
-                .startedAt(LocalDateTime.now())
+                .streaming(streaming)
+                .modelName(modelName)
+                .startedAt(startedAt)
                 .build());
         context.getAgentRunState().bindCurrentLlmInvocationId(llmInvocationId);
         return llmInvocationId;
@@ -493,6 +512,47 @@ public final class ExecutionLedgerFixtureFactory {
                     .sorted(Comparator.comparing(DialogueRun::getCreateTime)
                             .thenComparing(DialogueRun::getId))
                     .skip(offset)
+                    .limit(limit)
+                    .map(ExecutionLedgerFixtureFactory::toRunView)
+                    .toList();
+        }
+
+        @Override
+        public List<DialogueRunView> queryByTimeRange(LocalDateTime from,
+                                                       LocalDateTime to,
+                                                       int limit) {
+            return store.runs.values().stream()
+                    .filter(item -> item.getDeleted() == 0)
+                    .filter(item -> !item.getCreateTime().isBefore(from)
+                            && item.getCreateTime().isBefore(to))
+                    .sorted(Comparator.comparing(DialogueRun::getCreateTime)
+                            .thenComparing(DialogueRun::getId))
+                    .limit(limit)
+                    .map(ExecutionLedgerFixtureFactory::toRunView)
+                    .toList();
+        }
+
+        @Override
+        public List<DialogueRunView> queryByTimeRangeAfter(
+                LocalDateTime from,
+                LocalDateTime to,
+                List<Integer> statuses,
+                LocalDateTime afterCreateTime,
+                Long afterId,
+                int limit) {
+            return store.runs.values().stream()
+                    .filter(item -> item.getDeleted() == 0)
+                    .filter(item -> !item.getCreateTime().isBefore(from)
+                            && item.getCreateTime().isBefore(to))
+                    .filter(item -> statuses == null
+                            || statuses.isEmpty()
+                            || statuses.contains(item.getStatus()))
+                    .filter(item -> afterCreateTime == null
+                            || item.getCreateTime().isAfter(afterCreateTime)
+                            || (item.getCreateTime().equals(afterCreateTime)
+                            && item.getId() > afterId))
+                    .sorted(Comparator.comparing(DialogueRun::getCreateTime)
+                            .thenComparing(DialogueRun::getId))
                     .limit(limit)
                     .map(ExecutionLedgerFixtureFactory::toRunView)
                     .toList();
@@ -957,6 +1017,7 @@ public final class ExecutionLedgerFixtureFactory {
             existing.setTotalTokens(invocation.getTotalTokens());
             existing.setFinishReason(invocation.getFinishReason());
             existing.setErrorMsg(invocation.getErrorMsg());
+            existing.setFirstTokenAt(invocation.getFirstTokenAt());
             existing.setFinishedAt(invocation.getFinishedAt());
             existing.setDurationMs(duration(existing.getStartedAt(), invocation.getFinishedAt()));
             existing.setUpdateTime(LocalDateTime.now());
@@ -1497,6 +1558,7 @@ public final class ExecutionLedgerFixtureFactory {
                 .status(invocation.getStatus())
                 .errorMsg(invocation.getErrorMsg())
                 .startedAt(invocation.getStartedAt())
+                .firstTokenAt(invocation.getFirstTokenAt())
                 .finishedAt(invocation.getFinishedAt())
                 .durationMs(invocation.getDurationMs())
                 .createTime(invocation.getCreateTime())

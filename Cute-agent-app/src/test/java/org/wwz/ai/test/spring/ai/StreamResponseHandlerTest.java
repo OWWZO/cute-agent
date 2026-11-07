@@ -142,6 +142,8 @@ public class StreamResponseHandlerTest {
         Assert.assertEquals(ReplayTiming.SOURCE_RUNTIME, response.getTiming().getSource());
         Assert.assertNotNull(response.getTiming().getFinishedAt());
         Assert.assertNotNull(response.getTiming().getDurationMs());
+        Assert.assertNotNull(response.getTiming().getFirstTokenAt());
+        Assert.assertFalse(response.getTiming().getFirstTokenAt().isBefore(timing.getStartedAt()));
     }
 
     @Test

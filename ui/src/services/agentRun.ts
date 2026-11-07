@@ -144,7 +144,12 @@ export const agentRunApi = {
     api.post<Record<string, unknown>>(`${AGENT_RUN_API_PREFIX}/stop`, payload) as unknown as Promise<
       Record<string, unknown>
     >,
-  inject: (payload: { sessionId?: string; requestId: string; text: string }) =>
+  inject: (payload: {
+    sessionId?: string;
+    requestId: string;
+    text: string;
+    clientMessageId?: string;
+  }) =>
     api.post<Record<string, unknown>>(`${AGENT_RUN_API_PREFIX}/inject`, payload) as unknown as Promise<
       Record<string, unknown>
     >,
