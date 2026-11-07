@@ -5,11 +5,14 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -132,6 +135,33 @@ public class BskSessionQueueTest {
             busyLane.get(2, TimeUnit.SECONDS);
         } finally {
             pool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void independentControlTaskIsRejectedWhenItsExecutorIsFull() throws Exception {
+        ExecutorService laneExecutor = Executors.newSingleThreadExecutor();
+        ThreadPoolExecutor controlExecutor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(1),
+                new ThreadPoolExecutor.AbortPolicy());
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            BskSessionQueue queue = new BskSessionQueue(laneExecutor, controlExecutor);
+            queue.submitIndependent(() -> awaitQuietly(release));
+            queue.submitIndependent(() -> awaitQuietly(release));
+
+            try {
+                queue.submitIndependent(() -> {
+                });
+                Assert.fail("expected RejectedExecutionException");
+            } catch (RejectedExecutionException expected) {
+                // 满载即拒绝，交给 CLI 侧统一回 session_busy。
+            }
+        } finally {
+            release.countDown();
+            controlExecutor.shutdownNow();
+            laneExecutor.shutdownNow();
         }
     }
 

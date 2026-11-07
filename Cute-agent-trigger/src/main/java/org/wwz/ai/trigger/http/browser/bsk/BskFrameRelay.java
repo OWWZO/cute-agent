@@ -104,7 +104,7 @@ public class BskFrameRelay {
     /** 握手响应装配器。 */
     private final BskHandshakeResponder handshakeResponder;
 
-    /** 待补发的在飞请求。id → (connectionId, future)。 */
+    /** 待补发的在飞请求。connectionId + rpcId → future。 */
     private final Map<String, PendingCall> pending = new ConcurrentHashMap<>();
 
     /** 已注册的连接：connectionId → 连接记录。 */
@@ -144,7 +144,7 @@ public class BskFrameRelay {
 
     /** 扩展事件需要驱动 CLI 侧状态时使用的回调 seam。 */
     public interface SessionEventListener {
-        void onDialogChanged(JSONObject payload);
+        void onDialogChanged(String extensionConnectionId, JSONObject payload);
 
         void onUserInterrupt(String extensionConnectionId, String userId, String sessionId);
 
@@ -297,20 +297,34 @@ public class BskFrameRelay {
         if (StringUtils.isBlank(id)) {
             return false;
         }
-        PendingCall call = pending.get(id);
-        if (call == null) {
+        String key = StringUtils.isBlank(connectionId)
+                ? findPendingKey(id)
+                : pendingKey(connectionId, id);
+        PendingCall call = key == null ? null : pending.get(key);
+        if (call == null || !pending.remove(key, call)) {
             log.debug("bsk response for unknown or completed id {}", id);
-            return false;
-        }
-        if (StringUtils.isNotBlank(connectionId) && !connectionId.equals(call.connectionId)) {
-            log.warn("bsk response for {} came from foreign connection {}", id, connectionId);
-            return false;
-        }
-        if (!pending.remove(id, call)) {
             return false;
         }
         call.future.complete(normalize(payload));
         return true;
+    }
+
+    private String findPendingKey(String rpcId) {
+        String found = null;
+        for (Map.Entry<String, PendingCall> entry : pending.entrySet()) {
+            if (!rpcId.equals(entry.getValue().rpcId)) {
+                continue;
+            }
+            if (found != null) {
+                return null;
+            }
+            found = entry.getKey();
+        }
+        return found;
+    }
+
+    private static String pendingKey(String connectionId, String rpcId) {
+        return connectionId + "\u0000" + rpcId;
     }
 
     /**
@@ -350,15 +364,9 @@ public class BskFrameRelay {
     }
 
     private void handleDialogChanged(RegisteredConnection connection, JSONObject payload) {
-        String sessionId = payload.getString("session_id");
-        if (!ownsSession(connection.id, sessionId)) {
-            log.warn("ignoring dialog.changed from connection {} for foreign session {}",
-                    connection.id, sessionId);
-            return;
-        }
         SessionEventListener listener = sessionEventListener;
         if (listener != null) {
-            listener.onDialogChanged(payload);
+            listener.onDialogChanged(connection.id, payload);
         }
     }
 
@@ -466,7 +474,7 @@ public class BskFrameRelay {
 
     /** 该 id 是否有等待中的请求。 */
     public boolean isPending(String id) {
-        return StringUtils.isNotBlank(id) && pending.containsKey(id);
+        return StringUtils.isNotBlank(id) && findPendingKey(id) != null;
     }
 
     /** 当前在飞请求数（观测用）。 */
@@ -497,25 +505,41 @@ public class BskFrameRelay {
      * 所以发出去的就是 CLI 发来的那串 JSON。</p>
      */
     public CompletableFuture<JSONObject> dispatch(String connectionId, String rpcId, String rawJson) {
+        return dispatch(connectionId, rpcId, rawJson, true);
+    }
+
+    /**
+     * dialog-aware 操作可能停住等待人工决策，不能套普通传输超时。
+     */
+    CompletableFuture<JSONObject> dispatchWithoutTimeout(String connectionId, String rpcId, String rawJson) {
+        return dispatch(connectionId, rpcId, rawJson, false);
+    }
+
+    private CompletableFuture<JSONObject> dispatch(String connectionId, String rpcId,
+                                                   String rawJson, boolean scheduleTimeout) {
         RegisteredConnection connection = connections.get(connectionId);
         if (connection == null || !connection.handshakeDone || StringUtils.isBlank(rpcId)) {
             return null;
         }
-        if (pending.putIfAbsent(rpcId, new PendingCall(connectionId)) != null) {
+        String key = pendingKey(connectionId, rpcId);
+        PendingCall call = new PendingCall(connectionId, rpcId);
+        if (pending.putIfAbsent(key, call) != null) {
             return CompletableFuture.completedFuture(
                     errorBody("protocol_error", "duplicate rpc id: " + rpcId, null));
         }
-        CompletableFuture<JSONObject> future = pending.get(rpcId).future;
+        CompletableFuture<JSONObject> future = call.future;
         try {
             connection.sink.send(rawJson);
         } catch (Exception e) {
-            pending.remove(rpcId);
+            pending.remove(key, call);
             return CompletableFuture.completedFuture(
                     errorBody("protocol_error", "send failed: " + e.getMessage(), null));
         }
         // 帧超时按<b>方法</b>算，不搞一刀切：borrow 要等用户点确认，整页截图
         // 要 120s，request-help 要 300s，用统一的 60s 会把它们全部提前判死。
-        scheduleTimeout(rpcId, timeoutSecondsFor(rawJson));
+        if (scheduleTimeout) {
+            scheduleTimeout(connectionId, rpcId, timeoutSecondsFor(rawJson));
+        }
         return future;
     }
 
@@ -697,7 +721,21 @@ public class BskFrameRelay {
         if (StringUtils.isBlank(rpcId)) {
             return false;
         }
-        PendingCall call = pending.remove(rpcId);
+        String key = findPendingKey(rpcId);
+        PendingCall call = key == null ? null : pending.remove(key);
+        if (call == null) {
+            return false;
+        }
+        call.future.complete(errorBody(code, message, data));
+        return true;
+    }
+
+    public boolean failPending(String connectionId, String rpcId,
+                               String code, String message, Map<String, Object> data) {
+        if (StringUtils.isBlank(connectionId) || StringUtils.isBlank(rpcId)) {
+            return false;
+        }
+        PendingCall call = pending.remove(pendingKey(connectionId, rpcId));
         if (call == null) {
             return false;
         }
@@ -743,6 +781,7 @@ public class BskFrameRelay {
             // 会话数来自网关的会话表（对齐 Rust 的 count_for_browser）。
             entry.put("session_count", sessionCountForConnection(connection.id));
             entry.put("connected_at_ms", connection.connectedAtMs);
+            entry.put("last_seen_at_ms", connection.lastSeenAtMs);
             entries.add(entry);
         }
         entries.sort(Comparator.comparingLong(entry -> entry.getLongValue("connected_at_ms")));
@@ -841,6 +880,7 @@ public class BskFrameRelay {
             if (session.interaction != null) {
                 entry.put("interaction", session.interaction);
             }
+            entry.put("idle_protected", session.idleProtected);
             entry.put("created_at_ms", session.createdAtMs);
             entries.add(entry);
         }
@@ -878,13 +918,13 @@ public class BskFrameRelay {
 
     /** 参数里的正整数毫秒值；缺失、非数字或非正数一律返回 null。 */
 
-    private void scheduleTimeout(String rpcId, long timeoutSeconds) {
+    private void scheduleTimeout(String connectionId, String rpcId, long timeoutSeconds) {
         if (timeoutSeconds <= 0) {
             return;
         }
         CompletableFuture.delayedExecutor(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
                 .execute(() -> {
-                    PendingCall call = pending.remove(rpcId);
+                    PendingCall call = pending.remove(pendingKey(connectionId, rpcId));
                     if (call != null) {
                         call.future.complete(errorBody("timeout",
                                 "extension did not respond within " + timeoutSeconds + "s", null));
@@ -970,10 +1010,12 @@ public class BskFrameRelay {
     /** 一条在飞请求。 */
     private static final class PendingCall {
         final String connectionId;
+        final String rpcId;
         final CompletableFuture<JSONObject> future = new CompletableFuture<>();
 
-        PendingCall(String connectionId) {
+        PendingCall(String connectionId, String rpcId) {
             this.connectionId = connectionId;
+            this.rpcId = rpcId;
         }
     }
 

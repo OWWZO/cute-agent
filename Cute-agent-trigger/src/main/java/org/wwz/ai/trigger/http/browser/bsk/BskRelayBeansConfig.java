@@ -6,8 +6,11 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * bsk 中继的依赖 bean 装配（queue / responder / relay）。
@@ -64,8 +67,10 @@ public class BskRelayBeansConfig {
      * 车道里的任务要阻塞等待扩展的应答，阻塞公共池会把整个 JVM 的并行任务拖住。</p>
      */
     @Bean
-    public BskSessionQueue bskCliSessionQueue(@Qualifier("bskCliExecutor") ExecutorService executor) {
-        return new BskSessionQueue(executor);
+    public BskSessionQueue bskCliSessionQueue(
+            @Qualifier("bskCliExecutor") ExecutorService executor,
+            @Qualifier("bskCliControlExecutor") ExecutorService controlExecutor) {
+        return new BskSessionQueue(executor, controlExecutor);
     }
 
     @Bean(destroyMethod = "shutdown")
@@ -75,5 +80,18 @@ public class BskRelayBeansConfig {
             thread.setDaemon(true);
             return thread;
         });
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    public ExecutorService bskCliControlExecutor() {
+        return new ThreadPoolExecutor(
+                8, 8, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(64),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "bsk-cli-control");
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
     }
 }

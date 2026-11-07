@@ -35,15 +35,21 @@ public class BskSessionQueue {
 
     private final boolean rejectWhenBusy;
     private final Executor executor;
+    private final Executor independentExecutor;
 
     /** 默认：排队并串行（021 spec 语义）。 */
     public BskSessionQueue() {
-        this(false, ForkJoinPool.commonPool());
+        this(false, ForkJoinPool.commonPool(), ForkJoinPool.commonPool());
     }
 
     /** 指定执行器的构造，测试用。 */
     public BskSessionQueue(Executor executor) {
-        this(false, executor);
+        this(false, executor, executor);
+    }
+
+    /** session 车道与控制面使用不同执行器，控制面可单独设置容量上限。 */
+    BskSessionQueue(Executor executor, Executor independentExecutor) {
+        this(false, executor, independentExecutor);
     }
 
     /**
@@ -51,12 +57,16 @@ public class BskSessionQueue {
      * {@code session_busy} 拒绝，而不是排队。
      */
     public static BskSessionQueue newRejectingWhenBusy() {
-        return new BskSessionQueue(true, ForkJoinPool.commonPool());
+        return new BskSessionQueue(
+                true, ForkJoinPool.commonPool(), ForkJoinPool.commonPool());
     }
 
-    private BskSessionQueue(boolean rejectWhenBusy, Executor executor) {
+    private BskSessionQueue(boolean rejectWhenBusy,
+                            Executor executor,
+                            Executor independentExecutor) {
         this.rejectWhenBusy = rejectWhenBusy;
         this.executor = executor;
+        this.independentExecutor = independentExecutor;
     }
 
     /**
@@ -105,7 +115,7 @@ public class BskSessionQueue {
             return failed;
         }
         CompletableFuture<Void> future = new CompletableFuture<>();
-        executor.execute(() -> {
+        independentExecutor.execute(() -> {
             try {
                 task.run();
                 future.complete(null);
