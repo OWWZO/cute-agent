@@ -20,7 +20,7 @@ public class BskHandshakeGatewayTest {
 
     @Test
     public void exactMatchIsOk() {
-        Assert.assertTrue(eval("1.3", "1.0") instanceof BskHandshakeGateway.Ok);
+        Assert.assertTrue(eval("1.8", "1.0") instanceof BskHandshakeGateway.Ok);
     }
 
     @Test
@@ -39,7 +39,7 @@ public class BskHandshakeGatewayTest {
     @Test
     public void missingPeerFloorIsTolerated() {
         // 旧版扩展不带 min_compatible_protocol，该分支必须跳过。
-        Assert.assertTrue(eval("1.3", null) instanceof BskHandshakeGateway.Ok);
+        Assert.assertTrue(eval("1.8", null) instanceof BskHandshakeGateway.Ok);
         Assert.assertTrue(eval("1.2", null) instanceof BskHandshakeGateway.Skew);
     }
 
@@ -110,9 +110,9 @@ public class BskHandshakeGatewayTest {
     @Test
     public void leadingZerosAreAccepted() {
         // 与 Rust parse_major_tests::accepts_leading_zeros 对齐。
-        // "01.3" 解析为 (1,3)，与 "1.3" 等价，因此判定为 Ok 而非 Skew。
-        Assert.assertTrue(eval("01.3", "1.0") instanceof BskHandshakeGateway.Ok);
-        Assert.assertEquals(0, (int) BskHandshakeGateway.compareProtocol("01.3", "1.3"));
+        // "01.8" 解析为 (1,8)，与 "1.8" 等价，因此判定为 Ok 而非 Skew。
+        Assert.assertTrue(eval("01.8", "1.0") instanceof BskHandshakeGateway.Ok);
+        Assert.assertEquals(0, (int) BskHandshakeGateway.compareProtocol("01.8", "1.8"));
     }
 
     @Test
@@ -123,7 +123,7 @@ public class BskHandshakeGatewayTest {
 
     @Test
     public void threeSegmentVersionParsesFirstTwo() {
-        Assert.assertTrue(eval("1.3.0", "1.0") instanceof BskHandshakeGateway.Ok);
+        Assert.assertTrue(eval("1.8.0", "1.0") instanceof BskHandshakeGateway.Ok);
     }
 
     @Test

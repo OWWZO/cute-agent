@@ -22,7 +22,7 @@ import java.util.Optional;
 public final class BskHandshakeGateway {
 
     /** 当前协议版本，对齐 {@code daemon/state.rs} 的 PROTOCOL_VERSION。 */
-    public static final String PROTOCOL_VERSION = "1.3";
+    public static final String PROTOCOL_VERSION = "1.8";
 
     /** 本端接受的最低协议版本，对齐 MIN_COMPATIBLE_PROTOCOL。 */
     public static final String MIN_COMPATIBLE_PROTOCOL = "1.0";
@@ -60,7 +60,7 @@ public final class BskHandshakeGateway {
     /**
      * 判定对端握手是否兼容。
      *
-     * @param peerProtocolVersion   对端协议版本，如 "1.3"
+     * @param peerProtocolVersion   对端协议版本，如 "1.8"
      * @param peerMinCompatible     对端接受的最低协议版本；旧版扩展可能不提供
      * @param ourProtocolVersion    本端协议版本
      * @param ourMinCompatible      本端接受的最低协议版本
