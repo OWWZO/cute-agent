@@ -1,13 +1,32 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import jsonschema
+import pytest
 import yaml
 
-from cute_evals.ab_runner import resume_experiment, run_experiment
-from cute_evals.experiment import REPO_ROOT, CellResult, CellSpec, now_iso
+from cute_evals.ab_runner import (
+    _default_executor,
+    resume_experiment,
+    run_experiment,
+)
+from cute_evals.ab_cell import execute_cell
+from cute_evals.case_loader import load_case_file
+from cute_evals.experiment import (
+    REPO_ROOT,
+    CellResult,
+    CellSpec,
+    build_arm_fingerprints,
+    build_cells,
+    load_experiment,
+    load_experiment_cases,
+    now_iso,
+    prepare_arm_roots,
+)
+from cute_evals.models import CaseResult, RunTrace
 
 
 def _write_case(directory: Path, case_id: str) -> None:
@@ -34,6 +53,9 @@ def _write_spec(
     repetitions: int = 1,
     retries: int = 0,
     cases: int = 1,
+    database: str = "experiment",
+    workspace: str = "per-cell",
+    max_wall_minutes: float = 10,
 ) -> None:
     case_dir.mkdir(parents=True, exist_ok=True)
     for index in range(cases):
@@ -55,11 +77,11 @@ def _write_spec(
         "retries": retries,
         "isolation": {
             "mode": "process",
-            "workspace": "per-cell",
-            "database": "experiment",
+            "workspace": workspace,
+            "database": database,
             "allowDirty": True,
         },
-        "budgets": {"maxUsd": 1, "maxWallMinutes": 10},
+        "budgets": {"maxUsd": 1, "maxWallMinutes": max_wall_minutes},
         "thresholds": {
             "maxAccuracyRegression": 0.05,
             "maxTokenRegressionRatio": 0.10,
@@ -209,3 +231,138 @@ def test_three_consecutive_infra_errors_trip_fuse(tmp_path: Path) -> None:
     assert report["summary"]["actualCellCount"] == 3
     assert report["summary"]["expectedCellCount"] == 6
     assert report["recommendation"] == "needs-more-runs"
+
+
+def test_expected_cell_count_uses_full_case_set_after_budget_stop(
+    tmp_path: Path,
+) -> None:
+    case_dir = tmp_path / "cases"
+    spec_path = tmp_path / "experiment.yaml"
+    _write_spec(spec_path, case_dir, cases=2, max_wall_minutes=0)
+
+    def executor(cell: CellSpec, attempt: int) -> CellResult:
+        return _result(cell, "passed", 1.0)
+
+    report = run_experiment(spec_path, tmp_path / "out", executor=executor)
+
+    assert report["summary"]["actualCellCount"] == 1
+    assert report["summary"]["expectedCellCount"] == 4
+    assert report["summary"]["complete"] is False
+
+
+def test_per_run_workspace_is_rejected_explicitly(tmp_path: Path) -> None:
+    spec_path = tmp_path / "experiment.yaml"
+    _write_spec(spec_path, tmp_path / "cases", workspace="per-run")
+
+    with pytest.raises(ValueError, match="workspace=per-run is not supported"):
+        load_experiment(spec_path)
+
+
+def test_default_executor_isolates_database_repo_and_attempt_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    spec_path = tmp_path / "experiment.yaml"
+    _write_spec(spec_path, tmp_path / "cases", database="per-cell")
+    spec = load_experiment(spec_path)
+    output = tmp_path / "out"
+    roots = prepare_arm_roots(spec, output)
+    fingerprints = build_arm_fingerprints(spec, roots)
+    cell = build_cells(
+        spec,
+        load_experiment_cases(spec),
+        roots,
+        fingerprints,
+    )[0]
+    work_dir = output / "work" / cell.cell_key / "attempt-00"
+    work_dir.mkdir(parents=True)
+    (work_dir / "trace.json").write_text("stale", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["env"] = kwargs["env"]
+        captured["staleTraceExists"] = (work_dir / "trace.json").exists()
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("cute_evals.ab_runner.subprocess.run", fake_run)
+
+    result = _default_executor(spec, output)(cell, 0)
+
+    assert result.status == "adapter_error"
+    assert captured["staleTraceExists"] is False
+    env = captured["env"]
+    assert env["CUTE_EVAL_DB_SCHEMA"] == "eval_" + cell.cell_key[:24]
+    assert env["CUTE_EVAL_MAVEN_REPO"] == str(
+        output / "maven-repos" / cell.arm
+    )
+
+
+def test_ab_cell_builds_judge_from_environment(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case_path = (
+        REPO_ROOT
+        / "evals"
+        / "agent"
+        / "cases"
+        / "rag"
+        / "core"
+        / "01-cited-answer.yaml"
+    )
+    case = load_case_file(case_path)
+    trace = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": case.id,
+                "requestId": "judge-test",
+                "status": "SUCCESS",
+                "finalSummaryText": "answer",
+            },
+            "llmInvocations": [],
+            "toolInvocations": [],
+            "artifacts": [],
+        }
+    )
+    payload = {
+        "cellKey": "cell-key",
+        "experimentId": "experiment",
+        "experimentSpecHash": "spec-hash",
+        "arm": "candidate",
+        "model": "fixture-model",
+        "caseId": case.id,
+        "suite": case.suite,
+        "casePath": str(case_path),
+        "repetition": 1,
+        "armRoot": str(REPO_ROOT),
+        "armEnv": {},
+        "sourceFingerprint": "source",
+    }
+    captured = {}
+
+    def fake_score_case(case, trace, trace_path, **kwargs):
+        captured.update(kwargs)
+        return CaseResult(case, trace, [], trace_path, attempt=1)
+
+    monkeypatch.setenv("CUTE_EVAL_JUDGE_MODEL", "judge-model")
+    monkeypatch.setenv("CUTE_EVAL_JUDGE_BASE_URL", "https://judge.test/v1")
+    monkeypatch.setenv("CUTE_EVAL_JUDGE_API_KEY", "secret")
+    monkeypatch.setattr(
+        "cute_evals.ab_cell.run_java_cases",
+        lambda cases, output_dir, **kwargs: {case.id: trace},
+    )
+    monkeypatch.setattr("cute_evals.ab_cell.score_case", fake_score_case)
+
+    execute_cell(
+        payload,
+        tmp_path / "work",
+        profile="pr",
+        java_mode="fixture",
+        timeout_seconds=10,
+        require_judge=True,
+    )
+
+    assert captured["judge"].model == "judge-model"
+    assert captured["judge"].base_url == "https://judge.test/v1"
+    assert captured["judge"].api_key == "secret"
+    assert captured["judge_cache_dir"] == tmp_path / "judge-cache"

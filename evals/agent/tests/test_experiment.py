@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import jsonschema
+import pytest
 import yaml
 
 from cute_evals.case_loader import load_cases
@@ -193,3 +194,15 @@ def test_git_arms_use_independent_worktrees(
     assert roots["base"] != roots["candidate"]
     assert (roots["base"] / "README.md").read_text(encoding="utf-8") == "base\n"
     assert (roots["candidate"] / "README.md").read_text(encoding="utf-8") == "base\n"
+
+
+def test_json_atomic_write_removes_temp_file_on_serialization_error(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "payload.json"
+
+    with pytest.raises(TypeError):
+        write_json_atomic(target, {"bad": object()})
+
+    assert not target.exists()
+    assert not list(tmp_path.glob(".*.tmp"))

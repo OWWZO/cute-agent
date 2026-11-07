@@ -106,6 +106,11 @@ class ExperimentSpec:
         source_path: Path,
         case_dirs: list[Path],
     ) -> ExperimentSpec:
+        isolation = dict(raw["isolation"])
+        if isolation.get("workspace") != "per-cell":
+            raise ValueError(
+                "isolation.workspace=per-run is not supported; use per-cell"
+            )
         return cls(
             schema_version=str(raw["schemaVersion"]),
             experiment_id=str(raw["experimentId"]),
@@ -121,7 +126,7 @@ class ExperimentSpec:
             profile=str(raw.get("profile", "pr")),
             java_mode=str(raw.get("javaMode", "fixture")),
             require_judge=bool(raw.get("requireJudge", False)),
-            isolation=dict(raw["isolation"]),
+            isolation=isolation,
             budgets=dict(raw["budgets"]),
             thresholds=dict(raw["thresholds"]),
             case_dirs=case_dirs,
@@ -463,9 +468,14 @@ def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
         suffix=".tmp",
         delete=False,
     ) as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
         temporary = Path(handle.name)
+        try:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        except BaseException:
+            handle.close()
+            temporary.unlink(missing_ok=True)
+            raise
     os.replace(temporary, path)
 
 
@@ -578,7 +588,3 @@ def load_cell_case(cell: CellSpec | dict[str, Any]) -> EvalCase:
     if isinstance(cell, CellSpec):
         return cell.case
     return load_case_file(Path(str(cell["casePath"])))
-
-
-def cell_payload_for_child(cell: CellSpec) -> dict[str, Any]:
-    return cell.to_payload()

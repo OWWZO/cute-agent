@@ -180,8 +180,10 @@ def _recommend(
 def build_ab_report(
     spec: ExperimentSpec,
     cells: list[CellResult],
+    *,
+    case_ids: list[str],
 ) -> dict[str, Any]:
-    case_ids = sorted({cell.case_id for cell in cells})
+    case_ids = sorted(set(case_ids))
     base_cells = [cell for cell in cells if cell.arm == "base"]
     candidate_cells = [cell for cell in cells if cell.arm == "candidate"]
     model_count = len(spec.models)
