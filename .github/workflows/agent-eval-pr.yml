@@ -5,6 +5,7 @@ on:
     paths:
       - "evals/agent/**"
       - "Cute-agent-*/**"
+      - "pom.xml"
       - ".github/workflows/agent-eval-pr.yml"
   workflow_dispatch:
 
