@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
@@ -54,8 +55,23 @@ def _request(url: str, payload: dict[str, Any] | None = None) -> Any:
         headers={"Content-Type": "application/json"},
         method="POST" if payload is not None else "GET",
     )
-    with urllib.request.urlopen(request, timeout=300) as response:
-        body = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=300) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")
+        try:
+            payload = json.loads(detail)
+            message = (
+                str(payload.get("error") or "")
+                if isinstance(payload, dict)
+                else ""
+            )
+        except json.JSONDecodeError:
+            message = detail
+        raise RuntimeError(
+            message or f"tau2 task server returned HTTP {exc.code}"
+        ) from exc
     if not body.get("ok"):
         raise RuntimeError(body.get("error") or "tau2 task server failed")
     return body.get("result")
@@ -109,19 +125,32 @@ class Tau2TaskServer:
         )
         self._stderr_thread.start()
         assert self.process.stdout is not None
-        with ThreadPoolExecutor(max_workers=1) as pool:
+        pool = ThreadPoolExecutor(max_workers=1)
+        try:
             future = pool.submit(self.process.stdout.readline)
             try:
                 line = future.result(timeout=self.startup_timeout)
             except FutureTimeoutError:
                 line = ""
             if line:
-                payload = json.loads(line)
-                self.port = int(payload["port"])
+                try:
+                    payload = json.loads(line)
+                    self.port = int(payload["port"])
+                except (TypeError, KeyError, ValueError) as exc:
+                    raise RuntimeError(
+                        "tau2 task server returned an invalid startup line: "
+                        f"{line!r}: {self._stderr_text()}"
+                    ) from exc
                 return self
-        self.close()
-        stderr = self._stderr_text()
-        raise RuntimeError(f"tau2 task server did not start: {stderr}")
+            raise RuntimeError(
+                f"tau2 task server did not start: {self._stderr_text()}"
+            )
+        except BaseException:
+            self.close()
+            raise
+        finally:
+            # Never join a worker that may still be blocked in readline().
+            pool.shutdown(wait=False, cancel_futures=True)
 
     def reset(self, task_id: str) -> dict[str, Any]:
         return _request(self.endpoint + "/reset", {"taskId": task_id})
@@ -304,6 +333,7 @@ class Tau2Adapter:
         )
         self.python = python
         self._tasks: dict[str, list[BenchmarkTask]] = {}
+        self._rows_by_split: dict[str, list[dict[str, Any]]] = {}
         self._active_split = "official-subset"
         self._active_rows: list[dict[str, Any]] = []
 
@@ -402,14 +432,15 @@ class Tau2Adapter:
             raise ValueError(f"unsupported tau2 split: {split}")
         self._active_split = split
         if split in self._tasks:
+            self._active_rows = list(self._rows_by_split[split])
             return list(self._tasks[split])
         tasks = []
-        self._active_rows = []
+        active_rows = []
         for domain, row in self._selected_tasks(split):
             instructions = self._instructions(row)
             official_task_id = str(row["id"])
             task_id = self._task_identity(domain, official_task_id, split)
-            self._active_rows.append(
+            active_rows.append(
                 {
                     "domain": domain,
                     "taskId": official_task_id,
@@ -434,6 +465,8 @@ class Tau2Adapter:
                 )
             )
         self._tasks[split] = tasks
+        self._rows_by_split[split] = active_rows
+        self._active_rows = list(active_rows)
         return list(tasks)
 
     def task_server(
@@ -509,17 +542,23 @@ class Tau2Adapter:
         oracle: dict[str, Any] | None = None,
         prepared: PreparedTask | None = None,
     ) -> BenchmarkRun:
-        return BenchmarkRun(
-            task=task,
-            trace=trace,
-            trace_path=trace_path,
-            calls=trace.tool_invocations,
-            conversation=trace.conversation,
-            environment_events=trace.environment_events,
-            environment_snapshots=trace.environment_snapshots,
-            oracle=oracle or {},
-            metadata={"taskServer": (prepared.metadata if prepared else {}).get("taskServer")},
-        )
+        prepared_metadata = prepared.metadata if prepared else {}
+        server = prepared_metadata.get("taskServer")
+        try:
+            return BenchmarkRun(
+                task=task,
+                trace=trace,
+                trace_path=trace_path,
+                calls=trace.tool_invocations,
+                conversation=trace.conversation,
+                environment_events=trace.environment_events,
+                environment_snapshots=trace.environment_snapshots,
+                oracle=oracle or {},
+                metadata={"taskServer": server},
+            )
+        finally:
+            if prepared_metadata.get("ownedServer") and server is not None:
+                server.close()
 
     def score(self, run: BenchmarkRun) -> CaseResult:
         reward = float(run.oracle.get("reward") or 0.0)

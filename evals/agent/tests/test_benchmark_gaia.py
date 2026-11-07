@@ -147,6 +147,24 @@ def test_gaia_materializes_attachment_and_preserves_hash(tmp_path: Path) -> None
     assert len(attachment["sha256"]) == 64
 
 
+def test_gaia_attachment_name_cannot_escape_cache_or_workspace(tmp_path: Path) -> None:
+    metadata = tmp_path / "metadata.jsonl"
+    metadata.write_text(
+        json.dumps(_row("a", "1", "Read the file.", "42", "../escape.txt")),
+        encoding="utf-8",
+    )
+    adapter = GAIAAdapter(metadata_path=metadata, data_home=tmp_path / "cache")
+    task = adapter.tasks("official-subset")[0]
+    cached = adapter.cache_dir / "files" / "escape.txt"
+    cached.parent.mkdir(parents=True)
+    cached.write_text("contained", encoding="utf-8")
+
+    prepared = adapter.prepare(task, tmp_path / "workspace")
+
+    assert (prepared.workspace / "escape.txt").read_text(encoding="utf-8") == "contained"
+    assert not (tmp_path / "escape.txt").exists()
+
+
 def test_gaia_missing_attachment_is_unverified_not_passed(tmp_path: Path) -> None:
     metadata = tmp_path / "metadata.jsonl"
     metadata.write_text(

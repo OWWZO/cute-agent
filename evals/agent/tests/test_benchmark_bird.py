@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from cute_evals.benchmarks.bird.adapter import BirdAdapter, OfficialExecution
+from cute_evals.benchmarks.bird.server import validate_read_only_sql
 from cute_evals.models import RunTrace
 
 
@@ -323,3 +324,56 @@ def test_bird_rejects_tampered_seed_snapshot(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="database snapshot hash mismatch"):
         adapter.prepare(task, tmp_path / "workspace")
+
+
+def test_bird_score_rejects_tampered_workspace_database(tmp_path: Path) -> None:
+    adapter, _, _ = _fixtures(tmp_path)
+    task = adapter.tasks("official-subset")[0]
+    prepared = adapter.prepare(task, tmp_path / "workspace")
+    database = prepared.workspace / "database.sqlite"
+    connection = sqlite3.connect(database)
+    connection.execute("DELETE FROM students")
+    connection.commit()
+    connection.close()
+    trace = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": "0",
+                "requestId": "request-0",
+                "status": "SUCCESS",
+                "finalSummaryText": "Ada",
+            },
+            "toolInvocations": [
+                {
+                    "toolName": "submit_sql",
+                    "inputJson": (
+                        '{"sql":"SELECT name FROM students '
+                        'ORDER BY score DESC LIMIT 1"}'
+                    ),
+                    "status": "SUCCESS",
+                }
+            ],
+            "llmInvocations": [],
+            "artifacts": [],
+        }
+    )
+    try:
+        result = adapter.score(
+            adapter.collect(task, trace, "trace.json", prepared=prepared)
+        )
+    finally:
+        prepared.metadata["taskServer"].close()
+
+    assert result.passed is False
+    assert result.unverified is True
+    assert result.scores[0].status == "unverified"
+    assert "hash mismatch" in result.scores[0].evidence["error"]
+
+
+def test_bird_sql_validator_rejects_a_second_statement() -> None:
+    assert (
+        validate_read_only_sql("SELECT ';' AS value; -- trailing comment")
+        == "SELECT ';' AS value; -- trailing comment"
+    )
+    with pytest.raises(ValueError, match="single read-only"):
+        validate_read_only_sql("SELECT 1; DROP TABLE students")

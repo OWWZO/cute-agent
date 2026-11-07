@@ -38,7 +38,52 @@ def validate_read_only_sql(sql: str) -> str:
         break
     if not re.match(r"(?is)^\s*(select|with)\b", value):
         raise ValueError("only a single read-only SELECT/CTE statement is allowed")
+    _reject_multiple_statements(value)
     return value
+
+
+def _reject_multiple_statements(statement: str) -> None:
+    quote: str | None = None
+    terminated = False
+    index = 0
+    while index < len(statement):
+        char = statement[index]
+        if quote is not None:
+            if char == quote:
+                if (
+                    quote != "]"
+                    and index + 1 < len(statement)
+                    and statement[index + 1] == quote
+                ):
+                    index += 2
+                    continue
+                quote = None
+            index += 1
+            continue
+        if char.isspace():
+            index += 1
+            continue
+        if statement.startswith("--", index):
+            newline = statement.find("\n", index + 2)
+            if newline < 0:
+                return
+            index = newline + 1
+            continue
+        if statement.startswith("/*", index):
+            end = statement.find("*/", index + 2)
+            if end < 0:
+                raise ValueError("unterminated SQL block comment")
+            index = end + 2
+            continue
+        if terminated:
+            raise ValueError("only a single read-only SELECT/CTE statement is allowed")
+        if char in {"'", '"', "`"}:
+            quote = char
+        elif char == "[":
+            quote = "]"
+        elif char == ";":
+            terminated = True
+        index += 1
 
 
 def read_only_query(

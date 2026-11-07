@@ -21,10 +21,8 @@ class Tau2Runtime:
         from tau2.data_model.message import AssistantMessage, ToolMessage, UserMessage
         from tau2.data_model.message import ToolCall as TauToolCall
         from tau2.data_model.simulation import SimulationRun, TerminationReason
-        from tau2.data_model.tasks import Task
         from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
         from tau2.orchestrator.orchestrator import DEFAULT_FIRST_AGENT_MESSAGE
-        from tau2.registry import registry
         from tau2.user.user_simulator import UserSimulator
 
         self.AssistantMessage = AssistantMessage
@@ -33,14 +31,11 @@ class Tau2Runtime:
         self.UserMessage = UserMessage
         self.SimulationRun = SimulationRun
         self.TerminationReason = TerminationReason
-        self.Task = Task
         self.EvaluationType = EvaluationType
         self.evaluate_simulation = evaluate_simulation
         self.DEFAULT_FIRST_AGENT_MESSAGE = DEFAULT_FIRST_AGENT_MESSAGE
         self.UserSimulator = UserSimulator
-        self.registry = registry
         self.domain = domain
-        self.source = source
         self.environment = None
         self.task = None
         self.user_simulator = None

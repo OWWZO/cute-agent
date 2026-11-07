@@ -249,7 +249,8 @@ class GAIAAdapter:
         file_path = task.metadata.get("file_path")
         if not file_name:
             return None
-        cached = self.cache_dir / "files" / str(file_name)
+        safe_name = Path(str(file_name)).name
+        cached = self.cache_dir / "files" / safe_name
         if not cached.exists():
             try:
                 from huggingface_hub import hf_hub_download
@@ -274,7 +275,7 @@ class GAIAAdapter:
                     "available": False,
                     "reason": str(exc),
                 }
-        target = workspace / str(file_name)
+        target = workspace / safe_name
         shutil.copy2(cached, target)
         digest = _sha256(target)
         manifest = {

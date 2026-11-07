@@ -304,6 +304,23 @@ def test_spider2_official_full_fails_closed_when_assets_are_incomplete(
         adapter.tasks("official-full")
 
 
+def test_spider2_reports_missing_gold_standard(tmp_path: Path) -> None:
+    adapter, _, _ = _fixtures(tmp_path)
+    gold_config = (
+        adapter.source_root
+        / "evaluation_suite"
+        / "gold"
+        / "spider2lite_eval.jsonl"
+    )
+    gold_config.write_text("", encoding="utf-8")
+    adapter.manifest["source"]["files"][
+        "evaluation_suite/gold/spider2lite_eval.jsonl"
+    ]["sha256"] = _sha256(gold_config)
+
+    with pytest.raises(ValueError, match="gold standard not found"):
+        adapter.tasks("official-subset")
+
+
 def test_spider2_prepare_copies_snapshot_and_keeps_sql_read_only(
     tmp_path: Path,
 ) -> None:
@@ -377,6 +394,75 @@ def test_spider2_score_uses_final_submit_and_official_comparator(
     assert result.scores[2].passed is True
     assert result.scores[3].name == "sql_validity"
     assert result.scores[3].passed is True
+
+
+def test_spider2_executes_submitted_sql_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip(
+        "pandas",
+        reason="Spider2 official scoring requires the optional phase4 extra",
+    )
+    adapter, _, _ = _fixtures(tmp_path)
+    task = adapter.tasks("official-subset")[0]
+    prepared = adapter.prepare(task, tmp_path / "workspace")
+    calls = 0
+    original_execute = adapter._execute_sql
+
+    def counted_execute(database_path: Path, sql: str):
+        nonlocal calls
+        calls += 1
+        return original_execute(database_path, sql)
+
+    monkeypatch.setattr(adapter, "_execute_sql", counted_execute)
+    try:
+        result = adapter.score(
+            adapter.collect(
+                task,
+                _trace("SELECT name FROM students ORDER BY score DESC LIMIT 1"),
+                "trace.json",
+                prepared=prepared,
+            )
+        )
+    finally:
+        prepared.metadata["taskServer"].close()
+
+    by_name = {score.name: score for score in result.scores}
+    assert calls == 1
+    assert result.passed is True
+    assert by_name["sql_latency"].value is not None
+    assert by_name["sql_result_hash"].value is not None
+
+
+def test_spider2_reports_unverified_when_submitted_sql_cannot_be_evaluated(
+    tmp_path: Path,
+) -> None:
+    adapter, _, _ = _fixtures(tmp_path)
+    task = adapter.tasks("official-subset")[0]
+    prepared = adapter.prepare(task, tmp_path / "workspace")
+    database = prepared.workspace / "database.sqlite"
+    connection = sqlite3.connect(database)
+    connection.execute("DELETE FROM students")
+    connection.commit()
+    connection.close()
+    try:
+        result = adapter.score(
+            adapter.collect(
+                task,
+                _trace("SELECT name FROM students ORDER BY score DESC LIMIT 1"),
+                "trace.json",
+                prepared=prepared,
+            )
+        )
+    finally:
+        prepared.metadata["taskServer"].close()
+
+    assert result.passed is False
+    assert result.unverified is True
+    assert result.scores[0].status == "unverified"
+    assert "submitted SQL could not be evaluated" in result.scores[0].evidence["error"]
+    assert "no submitted SQL" not in result.scores[0].evidence["error"]
 
 
 def test_spider2_write_sql_cannot_receive_official_credit(

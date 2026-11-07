@@ -358,7 +358,12 @@ class Spider2Adapter:
                 raise ValueError(
                     f"Spider2-Lite task database is not pinned: {db_name}"
                 )
-            standard = standards[str(task_id)]
+            standard = standards.get(str(task_id))
+            if standard is None:
+                raise ValueError(
+                    "Spider2-Lite gold standard not found in "
+                    f"{gold_config_path}: {task_id}"
+                )
             gold_sql, gold_results = self._gold_for_task(str(task_id))
             tasks.append(
                 BenchmarkTask(
@@ -551,7 +556,7 @@ class Spider2Adapter:
         self,
         database_path: Path,
         sql: str,
-    ) -> tuple[Any, float]:
+    ) -> tuple[Any, dict[str, Any], float]:
         import pandas as pd
 
         started = time.perf_counter()
@@ -562,7 +567,7 @@ class Spider2Adapter:
             max_rows=None,
         )
         frame = pd.DataFrame(payload["rows"], columns=payload["columns"])
-        return frame, (time.perf_counter() - started) * 1000
+        return frame, payload, (time.perf_counter() - started) * 1000
 
     def _official_execution(
         self,
@@ -570,31 +575,23 @@ class Spider2Adapter:
         task_id: str,
         actual_sql: str,
         gold_sql: str,
-        database_path: Path,
         gold_results: list[Path],
         condition_cols: Any,
         ignore_order: bool,
         external_available: bool,
-    ) -> tuple[OfficialExecution, dict[str, Any] | None, float | None]:
+        prediction: Any,
+    ) -> OfficialExecution:
         if not external_available:
-            return (
-                OfficialExecution(
-                    passed=False,
-                    verified=False,
-                    error="official external knowledge is unavailable",
-                ),
-                None,
-                None,
+            return OfficialExecution(
+                passed=False,
+                verified=False,
+                error="official external knowledge is unavailable",
             )
         try:
             evaluator = self._official_evaluator()
             actual_statement = evaluator.extract_sql(actual_sql)
             validate_read_only_sql(actual_statement)
             validate_read_only_sql(gold_sql)
-            prediction, execution_ms = self._execute_sql(
-                database_path,
-                actual_statement,
-            )
             result_specs = self.manifest["tasks"][task_id]["goldResults"]
             if len(result_specs) != len(gold_results):
                 raise ValueError("official gold result file count mismatch")
@@ -610,20 +607,12 @@ class Spider2Adapter:
                 condition_cols=condition_cols,
                 ignore_order=ignore_order,
             )
-            return (
-                OfficialExecution(passed=bool(score), verified=True),
-                prediction.to_dict(orient="split"),
-                execution_ms,
-            )
+            return OfficialExecution(passed=bool(score), verified=True)
         except Exception as exc:  # noqa: BLE001 - Oracle errors are evaluation facts
-            return (
-                OfficialExecution(
-                    passed=False,
-                    verified=False,
-                    error=f"{type(exc).__name__}: {exc}",
-                ),
-                None,
-                None,
+            return OfficialExecution(
+                passed=False,
+                verified=False,
+                error=f"{type(exc).__name__}: {exc}",
             )
 
     def score(self, run: BenchmarkRun) -> CaseResult:
@@ -646,6 +635,7 @@ class Spider2Adapter:
         sql_error: str | None = None
         rows_payload: dict[str, Any] | None = None
         execution_ms: float | None = None
+        prediction: Any = None
         if database_path is not None:
             try:
                 _verify_file(
@@ -659,36 +649,46 @@ class Spider2Adapter:
         if actual_statement and database_path is not None and sql_error is None:
             try:
                 validate_read_only_sql(actual_statement)
-                started = time.perf_counter()
-                rows_payload = read_only_query(
+                prediction, rows_payload, execution_ms = self._execute_sql(
                     database_path,
                     actual_statement,
-                    timeout_seconds=float(
-                        self.manifest["budgets"]["queryTimeoutSeconds"]
-                    ),
-                    max_rows=None,
                 )
-                execution_ms = (time.perf_counter() - started) * 1000
             except Exception as exc:  # noqa: BLE001 - SQL errors are evaluation facts
                 sql_error = f"{type(exc).__name__}: {exc}"
 
+        if not actual_statement:
+            official_error = "no submitted SQL"
+        elif sql_error or evaluator_error:
+            official_error = (
+                "submitted SQL could not be evaluated: "
+                f"{sql_error or evaluator_error}"
+            )
+        else:
+            official_error = "workspace database unavailable"
         official = OfficialExecution(
             passed=False,
-            verified=True,
-            error="no submitted SQL",
+            verified=(
+                not actual_statement
+                or (
+                    sql_error is None
+                    and evaluator_error is None
+                    and database_path is not None
+                )
+            ),
+            error=official_error,
         )
         if actual_statement and database_path is not None and sql_error is None:
-            official, _, _ = self._official_execution(
+            official = self._official_execution(
                 task_id=run.task.id,
                 actual_sql=actual_statement,
                 gold_sql=str(run.task.metadata["gold_sql"]),
-                database_path=database_path,
                 gold_results=[
                     Path(path) for path in run.task.metadata["gold_results"]
                 ],
                 condition_cols=run.task.metadata.get("condition_cols"),
                 ignore_order=bool(run.task.metadata.get("ignore_order", False)),
                 external_available=external_available,
+                prediction=prediction,
             )
         elif not external_available:
             official = OfficialExecution(

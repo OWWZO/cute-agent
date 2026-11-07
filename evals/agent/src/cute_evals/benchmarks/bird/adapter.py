@@ -536,9 +536,22 @@ class BirdAdapter:
         database_value = run.metadata.get("databasePath")
         database_path = Path(str(database_value)) if database_value else None
         sql_error: str | None = None
+        database_error: str | None = None
         rows_payload: dict[str, Any] | None = None
         execution_ms: float | None = None
-        if actual_sql and database_path is not None:
+        expected_database_sha = run.metadata.get("databaseSha256")
+        if database_path is not None:
+            try:
+                actual_database_sha = _sha256_file(database_path)
+            except OSError:
+                actual_database_sha = None
+            if (
+                not expected_database_sha
+                or actual_database_sha != str(expected_database_sha)
+            ):
+                database_error = "workspace database hash mismatch"
+                sql_error = database_error
+        if actual_sql and database_path is not None and sql_error is None:
             try:
                 validate_read_only_sql(str(actual_sql))
                 started = time.perf_counter()
@@ -556,8 +569,8 @@ class BirdAdapter:
 
         official = OfficialExecution(
             passed=False,
-            verified=True,
-            error="no valid sql_query execution",
+            verified=database_error is None,
+            error=database_error or "no valid sql_query execution",
         )
         if actual_sql and database_path is not None and sql_error is None:
             try:

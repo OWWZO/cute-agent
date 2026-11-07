@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import io
 import json
+import threading
+import time
+import urllib.error
 from pathlib import Path
 
 import pytest
 
-from cute_evals.benchmarks.base import BenchmarkTask
+from cute_evals.benchmarks.base import BenchmarkTask, PreparedTask
+from cute_evals.benchmarks.tau2 import adapter as tau2_adapter
 from cute_evals.benchmarks.tau2.adapter import Tau2Adapter, Tau2UserSimulator
+from cute_evals.benchmarks.tau2.adapter import Tau2TaskServer
+from cute_evals.models import RunTrace
 
 
 class FakeTaskServer:
@@ -37,6 +44,56 @@ class FakeUserServer:
     def next_user(self, assistant_message: str) -> dict:
         self.assistant_messages.append(assistant_message)
         return {"message": "", "done": True, "reason": "user_stop"}
+
+
+class BlockingStdout:
+    def __init__(self) -> None:
+        self.release = threading.Event()
+
+    def readline(self) -> str:
+        self.release.wait()
+        return ""
+
+    def close(self) -> None:
+        self.release.set()
+
+
+class EmptyStderr:
+    def read(self, size: int) -> str:
+        del size
+        return ""
+
+    def close(self) -> None:
+        return None
+
+
+class FakeProcess:
+    def __init__(self, *, line: str | None = None) -> None:
+        self.stdout = BlockingStdout() if line is None else io.StringIO(line)
+        self.stderr = EmptyStderr()
+        self.terminated = False
+
+    def poll(self) -> int | None:
+        return 0 if self.terminated else None
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self.stdout.close()
+
+    def wait(self, timeout: int) -> int:
+        del timeout
+        return 0
+
+    def kill(self) -> None:
+        self.terminate()
+
+
+class FakeOwnedServer:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def test_tau2_loads_official_task_instructions_without_mutation(tmp_path: Path) -> None:
@@ -118,6 +175,13 @@ def test_tau2_official_full_selects_all_domains(tmp_path: Path) -> None:
     assert [task.id for task in tasks] == ["airline:0", "retail:10"]
     assert [task.metadata["domain"] for task in tasks] == ["airline", "retail"]
     assert adapter.report_metadata()["scoreLabel"] == "official-full"
+
+    adapter.manifest["taskIds"] = ["0"]
+    adapter.tasks("official-subset")
+    fresh = Tau2Adapter(manifest, source_root=source)
+    fresh.manifest["taskIds"] = ["0"]
+    fresh.tasks("official-subset")
+    assert adapter.dataset_hash() == fresh.dataset_hash()
 
 
 def test_tau2_prepare_resets_official_environment_before_every_task(
@@ -212,3 +276,98 @@ def test_tau2_user_simulator_uses_official_task_server_protocol() -> None:
         },
     }
     assert server.assistant_messages == ["I cannot process this cancellation."]
+
+
+def test_tau2_request_surfaces_http_error_payload(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        del request, timeout
+        raise urllib.error.HTTPError(
+            "http://127.0.0.1:1/reset",
+            500,
+            "Internal Server Error",
+            None,
+            io.BytesIO(b'{"ok": false, "error": "tau2 exploded"}'),
+        )
+
+    monkeypatch.setattr(tau2_adapter.urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="tau2 exploded"):
+        tau2_adapter._request("http://127.0.0.1:1/reset", {})
+
+
+def test_tau2_startup_timeout_closes_silent_process(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    process = FakeProcess()
+    monkeypatch.setattr(
+        tau2_adapter.subprocess,
+        "Popen",
+        lambda *args, **kwargs: process,
+    )
+    server = Tau2TaskServer(
+        tmp_path,
+        domain="airline",
+        startup_timeout=0.1,
+    )
+
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="did not start"):
+        server.start()
+
+    assert time.monotonic() - started < 3
+    assert process.terminated is True
+    assert server.process is None
+
+
+def test_tau2_invalid_startup_line_closes_process(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    process = FakeProcess(line="library warning\n")
+    monkeypatch.setattr(
+        tau2_adapter.subprocess,
+        "Popen",
+        lambda *args, **kwargs: process,
+    )
+    server = Tau2TaskServer(tmp_path, domain="airline")
+
+    with pytest.raises(RuntimeError, match="invalid startup line"):
+        server.start()
+
+    assert process.terminated is True
+    assert server.process is None
+
+
+def test_tau2_collect_closes_owned_server(tmp_path: Path) -> None:
+    adapter = Tau2Adapter()
+    task = BenchmarkTask(
+        id="0",
+        category="airline",
+        question="Cancel reservation EHGLP3.",
+        functions=[],
+        ground_truth=None,
+        raw={},
+    )
+    trace = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": "0",
+                "requestId": "request-0",
+                "status": "SUCCESS",
+            },
+            "llmInvocations": [],
+            "toolInvocations": [],
+            "artifacts": [],
+        }
+    )
+    server = FakeOwnedServer()
+    prepared = PreparedTask(
+        task=task,
+        workspace=tmp_path,
+        metadata={"taskServer": server, "ownedServer": True},
+    )
+
+    adapter.collect(task, trace, "trace.json", prepared=prepared)
+
+    assert server.closed is True

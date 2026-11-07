@@ -21,9 +21,14 @@ class FakeVerifier:
         return {"passed": True, "status": "verified", "reward": "1"}
 
 
-def _write_task(root: Path, task_id: str = "task-a") -> Path:
+def _write_task(
+    root: Path,
+    task_id: str = "task-a",
+    *,
+    skill_name: str = "foo",
+) -> Path:
     task_dir = root / "tasks" / task_id
-    (task_dir / "environment" / "skills" / "foo").mkdir(parents=True)
+    (task_dir / "environment" / "skills" / skill_name).mkdir(parents=True)
     (task_dir / "verifier").mkdir(parents=True)
     (task_dir / "task.md").write_text(
         "---\n"
@@ -34,7 +39,7 @@ def _write_task(root: Path, task_id: str = "task-a") -> Path:
         "Sort these files.\n",
         encoding="utf-8",
     )
-    (task_dir / "environment" / "skills" / "foo" / "SKILL.md").write_text(
+    (task_dir / "environment" / "skills" / skill_name / "SKILL.md").write_text(
         "# Foo skill\n",
         encoding="utf-8",
     )
@@ -141,6 +146,68 @@ def test_skillsbench_live_prepare_materializes_official_image_and_reuses_it(
     assert oracle["status"] == "verified"
 
 
+def test_skillsbench_normalizes_skill_names_and_repeated_loads(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    _write_task(source, skill_name="Foo")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        (Path(__file__).parents[1] / "src" / "cute_evals" / "benchmarks" / "skillsbench" / "manifest.yaml")
+        .read_text(encoding="utf-8")
+        .replace("- organize-messy-files", "- task-a")
+        .replace(
+            "  - travel-planning\n  - offer-letter-generator\n"
+            "  - xlsx-recover-data\n  - python-scala-translation\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+    adapter = SkillsBenchAdapter(manifest, source_root=source)
+    task = adapter.tasks("official-subset")[0]
+    prepared = adapter.prepare(task, tmp_path / "workspace")
+    trace = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": "task-a",
+                "requestId": "request-a",
+                "status": "SUCCESS",
+                "finalSummaryText": "done",
+            },
+            "llmInvocations": [],
+            "toolInvocations": [
+                {
+                    "toolName": "workspace_read",
+                    "inputJson": '{"path":"skills/Missing/SKILL.md"}',
+                    "status": "SUCCESS",
+                },
+                {
+                    "toolName": "workspace_read",
+                    "inputJson": '{"path":"skills/Foo/SKILL.md"}',
+                    "status": "SUCCESS",
+                },
+            ],
+            "artifacts": [],
+            "environment": {},
+        }
+    )
+    result = adapter.score(
+        adapter.collect(
+            task,
+            trace,
+            "trace.json",
+            prepared=prepared,
+            oracle={"status": "verified", "passed": True, "reward": "1"},
+        )
+    )
+
+    by_name = {score.name: score for score in result.scores}
+    assert by_name["skill_selection"].value == ["Foo"]
+    assert by_name["skill_selection"].evidence["wrongSkills"] == ["missing"]
+    assert by_name["skill_load_count"].value == 2
+    assert by_name["repeated_skill_loads"].value == 0
+
+
 def test_docker_verifier_copies_workspace_into_container_instead_of_mounting_root(
     tmp_path: Path,
     monkeypatch,
@@ -194,3 +261,48 @@ def test_docker_verifier_copies_workspace_into_container_instead_of_mounting_roo
         for part in create
     )
     assert commands[2][1] == f"{workspace.resolve()}/."
+
+
+def test_docker_verifier_names_are_unique_and_cleanup_timeout_is_ignored(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    task_dir = _write_task(tmp_path / "source")
+    (task_dir / "environment" / "Dockerfile").write_text(
+        "FROM scratch\n",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    out_dir = tmp_path / "out"
+    commands: list[list[str]] = []
+    verifier = DockerVerifier()
+
+    def fake_run(command: list[str], *, timeout: int):
+        commands.append(command)
+        if command[0] == "rm":
+            raise subprocess.TimeoutExpired(command, timeout)
+        if command[0] == "build":
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if command[0] == "create":
+            return subprocess.CompletedProcess(command, 0, "container", "")
+        if command[0] in {"start", "cp"}:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if command[0] == "exec":
+            reward = out_dir / "logs" / "verifier" / "reward.txt"
+            reward.parent.mkdir(parents=True, exist_ok=True)
+            reward.write_text("1", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, "ok", "")
+        raise AssertionError(command)
+
+    monkeypatch.setattr(verifier, "_run", fake_run)
+    first = verifier.run(task_dir, workspace, out_dir, image="official-image")
+    second = verifier.run(task_dir, workspace, out_dir, image="official-image")
+    materialized = verifier.materialize(task_dir, workspace, out_dir)
+
+    assert first["passed"] is True
+    assert second["passed"] is True
+    assert materialized["status"] == "materialized"
+    names = [command[2] for command in commands if command[0] == "create"]
+    assert len(names) == 3
+    assert len(set(names)) == 3
