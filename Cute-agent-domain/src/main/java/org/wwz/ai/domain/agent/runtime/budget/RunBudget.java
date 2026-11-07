@@ -184,7 +184,9 @@ public final class RunBudget {
         snapshot.put("toolCalls", toolCalls.get());
         snapshot.put("wallMs", elapsedMs());
         snapshot.put("finalizationTriggered", finalizationStarted.get());
-        snapshot.put("finalizationCount", finalizationOwners.size());
+        synchronized (finalizationLock) {
+            snapshot.put("finalizationCount", finalizationOwners.size());
+        }
         snapshot.put("finalizationReason", finalizationReason.get());
         snapshot.put("finalizationSucceeded", isFinalizationSucceeded());
         snapshot.put(

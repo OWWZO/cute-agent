@@ -106,20 +106,35 @@ public class ReactTurnCloseSupport {
         Set<Long> consumedInboxIds = agentContext.control().drainConsumedInboxItemIds();
         SessionInboxPort inbox = agentContext.sessionInboxPort();
         if (inbox != null && !consumedInboxIds.isEmpty()) {
-            int acked = inbox.ackDelivered(
-                    agentContext.getSessionId(),
-                    consumedInboxIds,
-                    agentContext.getRequestId());
-            if (acked < consumedInboxIds.size()) {
-                log.warn("session inbox ack incomplete requestId={} expected={} acked={}",
-                        agentContext.getRequestId(), consumedInboxIds.size(), acked);
-                return;
+            try {
+                int acked = inbox.ackDelivered(
+                        agentContext.getSessionId(),
+                        consumedInboxIds,
+                        agentContext.getRequestId());
+                if (acked < consumedInboxIds.size()) {
+                    log.warn("session inbox ack incomplete requestId={} expected={} acked={}",
+                            agentContext.getRequestId(), consumedInboxIds.size(), acked);
+                    releaseUnackedClaims(inbox, agentContext);
+                }
+            } catch (Exception e) {
+                log.warn("session inbox ack failed requestId={} expected={}",
+                        agentContext.getRequestId(), consumedInboxIds.size(), e);
+                releaseUnackedClaims(inbox, agentContext);
             }
         }
         // 通知只有随工作记忆落库后才算「已投递」；失败时保持 0，下一轮补投。
         Set<String> consumedTaskIds = agentContext.control().drainConsumedBackgroundNotifications();
         if (!consumedTaskIds.isEmpty()) {
             agentContext.requireBackgroundTasks().markNotified(consumedTaskIds);
+        }
+    }
+
+    private void releaseUnackedClaims(SessionInboxPort inbox, AgentContext agentContext) {
+        try {
+            inbox.releaseClaims(agentContext.getSessionId(), agentContext.getRequestId());
+        } catch (Exception e) {
+            log.warn("session inbox release claims failed requestId={}",
+                    agentContext.getRequestId(), e);
         }
     }
 

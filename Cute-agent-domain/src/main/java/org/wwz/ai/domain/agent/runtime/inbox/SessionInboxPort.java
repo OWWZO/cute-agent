@@ -10,6 +10,7 @@ public interface SessionInboxPort {
 
     /**
      * 幂等入队；同一 session + idempotencyKey 只保留一条。
+     * 非法枚举、空必填字段或超出列长度的消息返回 {@code null}。
      */
     SessionInboxItem offer(SessionInboxItem item);
 

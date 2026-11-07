@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.inbox;
 
 import lombok.Builder;
+import lombok.ToString;
 import lombok.Value;
 
 /**
@@ -27,6 +28,7 @@ public class SessionInboxItem {
     private String visibility;
     private String state;
     private String idempotencyKey;
+    @ToString.Exclude
     private String payloadJson;
     private String sourceRunId;
     private String claimedByRunId;
@@ -34,14 +36,6 @@ public class SessionInboxItem {
     @Builder.Default
     private Long createdAtMs = System.currentTimeMillis();
     private Long deliveredAtMs;
-
-    public boolean isUserMessage() {
-        return KIND_USER_MESSAGE.equals(kind);
-    }
-
-    public boolean isBackgroundNotification() {
-        return KIND_BACKGROUND_NOTIFICATION.equals(kind);
-    }
 
     public boolean isHeld() {
         return STATE_HELD.equals(state);

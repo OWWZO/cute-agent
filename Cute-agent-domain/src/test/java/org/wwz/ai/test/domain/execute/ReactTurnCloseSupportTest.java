@@ -2,6 +2,7 @@ package org.wwz.ai.test.domain.execute;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactRecordCommand;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunFinishRecord;
@@ -15,6 +16,9 @@ import org.wwz.ai.domain.agent.memory.SessionWorkingMemoryService;
 import org.wwz.ai.domain.agent.memory.ltm.LtmTurnSyncSupport;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.agent.ReActAgent;
+import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
+import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.service.execute.support.ReactTurnCloseSupport;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
@@ -22,6 +26,7 @@ import org.wwz.ai.domain.agent.runtime.dto.Message;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * React / PlanSolve 成功轮的收口顺序。
@@ -148,6 +153,39 @@ public class ReactTurnCloseSupportTest {
         Assert.assertEquals(1, memory.turnClosedAtPersist.size());
         Assert.assertTrue("persistWorkingMemory 必须发生在 finishRun 之后",
                 memory.turnClosedAtPersist.get(0));
+    }
+
+    @Test
+    public void inboxAckFailureDoesNotFailSuccessfulTurnAndStillMarksNotifications() {
+        RecordingPrinter printer = new RecordingPrinter();
+        SessionInboxPort inbox = Mockito.mock(SessionInboxPort.class);
+        Mockito.when(inbox.ackDelivered(
+                Mockito.anyString(), Mockito.anyCollection(), Mockito.anyString()))
+                .thenThrow(new IllegalStateException("db down"));
+        AgentContext context = AgentContext.builder()
+                .requestId("req-close-ack")
+                .sessionId("session-close-ack")
+                .printer(printer)
+                .runtimeDependencies(CuteRuntimeDependencies.builder()
+                        .sessionInboxPort(inbox)
+                        .build())
+                .build();
+        context.control().addConsumedInboxItemIds(Set.of(1L));
+        RuntimeBackgroundTask task = context.requireBackgroundTasks()
+                .registerLocalAgent("后台任务", "general-purpose", "scan");
+        context.control().addConsumedBackgroundNotifications(Set.of(task.getId()));
+
+        RecordingWorkingMemoryService memory = new RecordingWorkingMemoryService();
+        ReactTurnCloseSupport support = supportWith(memory);
+        StubExecutor executor = new StubExecutor();
+        executor.getMemory().addMessage(Message.userMessage("问题", null));
+
+        support.closeSuccessfulTurn(context, executor, "答复", ExecutionLedgerConstants.ENTRY_AGENT_REACT);
+
+        Assert.assertEquals("result", printer.messageType);
+        Assert.assertTrue(context.isTurnClosed());
+        Assert.assertTrue(task.getNotified());
+        Mockito.verify(inbox).releaseClaims("session-close-ack", "req-close-ack");
     }
 
     // ---------- fixtures ----------

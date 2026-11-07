@@ -349,14 +349,17 @@ public class AgentSessionPrinter implements Printer {
             return null;
         }
         LocalDateTime startedAt = toLocalDateTime(map.get("startedAt"));
+        LocalDateTime firstTokenAt = toLocalDateTime(map.get("firstTokenAt"));
         LocalDateTime finishedAt = toLocalDateTime(map.get("finishedAt"));
         Long durationMs = toLong(map.get("durationMs"));
         String source = map.get("source") == null ? null : String.valueOf(map.get("source"));
-        if (startedAt == null && finishedAt == null && durationMs == null && StringUtils.isBlank(source)) {
+        if (startedAt == null && firstTokenAt == null && finishedAt == null
+                && durationMs == null && StringUtils.isBlank(source)) {
             return null;
         }
         return ReplayTiming.builder()
                 .startedAt(startedAt)
+                .firstTokenAt(firstTokenAt)
                 .finishedAt(finishedAt)
                 .durationMs(durationMs)
                 .source(source)

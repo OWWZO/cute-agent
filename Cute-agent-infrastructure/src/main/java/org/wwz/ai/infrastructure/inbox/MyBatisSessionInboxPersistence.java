@@ -31,14 +31,35 @@ public class MyBatisSessionInboxPersistence implements SessionInboxPort {
     @Override
     public SessionInboxItem offer(SessionInboxItem item) {
         if (item == null || StringUtils.isBlank(item.getSessionId())
-                || StringUtils.isBlank(item.getIdempotencyKey())) {
+                || StringUtils.isBlank(item.getIdempotencyKey())
+                || StringUtils.isBlank(item.getKind())
+                || StringUtils.isBlank(item.getVisibility())) {
+            return null;
+        }
+        String sessionId = StringUtils.trim(item.getSessionId());
+        String idempotencyKey = StringUtils.trim(item.getIdempotencyKey());
+        if (sessionId.length() > 128 || idempotencyKey.length() > 160
+                || StringUtils.length(StringUtils.trim(item.getSourceRunId())) > 64) {
+            log.warn("session inbox offer rejected: value too long sessionId={} keyLength={}",
+                    sessionId, idempotencyKey.length());
+            return null;
+        }
+        String kind = StringUtils.trim(item.getKind());
+        String visibility = StringUtils.trim(item.getVisibility());
+        boolean invalidKind = !SessionInboxItem.KIND_USER_MESSAGE.equals(kind)
+                && !SessionInboxItem.KIND_BACKGROUND_NOTIFICATION.equals(kind);
+        boolean invalidVisibility = !SessionInboxItem.VISIBILITY_ALL.equals(visibility)
+                && !SessionInboxItem.VISIBILITY_MODEL_ONLY.equals(visibility);
+        if (invalidKind || invalidVisibility) {
+            log.warn("session inbox offer rejected: invalid kind/visibility sessionId={} kind={} visibility={}",
+                    sessionId, kind, visibility);
             return null;
         }
         SessionInboxPO row = toPo(item);
-        sessionInboxDao.insertIgnore(row);
+        sessionInboxDao.insertIfAbsent(row);
         return toDomain(sessionInboxDao.selectByKey(
-                StringUtils.trim(item.getSessionId()),
-                StringUtils.trim(item.getIdempotencyKey())));
+                sessionId,
+                idempotencyKey));
     }
 
     @Override
@@ -50,7 +71,7 @@ public class MyBatisSessionInboxPersistence implements SessionInboxPort {
         int actualLimit = limit <= 0 ? CLAIM_BATCH_LIMIT : Math.min(limit, CLAIM_BATCH_LIMIT);
         long now = System.currentTimeMillis();
         List<SessionInboxPO> rows = sessionInboxDao.selectClaimableForUpdate(
-                StringUtils.trim(sessionId), kind, now, actualLimit);
+                StringUtils.trim(sessionId), kind, StringUtils.trim(runId), now, actualLimit);
         if (rows == null || rows.isEmpty()) {
             return List.of();
         }
@@ -138,8 +159,8 @@ public class MyBatisSessionInboxPersistence implements SessionInboxPort {
     private static SessionInboxPO toPo(SessionInboxItem item) {
         SessionInboxPO row = new SessionInboxPO();
         row.setSessionId(StringUtils.trim(item.getSessionId()));
-        row.setKind(item.getKind());
-        row.setVisibility(item.getVisibility());
+        row.setKind(StringUtils.trim(item.getKind()));
+        row.setVisibility(StringUtils.trim(item.getVisibility()));
         row.setState(StringUtils.defaultIfBlank(item.getState(), SessionInboxItem.STATE_PENDING));
         row.setIdempotencyKey(StringUtils.trim(item.getIdempotencyKey()));
         row.setPayloadJson(item.getPayloadJson());

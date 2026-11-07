@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class RunControlCancellationChainTest {
 
     @Test
-    public void allParentTokensAreKeptAndObserved() {
+    public void taskStopIsHiddenFromParentWhileUserStopPropagates() {
         RunControl control = new RunControl();
         RunCancellation taskToken = new RunCancellation();
         RunCancellation userStopToken = new RunCancellation();
@@ -26,8 +26,14 @@ public class RunControlCancellationChainTest {
 
         taskToken.cancel("task_stop");
 
-        Assert.assertTrue("父链中任意令牌 cancel 都必须可见", control.isCancelled());
-        Assert.assertEquals("task_stop", control.getCancelReason());
+        Assert.assertFalse("task_stop 只作用于被点名的子 Agent，不向父链传播", control.isCancelled());
+        Assert.assertNull(control.getCancelReason());
+        Assert.assertEquals(0, abortHooks.get());
+
+        userStopToken.cancel("user_stop");
+
+        Assert.assertTrue("用户 stop 仍必须沿父链传播", control.isCancelled());
+        Assert.assertEquals("user_stop", control.getCancelReason());
         Assert.assertEquals(1, abortHooks.get());
     }
 

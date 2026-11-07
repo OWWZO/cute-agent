@@ -2,12 +2,14 @@ package org.wwz.ai.test.stream;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 import org.wwz.ai.application.agent.query.GptQueryApplicationService;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
 import org.wwz.ai.application.agent.stream.AgentSessionPrinter;
 import org.wwz.ai.application.agent.stream.AgentSessionStream;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamEvent;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
@@ -256,6 +258,18 @@ public class BackgroundStreamSettleTest {
                 SessionBackgroundTaskHub.evict(sessionId);
             }
         });
+    }
+
+    @Test
+    public void gptQueryTreatsInboxProbeFailureAsNonFatal() {
+        String sessionId = "sess-bg-inbox-failure-" + System.nanoTime();
+        SessionInboxPort inbox = Mockito.mock(SessionInboxPort.class);
+        Mockito.when(inbox.hasOutstanding(sessionId)).thenThrow(new IllegalStateException("db down"));
+        AgentExecutionCommand request = new AgentExecutionCommand();
+        request.setRequestId("req-bg-inbox-failure");
+        request.setSessionId(sessionId);
+
+        Assert.assertFalse(GptQueryApplicationService.shouldDeferProjectionComplete(request, inbox));
     }
 
     @Test

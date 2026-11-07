@@ -95,6 +95,9 @@ public interface ExecutionLedgerQueryService {
      *
      * <p>时间范围左闭右开：{@code [from, to)}。返回项不附加 artifact 摘要，
      * 调用方需要完整事实时应继续调用 {@link #queryRunDetails(List)}。</p>
+     * <p><b>安全边界：</b>这是跨会话、跨用户的全局读取，仅供运维/测试工具使用，
+     * 禁止直接暴露到 HTTP、触发器或任何用户可调用入口；面向用户的 API 必须使用带
+     * {@code userId}/{@code sessionId} 过滤并完成归属校验的重载。</p>
      */
     List<DialogueRunView> queryRunsByTimeRange(LocalDateTime from, LocalDateTime to, int limit);
 

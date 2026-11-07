@@ -224,7 +224,8 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_run (
     KEY idx_dialogue_session_create (session_id, deleted, create_time DESC),
     KEY idx_dialogue_session_cursor (session_id, deleted, create_time, id),
     KEY idx_dialogue_run_user_create (user_id, deleted, create_time DESC),
-    KEY idx_dialogue_entry_status (entry_agent, status, deleted, create_time DESC)
+    KEY idx_dialogue_entry_status (entry_agent, status, deleted, create_time DESC),
+    KEY idx_dialogue_run_create_cursor (deleted, create_time, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话执行\r\n  总账表';
 
 CREATE TABLE IF NOT EXISTS ai_agent_dialogue_session (

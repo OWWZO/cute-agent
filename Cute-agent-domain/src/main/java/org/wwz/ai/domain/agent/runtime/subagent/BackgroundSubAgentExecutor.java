@@ -282,7 +282,16 @@ public final class BackgroundSubAgentExecutor {
             return false;
         }
         SessionInboxPort inbox = parent.sessionInboxPort();
-        return inbox == null || !inbox.hasOutstanding(parent.getSessionId());
+        if (inbox == null) {
+            return true;
+        }
+        try {
+            return !inbox.hasOutstanding(parent.getSessionId());
+        } catch (Exception e) {
+            // Inbox 查询失败时退回旧语义（仅内存判定），避免连带阻断 run 收口。
+            log.warn("session inbox outstanding check failed sessionId={}", parent.getSessionId(), e);
+            return true;
+        }
     }
 
     private static boolean shouldReleaseParentRun(AgentContext parent) {
@@ -503,7 +512,8 @@ public final class BackgroundSubAgentExecutor {
                 printer.send(parentToolUseId, "tool_result", toolResult, extra, null, true);
             }
             if (settleAllowed && shouldReleaseParentRun(parent)) {
-                if (shouldSettleParentStream(parent)) {
+                // 没有 wake port 时 Inbox 无法自动续跑；此时必须关流，避免客户端永久等待。
+                if (shouldSettleParentStream(parent) || backgroundWakePort(parent) == null) {
                     Map<String, Object> settle = new LinkedHashMap<>();
                     settle.put("reason", "background_idle");
                     printer.send("stream_settle", settle);
@@ -519,8 +529,7 @@ public final class BackgroundSubAgentExecutor {
     }
 
     private static void notifyRunSettled(AgentContext parent) {
-        CuteRuntimeDependencies deps = parent.getRuntimeDependencies();
-        BackgroundTaskWakePort wakePort = deps == null ? null : deps.getOptionalBackgroundTaskWakePort();
+        BackgroundTaskWakePort wakePort = backgroundWakePort(parent);
         if (wakePort == null) {
             return;
         }
@@ -530,6 +539,11 @@ public final class BackgroundSubAgentExecutor {
             log.warn("background settlement wake check failed sessionId={} requestId={}",
                     parent.getSessionId(), parent.getRequestId(), e);
         }
+    }
+
+    private static BackgroundTaskWakePort backgroundWakePort(AgentContext parent) {
+        CuteRuntimeDependencies deps = parent == null ? null : parent.getRuntimeDependencies();
+        return deps == null ? null : deps.getOptionalBackgroundTaskWakePort();
     }
 
     /** 已有同 agentId 的后台 run 未收尾：返回可重试的业务失败，不再叠加第二条 run。 */
