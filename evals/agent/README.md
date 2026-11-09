@@ -10,6 +10,8 @@
 - `scorers.py`：结果、轨迹、预算、恢复、引用、SQL、Artifact 的确定性 Oracle。
 - `framework_scorers.py`：DeepEval、agentevals、Ragas 的统一 `ScoreRecord` 适配。
 - `report.py`：pass@1、pass^k、失败分类、baseline diff、JSON / HTML 报告。
+- `process_view.py`：把 Execution Ledger 投影成稳定的逐步骤 `ProcessView`。
+- `judge_benchmarks/`：裁判评测适配层；与 Agent 任务评测分开记账。
 - `cases/`：`Cute-Agent Bench` 自有 Case。公开 Benchmark 接入后会放在独立 Adapter 中。
 
 ## 安装
@@ -79,6 +81,128 @@ uv run cute-evals run --profile pr --require-judge
 - 相同 Trace 和 Case 的 DeepEval 结果使用内容哈希缓存。
 - agentevals 确定性 trajectory match 始终执行；LLM 轨迹 judge 首版仍是 advisory。
 - 对不严格执行 `json_schema` 的兼容端点，agentevals 会显式要求 JSON 输出，仍通过其公开 Evaluator 解析。
+
+## 轨迹质量与裁判校准
+
+把真实 Ledger Trace 转成逐步骤视图：
+
+```powershell
+uv run cute-evals process-view `
+  --trace .eval-runs\snapshot\trace.json `
+  --out .eval-runs\snapshot\process-view.json
+```
+
+`ProcessView` 只做无损投影：assistant message 是 step，LLM、tool、artifact 和异常
+作为 step 证据；缺少 assistant message 时直接失败，不会补造步骤。
+
+AgentProcessBench 的正式入口：
+
+```powershell
+uv run cute-evals judge-benchmark `
+  --name agent-process-bench `
+  --source-dir D:\cute-evals-data\AgentProcessBench `
+  --split smoke `
+  --out D:\cute-eval-tmp\agent-process-bench-smoke `
+  --judge-model group/deepseek `
+  --dry-run
+```
+
+说明：
+
+- 当前 manifest 的许可证状态是 `blocked-license`，dry-run 可校验资产和题目，
+  非 dry-run 会在启动模型前拒绝运行。
+- 官方 checkout 必须使用 LF 原始字节；Windows 上先执行
+  `git config core.autocrlf false`，否则数据 SHA-256 会因 CRLF 转换失败。
+- 官方 `llm_annotation.py` 和 `compare.py` 由独立 checkout 原地调用，不复制、
+  不改写 Prompt、标签或评分逻辑。
+- 结果写入 `judge-calibration` 命名空间，不能混入 Cute Agent 任务成功率。
+
+TRAIL 的入口：
+
+```powershell
+uv run cute-evals judge-benchmark `
+  --name trail `
+  --source-dir D:\cute-evals-data\trail-benchmark `
+  --split smoke `
+  --out D:\cute-eval-tmp\trail-smoke `
+  --judge-model group/deepseek `
+  --dry-run
+```
+
+TRAIL 接入边界：
+
+- 固定 upstream commit，并校验 Trace / 标签目录的 Git tree 摘要和官方脚本 SHA-256。
+- 从官方 `run_eval.py` 的 `get_prompt` 常量原样提取 Prompt，不改分类体系或输出 schema。
+- 由本项目调用裁判模型并落盘结果，再由官方 `calculate_scores.py` 计算
+  Weighted F1、Location Accuracy、Joint Accuracy 和分类指标。
+- 不调用官方 `run_eval.py` 的 Windows 路径拼接逻辑，避免 `/` 与 `\` 混用导致输出文件失败。
+- 当前许可证状态是 `blocked-license`：代码为 MIT，但 GAIA/SWE 派生 Trace 的再分发
+  条件未单独确认。dry-run 可用于资产校验，正式跑分会被拒绝。
+- 正式评分依赖 `numpy`、`scikit-learn`、`scipy`。
+
+AgentRewardBench 的入口：
+
+```powershell
+uv run cute-evals judge-benchmark `
+  --name agent-reward-bench `
+  --source-dir D:\cute-evals-data\agent-reward-bench `
+  --trajectory-dir D:\cute-evals-data\agent-reward-bench-dataset `
+  --split smoke `
+  --judge-variant axtree `
+  --out D:\cute-eval-tmp\agent-reward-bench-smoke `
+  --judge-model group/deepseek `
+  --dry-run
+```
+
+AgentRewardBench 接入边界：
+
+- 固定代码 commit `05899fc...` 和 HF dataset revision `b6d17e...`；校验
+  `annotations.csv`、`splits.csv`、`complete_task_ids.csv` 以及官方 Prompt / 评分脚本
+  的 SHA-256。
+- `smoke` 从官方 dev split 选前 5 个唯一轨迹；`dev` / `test` 使用官方 split 全量。
+  `--judge-variant` 只决定输入证据，不改变官方四个标签和评分逻辑：
+  `axtree`、`screen`、`both`、`none`。
+- 官方 judgment 目录格式原样落盘，再调用官方 `score_judgments.py`；本项目只通过
+  薄 wrapper 注入当前被测 judge 名称，不改官方 annotation、标签、split 或指标计算。
+- 当前 manifest 状态是 `blocked-license`：仓库根、HF dataset card 和截图资产
+  都没有确认可再分发/可商用条件。dry-run 可校验元数据和 prompt，正式跑分会被拒绝；
+  不能把本地模型结果写成官方 leaderboard 分数。
+- 全量 `test` 只有在所有官方目标都有 verified judgment 时才标记 `official-test`；
+  否则统一是 `partial-not-official`。`false-pass` 必须单独查看，不能只看总 accuracy。
+
+多 Agent Trace 视图：
+
+```powershell
+uv run cute-evals multi-agent-view `
+  --trace .eval-runs\snapshot\trace.json `
+  --out .eval-runs\snapshot\multi-agent-view.json
+```
+
+视图从 Ledger 的 `subAgentId / subAgentType / subAgentDescription` 还原 main 与
+sub-agent 归属；没有父关系字段时只标记 `parentRelationship: implicit-main`，
+不会伪造多级父子链。子 Agent 的工具事实保留，子 Agent 的 assistant step
+不在当前 Trace 中时不补造。
+
+MARBLE / MultiAgentBench 的 dry-run 入口：
+
+```powershell
+uv run cute-evals multiagent-benchmark `
+  --name multiagentbench-marble `
+  --source-dir D:\cute-evals-data\MARBLE `
+  --split smoke `
+  --out D:\cute-eval-tmp\marble-smoke `
+  --dry-run
+```
+
+边界：
+
+- 已锁定官方 commit、五个 domain 的 JSONL hash 和 evaluator / entrypoint hash；
+  smoke 是每 domain 1 题，共 5 题；official-subset 是每 domain 10 题，共 50 题；
+  official-full 是 500 题。
+- 官方根 `LICENSE` 是 MIT，但 `pyproject.toml` 声明 Apache 2.0，冲突未解决，
+  因此当前是 `blocked-license`。
+- 当前只完成题集/资产接入和 MultiAgentTraceView；官方 Docker/DB/Minecraft
+  环境运行器尚未实现，正式入口会在启动任何环境前失败关闭。
 
 ## Baseline
 
@@ -208,6 +332,142 @@ GAIA 的答案契约固定为 `gaia-final-answer-v1`：
 `official-subset`；补全 `official-full` 选择、全量附件、工具覆盖和运行预算后，再单独
 安排全量运行，不能把子集结果当成完整官方成绩。
 
+### MemoryAgentBench
+
+MemoryAgentBench 固定上游 `HUST-AI-HYZ/MemoryAgentBench`
+`538026089d1a8a8eff05121d0db89b388f360eba` 和 HF dataset revision
+`7ea066982b140a19337e17e60d45d4076e042faf`，许可证为 MIT。当前已接
+`official-subset` 和 `official-full`：
+
+- Accurate Retrieval：`eventqa_65536`
+- Test-Time Learning：`icl_banking77_5900shot_balance`
+- Long-Range Understanding：`detective_qa`
+- Conflict Resolution：`factconsolidation_sh_6k`
+
+每个 `official-subset` category 固定第一个官方 context，并取前 5 道官方题，
+共 4 个 context、20 道题。`official-full` 加载 manifest 中全部 22 个官方 source、
+146 个 context 和 3,671 道官方题，不修改题目、答案、标签或官方评分规则。
+每个 context 只通过 `EvalMemorySeedCli` 注入一次，按官方 4096-token sentence
+chunk 顺序写入同一评测 user 下的隔离 retrieval session，然后由 Java ReAct Agent
+连续回答该类别的题目。官方 `agentic_memory_agent` query template 保持原样；只在
+回答契约中说明 “Search Archival Memory” 对应生产 `session_search`。
+
+`official-full` 已覆盖五类 scorer 路径：官方 exact / substring-match、EventQA recall、
+Ruler recall、LongMemEval LLM judge、InfBench 三分项 F1 和 Recsys Recall@1/5/10。
+`--judge-model` 为 `gpt-4o` 或 `gpt-4o-2024-05-13` 时才标记 `official-full`；其他
+兼容模型只能标记 `compatibility-full`。当前尚未执行 3,671 题的全量 live 跑分，
+因此不能把 Adapter 可运行写成已有官方榜单成绩。
+
+```powershell
+cd "D:\Java Code\ai-agent\Cute-agent\evals\agent"
+$env:EVAL_DATA_HOME = "D:\cute-evals-data"
+uv sync --extra dev --extra phase3 --extra memoryagentbench
+uv run cute-evals benchmark `
+  --name memoryagentbench `
+  --split official-subset `
+  --profile nightly `
+  --repeat 3
+```
+
+首次使用 NLTK 官方 sentence tokenizer 时需要 `punkt` / `punkt_tab`。如果本机只允许
+通过可信代理下载资源，可临时设置 `NLTK_ALLOW_PROXIED_URLOPEN=1`。
+
+跑完整官方任务时，必须提供 judge：
+
+```powershell
+uv run cute-evals benchmark `
+  --name memoryagentbench `
+  --split official-full `
+  --profile release `
+  --judge-model gpt-4o-2024-05-13 `
+  --judge-base-url "https://api.openai.com/v1" `
+  --judge-api-key $env:JUDGE_API_KEY
+```
+
+2026-11-09 本机 live 单次验收（`nightly`、`repeat=1`）：
+
+| Category | Correct / Questions |
+|---|---:|
+| Accurate Retrieval | 5 / 5 |
+| Test-Time Learning | 4 / 5 |
+| Long-Range Understanding | 3 / 5 |
+| Conflict Resolution | 3 / 5 |
+
+- 20 / 20 个 turn 执行成功，题目级准确率为 75%。
+- context 级硬门禁为 1 / 4（`quality@1=25%`）；只有 AR 的 5 题全部通过。
+- SLO 为 4 / 4（`slo@1=100%`），共使用 1,060,806 tokens。
+- 这是单次 live 结果和兼容子集结果，不是完整官方榜成绩，也不能替代 `repeat=3` 的稳定性结论。
+
+随后实验过更严格的“语义最近标签 + 选项逐字符复制”回答契约，子集降到
+12 / 20，已撤回。负向实验报告保留在
+`outputs/memoryagentbench-live-20261109-v6b/report.json`，不作为验收结果。
+
+### DeepResearch Bench
+
+DeepResearch Bench 用来评测完整研究报告，而不是单轮问答。Adapter 固定官方仓库
+`f2735b5c3636759c22f9e936c0232de8bf545b67` 的 100 道题（50 中文、50 英文），
+并校验 `data/prompt_data/query.jsonl` 的 SHA-256。官方题目和标签不改。
+
+评测对象是 Python 端 DeepSearch 本身，不经过 Java 根 Agent。先启动 cute-tool：
+
+```powershell
+cd "D:\Java Code\ai-agent\Cute-agent\cute-tool"
+.\start.ps1
+```
+
+```powershell
+cd "D:\Java Code\ai-agent\Cute-agent\evals\agent"
+$env:EVAL_DATA_HOME = "D:\cute-evals-data"
+$env:OPENAI_API_KEY = "<official-openai-key>"
+$env:JINA_API_KEY = "<jina-read-key>"
+uv sync --extra dev --extra deepresearch
+uv run cute-evals benchmark `
+  --name deepresearch `
+  --split official-full `
+  --profile nightly `
+  --judge-model gpt-5.5 `
+  --clean-model gpt-5.6-luna `
+  --fact-model gpt-5.4-mini
+```
+
+如果已有官方仓库快照，可加 `--source-dir <deep_research_bench路径>`，避免重复下载。
+DeepResearch 默认只跑一次；需要重复实验时显式传 `--repeat`。
+FACT 在 Windows 上使用单进程兼容模式，不需要 Docker。
+默认直连 `http://127.0.0.1:1601/v1/tool/deepsearch`，可用 `--deepsearch-url`
+指向其他 Python 服务；`--search-engines bing,ddg` 可覆盖服务端默认引擎。
+
+运行分两段：
+
+- Python DeepSearch 逐题生成 Markdown 研究报告，并保存 SSE 事件、来源文档和终稿。
+- Adapter 按官方格式导出 `id / prompt / article` JSONL；RACE 评报告质量，
+  FACT 评事实主张和引用可信度。
+
+报告中的逐题 `article_present` 只代表报告已产出，不代表官方质量通过。RACE/FACT
+是聚合成绩，写入 `benchmark.officialEvaluation`。没有 API Key、没有 Jina Key、
+官方评测失败或使用 `--limit` 时，结果标记为 `unverified` 或
+`compatibility-subset`，不会冒充 `official-full`。
+
+只生成提交包、不跑官方裁判：
+
+```powershell
+uv run cute-evals benchmark `
+  --name deepresearch `
+  --split official-full `
+  --profile nightly `
+  --skip-official-eval
+```
+
+本地小样本冒烟必须使用 `--limit`，且只作为兼容性检查：
+
+```powershell
+uv run cute-evals benchmark `
+  --name deepresearch `
+  --split official-full `
+  --profile nightly `
+  --limit 2 `
+  --skip-official-eval
+```
+
 ### 阶段 4A：MRAG Core
 
 `rag-core` 现在包含 7 个项目自有 MRAG 标注 Case，覆盖直接页面引用、多来源、
@@ -230,6 +490,40 @@ uv run cute-evals run --profile pr --suite rag-core
 当前 deterministic fixture 为 `7/7`；配置本地 Judge 并加 `--require-judge` 后，
 三层指标均通过。无证据 Case 使用 `noEvidence: true`，不会把“没有 gold citation”
 误报成召回失败。报告示例：`D:\cute-eval-tmp\rag-core-v5\report.html`。
+
+#### Python 直连 MRAG 质量评测
+
+`rag-core` 评测的是 Java Agent 是否正确选择和消费 `mrag_query`，不等于
+Python MRAG 本身的检索和生成质量。对应地新增 `rag-python`：它不启动 Java
+Agent，直接调用 `POST /v1/tool/mragQuery`，收集 SSE 阶段事件、完整
+`RetrievalTrace`、最终答案和耗时。
+
+启动 MRAG 服务并准备评测知识库后运行：
+
+```powershell
+uv sync --extra dev --extra rag
+uv run cute-evals benchmark `
+  --name rag-python `
+  --split internal `
+  --profile nightly `
+  --mrag-url http://127.0.0.1:1601 `
+  --mrag-kb-id <your-kb-id>
+```
+
+`--mrag-kb-id` 也可以改用环境变量 `CUTE_EVAL_MRAG_KB_ID`。需要 Ragas 语义评分时，
+额外传 `--judge-model / --judge-base-url / --judge-api-key` 和 `--require-judge`。
+
+输出包括：
+
+- `mrag-answer.md`：最终答案
+- `mrag-events.jsonl`：MRAG SSE 阶段事件
+- `mrag-retrieval-trace.json`：完整检索证据；接口未提供时会明确标记为不可用
+- `trace.json`：统一评测 Trace
+
+评分把 `citation_coverage`（最终答案是否引用）和 `citation_recall`（检索证据是否
+召回）分开。没有完整 `RetrievalTrace` 时，`citation_recall` 记为 `unverified`，
+不会伪造一个召回分数。Token 用量只有服务端实际返回 `usage` 时才会计算，否则
+显示为 advisory unverified。
 
 ### 阶段 4B：数据分析内部基准集
 

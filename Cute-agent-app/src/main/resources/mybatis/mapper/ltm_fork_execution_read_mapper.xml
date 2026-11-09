@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.wwz.ai.infrastructure.dao.cute.ILtmForkExecutionReadDao">
+
+    <resultMap id="LtmForkExecutionReadMap"
+               type="org.wwz.ai.domain.agent.memory.ltm.LtmForkExecutionEvent">
+        <id column="id" property="id"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="trigger_request_id" property="triggerRequestId"/>
+        <result column="fork_request_id" property="forkRequestId"/>
+        <result column="fork_kind" property="forkKind"/>
+        <result column="status" property="status"/>
+        <result column="skip_reason" property="skipReason"/>
+        <result column="owner_type" property="ownerType"/>
+        <result column="owner_id" property="ownerId"/>
+        <result column="user_turns" property="userTurns"/>
+        <result column="snapshot_message_count" property="snapshotMessageCount"/>
+        <result column="max_steps" property="maxSteps"/>
+        <result column="timeout_seconds" property="timeoutSeconds"/>
+        <result column="duration_ms" property="durationMs"/>
+        <result column="entries_before" property="entriesBefore"/>
+        <result column="entries_after" property="entriesAfter"/>
+        <result column="applied_count" property="appliedCount"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <select id="queryByTriggerRequestIds" resultMap="LtmForkExecutionReadMap">
+        SELECT id, session_id, trigger_request_id, fork_request_id, fork_kind, status,
+               skip_reason, owner_type, owner_id, user_turns, snapshot_message_count,
+               max_steps, timeout_seconds, duration_ms, entries_before, entries_after,
+               applied_count, error_message, create_time
+        FROM ai_agent_ltm_fork_execution
+        WHERE deleted = 0
+          AND trigger_request_id IN
+        <foreach collection="triggerRequestIds" item="triggerRequestId"
+                 open="(" separator="," close=")">
+            #{triggerRequestId}
+        </foreach>
+        ORDER BY trigger_request_id ASC, create_time ASC, id ASC
+    </select>
+
+</mapper>

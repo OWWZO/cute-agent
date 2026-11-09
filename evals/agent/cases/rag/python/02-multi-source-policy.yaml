@@ -1,0 +1,19 @@
+id: rag-python.multi-source-policy
+suite: rag-python
+version: 1
+hardGate: true
+judgeTask: "国内差旅住宿上限为 1200 元，海外差旅住宿上限为 1800 元，并分别给出可定位的制度引用。"
+metadata:
+  source: project-owned
+  taskType: rag
+  failureMode: incomplete-multi-source
+input:
+  message: "查询国内和海外差旅住宿报销上限，并分别给出引用。"
+expected:
+  finalContains: ["1200", "1800"]
+  finalNotContains: ["没有引用"]
+  requiredCitations: ["[policy-domestic.pdf#p4]", "[policy-overseas.pdf#p8]"]
+budgets:
+  maxTotalTokens: 2500
+  maxWallMs: 120000
+script: []

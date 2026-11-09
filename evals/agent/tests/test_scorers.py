@@ -370,6 +370,24 @@ def test_agentevals_trajectory_match_is_actually_evaluated() -> None:
     assert score.passed is True
 
 
+def test_agentevals_allows_extra_tool_arguments_without_losing_reference_args() -> None:
+    trace = make_trace()
+    trace.tool_invocations[0]["inputJson"] = (
+        '{"path":"config.yaml","encoding":"utf-8"}'
+    )
+
+    result = score_case(make_case(), trace, "traces/react.test/trace.json")
+
+    score = next(
+        item
+        for item in result.scores
+        if item.scorer == "agentevals" and item.name == "trajectory_match"
+    )
+    assert score.status == "verified"
+    assert score.passed is True
+    assert score.evidence["toolArgsMatchMode"] == "superset"
+
+
 def test_require_judge_marks_deepeval_unverified_as_hard_gate() -> None:
     result = score_case(
         make_case(),

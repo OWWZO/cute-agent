@@ -23,6 +23,7 @@ public final class WorkingMemoryCompactor {
     }
 
     private static final int MAX_TAIL_MESSAGE_FLOOR = 8;
+    private static final int FALLBACK_MIDDLE_CHARS = 2400;
 
     private final TokenCounter tokenCounter;
 
@@ -650,7 +651,14 @@ public final class WorkingMemoryCompactor {
         out.append("## Historical Task Snapshot\n").append(StringUtils.defaultString(latestUser, "Earlier conversation context")).append('\n');
         out.append("## Goal\n").append(StringUtils.defaultString(previousSummary, "Continue the active task.")).append('\n');
         out.append("## Constraints & Preferences\nPreserve user requirements and existing behavior.\n## Completed Actions\n");
-        out.append(serializeMiddleForSummarizer(middle, CompactionBudget.defaults())).append("\n## Active State\nContinue from the latest preserved messages.\n");
+        CompactionBudget fallbackBudget = CompactionBudget.defaults().toBuilder()
+                .contentMaxChars(FALLBACK_MIDDLE_CHARS)
+                .contentHeadChars(1600)
+                .contentTailChars(600)
+                .summaryInputMaxChars(FALLBACK_MIDDLE_CHARS)
+                .build();
+        out.append(serializeMiddleForSummarizer(middle, fallbackBudget))
+                .append("\n## Active State\nContinue from the latest preserved messages.\n");
         out.append("## Blocked\nNone recorded.\n## Key Decisions\nUse the available conversation facts.\n## Resolved Questions\nNone recorded.\n## Relevant Files\nSee checkpoint content.\n## Critical Context\nEarlier turns were compacted.\n");
         return out.toString().trim();
     }

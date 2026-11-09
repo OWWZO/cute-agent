@@ -290,13 +290,133 @@ public final class ToolObservationFormatter {
     // ---- session_search ----
 
     private static String projectSessionSearch(Map<?, ?> data) {
-        // 入参是模型刚发过的，回显纯属浪费；只给检索结果。
-        Object result = data.get("result");
-        if (result == null) {
-            return null;
+        Map<?, ?> payload = data;
+        Object nestedResult = data.get("result");
+        if (nestedResult instanceof Map<?, ?> resultMap) {
+            payload = resultMap;
+        } else if (nestedResult instanceof String raw) {
+            try {
+                Object parsed = JSON.parse(raw);
+                if (parsed instanceof Map<?, ?> resultMap) {
+                    payload = resultMap;
+                }
+            } catch (Exception ignored) {
+                return null;
+            }
         }
-        String text = result instanceof String str ? str : JSON.toJSONString(result);
-        return StringUtils.isBlank(text) ? null : text;
+
+        String mode = text(payload.get("mode"));
+        if ("read".equals(mode) || "scroll".equals(mode)) {
+            return projectSessionMessages(payload);
+        }
+        if ("discover".equals(mode)) {
+            return projectSessionDiscover(payload);
+        }
+        if ("browse".equals(mode)) {
+            return projectSessionBrowse(payload);
+        }
+        return null;
+    }
+
+    private static final int SESSION_SEARCH_MAX_CHARS = 9_000;
+
+    private static String projectSessionMessages(Map<?, ?> data) {
+        List<?> messages = list(data.get("messages"));
+        StringBuilder header = new StringBuilder();
+        header.append(text(data.get("mode")))
+                .append(" session_id=").append(StringUtils.defaultString(text(data.get("session_id"))))
+                .append(" message_count=").append(intOf(data.get("message_count"), messages.size()));
+        if (data.get("truncated") != null) {
+            header.append(" truncated=").append(data.get("truncated"));
+        }
+        if (data.get("messages_before") != null) {
+            header.append(" messages_before=").append(data.get("messages_before"));
+        }
+        if (data.get("messages_after") != null) {
+            header.append(" messages_after=").append(data.get("messages_after"));
+        }
+        String prefix = header.toString();
+        int totalMessages = intOf(data.get("message_count"), messages.size());
+        int maxPerMessage = totalMessages <= 8 ? 1_400 : 100;
+        int perMessage = messages.isEmpty()
+                ? 0
+                : Math.max(120, Math.min(maxPerMessage,
+                (SESSION_SEARCH_MAX_CHARS - prefix.length() - 200) / messages.size()));
+        String rendered = renderSessionMessages(prefix, messages, perMessage);
+        for (int attempt = 0; attempt < 3 && rendered.length() > SESSION_SEARCH_MAX_CHARS; attempt++) {
+            perMessage = Math.max(80, perMessage * 3 / 4);
+            rendered = renderSessionMessages(prefix, messages, perMessage);
+        }
+        return rendered.length() <= SESSION_SEARCH_MAX_CHARS
+                ? rendered
+                : ToolObservationSerializer.truncateForLlm(rendered, SESSION_SEARCH_MAX_CHARS);
+    }
+
+    private static String renderSessionMessages(String prefix, List<?> messages, int perMessage) {
+        StringBuilder out = new StringBuilder(prefix);
+        for (Object item : messages) {
+            if (!(item instanceof Map<?, ?> row)) {
+                continue;
+            }
+            String role = StringUtils.defaultString(text(row.get("role")));
+            String content = StringUtils.defaultString(text(row.get("content")));
+            int cap = "USER".equalsIgnoreCase(role)
+                    ? Math.max(perMessage, Math.min(1_200, perMessage * 2))
+                    : perMessage;
+            out.append("\n[id=").append(StringUtils.defaultString(text(row.get("id"))))
+                    .append(" seq=").append(StringUtils.defaultString(text(row.get("seq_no"))))
+                    .append(" role=").append(role).append("] ")
+                    .append(truncate(content.strip(), cap));
+        }
+        return out.toString();
+    }
+
+    private static String projectSessionDiscover(Map<?, ?> data) {
+        List<?> results = list(data.get("results"));
+        StringBuilder out = new StringBuilder("discover count=")
+                .append(intOf(data.get("count"), results.size()));
+        String backend = text(data.get("search_backend"));
+        if (StringUtils.isNotBlank(backend)) {
+            out.append(" backend=").append(backend);
+        }
+        for (Object item : results) {
+            if (!(item instanceof Map<?, ?> row)) {
+                continue;
+            }
+            out.append("\n- session=").append(StringUtils.defaultString(text(row.get("session_id"))))
+                    .append(" match=").append(StringUtils.defaultString(text(row.get("match_message_id"))))
+                    .append(" role=").append(StringUtils.defaultString(text(row.get("matched_role"))));
+            String title = text(row.get("title"));
+            if (StringUtils.isNotBlank(title)) {
+                out.append(" title=").append(truncate(title, 120));
+            }
+            String snippet = text(row.get("snippet"));
+            if (StringUtils.isNotBlank(snippet)) {
+                out.append("\n  ").append(truncate(snippet.strip(), 320));
+            }
+        }
+        return out.toString();
+    }
+
+    private static String projectSessionBrowse(Map<?, ?> data) {
+        List<?> results = list(data.get("results"));
+        StringBuilder out = new StringBuilder("browse count=")
+                .append(intOf(data.get("count"), results.size()));
+        for (Object item : results) {
+            if (!(item instanceof Map<?, ?> row)) {
+                continue;
+            }
+            out.append("\n- session=").append(StringUtils.defaultString(text(row.get("session_id"))));
+            String title = text(row.get("title"));
+            if (StringUtils.isNotBlank(title)) {
+                out.append(" title=").append(truncate(title, 120));
+            }
+            String preview = text(row.get("preview"));
+            if (StringUtils.isNotBlank(preview)) {
+                out.append("\n  ").append(truncate(preview.strip(), 240));
+            }
+        }
+        return out.toString();
     }
 
     // ---- WebSearch ----

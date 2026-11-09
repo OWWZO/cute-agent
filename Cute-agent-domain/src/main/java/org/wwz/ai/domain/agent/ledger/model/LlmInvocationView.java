@@ -45,6 +45,30 @@ public class LlmInvocationView {
 
     private Integer totalTokens;
 
+    /** prompt_tokens_details.cached_tokens */
+    private Integer cachedPromptTokens;
+
+    /** prompt_tokens_details.text_tokens */
+    private Integer promptTextTokens;
+
+    /** prompt_tokens_details.audio_tokens */
+    private Integer promptAudioTokens;
+
+    /** prompt_tokens_details.image_tokens */
+    private Integer promptImageTokens;
+
+    /** completion_tokens_details.text_tokens */
+    private Integer completionTextTokens;
+
+    /** completion_tokens_details.audio_tokens */
+    private Integer completionAudioTokens;
+
+    /** completion_tokens_details.reasoning_tokens */
+    private Integer reasoningTokens;
+
+    /** 本地 System Prompt 指纹。 */
+    private String systemFingerprint;
+
     /** 请求开始前的上下文分段估算。 */
     private Integer estTotalTokens;
 
@@ -53,6 +77,15 @@ public class LlmInvocationView {
     private Integer estMessageTokens;
 
     private Integer estToolTokens;
+
+    private Integer messageCount;
+
+    private Integer toolCount;
+
+    /** OK / RISK / MISS / UNKNOWN */
+    private String cacheStatus;
+
+    private String cacheRiskFlags;
 
     private String finishReason;
 

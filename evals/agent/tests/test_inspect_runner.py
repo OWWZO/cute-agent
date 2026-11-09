@@ -21,6 +21,7 @@ def test_inspect_runner_executes_solver_and_scorer(tmp_path: Path, monkeypatch) 
 
     def fake_run_java_cases(cases, output_dir, **kwargs):
         assert cases == [case]
+        assert kwargs["tool_mode"] == "production"
         trace = RunTrace.from_dict(
             {
                 "run": {
@@ -51,6 +52,7 @@ def test_inspect_runner_executes_solver_and_scorer(tmp_path: Path, monkeypatch) 
         judge_cache_dir=None,
         timeout_seconds=30,
         build=False,
+        tool_mode="production",
     )
 
     assert len(results) == 1

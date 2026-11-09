@@ -1,0 +1,207 @@
+name: memoryagentbench
+version: gh-538026089d1a8a8eff05121d0db89b388f360eba-hf-7ea066982b140a19337e17e60d45d4076e042faf
+upstream: https://github.com/HUST-AI-HYZ/MemoryAgentBench
+upstreamCommit: 538026089d1a8a8eff05121d0db89b388f360eba
+datasetUpstream: https://huggingface.co/datasets/ai-hyz/MemoryAgentBench
+datasetRevision: 7ea066982b140a19337e17e60d45d4076e042faf
+license: mit
+scoreLabels:
+  official-subset: official-subset
+  official-full: official-full
+runnerMode: incremental-memory-seed-then-java-agent
+environment: isolated-eval-database
+seedMode: chunk-per-session
+queryTemplateStyle: agentic_memory_agent
+officialEvaluator:
+  repository: https://github.com/HUST-AI-HYZ/MemoryAgentBench
+  revision: 538026089d1a8a8eff05121d0db89b388f360eba
+  file: utils/eval_other_utils.py
+  sha256: d77976be409298970614d477a9d8003850caddb0510e56a7e821a037d98493a2
+  templatesFile: utils/templates.py
+  templatesSha256: 148c40d48d19f155ae845482c4417ba59cfa7ae4e194019509e023bd3a8755dd
+  longMemEvalJudgeFile: llm_based_eval/longmem_qa_evaluate.py
+  longMemEvalJudgeSha256: ceca59bddea4203a78b417be635e63fe3f685bd957e3df12150978e21972c540
+  infBenchJudgeFile: llm_based_eval/summarization_evaluate.py
+  infBenchJudgeSha256: 6951d19644cdb1972bcf6cdb272f4757aa995ae07099bf74012925158c376dd4
+  compatibility: exact-official-agentic-memory-query-templates-and-metrics
+dataset:
+  kind: huggingface-parquet
+  repo: ai-hyz/MemoryAgentBench
+  revision: 7ea066982b140a19337e17e60d45d4076e042faf
+  files:
+    Accurate_Retrieval:
+      path: data/Accurate_Retrieval-00000-of-00001.parquet
+      sha256: 56c3cd80fb6731a3e53cd1a6be3148f54df60ff2d290ee50e28f8acebf9655c1
+      size: 20024386
+    Conflict_Resolution:
+      path: data/Conflict_Resolution-00000-of-00001.parquet
+      sha256: 24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45
+      size: 1491588
+    Long_Range_Understanding:
+      path: data/Long_Range_Understanding-00000-of-00001.parquet
+      sha256: 5ab175461954db67770d4a4cb69e569b513ebb96aceb9ee79b57f67488bcd539
+      size: 49342452
+    Test_Time_Learning:
+      path: data/Test_Time_Learning-00000-of-00001.parquet
+      sha256: 5338753be48f925d03318eed66117286e3489025fabe050a547bd086cd7d79c0
+      size: 3947476
+  auxiliaryFiles:
+    recsysCatalog:
+      path: entity2id.json
+      sha256: 63353aca481bc9558b502f91cb98f6fa26438796fdd7e0bc06b5a1532126e8b5
+      size: 1758081
+selection:
+  official-subset:
+    maxContextsPerCategory: 1
+    questionsPerSource: 5
+    categories:
+      Accurate_Retrieval:
+        sources:
+          - source: eventqa_65536
+            scorer: text
+            metric: substring_exact_match
+      Test_Time_Learning:
+        sources:
+          - source: icl_banking77_5900shot_balance
+            scorer: text
+            metric: exact_match
+      Long_Range_Understanding:
+        sources:
+          - source: detective_qa
+            scorer: text
+            metric: exact_match
+      Conflict_Resolution:
+        sources:
+          - source: factconsolidation_sh_6k
+            scorer: text
+            metric: substring_exact_match
+  official-full:
+    categories:
+      Accurate_Retrieval:
+        sources:
+          - source: eventqa_131072
+            scorer: text
+            metric: substring_exact_match
+          - source: eventqa_65536
+            scorer: text
+            metric: substring_exact_match
+          - source: eventqa_full
+            scorer: text
+            metric: substring_exact_match
+          - source: longmemeval_s*
+            scorer: longmemeval_judge
+            metric: llm_judge_accuracy
+          - source: ruler_qa1_197K
+            scorer: ruler_recall
+            metric: ruler_recall
+          - source: ruler_qa2_421K
+            scorer: ruler_recall
+            metric: ruler_recall
+      Test_Time_Learning:
+        sources:
+          - source: icl_banking77_5900shot_balance
+            scorer: text
+            metric: exact_match
+          - source: icl_clinic150_7050shot_balance
+            scorer: text
+            metric: exact_match
+          - source: icl_nlu_8296shot_balance
+            scorer: text
+            metric: exact_match
+          - source: icl_trec_coarse_6600shot_balance
+            scorer: text
+            metric: exact_match
+          - source: icl_trec_fine_6400shot_balance
+            scorer: text
+            metric: exact_match
+          - source: recsys_redial_full
+            scorer: recsys_recall
+            metric: recall_at_5
+      Long_Range_Understanding:
+        sources:
+          - source: detective_qa
+            scorer: text
+            metric: exact_match
+          - source: infbench_sum_eng_shots2
+            scorer: summary_judge
+            metric: infbench_f1
+      Conflict_Resolution:
+        sources:
+          - source: factconsolidation_mh_262k
+            scorer: text
+            metric: substring_exact_match
+          - source: factconsolidation_mh_32k
+            scorer: text
+            metric: substring_exact_match
+          - source: factconsolidation_mh_64k
+            scorer: text
+            metric: substring_exact_match
+          - source: factconsolidation_mh_6k
+            scorer: text
+            metric: substring_exact_match
+          - source: factconsolidation_sh_262k
+            scorer: text
+            metric: substring_exact_match
+          - source: factconsolidation_sh_32k
+            scorer: text
+            metric: substring_exact_match
+          - source: factconsolidation_sh_64k
+            scorer: text
+            metric: substring_exact_match
+          - source: factconsolidation_sh_6k
+            scorer: text
+            metric: substring_exact_match
+chunking:
+  model: gpt-4o-mini
+  size: 4096
+seedTimestamp:
+  start: "2024-01-01 00:00:00"
+  stepSeconds: 1
+answerContract:
+  version: memoryagentbench-final-answer-v1
+  linePrefix: "FINAL_ANSWER:"
+  instruction: |-
+    Answer from the context already stored in the user's memory. When the task
+    says "Search Archival Memory", use the available session_search tool.
+    Only when the task explicitly asks to assign a numerical label from the
+    provided mapping, put that numeric label in the final answer (for example,
+    `FINAL_ANSWER: 18`), not `label: 18`. Multiple-choice questions must return
+    the complete selected option text, not an option number.
+    Return only the requested value and finish with exactly one line of the form
+    `FINAL_ANSWER: <answer>`. Do not include explanations or a second answer line.
+answerContractByScorer:
+  text: concise
+  ruler_recall: concise
+  longmemeval_judge: concise
+  summary_judge:
+    version: memoryagentbench-summary-answer-v1
+    linePrefix: "FINAL_ANSWER:"
+    multiline: true
+    instruction: |-
+      Answer from the context already stored in the user's memory. After all
+      reasoning, write `FINAL_ANSWER:` followed by the complete requested book
+      summary. The summary may span multiple lines. Do not include a second
+      `FINAL_ANSWER:` marker.
+  recsys_recall:
+    version: memoryagentbench-recsys-answer-v1
+    linePrefix: "FINAL_ANSWER:"
+    multiline: true
+    instruction: |-
+      Answer from the context already stored in the user's memory. After all
+      reasoning, write `FINAL_ANSWER:` followed by exactly 20 numbered movie
+      recommendations, one per line. Do not include extra commentary or a second
+      `FINAL_ANSWER:` marker.
+budgets:
+  maxWallMs: 300000
+  maxTokens: 120000
+  maxSteps: 10
+  maxToolCalls: 12
+officialFull:
+  status: implemented
+  requiresJudge: true
+  selection: all pinned contexts, sources and official questions
+  expectedContexts: 146
+  expectedQuestions: 3671
+  officialJudgeModels:
+    - gpt-4o
+    - gpt-4o-2024-05-13

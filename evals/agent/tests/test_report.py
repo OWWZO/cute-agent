@@ -212,6 +212,76 @@ def test_report_includes_wilson_confidence_intervals(tmp_path: Path) -> None:
     assert intervals["passAtK"] == intervals["passAt1"]
 
 
+def test_report_separates_official_scores_from_advisory_diagnostics(
+    tmp_path: Path,
+) -> None:
+    case = make_case()
+    trace = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": case.id,
+                "status": "SUCCESS",
+                "finalSummaryText": "ok",
+                "totalTokens": 100,
+                "durationMs": 20,
+            },
+            "llmInvocations": [],
+            "toolInvocations": [],
+            "artifacts": [],
+        }
+    )
+    scores = [
+        ScoreRecord(
+            case_id=case.id,
+            scorer="memoryagentbench.official-text",
+            name="official_accuracy",
+            value=0.5,
+            unit="ratio",
+            passed=False,
+            hard_gate=True,
+            status="verified",
+        ),
+        ScoreRecord(
+            case_id=case.id,
+            scorer="memoryagentbench.diagnostic",
+            name="diagnostic_format_normalized_accuracy",
+            value=0.75,
+            unit="ratio",
+            passed=None,
+            hard_gate=False,
+            status="verified",
+            evidence={"correct": 3, "checked": 4},
+        ),
+    ]
+
+    report = build_report(
+        profile="nightly",
+        agent="cute-agent",
+        cases=[
+            CaseResult(
+                case=case,
+                trace=trace,
+                scores=scores,
+                trace_path="trace.json",
+            )
+        ],
+        output_dir=tmp_path,
+    )
+
+    diagnostics = report["summary"]["diagnostics"]
+    assert len(diagnostics["scores"]) == 1
+    assert diagnostics["scores"][0]["name"] == (
+        "diagnostic_format_normalized_accuracy"
+    )
+    assert diagnostics["metrics"][
+        "diagnostic_format_normalized_accuracy"
+    ]["mean"] == 0.75
+    assert report["summary"]["passAt1"] == 0.0
+    html = (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert "Official and gate scores" in html
+    assert "Diagnostics (advisory only)" in html
+
+
 def test_report_separates_answer_quality_from_slo_budget(tmp_path: Path) -> None:
     case = make_case()
     trace = RunTrace.from_dict(
@@ -260,3 +330,126 @@ def test_report_separates_answer_quality_from_slo_budget(tmp_path: Path) -> None
     assert report["caseSummaries"][0]["qualityStatus"] == "passed"
     assert report["caseSummaries"][0]["sloStatus"] == "failed"
     assert report["caseSummaries"][0]["status"] == "failed"
+
+
+def test_report_summarizes_compaction_and_control(tmp_path: Path) -> None:
+    compressed_case = make_case()
+    compressed_case.id = "compaction.compressed"
+    compressed_case.suite = "compaction-carry-forward"
+    compressed_case.metadata = {"taskType": "compaction"}
+    compressed_trace = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": compressed_case.id,
+                "status": "SUCCESS",
+                "finalSummaryText": "ok",
+                "totalTokens": 100,
+                "durationMs": 10,
+            },
+            "llmInvocations": [],
+            "toolInvocations": [],
+            "artifacts": [],
+        }
+    )
+    compressed_scores = [
+        ScoreRecord(
+            case_id=compressed_case.id,
+            scorer="deterministic",
+            name="task_success",
+            value=True,
+            unit="boolean",
+            passed=True,
+            hard_gate=True,
+            status="verified",
+        ),
+        ScoreRecord(
+            case_id=compressed_case.id,
+            scorer="deterministic",
+            name="compaction_triggered",
+            value=True,
+            unit="boolean",
+            passed=True,
+            hard_gate=True,
+            status="verified",
+            evidence={"strategies": ["full-llm"]},
+        ),
+        ScoreRecord(
+            case_id=compressed_case.id,
+            scorer="deterministic",
+            name="compression_ratio",
+            value=4.0,
+            unit="ratio",
+            passed=None,
+            hard_gate=False,
+            status="verified",
+            evidence={"beforeTokens": 400, "afterTokens": 100},
+        ),
+    ]
+    control_case = make_case()
+    control_case.id = "compaction.control"
+    control_case.suite = "compaction-carry-forward"
+    control_trace = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": control_case.id,
+                "status": "SUCCESS",
+                "finalSummaryText": "ok",
+                "totalTokens": 90,
+                "durationMs": 9,
+            },
+            "llmInvocations": [],
+            "toolInvocations": [],
+            "artifacts": [],
+        }
+    )
+    control_scores = [
+        ScoreRecord(
+            case_id=control_case.id,
+            scorer="deterministic",
+            name="task_success",
+            value=True,
+            unit="boolean",
+            passed=True,
+            hard_gate=True,
+            status="verified",
+        ),
+        ScoreRecord(
+            case_id=control_case.id,
+            scorer="deterministic",
+            name="compaction_control_clean",
+            value=True,
+            unit="boolean",
+            passed=True,
+            hard_gate=True,
+            status="verified",
+        ),
+    ]
+
+    report = build_report(
+        profile="nightly",
+        agent="cute-agent",
+        cases=[
+            CaseResult(
+                case=compressed_case,
+                trace=compressed_trace,
+                scores=compressed_scores,
+                trace_path="compressed/trace.json",
+            ),
+            CaseResult(
+                case=control_case,
+                trace=control_trace,
+                scores=control_scores,
+                trace_path="control/trace.json",
+            ),
+        ],
+        output_dir=tmp_path,
+    )
+
+    compaction = report["summary"]["compaction"]
+    assert compaction["triggeredCaseCount"] == 1
+    assert compaction["carryForwardQualityPassCount"] == 1
+    assert compaction["controlCleanCount"] == 1
+    assert compaction["fullLlmCount"] == 1
+    assert compaction["medianCompressionRatio"] == 4.0
+    assert compaction["reclaimedTokens"] == 300
+    assert "Compaction:" in (tmp_path / "report.html").read_text(encoding="utf-8")

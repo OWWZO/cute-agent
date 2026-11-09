@@ -1,0 +1,19 @@
+id: rag-python.no-evidence
+suite: rag-python
+version: 1
+hardGate: true
+judgeTask: "知识库没有宠物托运报销制度时，应明确说明无法从知识库确认，不能编造报销结论。"
+metadata:
+  source: project-owned
+  taskType: rag
+  failureMode: fabricated-evidence
+input:
+  message: "员工可以报销宠物托运费用吗？如果知识库没有依据，请明确说明。"
+expected:
+  finalContains: ["知识库未提供"]
+  finalNotContains: ["无法报销"]
+  noEvidence: true
+budgets:
+  maxTotalTokens: 2000
+  maxWallMs: 120000
+script: []

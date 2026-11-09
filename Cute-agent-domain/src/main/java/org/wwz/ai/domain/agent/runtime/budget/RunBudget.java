@@ -63,6 +63,14 @@ public final class RunBudget {
         return new RunBudget(maxTotalTokens, maxWallMs, maxToolCalls, maxSteps, 0.8);
     }
 
+    public static RunBudget create(Integer maxTotalTokens,
+                                   Integer maxWallMs,
+                                   Integer maxToolCalls,
+                                   Integer maxSteps,
+                                   double softRatio) {
+        return new RunBudget(maxTotalTokens, maxWallMs, maxToolCalls, maxSteps, softRatio);
+    }
+
     /**
      * 记录一次 LLM 调用的真实用量。Token 可能已经超过硬上限，但调用本身无法回滚。
      */

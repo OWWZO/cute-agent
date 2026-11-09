@@ -4,7 +4,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 
 /**
  * 工作记忆压缩事件（表 ai_agent_working_memory_compaction）。
@@ -86,6 +89,16 @@ public class WorkingMemoryCompactionEvent {
         if (value == null || value.length() <= MAX_PAYLOAD_CHARS) {
             return value;
         }
-        return value.substring(0, MAX_PAYLOAD_CHARS) + "...[truncated]";
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String hash = HexFormat.of().formatHex(
+                    digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+            return "{\"truncated\":true,\"reason\":\"audit_payload_limit\","
+                    + "\"originalChars\":" + value.length()
+                    + ",\"sha256\":\"sha256:" + hash + "\"}";
+        } catch (Exception e) {
+            return "{\"truncated\":true,\"reason\":\"audit_payload_limit\","
+                    + "\"originalChars\":" + value.length() + "}";
+        }
     }
 }

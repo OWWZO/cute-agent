@@ -89,6 +89,58 @@ class MragApiTest(unittest.TestCase):
         self.assertIsNone(first_chunk["choices"][0]["finishReason"])
         self.assertEqual("stop", second_chunk["choices"][0]["finishReason"])
 
+    def test_should_emit_retrieval_trace_only_when_eval_mode_is_enabled(self):
+        retrieval_trace = {
+            "question": "总结多模态检索核心能力",
+            "merged_text": {"stage": "merged_text", "hits": []},
+        }
+
+        with patch.dict(os.environ, {"DEFAULT_KB_ID": "kb-test"}, clear=False):
+            with patch.object(tool_module, "build_mrag_agent") as build_mrag_agent:
+                agent = build_mrag_agent.return_value
+
+                def run(question, image_urls, include_retrieval_trace=False):
+                    self.assertTrue(include_retrieval_trace)
+                    yield {
+                        "stage": "retrieval_trace",
+                        "data": "",
+                        "isFinal": False,
+                        "meta": {"retrievalTrace": retrieval_trace},
+                    }
+                    yield {
+                        "stage": "final",
+                        "data": "",
+                        "isFinal": True,
+                    }
+
+                agent.run.side_effect = run
+
+                with self.client.stream(
+                    "POST",
+                    "/v1/tool/mragQuery",
+                    json={
+                        "question": "总结多模态检索核心能力",
+                        "image_urls": [],
+                        "include_retrieval_trace": True,
+                    },
+                ) as response:
+                    lines = [line for line in response.iter_lines() if line]
+
+        self.assertEqual(200, response.status_code)
+        events = [
+            json.loads(line.removeprefix("data: "))
+            for line in lines
+            if line.startswith("data: ") and line != "data: [DONE]"
+        ]
+        trace_event = next(
+            event for event in events if event.get("stage") == "retrieval_trace"
+        )
+        self.assertEqual(
+            retrieval_trace,
+            trace_event["meta"]["retrievalTrace"],
+        )
+        self.assertEqual("final", events[-1]["stage"])
+
     def test_should_prefer_kb_ids_over_legacy_kb_id(self):
         with patch.dict(os.environ, {"DEFAULT_KB_ID": "kb-default"}, clear=False):
             with patch.object(tool_module, "build_mrag_agent") as build_mrag_agent:
@@ -241,7 +293,12 @@ class MragApiTest(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         events = [line.removeprefix("data: ") for line in lines if line.startswith("data: ")]
         self.assertEqual("[DONE]", events[-1])
-        error_chunk = json.loads(events[0])
+        error_chunk = next(
+            json.loads(event)
+            for event in events
+            if event not in {"[DONE]", "heartbeat"}
+            and "choices" in json.loads(event)
+        )
         self.assertEqual("stop", error_chunk["choices"][0]["finishReason"])
         self.assertIn("MRAG 检索失败", error_chunk["choices"][0]["delta"]["content"])
 

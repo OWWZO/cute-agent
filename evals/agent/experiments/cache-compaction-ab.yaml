@@ -1,0 +1,36 @@
+schemaVersion: "1.0"
+experimentId: cache-compaction-ab
+suite: compaction-carry-forward
+profile: nightly
+javaMode: compaction
+models:
+- group/deepseek
+repetitions: 2
+seed: 42
+parallelism: 1
+timeoutSeconds: 900
+retries: 1
+requireJudge: false
+isolation:
+  mode: process
+  workspace: per-cell
+  database: experiment
+  allowDirty: true
+caseDirs:
+- evals/agent/cases/ab/compaction-carry-forward
+base:
+  source: local
+  root: .
+  env:
+    CUTE_EVAL_CACHE_VARIANT: uncompressed-control
+candidate:
+  source: local
+  root: .
+  env:
+    CUTE_EVAL_CACHE_VARIANT: compressed
+budgets:
+  maxUsd: 0
+  maxWallMinutes: 240
+thresholds:
+  maxAccuracyRegression: 0
+  maxTokenRegressionRatio: 0.2

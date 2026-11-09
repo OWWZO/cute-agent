@@ -15,11 +15,17 @@ import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
+import org.wwz.ai.domain.agent.ledger.model.WorkingMemoryConversationRow;
+import org.wwz.ai.domain.agent.memory.WorkingMemoryCompactionEvent;
+import org.wwz.ai.domain.agent.memory.ltm.LtmForkExecutionEvent;
 import org.wwz.ai.infrastructure.dao.cute.IArtifactLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.IDialogueRunLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.IDialogueSessionLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.ILlmInvocationLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.IToolInvocationLedgerDao;
+import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryCompactionReadDao;
+import org.wwz.ai.infrastructure.dao.cute.ILtmForkExecutionReadDao;
+import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryConversationReadDao;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -41,6 +47,9 @@ public class ExecutionLedgerReadRepository implements IExecutionLedgerReadReposi
     private final ILlmInvocationLedgerDao llmInvocationLedgerDao;
     private final IToolInvocationLedgerDao toolInvocationLedgerDao;
     private final IArtifactLedgerDao artifactLedgerDao;
+    private final IWorkingMemoryCompactionReadDao workingMemoryCompactionReadDao;
+    private final ILtmForkExecutionReadDao ltmForkExecutionReadDao;
+    private final IWorkingMemoryConversationReadDao workingMemoryConversationReadDao;
 
     @Override
     public DialogueRun queryRunByRequestId(String requestId) {
@@ -198,6 +207,62 @@ public class ExecutionLedgerReadRepository implements IExecutionLedgerReadReposi
     @Override
     public List<ArtifactRecord> queryArtifactsByRunIdsWithSubagentFold(List<Long> runIds) {
         return artifactLedgerDao.queryByRunIdsWithSubagentFold(runIds);
+    }
+
+    @Override
+    public List<WorkingMemoryCompactionEvent> queryCompactionEventsByTriggerRequestIds(
+            List<String> triggerRequestIds) {
+        if (triggerRequestIds == null || triggerRequestIds.isEmpty()) {
+            return List.of();
+        }
+        List<String> ids = triggerRequestIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .limit(MAX_BATCH_RUN_IDS)
+                .toList();
+        return ids.isEmpty()
+                ? List.of()
+                : workingMemoryCompactionReadDao.queryByTriggerRequestIds(ids);
+    }
+
+    @Override
+    public List<LtmForkExecutionEvent> queryMemoryForkEventsByTriggerRequestIds(
+            List<String> triggerRequestIds) {
+        if (triggerRequestIds == null || triggerRequestIds.isEmpty()) {
+            return List.of();
+        }
+        List<String> ids = triggerRequestIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .limit(MAX_BATCH_RUN_IDS)
+                .toList();
+        return ids.isEmpty()
+                ? List.of()
+                : ltmForkExecutionReadDao.queryByTriggerRequestIds(ids);
+    }
+
+    @Override
+    public List<WorkingMemoryConversationRow> queryConversationBySessionId(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return List.of();
+        }
+        return queryConversationBySessionIds(List.of(sessionId));
+    }
+
+    @Override
+    public List<WorkingMemoryConversationRow> queryConversationBySessionIds(
+            List<String> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return List.of();
+        }
+        List<String> ids = sessionIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .limit(MAX_BATCH_RUN_IDS)
+                .toList();
+        return ids.isEmpty()
+                ? List.of()
+                : workingMemoryConversationReadDao.queryBySessionIds(ids);
     }
 
     @Override

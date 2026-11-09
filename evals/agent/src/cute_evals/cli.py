@@ -19,19 +19,32 @@ from .ab_runner import (
     run_experiment,
 )
 from .benchmarks.bird import BirdAdapter
+from .benchmarks.compactbench import CompactBenchAdapter
+from .benchmarks.deepresearch import DeepResearchAdapter
+from .benchmarks.deepresearch.runner import run_deepsearch
 from .benchmarks.gaia import GAIAAdapter
+from .benchmarks.longmemeval import LongMemEvalAdapter
+from .benchmarks.memoryagentbench import MemoryAgentBenchAdapter
+from .benchmarks.marble import MarbleAdapter
+from .benchmarks.rag import RagAdapter, run_mrag
 from .benchmarks.spider2 import Spider2Adapter
 from .benchmarks.tau2 import Tau2Adapter, Tau2UserSimulator
 from .case_loader import load_case_dirs
 from .data_dataset import load_data_dataset_manifest
+from .gate import evaluate_gate
 from .inspect_runner import run_inspect_attempt
+from .judge_benchmarks.agent_reward_bench import AgentRewardBenchAdapter
+from .judge_benchmarks.agent_process_bench import AgentProcessBenchAdapter
+from .judge_benchmarks.client import OpenAICompatibleJudge
+from .judge_benchmarks.trail import TrailAdapter
 from .java_runner import (
     compile_java_fixture_runner,
     export_ledger_traces,
     run_java_cases,
     run_java_conversation,
 )
-from .models import CaseResult, JudgeConfig
+from .models import CaseResult, JudgeConfig, RunTrace
+from .multi_agent_view import project_multi_agent_view
 from .ops import (
     build_matrix_report,
     build_trend_report,
@@ -53,6 +66,7 @@ from .ops_schedule import (
 from .overfit import build_overfit_report, overfit_blocks
 from .rag_dataset import load_rag_dataset_manifest
 from .report import build_baseline, build_report
+from .process_view import project_process_view
 from .runtime import (
     ConversationEntry,
     EnvironmentEvent,
@@ -89,6 +103,10 @@ AB_SUITES = (
     "tool-discovery",
     "session-recall",
     "compaction-recall",
+    "compaction-carry-forward",
+    "memory-isolation",
+    "memory-update",
+    "cache-efficiency",
     "clarify-multiturn",
 )
 
@@ -139,6 +157,7 @@ def _run_native_attempt(
     judge: JudgeConfig | None,
     judge_cache_dir: Path | None,
     timeout_seconds: int,
+    tool_mode: str,
 ) -> list[CaseResult]:
     traces = run_java_cases(
         cases,
@@ -147,6 +166,7 @@ def _run_native_attempt(
         profile=profile,
         build=False,
         timeout_seconds=timeout_seconds,
+        tool_mode=tool_mode,
     )
     return [
         score_case(
@@ -185,6 +205,9 @@ def _dataset_hash(cases) -> str:
             "tools": case.tools,
             "answerContract": case.answer_contract,
             "baselineTrace": case.baseline_trace,
+            "compaction": case.compaction,
+            "userId": case.user_id,
+            "memorySeed": case.memory_seed,
         }
         for case in cases
     ]
@@ -245,6 +268,7 @@ def run_command(args: argparse.Namespace) -> int:
         compile_java_fixture_runner()
 
     timeout_seconds = _case_batch_timeout_seconds(cases, args.timeout)
+    tool_mode = "production" if mode == "benchmark" else "ephemeral"
     results: list[CaseResult] = []
     for attempt in range(1, repeat + 1):
         attempt_relative = f"attempts/{attempt:02d}"
@@ -262,6 +286,7 @@ def run_command(args: argparse.Namespace) -> int:
                 judge_cache_dir=judge_cache_dir,
                 timeout_seconds=timeout_seconds,
                 build=False,
+                tool_mode=tool_mode,
             )
         else:
             attempt_results = _run_native_attempt(
@@ -275,6 +300,7 @@ def run_command(args: argparse.Namespace) -> int:
                 judge=judge,
                 judge_cache_dir=judge_cache_dir,
                 timeout_seconds=timeout_seconds,
+                tool_mode=tool_mode,
             )
         results.extend(attempt_results)
 
@@ -492,6 +518,22 @@ def ops_release_command(args: argparse.Namespace) -> int:
     )
     print(f"record: {output_dir / 'release-record.json'}")
     return 0 if record["decision"] == "ship" else 1
+
+
+def ops_gate_command(args: argparse.Namespace) -> int:
+    output_dir = Path(args.out).resolve()
+    payload = evaluate_gate(
+        [Path(item) for item in args.reports],
+        output_dir,
+        min_pass_at_k=args.min_pass_at_k,
+        require_ship_ab=args.require_ship_ab,
+    )
+    print(
+        f"cute-evals gate: {'pass' if payload['passed'] else 'block'} "
+        f"reports={len(payload['reports'])}"
+    )
+    print(f"report: {output_dir / 'gate-report.md'}")
+    return 0 if payload["passed"] else 1
 
 
 def ops_overfit_command(args: argparse.Namespace) -> int:
@@ -800,7 +842,12 @@ def _report_benchmark(
         output_dir=output_dir,
         environment={
             "engine": f"{adapter.name}-adapter",
-            "javaMode": mode,
+            "javaMode": (
+                mode
+                if mode in {"fixture", "live", "benchmark"}
+                else None
+            ),
+            "runnerMode": mode,
             "repeat": repeat,
             "suite": f"{adapter.name}-{metadata['split']}",
             "datasetHash": metadata["datasetHash"],
@@ -819,6 +866,23 @@ def _report_benchmark(
         f"slo@1={summary['sloPassAt1']:.2%}"
     )
     print(f"score-label: {metadata['scoreLabel']} mode: {mode}")
+    official = metadata.get("officialEvaluation")
+    if isinstance(official, dict):
+        race = official.get("race") or {}
+        fact = official.get("fact") or {}
+        if race or fact:
+            print(
+                "official-evaluation: "
+                f"status={official.get('status')} "
+                f"race-overall={race.get('Overall Score')} "
+                f"fact-valid-rate={fact.get('valid_rate')}"
+            )
+        elif official.get("metric"):
+            print(
+                "official-evaluation: "
+                f"status={official.get('status')} "
+                f"metric={official.get('metric')}"
+            )
     print(f"report: {output_dir / 'report.html'}")
     blocked = summary["failed"] or summary["unstable"]
     if require_official and summary["unverified"]:
@@ -886,6 +950,225 @@ def _run_gaia_benchmark(args: argparse.Namespace) -> int:
         mode=mode,
         repeat=repeat,
         require_official=mode == "live",
+    )
+
+
+def _run_deepresearch_benchmark(args: argparse.Namespace) -> int:
+    if args.profile == "pr":
+        raise ValueError("DeepResearch Bench requires nightly or release")
+    if args.split != "official-full":
+        raise ValueError(
+            "DeepResearch Bench requires --split official-full; "
+            "use --limit for a non-official smoke subset"
+        )
+    adapter = DeepResearchAdapter(
+        Path(args.manifest).resolve()
+        if args.manifest
+        else Path(__file__).resolve().parent
+        / "benchmarks"
+        / "deepresearch"
+        / "manifest.yaml",
+        data_home=Path(args.data_home).resolve() if args.data_home else None,
+        source_dir=Path(args.source_dir).resolve() if args.source_dir else None,
+        target_model=args.target_model,
+        limit=args.limit,
+    )
+    tasks = adapter.tasks("official-full")
+    _, _, output_dir = _benchmark_settings(args)
+    repeat = args.repeat or 1
+    search_engines = [
+        item.strip()
+        for item in (args.search_engines or "").split(",")
+        if item.strip()
+    ]
+    results: list[CaseResult] = []
+    for attempt in range(1, repeat + 1):
+        attempt_relative = f"attempts/{attempt:02d}"
+        attempt_dir = output_dir / attempt_relative
+        attempt_runs = []
+        attempt_results: list[CaseResult] = []
+        for task in tasks:
+            prepared = adapter.prepare(task, attempt_dir / "workspace" / task.id)
+            deepsearch = run_deepsearch(
+                base_url=args.deepsearch_url,
+                query=task.question,
+                task_id=task.id,
+                timeout_seconds=args.deepsearch_timeout,
+                search_engines=search_engines,
+                max_loop=args.deepsearch_max_loop,
+            )
+            deepsearch.save_artifacts(prepared.workspace)
+            trace_relative = (
+                f"{attempt_relative}/tasks/{task.id}/trace.json"
+            )
+            trace_path = output_dir / trace_relative
+            trace_path.parent.mkdir(parents=True, exist_ok=True)
+            trace_payload = deepsearch.trace_payload(trace_path=trace_relative)
+            trace_path.write_text(
+                json.dumps(trace_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            trace = RunTrace.from_dict(trace_payload)
+            run = adapter.collect(
+                prepared.task,
+                trace,
+                trace_relative,
+                prepared=prepared,
+            )
+            attempt_runs.append(run)
+            result = adapter.score(run)
+            result.attempt = attempt
+            attempt_results.append(result)
+
+        submission_path = adapter.write_submission(
+            attempt_runs,
+            attempt_dir / "submission" / f"{adapter.target_model}.jsonl",
+        )
+        all_success = all(
+            run.trace.status == "SUCCESS" and bool(run.trace.final_text.strip())
+            for run in attempt_runs
+        )
+        if args.skip_official_eval or not all_success:
+            adapter.record_official_result(
+                {
+                    "status": "unverified",
+                    "reason": (
+                        "official evaluation skipped"
+                        if args.skip_official_eval
+                        else "one or more DeepSearch tasks failed or returned no report"
+                    ),
+                    "submission": str(submission_path),
+                }
+            )
+        else:
+            openrouter = bool(
+                (
+                    args.judge_base_url
+                    or os.environ.get("OPENROUTER_BASE_URL")
+                    or ""
+                ).rstrip("/").endswith("openrouter.ai/api/v1")
+            )
+            official_result = adapter.evaluate_official(
+                raw_data_path=submission_path,
+                output_dir=attempt_dir / "official",
+                race_model=(
+                    args.judge_model
+                    or ("openai/gpt-5.5" if openrouter else None)
+                ),
+                clean_model=(
+                    args.clean_model
+                    or ("openai/gpt-5.6-luna" if openrouter else None)
+                ),
+                fact_model=(
+                    args.fact_model
+                    or ("openai/gpt-5.4-mini" if openrouter else None)
+                ),
+                base_url=(
+                    args.judge_base_url
+                    or os.environ.get("OPENAI_BASE_URL")
+                    or os.environ.get("OPENROUTER_BASE_URL")
+                    or (
+                        "https://openrouter.ai/api/v1"
+                        if os.environ.get("OPENROUTER_API_KEY")
+                        and not os.environ.get("OPENAI_API_KEY")
+                        else None
+                    )
+                ),
+                api_key=(
+                    args.judge_api_key
+                    or os.environ.get("OPENAI_API_KEY")
+                    or os.environ.get("OPENROUTER_API_KEY")
+                ),
+                jina_api_key=(
+                    args.jina_api_key
+                    or os.environ.get("JINA_API_KEY")
+                ),
+                max_workers=args.official_max_workers,
+            )
+            print(
+                "deepresearch official: "
+                f"status={official_result.get('status')} "
+                f"submission={submission_path}"
+            )
+        adapter.apply_official_results(attempt_results)
+        results.extend(attempt_results)
+
+    return _report_benchmark(
+        adapter=adapter,
+        args=args,
+        results=results,
+        output_dir=output_dir,
+        mode="python-direct",
+        repeat=repeat,
+        require_official=not args.skip_official_eval,
+    )
+
+
+def _run_rag_python_benchmark(args: argparse.Namespace) -> int:
+    if args.profile == "pr":
+        raise ValueError("RAG Python requires nightly or release")
+    if args.split != "internal":
+        raise ValueError("RAG Python requires --split internal")
+    adapter = RagAdapter(
+        Path(args.manifest).resolve()
+        if args.manifest
+        else Path(__file__).resolve().parent
+        / "benchmarks"
+        / "rag"
+        / "manifest.yaml",
+        limit=args.limit,
+    )
+    tasks = adapter.tasks("internal")
+    _, repeat, output_dir = _benchmark_settings(args)
+    judge = _judge_from_args(args)
+    require_judge = bool(getattr(args, "require_judge", False))
+    kb_id = args.mrag_kb_id or os.environ.get("CUTE_EVAL_MRAG_KB_ID", "")
+    results: list[CaseResult] = []
+
+    for attempt in range(1, repeat + 1):
+        attempt_relative = f"attempts/{attempt:02d}"
+        attempt_dir = output_dir / attempt_relative
+        for task in tasks:
+            prepared = adapter.prepare(task, attempt_dir / "workspace" / task.id)
+            mrag = run_mrag(
+                base_url=args.mrag_url,
+                question=task.question,
+                task_id=task.id,
+                kb_id=kb_id,
+                timeout_seconds=args.mrag_timeout,
+            )
+            mrag.save_artifacts(prepared.workspace)
+            trace_relative = f"{attempt_relative}/tasks/{task.id}/trace.json"
+            trace_path = output_dir / trace_relative
+            trace_path.parent.mkdir(parents=True, exist_ok=True)
+            trace_payload = mrag.trace_payload(trace_path=trace_relative)
+            trace_path.write_text(
+                json.dumps(trace_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            trace = RunTrace.from_dict(trace_payload)
+            run = adapter.collect(
+                task,
+                trace,
+                trace_relative,
+                prepared=prepared,
+                retrieval_trace=mrag.retrieval_trace,
+            )
+            result = adapter.score(
+                run,
+                judge=judge,
+                require_judge=require_judge,
+            )
+            result.attempt = attempt
+            results.append(result)
+
+    return _report_benchmark(
+        adapter=adapter,
+        args=args,
+        results=results,
+        output_dir=output_dir,
+        mode="python-direct",
+        repeat=repeat,
     )
 
 
@@ -1053,6 +1336,207 @@ def _run_tau2_benchmark(args: argparse.Namespace) -> int:
     )
 
 
+def _run_longmemeval_benchmark(args: argparse.Namespace) -> int:
+    if args.profile == "pr":
+        raise ValueError("LongMemEval requires nightly or release")
+    judge = _judge_from_args(args)
+    adapter = LongMemEvalAdapter(
+        Path(args.manifest).resolve()
+        if args.manifest
+        else Path(__file__).resolve().parent
+        / "benchmarks"
+        / "longmemeval"
+        / "manifest.yaml",
+        data_home=Path(args.data_home).resolve() if args.data_home else None,
+        data_path=Path(args.data_file).resolve() if args.data_file else None,
+        dataset_file=args.dataset_file,
+        judge=judge,
+    )
+    if not judge.configured or not judge.openai_compatible:
+        raise ValueError(
+            "LongMemEval requires --judge-model, --judge-base-url "
+            "and --judge-api-key"
+        )
+    tasks = adapter.tasks(args.split)
+    mode, repeat, output_dir = _benchmark_settings(args)
+    if mode != "live":
+        raise ValueError("LongMemEval requires live model mode")
+    if not args.skip_build:
+        compile_java_fixture_runner()
+    results: list[CaseResult] = []
+    for attempt in range(1, repeat + 1):
+        attempt_relative = f"attempts/{attempt:02d}"
+        attempt_dir = output_dir / attempt_relative
+        namespaces: dict[str, str] = {}
+        prepared = []
+        cases = []
+        for task in tasks:
+            namespace = f"{args.profile}-{attempt:02d}-{uuid4().hex[:10]}"
+            namespaces[task.id] = namespace
+            item = adapter.prepare(
+                task,
+                attempt_dir / "workspace" / task.id,
+            )
+            prepared.append(item)
+            cases.append(
+                adapter.case_for_task(task, namespace=namespace)
+            )
+        traces = run_java_cases(
+            cases,
+            attempt_dir,
+            mode="benchmark",
+            profile=args.profile,
+            build=False,
+            timeout_seconds=_case_batch_timeout_seconds(cases, args.timeout),
+            runner_class="org.wwz.ai.test.domain.EvalBenchmarkLiveRunnerCli",
+            workspace_roots={item.task.id: item.workspace for item in prepared},
+            tool_mode="production",
+        )
+        for item in prepared:
+            trace = traces.get(item.task.id)
+            if trace is None:
+                raise ValueError(
+                    f"Java runner returned no trace for {item.task.id}"
+                )
+            run = adapter.collect(
+                item.task,
+                trace,
+                f"{attempt_relative}/traces/{item.task.id}/trace.json",
+                prepared=item,
+            )
+            run.metadata["namespace"] = namespaces[item.task.id]
+            result = adapter.score(run)
+            result.attempt = attempt
+            results.append(result)
+    return _report_benchmark(
+        adapter=adapter,
+        args=args,
+        results=results,
+        output_dir=output_dir,
+        mode=mode,
+        repeat=repeat,
+        require_official=True,
+    )
+
+
+def _run_memoryagentbench_benchmark(args: argparse.Namespace) -> int:
+    if args.profile == "pr":
+        raise ValueError("MemoryAgentBench requires nightly or release")
+    judge = _judge_from_args(args)
+    if (
+        args.split == "official-full"
+        and not judge.configured
+    ):
+        raise ValueError(
+            "MemoryAgentBench official-full requires --judge-model"
+        )
+    if (
+        args.split == "official-full"
+        and not judge.openai_compatible
+    ):
+        raise ValueError(
+            "MemoryAgentBench official-full requires --judge-base-url "
+            "and --judge-api-key"
+        )
+    adapter = MemoryAgentBenchAdapter(
+        Path(args.manifest).resolve()
+        if args.manifest
+        else Path(__file__).resolve().parent
+        / "benchmarks"
+        / "memoryagentbench"
+        / "manifest.yaml",
+        data_home=Path(args.data_home).resolve() if args.data_home else None,
+        source_dir=Path(args.source_dir).resolve() if args.source_dir else None,
+        judge=judge,
+    )
+    tasks = adapter.tasks(args.split)
+    mode, repeat, output_dir = _benchmark_settings(args)
+    if mode != "live":
+        raise ValueError("MemoryAgentBench requires live model mode")
+    if not args.skip_build:
+        compile_java_fixture_runner()
+
+    results: list[CaseResult] = []
+    for attempt in range(1, repeat + 1):
+        attempt_relative = f"attempts/{attempt:02d}"
+        attempt_dir = output_dir / attempt_relative
+        for task in tasks:
+            namespace = f"{args.profile}-{attempt:02d}-{uuid4().hex[:10]}"
+            prepared = adapter.prepare(
+                task,
+                attempt_dir / "workspace" / task.id,
+            )
+            case = adapter.case_for_task(
+                task,
+                namespace=namespace,
+                prepared=prepared,
+            )
+            queries = [str(turn["query"]) for turn in task.turns]
+            timeout_seconds = max(
+                args.timeout,
+                (
+                    (case.budgets.max_wall_ms or 0) * len(queries)
+                    + 120_000
+                )
+                // 1000,
+            )
+            conversation_dir = (
+                attempt_dir / "traces" / task.id
+            )
+            conversation = run_java_conversation(
+                case,
+                queries,
+                conversation_dir,
+                mode="live",
+                profile=args.profile,
+                tool_mode="production",
+                workspace_root=prepared.workspace,
+                max_turns=len(queries),
+                independent_turns=True,
+                build=False,
+                timeout_seconds=timeout_seconds,
+            )
+            trace = (
+                conversation.traces[-1]
+                if conversation.traces
+                else RunTrace.from_dict(
+                    {
+                        "run": {
+                            "caseId": task.id,
+                            "requestId": task.id,
+                            "status": "FAILED",
+                            "finalSummaryText": "",
+                            "totalTokens": None,
+                            "durationMs": None,
+                        },
+                        "llmInvocations": [],
+                        "toolInvocations": [],
+                        "artifacts": [],
+                    }
+                )
+            )
+            run = adapter.collect(
+                task,
+                trace,
+                f"{attempt_relative}/traces/{task.id}/result.json",
+                prepared=prepared,
+                turn_results=conversation.turns,
+                traces=conversation.traces,
+            )
+            result = adapter.score(run)
+            result.attempt = attempt
+            results.append(result)
+    return _report_benchmark(
+        adapter=adapter,
+        args=args,
+        results=results,
+        output_dir=output_dir,
+        mode=mode,
+        repeat=repeat,
+        require_official=True,
+    )
+
+
 def _run_sqlite_benchmark(args: argparse.Namespace, adapter) -> int:
     if args.profile == "pr":
         raise ValueError(
@@ -1146,13 +1630,493 @@ def _run_spider2_benchmark(args: argparse.Namespace) -> int:
 def benchmark_command(args: argparse.Namespace) -> int:
     if args.name == "gaia":
         return _run_gaia_benchmark(args)
+    if args.name == "deepresearch":
+        return _run_deepresearch_benchmark(args)
+    if args.name == "rag-python":
+        return _run_rag_python_benchmark(args)
     if args.name == "tau2":
         return _run_tau2_benchmark(args)
+    if args.name == "longmemeval":
+        return _run_longmemeval_benchmark(args)
+    if args.name == "memoryagentbench":
+        return _run_memoryagentbench_benchmark(args)
     if args.name == "bird":
         return _run_bird_benchmark(args)
     if args.name == "spider2":
         return _run_spider2_benchmark(args)
     raise ValueError(f"unsupported benchmark: {args.name}")
+
+
+def process_view_command(args: argparse.Namespace) -> int:
+    trace_path = Path(args.trace).resolve()
+    payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    view = project_process_view(payload)
+    output_path = Path(args.out).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(view.to_dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(
+        f"process view: steps={len(view.steps)} "
+        f"messages={len(view.messages)}"
+    )
+    print(f"output: {output_path}")
+    return 0
+
+
+def multi_agent_view_command(args: argparse.Namespace) -> int:
+    trace_path = Path(args.trace).resolve()
+    payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    view = project_multi_agent_view(payload)
+    output_path = Path(args.out).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(view.to_dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(
+        f"multi-agent view: agents={len(view.agents)} "
+        f"handoffs={len(view.handoffs)} tools={view.metrics['toolCount']}"
+    )
+    print(f"output: {output_path}")
+    return 0
+
+
+def multiagent_benchmark_command(args: argparse.Namespace) -> int:
+    if args.name != "multiagentbench-marble":
+        raise ValueError(f"unsupported multi-agent benchmark: {args.name}")
+    source_dir = (
+        Path(args.source_dir).resolve()
+        if args.source_dir
+        else (
+            Path(os.environ["MARBLE_SOURCE"]).resolve()
+            if os.environ.get("MARBLE_SOURCE")
+            else None
+        )
+    )
+    if source_dir is None:
+        raise ValueError("MARBLE requires --source-dir or MARBLE_SOURCE")
+    adapter = MarbleAdapter(
+        source_dir=source_dir,
+        manifest_path=(
+            Path(args.manifest).resolve()
+            if args.manifest
+            else Path(__file__).resolve().parent
+            / "benchmarks"
+            / "marble"
+            / "manifest.yaml"
+        ),
+    )
+    assets = adapter.verify_assets()
+    tasks = adapter.tasks(args.split)
+    output_dir = Path(args.out).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if args.dry_run:
+        report = {
+            "schemaVersion": "1.0",
+            "subject": {"type": "multi-agent-system", "agent": AGENT_ID},
+            "benchmark": {
+                **adapter.report_metadata(),
+                "datasetHash": adapter.dataset_hash(assets),
+            },
+            "scoreNamespace": adapter.score_namespace,
+            "scoreLabel": adapter.score_label,
+            "tasks": [
+                {
+                    "taskId": task.id,
+                    "domain": task.domain,
+                    "officialTaskId": task.task_id,
+                    "scenario": task.scenario,
+                    "agentCount": task.agent_count,
+                }
+                for task in tasks
+            ],
+            "metrics": {
+                "split": args.split,
+                "taskCount": len(tasks),
+                "domainCounts": {
+                    domain: sum(1 for task in tasks if task.domain == domain)
+                    for domain in sorted({task.domain for task in tasks})
+                },
+            },
+            "environment": {"dryRun": True, "assets": assets},
+        }
+        report_path = output_dir / "dry-run.json"
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(
+            f"MARBLE dry-run: tasks={len(tasks)} "
+            f"license={adapter.license_status}"
+        )
+        print(f"report: {report_path}")
+        return 0
+    adapter.assert_run_allowed()
+    raise RuntimeError(
+        "MARBLE official environment adapter is not implemented; "
+        "no simulation was started"
+    )
+
+
+def judge_benchmark_command(args: argparse.Namespace) -> int:
+    if args.name == "trail":
+        return _trail_judge_benchmark_command(args)
+    if args.name == "agent-reward-bench":
+        return _agent_reward_bench_command(args)
+    if args.name != "agent-process-bench":
+        raise ValueError(f"unsupported judge benchmark: {args.name}")
+    source_dir = (
+        Path(args.source_dir).resolve()
+        if args.source_dir
+        else (
+            Path(os.environ["AGENT_PROCESS_BENCH_SOURCE"]).resolve()
+            if os.environ.get("AGENT_PROCESS_BENCH_SOURCE")
+            else None
+        )
+    )
+    if source_dir is None:
+        raise ValueError(
+            "AgentProcessBench requires --source-dir or "
+            "AGENT_PROCESS_BENCH_SOURCE"
+        )
+    adapter = AgentProcessBenchAdapter(
+        source_dir=source_dir,
+        manifest_path=(
+            Path(args.manifest).resolve()
+            if args.manifest
+            else Path(__file__).resolve().parent
+            / "judge_benchmarks"
+            / "agent_process_bench"
+            / "manifest.yaml"
+        ),
+    )
+    assets = adapter.verify_assets()
+    tasks = adapter.tasks(args.split)
+    output_dir = Path(args.out).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if args.dry_run:
+        report = {
+            "schemaVersion": "1.0",
+            "subject": {"type": "judge", "model": args.judge_model},
+            "benchmark": {
+                **adapter.report_metadata(),
+                "datasetHash": adapter.dataset_hash(assets),
+            },
+            "scoreNamespace": adapter.score_namespace,
+            "scoreLabel": adapter.score_label,
+            "tasks": [
+                {
+                    "taskId": task.id,
+                    "category": task.category,
+                    "assistantSteps": len(task.assistant_message_indices),
+                }
+                for task in tasks
+            ],
+            "metrics": {
+                "split": args.split,
+                "taskCount": len(tasks),
+                "datasetCounts": {
+                    dataset: sum(
+                        1 for task in tasks if task.category == dataset
+                    )
+                    for dataset in sorted(
+                        {task.category for task in tasks}
+                    )
+                },
+            },
+            "environment": {"dryRun": True, "assets": assets},
+        }
+        report_path = output_dir / "dry-run.json"
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(
+            f"judge benchmark dry-run: tasks={len(tasks)} "
+            f"license={adapter.license_status}"
+        )
+        print(f"report: {report_path}")
+        return 0
+
+    if not (args.judge_model and args.judge_base_url and args.judge_api_key):
+        raise ValueError(
+            "judge benchmark requires --judge-model, --judge-base-url "
+            "and --judge-api-key"
+        )
+    report = adapter.run(
+        OpenAICompatibleJudge(
+            model=args.judge_model,
+            base_url=args.judge_base_url,
+            api_key=args.judge_api_key,
+        ),
+        split=args.split,
+        output_dir=output_dir,
+        concurrency=args.concurrency,
+        timeout_seconds=args.timeout,
+    )
+    average = report["metrics"]["datasets"]["AVG"]
+    print(
+        f"judge benchmark: tasks={len(report['tasks'])} "
+        f"step_micro_acc={average['stepMicroAccuracy']} "
+        f"firsterroracc={average['firstErrorAccuracy']}"
+    )
+    print(f"report: {output_dir / 'report.json'}")
+    return 0
+
+
+def _agent_reward_bench_command(args: argparse.Namespace) -> int:
+    source_dir = (
+        Path(args.source_dir).resolve()
+        if args.source_dir
+        else (
+            Path(os.environ["AGENT_REWARD_BENCH_SOURCE"]).resolve()
+            if os.environ.get("AGENT_REWARD_BENCH_SOURCE")
+            else None
+        )
+    )
+    if source_dir is None:
+        raise ValueError(
+            "AgentRewardBench requires --source-dir or "
+            "AGENT_REWARD_BENCH_SOURCE"
+        )
+    trajectory_dir = (
+        Path(args.trajectory_dir).resolve()
+        if args.trajectory_dir
+        else (
+            Path(os.environ["AGENT_REWARD_BENCH_TRAJECTORIES"]).resolve()
+            if os.environ.get("AGENT_REWARD_BENCH_TRAJECTORIES")
+            else None
+        )
+    )
+    adapter = AgentRewardBenchAdapter(
+        source_dir=source_dir,
+        manifest_path=(
+            Path(args.manifest).resolve()
+            if args.manifest
+            else Path(__file__).resolve().parent
+            / "judge_benchmarks"
+            / "agent_reward_bench"
+            / "manifest.yaml"
+        ),
+        trajectory_dir=trajectory_dir,
+    )
+    assets = adapter.verify_assets()
+    tasks = adapter.tasks(args.split)
+    output_dir = Path(args.out).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if args.dry_run:
+        report = {
+            "schemaVersion": "1.0",
+            "subject": {"type": "judge", "model": args.judge_model},
+            "benchmark": {
+                **adapter.report_metadata(),
+                "datasetHash": adapter.dataset_hash(assets),
+            },
+            "scoreNamespace": adapter.score_namespace,
+            "scoreLabel": adapter.score_label,
+            "tasks": [
+                {
+                    "taskId": task.id,
+                    "benchmark": task.benchmark,
+                    "modelName": task.model_name,
+                    "task": task.task_id,
+                    "annotatorCount": task.annotator_count,
+                    "labels": task.labels,
+                }
+                for task in tasks
+            ],
+            "metrics": {
+                "split": args.split,
+                "taskCount": len(tasks),
+                "annotationRows": sum(
+                    task.annotator_count for task in tasks
+                ),
+                "benchmarkCounts": {
+                    benchmark: sum(
+                        1 for task in tasks if task.benchmark == benchmark
+                    )
+                    for benchmark in sorted(
+                        {task.benchmark for task in tasks}
+                    )
+                },
+            },
+            "environment": {
+                "dryRun": True,
+                "assets": assets,
+                "trajectoryDir": str(trajectory_dir)
+                if trajectory_dir
+                else None,
+                "judgeVariant": args.judge_variant,
+            },
+        }
+        report_path = output_dir / "dry-run.json"
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(
+            f"AgentRewardBench dry-run: tasks={len(tasks)} "
+            f"license={adapter.license_status}"
+        )
+        print(f"report: {report_path}")
+        return 0
+
+    if not (args.judge_model and args.judge_base_url and args.judge_api_key):
+        raise ValueError(
+            "AgentRewardBench requires --judge-model, --judge-base-url "
+            "and --judge-api-key"
+        )
+    if trajectory_dir is None:
+        raise ValueError(
+            "AgentRewardBench real run requires --trajectory-dir or "
+            "AGENT_REWARD_BENCH_TRAJECTORIES"
+        )
+    report = adapter.run(
+        OpenAICompatibleJudge(
+            model=args.judge_model,
+            base_url=args.judge_base_url,
+            api_key=args.judge_api_key,
+            max_tokens=1024,
+        ),
+        split=args.split,
+        output_dir=output_dir,
+        judge_variant=args.judge_variant,
+        concurrency=args.concurrency,
+        timeout_seconds=args.timeout,
+    )
+    print(
+        f"AgentRewardBench: tasks={len(report['tasks'])} "
+        f"scoreLabel={report['scoreLabel']}"
+    )
+    print(f"report: {output_dir / 'report.json'}")
+    return 0
+
+
+def _trail_judge_benchmark_command(args: argparse.Namespace) -> int:
+    source_dir = (
+        Path(args.source_dir).resolve()
+        if args.source_dir
+        else (
+            Path(os.environ["TRAIL_SOURCE"]).resolve()
+            if os.environ.get("TRAIL_SOURCE")
+            else None
+        )
+    )
+    if source_dir is None:
+        raise ValueError("TRAIL requires --source-dir or TRAIL_SOURCE")
+    adapter = TrailAdapter(
+        source_dir=source_dir,
+        manifest_path=(
+            Path(args.manifest).resolve()
+            if args.manifest
+            else Path(__file__).resolve().parent
+            / "judge_benchmarks"
+            / "trail"
+            / "manifest.yaml"
+        ),
+    )
+    assets = adapter.verify_assets()
+    tasks = adapter.tasks(args.split)
+    output_dir = Path(args.out).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if args.dry_run:
+        report = {
+            "schemaVersion": "1.0",
+            "subject": {"type": "judge", "model": args.judge_model},
+            "benchmark": {
+                **adapter.report_metadata(),
+                "datasetHash": adapter.dataset_hash(assets),
+            },
+            "scoreNamespace": adapter.score_namespace,
+            "scoreLabel": adapter.score_label,
+            "tasks": [
+                {
+                    "taskId": task.id,
+                    "domain": task.domain,
+                }
+                for task in tasks
+            ],
+            "metrics": {
+                "split": args.split,
+                "taskCount": len(tasks),
+                "domainCounts": {
+                    domain: sum(1 for task in tasks if task.domain == domain)
+                    for domain in sorted({task.domain for task in tasks})
+                },
+            },
+            "environment": {"dryRun": True, "assets": assets},
+        }
+        report_path = output_dir / "dry-run.json"
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(
+            f"TRAIL dry-run: tasks={len(tasks)} "
+            f"license={adapter.license_status}"
+        )
+        print(f"report: {report_path}")
+        return 0
+
+    if not (args.judge_model and args.judge_base_url and args.judge_api_key):
+        raise ValueError(
+            "TRAIL requires --judge-model, --judge-base-url and --judge-api-key"
+        )
+    report = adapter.run(
+        OpenAICompatibleJudge(
+            model=args.judge_model,
+            base_url=args.judge_base_url,
+            api_key=args.judge_api_key,
+        ),
+        split=args.split,
+        output_dir=output_dir,
+        concurrency=args.concurrency,
+    )
+    print(
+        f"TRAIL: tasks={len(report['tasks'])} "
+        f"domains={len(report['metrics']['domains'])}"
+    )
+    print(f"report: {output_dir / 'report.json'}")
+    return 0
+
+
+def compactbench_command(args: argparse.Namespace) -> int:
+    adapter = CompactBenchAdapter(
+        Path(args.manifest).resolve() if args.manifest else Path(__file__).resolve().parent
+        / "benchmarks"
+        / "compactbench"
+        / "manifest.yaml"
+    )
+    output_path = Path(args.out).resolve()
+    traces_path = Path(args.traces).resolve() if args.traces else None
+    source = (
+        Path(args.source).resolve()
+        if args.source
+        else (
+            Path(os.environ["COMPACTBENCH_SOURCE"]).resolve()
+            if os.environ.get("COMPACTBENCH_SOURCE")
+            else None
+        )
+    )
+    result = adapter.run(
+        source=source,
+        suite=args.suite,
+        output_path=output_path,
+        traces_path=traces_path,
+        budget=args.budget,
+        cases=args.cases,
+        drift_cycles=args.drift_cycles,
+        controls=args.controls,
+        reader_provider=args.reader_provider,
+        reader_model=args.reader_model,
+    )
+    print(f"compactbench exit={result.returncode}")
+    print(f"results: {output_path}")
+    if traces_path is not None:
+        print(f"traces: {traces_path}")
+    return result.returncode
 
 
 def ab_run_command(args: argparse.Namespace) -> int:
@@ -1221,7 +2185,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--skip-build", action="store_true")
     run.add_argument(
         "--java-mode",
-        choices=["auto", "fixture", "live"],
+        choices=["auto", "fixture", "live", "benchmark", "compaction"],
         default="auto",
         help="fixture=deterministic model script; live=real configured model",
     )
@@ -1332,18 +2296,94 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--spring-profile", default="eval")
     export.set_defaults(func=ledger_export_command)
 
+    process_view = subparsers.add_parser(
+        "process-view",
+        help="project a ledger trace into the neutral step-oriented view",
+    )
+    process_view.add_argument("--trace", required=True)
+    process_view.add_argument("--out", required=True)
+    process_view.set_defaults(func=process_view_command)
+
+    multi_agent_view = subparsers.add_parser(
+        "multi-agent-view",
+        help="project a ledger trace into a main/sub-agent ownership view",
+    )
+    multi_agent_view.add_argument("--trace", required=True)
+    multi_agent_view.add_argument("--out", required=True)
+    multi_agent_view.set_defaults(func=multi_agent_view_command)
+
+    multiagent_benchmark = subparsers.add_parser(
+        "multiagent-benchmark",
+        help="inspect a pinned multi-agent benchmark",
+    )
+    multiagent_benchmark.add_argument(
+        "--name",
+        choices=["multiagentbench-marble"],
+        default="multiagentbench-marble",
+    )
+    multiagent_benchmark.add_argument(
+        "--split",
+        choices=["smoke", "official-subset", "official-full"],
+        default="smoke",
+    )
+    multiagent_benchmark.add_argument("--source-dir")
+    multiagent_benchmark.add_argument("--manifest")
+    multiagent_benchmark.add_argument("--out", required=True)
+    multiagent_benchmark.add_argument("--dry-run", action="store_true")
+    multiagent_benchmark.set_defaults(func=multiagent_benchmark_command)
+
+    judge_benchmark = subparsers.add_parser(
+        "judge-benchmark",
+        help="run a pinned benchmark that evaluates a judge model",
+    )
+    judge_benchmark.add_argument(
+        "--name",
+        choices=["agent-process-bench", "agent-reward-bench", "trail"],
+        required=True,
+    )
+    judge_benchmark.add_argument(
+        "--split",
+        choices=["smoke", "dev", "test", "official-subset", "official-full"],
+        default="smoke",
+    )
+    judge_benchmark.add_argument("--source-dir")
+    judge_benchmark.add_argument("--trajectory-dir")
+    judge_benchmark.add_argument("--manifest")
+    judge_benchmark.add_argument("--out", required=True)
+    judge_benchmark.add_argument("--judge-model")
+    judge_benchmark.add_argument("--judge-base-url")
+    judge_benchmark.add_argument("--judge-api-key")
+    judge_benchmark.add_argument("--concurrency", type=int, default=1)
+    judge_benchmark.add_argument("--timeout", type=int, default=300)
+    judge_benchmark.add_argument(
+        "--judge-variant",
+        choices=["axtree", "screen", "both", "none"],
+        default="axtree",
+    )
+    judge_benchmark.add_argument("--dry-run", action="store_true")
+    judge_benchmark.set_defaults(func=judge_benchmark_command)
+
     benchmark = subparsers.add_parser(
         "benchmark",
         help="run a pinned public benchmark through its official evaluator",
     )
     benchmark.add_argument(
         "--name",
-        choices=["bird", "gaia", "spider2", "tau2"],
+        choices=[
+            "bird",
+            "deepresearch",
+            "gaia",
+            "longmemeval",
+            "memoryagentbench",
+            "rag-python",
+            "spider2",
+            "tau2",
+        ],
         default="gaia",
     )
     benchmark.add_argument(
         "--split",
-        choices=["official-subset", "official-full"],
+        choices=["official-subset", "official-full", "internal"],
         default="official-subset",
     )
     benchmark.add_argument("--profile", choices=["pr", "nightly", "release"], default="pr")
@@ -1357,11 +2397,72 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--out")
     benchmark.add_argument("--manifest")
     benchmark.add_argument("--data-home")
+    benchmark.add_argument(
+        "--data-file",
+        help="explicit official LongMemEval JSON file",
+    )
+    benchmark.add_argument(
+        "--dataset-file",
+        default="longmemeval_oracle.json",
+        help="pinned LongMemEval JSON file name",
+    )
+    benchmark.add_argument("--judge-model")
+    benchmark.add_argument("--judge-base-url")
+    benchmark.add_argument("--judge-api-key")
+    benchmark.add_argument("--clean-model")
+    benchmark.add_argument("--fact-model")
+    benchmark.add_argument("--jina-api-key")
+    benchmark.add_argument("--target-model", default="cute-agent")
+    benchmark.add_argument(
+        "--deepsearch-url",
+        default="http://127.0.0.1:1601",
+    )
+    benchmark.add_argument("--deepsearch-timeout", type=int, default=1800)
+    benchmark.add_argument("--deepsearch-max-loop", type=int, default=1)
+    benchmark.add_argument(
+        "--mrag-url",
+        default="http://127.0.0.1:1601",
+    )
+    benchmark.add_argument("--mrag-timeout", type=int, default=600)
+    benchmark.add_argument("--mrag-kb-id")
+    benchmark.add_argument(
+        "--require-judge",
+        action="store_true",
+        help="treat hard-gated judge unverified results as a CI failure",
+    )
+    benchmark.add_argument(
+        "--search-engines",
+        help="comma-separated DeepSearch engines; empty uses the Python service default",
+    )
+    benchmark.add_argument("--source-dir")
+    benchmark.add_argument("--limit", type=int)
+    benchmark.add_argument("--official-max-workers", type=int, default=10)
+    benchmark.add_argument("--skip-official-eval", action="store_true")
     benchmark.add_argument("--skip-build", action="store_true")
     benchmark.add_argument("--user-simulator-model")
     benchmark.add_argument("--user-simulator-base-url")
     benchmark.add_argument("--user-simulator-api-key")
     benchmark.set_defaults(func=benchmark_command)
+
+    compactbench = subparsers.add_parser(
+        "compactbench",
+        help="run CompactBench's official compactor harness",
+    )
+    compactbench.add_argument("--suite", default="starter")
+    compactbench.add_argument("--out", required=True)
+    compactbench.add_argument("--traces")
+    compactbench.add_argument("--manifest")
+    compactbench.add_argument(
+        "--source",
+        help="CompactBench 0.3 source snapshot (or COMPACTBENCH_SOURCE)",
+    )
+    compactbench.add_argument("--budget", type=int, default=2048)
+    compactbench.add_argument("--cases", type=int)
+    compactbench.add_argument("--drift-cycles", type=int)
+    compactbench.add_argument("--controls", action="store_true")
+    compactbench.add_argument("--reader-provider")
+    compactbench.add_argument("--reader-model")
+    compactbench.set_defaults(func=compactbench_command)
 
     ops = subparsers.add_parser(
         "ops",
@@ -1413,6 +2514,16 @@ def build_parser() -> argparse.ArgumentParser:
     ops_release.add_argument("--series")
     ops_release.add_argument("--variant")
     ops_release.set_defaults(func=ops_release_command)
+
+    ops_gate = ops_sub.add_parser(
+        "gate",
+        help="evaluate multiple eval and A/B reports as one CI gate",
+    )
+    ops_gate.add_argument("--reports", nargs="+", required=True)
+    ops_gate.add_argument("--out", required=True)
+    ops_gate.add_argument("--min-pass-at-k", type=float, default=0.0)
+    ops_gate.add_argument("--require-ship-ab", action="store_true")
+    ops_gate.set_defaults(func=ops_gate_command)
 
     ops_overfit = ops_sub.add_parser(
         "overfit",

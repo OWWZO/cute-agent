@@ -17,6 +17,11 @@ spring:
         max-lifetime: 600000
         connection-timeout: 10000
 
+llm:
+  default:
+    # 评测固定使用确定性采样；重复运行只衡量系统稳定性，不混入温度随机性。
+    temperature: 0.0
+
 cute:
   file-artifact:
     local-file-mode: register

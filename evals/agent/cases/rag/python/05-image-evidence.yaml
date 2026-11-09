@@ -1,0 +1,19 @@
+id: rag-python.image-evidence
+suite: rag-python
+version: 1
+hardGate: true
+judgeTask: "根据架构图回答数据库写入路径，并引用 architecture.png 的图片证据。"
+metadata:
+  source: project-owned
+  taskType: rag
+  failureMode: image-evidence-miss
+input:
+  message: "架构图里数据库写入路径经过哪个组件？请回答并给出图片引用。"
+expected:
+  finalContains: ["write-ahead log", "异步刷入主库"]
+  finalNotContains: ["没有图片"]
+  requiredCitations: ["[architecture.png#img2]"]
+budgets:
+  maxTotalTokens: 2200
+  maxWallMs: 120000
+script: []

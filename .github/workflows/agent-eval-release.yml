@@ -1,0 +1,183 @@
+name: agent-eval-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type SHIP to run the release evaluation gate
+        required: true
+        type: string
+      longmemeval_split:
+        description: LongMemEval release split
+        type: choice
+        options:
+          - official-full
+          - official-subset
+        default: official-full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-eval-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.inputs.confirmation == 'SHIP'
+    runs-on: ubuntu-latest
+    timeout-minutes: 720
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: eval
+          MYSQL_DATABASE: ai-agent-eval
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -peval"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    env:
+      EVAL_DATA_HOME: ${{ runner.temp }}/cute-evals-data
+      CUTE_EVAL_REPO_ROOT: ${{ github.workspace }}
+      CUTE_EVAL_DB_URL: jdbc:mysql://127.0.0.1:3306/ai-agent-eval?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      CUTE_EVAL_DB_USER: root
+      CUTE_EVAL_DB_PASSWORD: eval
+      LLM_DEFAULT_MODEL: ${{ vars.CUTE_EVAL_LLM_MODEL }}
+      LLM_DEFAULT_BASE_URL: ${{ vars.CUTE_EVAL_LLM_BASE_URL }}
+      LLM_DEFAULT_APIKEY: ${{ secrets.CUTE_EVAL_LLM_API_KEY }}
+      CUTE_EVAL_JUDGE_MODEL: ${{ vars.CUTE_EVAL_JUDGE_MODEL }}
+      CUTE_EVAL_JUDGE_BASE_URL: ${{ vars.CUTE_EVAL_JUDGE_BASE_URL }}
+      CUTE_EVAL_JUDGE_API_KEY: ${{ secrets.CUTE_EVAL_JUDGE_API_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
+        with:
+          enable-cache: true
+
+      - name: Validate release evaluation configuration
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "SHIP" ]; then
+            echo "release confirmation must be SHIP" >&2
+            exit 1
+          fi
+          for name in LLM_DEFAULT_MODEL LLM_DEFAULT_BASE_URL LLM_DEFAULT_APIKEY CUTE_EVAL_JUDGE_MODEL CUTE_EVAL_JUDGE_BASE_URL CUTE_EVAL_JUDGE_API_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "missing required release setting: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Initialize release evaluation database
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+          mysql -h127.0.0.1 -uroot -peval ai-agent-eval < Cute-agent-app/src/main/resources/db/schema.sql
+
+      - name: Install evaluation dependencies
+        working-directory: evals/agent
+        run: uv sync --frozen --extra dev --extra frameworks --extra phase3 --extra memoryagentbench
+
+      - name: Run release contract tests
+        run: >-
+          mvn -pl Cute-agent-app -am test
+          -DskipTests=false -Dskip.tests=false
+          -Dtest=EvalMemorySeedCliTest,EvalBenchmarkBudgetTest,ExecutionLedgerQueryServiceTest,EvalTraceExportCliTest,EvalFixtureRunnerCliTest
+          -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Run release scorer tests
+        working-directory: evals/agent
+        run: uv run pytest
+
+      - name: Run release LongMemEval gate
+        continue-on-error: true
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals benchmark
+          --name longmemeval
+          --split "${{ github.event.inputs.longmemeval_split }}"
+          --profile release
+          --repeat 3
+          --out .eval-runs/longmemeval-release
+          --judge-model "$CUTE_EVAL_JUDGE_MODEL"
+          --judge-base-url "$CUTE_EVAL_JUDGE_BASE_URL"
+          --judge-api-key "$CUTE_EVAL_JUDGE_API_KEY"
+
+      - name: Run release MemoryAgentBench subset
+        continue-on-error: true
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals benchmark
+          --name memoryagentbench
+          --split official-subset
+          --profile release
+          --repeat 3
+          --out .eval-runs/memoryagentbench-release
+
+      - name: Run release memory suites
+        continue-on-error: true
+        working-directory: evals/agent
+        run: |
+          uv run cute-evals run --profile release --suite memory-isolation --java-mode benchmark --repeat 3 --out .eval-runs/memory-isolation-release --skip-build
+          uv run cute-evals run --profile release --suite memory-update --java-mode benchmark --repeat 3 --out .eval-runs/memory-update-release --skip-build
+
+      - name: Run release cache A/B gates
+        continue-on-error: true
+        working-directory: evals/agent
+        run: |
+          uv run cute-evals ab run --experiment experiments/cache-efficiency-schema-ab.yaml --out .eval-runs/cache-schema-release
+          uv run cute-evals ab run --experiment experiments/cache-compaction-ab.yaml --out .eval-runs/cache-compaction-release
+
+      - name: Enforce release evaluation gate
+        if: always()
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals ops gate
+          --reports
+          .eval-runs/longmemeval-release/report.json
+          .eval-runs/memoryagentbench-release/report.json
+          .eval-runs/memory-isolation-release/report.json
+          .eval-runs/memory-update-release/report.json
+          .eval-runs/cache-schema-release/report.json
+          .eval-runs/cache-compaction-release/report.json
+          --out .eval-runs/gate
+          --min-pass-at-k 1.0
+
+      - name: Record release decision
+        if: always()
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals ops release
+          --report .eval-runs/longmemeval-release/report.json
+          --out .eval-runs/release
+          --version "${{ github.ref_name }}"
+          --commit "${{ github.sha }}"
+          --model "$LLM_DEFAULT_MODEL"
+          --min-pass-at-k 1.0
+
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cute-agent-eval-release
+          path: |
+            evals/agent/.eval-runs/longmemeval-release
+            evals/agent/.eval-runs/memoryagentbench-release
+            evals/agent/.eval-runs/memory-isolation-release
+            evals/agent/.eval-runs/memory-update-release
+            evals/agent/.eval-runs/cache-schema-release
+            evals/agent/.eval-runs/cache-compaction-release
+            evals/agent/.eval-runs/release
+            evals/agent/.eval-runs/gate
+          if-no-files-found: warn

@@ -432,6 +432,11 @@ class MultimodalRAGRequest(BaseModel):
         default_factory=list, description="知识库 ID 列表，非空时优先于 kb_id"
     )
     session_id: Optional[str] = Field(default="", description="MRAG 会话 ID")
+    include_retrieval_trace: bool = Field(
+        default=False,
+        alias="includeRetrievalTrace",
+        description="评测模式：在 SSE 中附带完整检索 trace，默认关闭",
+    )
 
     @field_validator("question")
     @classmethod

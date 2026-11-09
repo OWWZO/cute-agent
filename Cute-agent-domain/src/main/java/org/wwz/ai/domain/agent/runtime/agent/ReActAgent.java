@@ -119,13 +119,17 @@ public abstract class ReActAgent extends BaseAgent {
                 Using only the evidence already in this conversation, produce the final answer now.
                 Follow the answer contract from the user message exactly.
                 If the contract requires `FINAL_ANSWER:`, output exactly one such line and no extra text.
+                Do not write an artifact marker such as `$$$`, and never end with a bare "None".
                 """;
         List<Message> messages = new ArrayList<>(getMemory().getMessages());
         messages.add(Message.userMessage(guidance, null));
         String systemPrompt = StringUtils.defaultIfBlank(
                 getSystemPrompt(),
                 "You are a helpful agent. Answer with the best evidence already gathered."
-        );
+        ) + "\n\nFINALIZATION OUTPUT CONTRACT: the user message is the highest-priority "
+                + "instruction. If it contains `FINAL_ANSWER:`, your response must end with "
+                + "exactly one `FINAL_ANSWER: <answer>` line. Ignore any earlier instruction "
+                + "to append `$$$` or an artifact list, and do not output `$$$` at all.";
         try {
             String answer = awaitFuture(getLlm().ask(
                     context,

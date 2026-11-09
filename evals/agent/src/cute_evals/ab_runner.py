@@ -103,7 +103,10 @@ def _copy_work_artifacts(
 def _default_executor(
     spec: ExperimentSpec,
     output_dir: Path,
+    roots: dict[str, Path],
 ) -> CellExecutor:
+    isolated_repo = len({root.resolve() for root in roots.values()}) > 1
+
     def execute(cell: CellSpec, attempt: int) -> CellResult:
         work_dir = (
             output_dir
@@ -138,11 +141,12 @@ def _default_executor(
                         for char in cell.experiment_id
                     )
                 ),
-                "CUTE_EVAL_MAVEN_REPO": str(
-                    _maven_repo_dir(output_dir, cell.arm)
-                ),
             }
         )
+        if isolated_repo:
+            env["CUTE_EVAL_MAVEN_REPO"] = str(
+                _maven_repo_dir(output_dir, cell.arm)
+            )
         command = [
             sys.executable,
             "-m",
@@ -314,7 +318,7 @@ def _run_loaded_experiment(
         output_dir,
         experiment_spec_hash=spec.spec_hash,
     )
-    active_executor = executor or _default_executor(spec, output_dir)
+    active_executor = executor or _default_executor(spec, output_dir, roots)
     results: list[CellResult] = []
     pending: list[CellSpec] = []
     for cell in cells:
@@ -325,13 +329,20 @@ def _run_loaded_experiment(
             pending.append(cell)
 
     if executor is None and pending:
+        unique_roots: dict[Path, str] = {}
         for arm_name, root in sorted(roots.items()):
+            unique_roots.setdefault(root.resolve(), arm_name)
+        for root, arm_name in unique_roots.items():
+            isolated_repo = len(unique_roots) > 1
             previous_root = os.environ.get("CUTE_EVAL_REPO_ROOT")
             previous_repo = os.environ.get("CUTE_EVAL_MAVEN_REPO")
-            os.environ["CUTE_EVAL_REPO_ROOT"] = root
-            os.environ["CUTE_EVAL_MAVEN_REPO"] = str(
-                _maven_repo_dir(output_dir, arm_name)
-            )
+            if isolated_repo:
+                os.environ["CUTE_EVAL_REPO_ROOT"] = str(root)
+                os.environ["CUTE_EVAL_MAVEN_REPO"] = str(
+                    _maven_repo_dir(output_dir, arm_name)
+                )
+            else:
+                os.environ["CUTE_EVAL_REPO_ROOT"] = str(root)
             try:
                 compile_java_fixture_runner()
             finally:
@@ -339,10 +350,11 @@ def _run_loaded_experiment(
                     os.environ.pop("CUTE_EVAL_REPO_ROOT", None)
                 else:
                     os.environ["CUTE_EVAL_REPO_ROOT"] = previous_root
-                if previous_repo is None:
-                    os.environ.pop("CUTE_EVAL_MAVEN_REPO", None)
-                else:
-                    os.environ["CUTE_EVAL_MAVEN_REPO"] = previous_repo
+                if isolated_repo:
+                    if previous_repo is None:
+                        os.environ.pop("CUTE_EVAL_MAVEN_REPO", None)
+                    else:
+                        os.environ["CUTE_EVAL_MAVEN_REPO"] = previous_repo
 
     started = time.monotonic()
     fuse_count = 0

@@ -194,6 +194,103 @@ public class WorkingMemorySessionSearchServiceTest {
     }
 
     @Test
+    public void discoveryKeepsPartialTokenMatchesAndRanksByCoverage() {
+        IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
+        WorkingMemorySearchMessage partial = message(
+                "session-partial", 1L, "r1", 0, "Portbury Brand niece", "USER", 2);
+        WorkingMemorySearchMessage complete = message(
+                "session-complete", 2L, "r2", 0,
+                "Portbury Brand niece Valerie inheritance", "USER", 2);
+        when(dao.searchFullTextByUserId(
+                eq("user-1"),
+                eq("Portbury Brand niece Valerie inheritance"),
+                eq(8),
+                anyList())).thenReturn(List.of(partial, complete));
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .query("Portbury Brand niece Valerie inheritance")
+                        .limit(2)
+                        .build()));
+
+        Assert.assertEquals(2, payload.getIntValue("count"));
+        Assert.assertEquals(
+                "session-complete",
+                payload.getJSONArray("results").getJSONObject(0).getString("session_id"));
+        Assert.assertFalse(payload.getBooleanValue("fallback"));
+    }
+
+    @Test
+    public void discoveryReturnsCompleteContentForTopResultsOnly() {
+        IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
+        String content = "evidence " + "x".repeat(18_000);
+        List<WorkingMemorySearchMessage> hits = List.of(
+                message("session-1", 1L, "r1", 0, content, "USER", 2),
+                message("session-2", 2L, "r2", 0, content, "USER", 2),
+                message("session-3", 3L, "r3", 0, content, "USER", 2),
+                message("session-4", 4L, "r4", 0, content, "USER", 2));
+        when(dao.searchFullTextByUserId(eq("user-1"), eq("evidence"), eq(16), anyList()))
+                .thenReturn(hits);
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .query("evidence")
+                        .limit(4)
+                        .build()));
+
+        JSONArray results = payload.getJSONArray("results");
+        Assert.assertEquals(4, results.size());
+        int completeContentCount = 0;
+        for (int index = 0; index < results.size(); index++) {
+            JSONObject item = results.getJSONObject(index);
+            Assert.assertFalse(item.getString("snippet").isBlank());
+            if (item.containsKey("content")) {
+                completeContentCount++;
+                Assert.assertEquals(content, item.getString("content"));
+                Assert.assertFalse(item.getBooleanValue("content_truncated"));
+            }
+        }
+        Assert.assertEquals(3, completeContentCount);
+    }
+
+    @Test
+    public void discoveryFallsBackToTokenScanWhenFullTextHasNoHits() {
+        IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
+        WorkingMemorySearchMessage hit = message(
+                "session-1", 9L, "r9", 0,
+                "The inheritance was left to Portbury Brand's niece Valerie.",
+                "USER",
+                2);
+        when(dao.searchFullTextByUserId(
+                eq("user-1"),
+                eq("Portbury Brand niece Valerie inheritance"),
+                eq(8),
+                anyList())).thenReturn(List.of());
+        when(dao.scanByUserId(
+                eq("user-1"),
+                eq("inheritance"),
+                eq(8),
+                anyList())).thenReturn(List.of(hit));
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .query("Portbury Brand niece Valerie inheritance")
+                        .limit(2)
+                        .build()));
+
+        Assert.assertTrue(payload.getBooleanValue("fallback"));
+        Assert.assertEquals("token-scan", payload.getString("search_backend"));
+        Assert.assertEquals("inheritance", payload.getJSONArray("fallback_terms").getString(0));
+        Assert.assertEquals(1, payload.getIntValue("count"));
+        Assert.assertEquals(
+                "session-1",
+                payload.getJSONArray("results").getJSONObject(0).getString("session_id"));
+    }
+
+    @Test
     public void discoveryLoadsSessionMetadataInOneBatch() {
         IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
         WorkingMemorySearchMessage first = message(
@@ -445,6 +542,23 @@ public class WorkingMemorySessionSearchServiceTest {
         Assert.assertEquals("USER", messages.getJSONObject(0).getString("role"));
         Assert.assertEquals("user ask", messages.getJSONObject(0).getString("content"));
         Assert.assertFalse(messages.getJSONObject(0).containsKey("request_id"));
+    }
+
+    @Test
+    public void readKeepsLongContextChunkContent() {
+        String content = "x".repeat(18_000);
+        IWorkingMemoryMessageDao dao = mockOwnedHistory(List.of(
+                message(1L, "r", 0, content, "USER", 1)));
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .sessionId("session-1")
+                        .build()));
+
+        JSONObject message = payload.getJSONArray("messages").getJSONObject(0);
+        Assert.assertEquals(content, message.getString("content"));
+        Assert.assertFalse(message.containsKey("content_truncated"));
     }
 
     @Test

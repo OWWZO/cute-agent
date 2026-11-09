@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/multi_agent_trace.schema.json",
+  "title": "Cute Agent Multi-Agent Trace View",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "runId",
+    "requestId",
+    "query",
+    "status",
+    "finalText",
+    "agents",
+    "handoffs",
+    "metrics",
+    "source"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "string"},
+    "runId": {"type": "string"},
+    "requestId": {"type": "string"},
+    "sessionId": {"type": ["string", "null"]},
+    "query": {"type": "string"},
+    "status": {"type": "string"},
+    "finalText": {"type": "string"},
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "agentId",
+          "parentAgentId",
+          "agentType",
+          "description",
+          "steps",
+          "tools"
+        ],
+        "properties": {
+          "agentId": {"type": "string"},
+          "parentAgentId": {"type": ["string", "null"]},
+          "agentType": {"type": "string"},
+          "description": {"type": ["string", "null"]},
+          "steps": {"type": "array", "items": {"type": "object"}},
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "index",
+                "toolCallId",
+                "toolName",
+                "status",
+                "inputJson",
+                "errorMsg",
+                "durationMs",
+                "artifactCount"
+              ],
+              "properties": {
+                "index": {"type": "integer", "minimum": 0},
+                "toolCallId": {"type": ["string", "null"]},
+                "toolName": {"type": "string"},
+                "status": {"type": "string"},
+                "inputJson": {"type": ["string", "null"]},
+                "errorMsg": {"type": ["string", "null"]},
+                "durationMs": {"type": ["integer", "null"]},
+                "artifactCount": {"type": ["integer", "null"]}
+              }
+            }
+          }
+        }
+      }
+    },
+    "handoffs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "fromAgentId",
+          "toAgentId",
+          "toolCallId",
+          "toolName",
+          "status"
+        ],
+        "properties": {
+          "fromAgentId": {"type": "string"},
+          "toAgentId": {"type": "string"},
+          "toolCallId": {"type": ["string", "null"]},
+          "toolName": {"type": "string"},
+          "status": {"type": "string"}
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "agentCount",
+        "subAgentCount",
+        "toolCount",
+        "toolSuccessRate",
+        "handoffCount"
+      ],
+      "properties": {
+        "agentCount": {"type": "integer", "minimum": 1},
+        "subAgentCount": {"type": "integer", "minimum": 0},
+        "toolCount": {"type": "integer", "minimum": 0},
+        "toolSuccessRate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "handoffCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "source": {"type": "object"}
+  }
+}

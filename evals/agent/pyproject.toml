@@ -25,6 +25,19 @@ phase3 = [
     "datasets>=3,<5",
     "huggingface-hub>=0.24,<2",
 ]
+memoryagentbench = [
+    "nltk>=3.8,<4",
+    "pyarrow>=15,<27",
+    "rapidfuzz>=3.10,<4",
+    "tiktoken>=0.7,<1",
+]
+deepresearch = [
+    "requests>=2.31,<3",
+    "tqdm>=4.65,<5",
+]
+rag = [
+    "requests>=2.31,<3",
+]
 phase4 = [
     "func-timeout>=4.3.5,<5",
     "pandas>=2.2,<4",
@@ -44,18 +57,32 @@ packages = ["src/cute_evals"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/cute_evals/benchmarks/bird/manifest.yaml" = "cute_evals/benchmarks/bird/manifest.yaml"
+"src/cute_evals/benchmarks/compactbench/manifest.yaml" = "cute_evals/benchmarks/compactbench/manifest.yaml"
+"src/cute_evals/benchmarks/deepresearch/manifest.yaml" = "cute_evals/benchmarks/deepresearch/manifest.yaml"
 "src/cute_evals/benchmarks/gaia/manifest.yaml" = "cute_evals/benchmarks/gaia/manifest.yaml"
 "src/cute_evals/benchmarks/gaia/official_scorer.py" = "cute_evals/benchmarks/gaia/official_scorer.py"
+"src/cute_evals/benchmarks/longmemeval/manifest.yaml" = "cute_evals/benchmarks/longmemeval/manifest.yaml"
+"src/cute_evals/benchmarks/longmemeval/official_prompt.py" = "cute_evals/benchmarks/longmemeval/official_prompt.py"
+"src/cute_evals/benchmarks/memoryagentbench/manifest.yaml" = "cute_evals/benchmarks/memoryagentbench/manifest.yaml"
+"src/cute_evals/benchmarks/memoryagentbench/official_summarization_prompts.json" = "cute_evals/benchmarks/memoryagentbench/official_summarization_prompts.json"
+"src/cute_evals/benchmarks/marble/manifest.yaml" = "cute_evals/benchmarks/marble/manifest.yaml"
+"src/cute_evals/benchmarks/rag/manifest.yaml" = "cute_evals/benchmarks/rag/manifest.yaml"
 "src/cute_evals/benchmarks/skillsbench/manifest.yaml" = "cute_evals/benchmarks/skillsbench/manifest.yaml"
 "src/cute_evals/benchmarks/spider2/manifest.yaml" = "cute_evals/benchmarks/spider2/manifest.yaml"
 "src/cute_evals/benchmarks/tau2/manifest.yaml" = "cute_evals/benchmarks/tau2/manifest.yaml"
 "src/cute_evals/benchmarks/tau2/server.py" = "cute_evals/benchmarks/tau2/server.py"
+"src/cute_evals/judge_benchmarks/agent_process_bench/manifest.yaml" = "cute_evals/judge_benchmarks/agent_process_bench/manifest.yaml"
+"src/cute_evals/judge_benchmarks/agent_reward_bench/manifest.yaml" = "cute_evals/judge_benchmarks/agent_reward_bench/manifest.yaml"
+"src/cute_evals/judge_benchmarks/trail/manifest.yaml" = "cute_evals/judge_benchmarks/trail/manifest.yaml"
 "schemas/experiment.schema.json" = "cute_evals/schemas/experiment.schema.json"
 "schemas/cell.schema.json" = "cute_evals/schemas/cell.schema.json"
 "schemas/ab-report.schema.json" = "cute_evals/schemas/ab-report.schema.json"
 "schemas/case.schema.json" = "cute_evals/schemas/case.schema.json"
 "schemas/case-draft.schema.json" = "cute_evals/schemas/case-draft.schema.json"
 "schemas/trace.schema.json" = "cute_evals/schemas/trace.schema.json"
+"schemas/process_view.schema.json" = "cute_evals/schemas/process_view.schema.json"
+"schemas/multi_agent_trace.schema.json" = "cute_evals/schemas/multi_agent_trace.schema.json"
+"schemas/judge_benchmark.schema.json" = "cute_evals/schemas/judge_benchmark.schema.json"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

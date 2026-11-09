@@ -1,0 +1,48 @@
+name: deepresearch
+version: gh-f2735b5c3636759c22f9e936c0232de8bf545b67
+upstream: https://github.com/Ayanami0730/deep_research_bench
+datasetUpstream: https://huggingface.co/datasets/muset-ai/DeepResearch-Bench-Dataset
+license: apache-2.0
+scoreLabel: official-aggregate
+runnerMode: python-http-sse
+environment: python-service
+officialEvaluator:
+  repository: https://github.com/Ayanami0730/deep_research_bench
+  revision: f2735b5c3636759c22f9e936c0232de8bf545b67
+  queryFile: data/prompt_data/query.jsonl
+  querySha256: 62b197a264a027fd4e2e795ff322a82dd6d566f5e350596ccc7572539ec987d1
+  raceScript: deepresearch_bench_race.py
+  factModules:
+    extract: utils.extract
+    deduplicate: utils.deduplicate
+    scrape: utils.scrape
+    validate: utils.validate
+    stat: utils.stat
+  backend: openai
+  models:
+    race: gpt-5.5
+    clean: gpt-5.6-luna
+    fact: gpt-5.4-mini
+dataset:
+  kind: github-jsonl
+  queryFile: data/prompt_data/query.jsonl
+  querySha256: 62b197a264a027fd4e2e795ff322a82dd6d566f5e350596ccc7572539ec987d1
+  officialTaskCount: 100
+  selection: all
+  languages:
+    zh: 50
+    en: 50
+answerContract:
+  version: deepresearch-report-v1
+  instruction: |
+    DeepResearch Bench delivery contract: return the complete finished research
+    report as Markdown in the final answer. Cover the task requirements with
+    structure and analysis. Every factual claim that can be cited must include
+    an inline source URL in Markdown form, for example [source](https://...).
+    Do not return only a filename, artifact list, outline, or progress note.
+    Do not add a FINAL_ANSWER line.
+budgets:
+  maxWallMs: 1800000
+  maxTokens: 240000
+  maxSteps: 80
+  maxToolCalls: 80

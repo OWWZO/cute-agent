@@ -22,6 +22,11 @@ def _median(values: list[float | int | None]) -> float | None:
     return median(present) if present else None
 
 
+def _sum(values: list[float | int | None]) -> float | None:
+    present = [float(value) for value in values if value is not None]
+    return sum(present) if present else None
+
+
 def _task_summary(
     cells: list[CellResult],
     *,
@@ -84,6 +89,19 @@ def _task_summary(
         ),
         "medianFirstTokenMs": _median(
             [cell.metrics.get("firstTokenMs") for cell in denominator]
+        ),
+        "medianCacheHitRatio": _median(
+            [cell.metrics.get("cacheHitRatio") for cell in denominator]
+        ),
+        "medianEligibleCacheHitRatio": _median(
+            [cell.metrics.get("eligibleCacheHitRatio") for cell in denominator]
+        ),
+        "medianCacheRequestHitRate": _median(
+            [cell.metrics.get("cacheRequestHitRate") for cell in denominator]
+        ),
+        "cacheUnverifiedInvocations": sum(
+            int(cell.metrics.get("cacheUnverifiedInvocations") or 0)
+            for cell in denominator
         ),
         "statusCounts": dict(Counter(cell.status for cell in cells)),
     }
@@ -172,6 +190,13 @@ def _recommend(
         and token_ratio > 1 + float(spec.thresholds["maxTokenRegressionRatio"])
     ):
         return "block"
+    cache_delta = metric_deltas.get("eligibleCacheHitRatioDelta")
+    if (
+        cache_delta is not None
+        and float(cache_delta) > 0
+        and candidate_score >= base_score
+    ):
+        return "ship"
     if candidate_score > base_score:
         return "ship"
     return "inconclusive"
@@ -256,13 +281,22 @@ def build_ab_report(
                     }
                 )
 
-    # Aggregate the per-task medians so a multi-model experiment still compares
-    # the same set of tasks rather than whichever task happened to finish last.
-    base_tokens = _median(
+    # Sum per-task medians for cost deltas: the suite total must reflect a
+    # large win on one task instead of being hidden by a median across tasks.
+    base_tokens = _sum(
         [item.get("medianTotalTokens") for item in base["tasks"].values()]
     )
-    candidate_tokens = _median(
+    candidate_tokens = _sum(
         [item.get("medianTotalTokens") for item in candidate["tasks"].values()]
+    )
+    base_cache = _median(
+        [item.get("medianEligibleCacheHitRatio") for item in base["tasks"].values()]
+    )
+    candidate_cache = _median(
+        [
+            item.get("medianEligibleCacheHitRatio")
+            for item in candidate["tasks"].values()
+        ]
     )
     base_denominator_keys = {
         (cell.model, cell.case_id, cell.repetition)
@@ -300,6 +334,16 @@ def build_ab_report(
             None
             if base_tokens is None or candidate_tokens is None
             else round(candidate_tokens - base_tokens, 3)
+        ),
+        "cacheHitRatioDelta": (
+            None
+            if base_cache is None or candidate_cache is None
+            else round(candidate_cache - base_cache, 6)
+        ),
+        "eligibleCacheHitRatioDelta": (
+            None
+            if base_cache is None or candidate_cache is None
+            else round(candidate_cache - base_cache, 6)
         ),
     }
     expected_cell_count = (
@@ -420,6 +464,8 @@ def _render_html(report: dict[str, Any]) -> str:
             f"<td>{escape(item['direction'])}</td>"
             f"<td>{escape(str(base.get('medianTotalTokens')))}</td>"
             f"<td>{escape(str(candidate.get('medianTotalTokens')))}</td>"
+            f"<td>{escape(str(base.get('medianEligibleCacheHitRatio')))}</td>"
+            f"<td>{escape(str(candidate.get('medianEligibleCacheHitRatio')))}</td>"
             "</tr>"
         )
     anomalies = "".join(
@@ -452,7 +498,7 @@ def _render_html(report: dict[str, Any]) -> str:
      Token ratio: {escape(str(report['metricDeltas']['totalTokensRatio']))}</p>
   <h2>Task Results</h2>
   <table>
-    <thead><tr><th>Case</th><th>Base score</th><th>Candidate score</th><th>Direction</th><th>Base tokens</th><th>Candidate tokens</th></tr></thead>
+    <thead><tr><th>Case</th><th>Base score</th><th>Candidate score</th><th>Direction</th><th>Base tokens</th><th>Candidate tokens</th><th>Base cache hit</th><th>Candidate cache hit</th></tr></thead>
     <tbody>{''.join(rows)}</tbody>
   </table>
   <h2>Anomalies</h2>

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/process_view.schema.json",
+  "title": "Cute Agent Neutral Process View",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "runId",
+    "requestId",
+    "query",
+    "status",
+    "finalText",
+    "messages",
+    "assistantMessageIndices",
+    "steps",
+    "tools",
+    "orphanEvidence",
+    "source"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "string"},
+    "runId": {"type": "string"},
+    "requestId": {"type": "string"},
+    "sessionId": {"type": ["string", "null"]},
+    "query": {"type": "string"},
+    "status": {"type": "string"},
+    "finalText": {"type": "string"},
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["messageIndex", "role", "content", "metadata"],
+        "properties": {
+          "messageIndex": {"type": "integer", "minimum": 0},
+          "role": {"type": "string"},
+          "content": {"type": "string"},
+          "sourceId": {"type": ["string", "null"]},
+          "actor": {"type": ["string", "null"]},
+          "toolCallId": {"type": ["string", "null"]},
+          "toolCalls": {},
+          "metadata": {"type": "object"}
+        }
+      }
+    },
+    "assistantMessageIndices": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0}
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "stepId",
+          "ordinal",
+          "messageIndex",
+          "content",
+          "status",
+          "evidence"
+        ],
+        "properties": {
+          "stepId": {"type": "string"},
+          "ordinal": {"type": "integer", "minimum": 1},
+          "messageIndex": {"type": "integer", "minimum": 0},
+          "content": {"type": "string"},
+          "status": {"type": "string"},
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["evidenceId", "kind", "status", "payload"],
+              "properties": {
+                "evidenceId": {"type": "string"},
+                "kind": {
+                  "enum": [
+                    "llm",
+                    "tool_call",
+                    "tool_result",
+                    "context",
+                    "memory",
+                    "artifact"
+                  ]
+                },
+                "sourceId": {"type": ["string", "null"]},
+                "status": {"type": ["string", "null"]},
+                "payload": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "orphanEvidence": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "source": {"type": "object"}
+  }
+}

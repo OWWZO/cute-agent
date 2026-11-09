@@ -34,7 +34,14 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
     private static final int MAX_LIMIT = 20;
     private static final int DEFAULT_WINDOW = 5;
     private static final int MAX_WINDOW = 20;
-    private static final int MAX_CONTENT_CHARS = 4000;
+    private static final int FULL_CONTENT_RESULT_LIMIT = 3;
+    private static final int MAX_FALLBACK_TOKENS = 3;
+    /**
+     * Long-context memory chunks can exceed 4k tokens (roughly 16k chars).
+     * Keep the complete chunk visible so retrieval does not turn into repeated
+     * partial searches for the same evidence.
+     */
+    private static final int MAX_CONTENT_CHARS = 20_000;
     /** working_memory_turn.status INVALID = compacted-away; still searchable, not in live context. */
     private static final int TURN_STATUS_INVALID = 2;
 
@@ -101,7 +108,7 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
                             List<String> roles) {
         List<String> tokens = tokenize(query);
         if (tokens.isEmpty()) {
-            return discoverPayload(query, roles, List.of(), "none");
+            return discoverPayload(query, roles, List.of(), "none", false, List.of());
         }
         String normalizedScope = normalizeScope(scope);
         String sessionScopeId = firstNonBlank(requestedSessionId, currentSessionId);
@@ -136,26 +143,49 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
             }
         }
 
-        List<WorkingMemorySearchMessage> matched = new ArrayList<>();
-        for (WorkingMemorySearchMessage hit : safeList(raw)) {
-            if (matchesQuery(hit.getContent(), tokens)) {
-                matched.add(hit);
+        List<WorkingMemorySearchMessage> matched = rankCandidates(raw, query, tokens);
+        boolean fallback = matched.isEmpty();
+        List<String> fallbackTerms = List.of();
+        if (fallback) {
+            fallbackTerms = fallbackTokens(tokens);
+            List<WorkingMemorySearchMessage> fallbackHits = new ArrayList<>();
+            int fallbackLimit = Math.min(scanLimit, Math.max(limit * 2, 10));
+            for (String term : fallbackTerms) {
+                try {
+                    fallbackHits.addAll("session".equals(normalizedScope)
+                            ? workingMemoryMessageDao.scanBySession(
+                                    sessionScopeId, term, fallbackLimit, roles)
+                            : searchByUserIdOrSession(
+                                    userId, currentSessionId, term, fallbackLimit, false, roles));
+                } catch (Exception scanError) {
+                    log.warn("working-memory token fallback failed term={}: {}",
+                            term, scanError.toString());
+                }
             }
+            matched = rankCandidates(fallbackHits, query, tokens);
+            backend = "token-scan";
         }
         boolean excludeLiveCurrent = !"session".equals(normalizedScope);
         List<WorkingMemorySearchMessage> hits = deduplicate(matched, limit, currentSessionId, excludeLiveCurrent);
         Map<String, Map<String, Object>> sessionMetadata = loadSessionMetadata(hits);
         List<Map<String, Object>> results = new ArrayList<>();
-        for (WorkingMemorySearchMessage hit : hits) {
-            results.add(lightweightResult(hit, query, tokens, sessionMetadata));
+        for (int index = 0; index < hits.size(); index++) {
+            results.add(lightweightResult(
+                    hits.get(index),
+                    query,
+                    tokens,
+                    sessionMetadata,
+                    index < FULL_CONTENT_RESULT_LIMIT));
         }
-        return discoverPayload(query, roles, results, backend);
+        return discoverPayload(query, roles, results, backend, fallback, fallbackTerms);
     }
 
     private String discoverPayload(String query,
                                    List<String> roles,
                                    List<Map<String, Object>> results,
-                                   String backend) {
+                                   String backend,
+                                   boolean fallback,
+                                   List<String> fallbackTerms) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("success", true);
         payload.put("mode", "discover");
@@ -164,6 +194,10 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         payload.put("results", results);
         payload.put("count", results.size());
         payload.put("search_backend", backend);
+        payload.put("fallback", fallback);
+        if (fallback) {
+            payload.put("fallback_terms", fallbackTerms);
+        }
         return JSON.toJSONString(payload);
     }
 
@@ -237,7 +271,8 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
     private Map<String, Object> lightweightResult(WorkingMemorySearchMessage hit,
                                                   String query,
                                                   List<String> tokens,
-                                                  Map<String, Map<String, Object>> sessionMetadata) {
+                                                  Map<String, Map<String, Object>> sessionMetadata,
+                                                  boolean includeContent) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("session_id", hit.getSessionId());
         result.put("match_message_id", hit.getId());
@@ -246,6 +281,17 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         result.put("matched_role", hit.getRole());
         result.put("snippet", snippet(hit.getContent(), query, tokens));
         result.put("matched_terms", List.copyOf(tokens));
+        if (includeContent) {
+            String content = StringUtils.defaultString(hit.getContent());
+            if (content.length() > MAX_CONTENT_CHARS) {
+                result.put("content", content.substring(0, MAX_CONTENT_CHARS) + "...");
+                result.put("content_truncated", true);
+                result.put("original_content_chars", content.length());
+            } else {
+                result.put("content", content);
+                result.put("content_truncated", false);
+            }
+        }
         if (hit.getSearchScore() != null) {
             result.put("search_score", hit.getSearchScore());
         }
@@ -609,17 +655,63 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         return tokens;
     }
 
-    private static boolean matchesQuery(String content, List<String> tokens) {
-        if (tokens == null || tokens.isEmpty()) {
-            return false;
+    private static List<WorkingMemorySearchMessage> rankCandidates(
+            List<WorkingMemorySearchMessage> raw,
+            String query,
+            List<String> tokens) {
+        List<RankedMessage> ranked = new ArrayList<>();
+        String phrase = StringUtils.defaultString(query).toLowerCase(Locale.ROOT);
+        for (WorkingMemorySearchMessage hit : safeList(raw)) {
+            String haystack = StringUtils.defaultString(hit.getContent()).toLowerCase(Locale.ROOT);
+            int matched = 0;
+            for (String token : tokens) {
+                if (haystack.contains(token.toLowerCase(Locale.ROOT))) {
+                    matched++;
+                }
+            }
+            if (matched == 0) {
+                continue;
+            }
+            ranked.add(new RankedMessage(
+                    hit,
+                    StringUtils.isNotBlank(phrase) && haystack.contains(phrase),
+                    (double) matched / tokens.size()));
         }
-        String haystack = StringUtils.defaultString(content).toLowerCase(Locale.ROOT);
+        ranked.sort(Comparator
+                .comparing(RankedMessage::phraseMatch, Comparator.reverseOrder())
+                .thenComparing(RankedMessage::coverage, Comparator.reverseOrder())
+                .thenComparing(
+                        item -> item.message().getSearchScore(),
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(
+                        item -> item.message().getTurnSeq(),
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(
+                        item -> item.message().getSeqNo(),
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(
+                        item -> item.message().getId(),
+                        Comparator.nullsLast(Comparator.reverseOrder())));
+        return ranked.stream().map(RankedMessage::message).toList();
+    }
+
+    private static List<String> fallbackTokens(List<String> tokens) {
+        List<String> candidates = new ArrayList<>();
         for (String token : tokens) {
-            if (!haystack.contains(token.toLowerCase(Locale.ROOT))) {
-                return false;
+            if (token.length() >= 3 && !candidates.contains(token)) {
+                candidates.add(token);
             }
         }
-        return true;
+        if (candidates.isEmpty() && !tokens.isEmpty()) {
+            candidates.add(tokens.get(0));
+        }
+        candidates.sort(Comparator.comparingInt(String::length).reversed());
+        return List.copyOf(candidates.subList(0, Math.min(MAX_FALLBACK_TOKENS, candidates.size())));
+    }
+
+    private record RankedMessage(WorkingMemorySearchMessage message,
+                                 boolean phraseMatch,
+                                 double coverage) {
     }
 
     private static int resolveLimit(Integer limit) {

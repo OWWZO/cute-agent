@@ -278,6 +278,85 @@ def score_case(
         )
     )
 
+    if case.compaction:
+        mode = str(case.compaction.get("mode") or "compressed")
+        events = list(trace.context_events)
+        successful = [
+            event
+            for event in events
+            if str(event.get("type")) == "compaction"
+            and str(event.get("status")) == "success"
+        ]
+        if mode == "uncompressed-control":
+            control_clean = not events
+            scores.append(
+                _record(
+                    case,
+                    "compaction_control_clean",
+                    control_clean,
+                    passed=control_clean,
+                    unit="boolean",
+                    hard_gate=case.hard_gate,
+                    evidence={"contextEventCount": len(events)},
+                )
+            )
+        else:
+            triggered = bool(successful)
+            scores.append(
+                _record(
+                    case,
+                    "compaction_triggered",
+                    triggered,
+                    passed=triggered,
+                    unit="boolean",
+                    hard_gate=case.hard_gate,
+                    evidence={
+                        "contextEventCount": len(events),
+                        "strategies": [event.get("strategy") for event in successful],
+                    },
+                )
+            )
+            if successful:
+                event = successful[-1]
+                before = event.get("beforeTokens")
+                after = event.get("afterTokens")
+                ratio = (
+                    float(before) / float(after)
+                    if isinstance(before, (int, float))
+                    and isinstance(after, (int, float))
+                    and float(after) > 0
+                    else None
+                )
+                scores.append(
+                    _record(
+                        case,
+                        "compression_ratio",
+                        ratio,
+                        passed=None,
+                        unit="ratio",
+                        hard_gate=False,
+                        status="verified" if ratio is not None else "unverified",
+                        evidence={
+                            "beforeTokens": before,
+                            "afterTokens": after,
+                            "eventId": event.get("eventId"),
+                        },
+                    )
+                )
+                summary_hash = event.get("summaryHash")
+                summary_hash_ok = bool(summary_hash)
+                scores.append(
+                    _record(
+                        case,
+                        "summary_hash_present",
+                        summary_hash_ok,
+                        passed=summary_hash_ok,
+                        unit="boolean",
+                        hard_gate=case.hard_gate,
+                        evidence={"eventId": event.get("eventId")},
+                    )
+                )
+
     tool_names = trace.tool_names()
     missing_tools = [name for name in case.expected.required_tools if name not in tool_names]
     forbidden_tools = [name for name in case.expected.forbidden_tools if name in tool_names]

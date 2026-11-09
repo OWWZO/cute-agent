@@ -1,0 +1,42 @@
+name: trail
+version: "0ffbed9db859b4a66250dc783fa4dccf86869595"
+upstream: https://github.com/patronus-ai/trail-benchmark
+upstreamCommit: 0ffbed9db859b4a66250dc783fa4dccf86869595
+licenseStatus: blocked-license
+licenseEvidence: "Repository code is MIT; GAIA/SWE-derived trace redistribution is not separately confirmed."
+scoreNamespace: judge-calibration
+scoreLabel: blocked-license
+verification: git-tree
+splits:
+  smoke:
+    GAIA: 10
+    SWE Bench: 0
+  official-subset:
+    GAIA: 10
+    SWE Bench: 10
+  official-full:
+    GAIA: -1
+    SWE Bench: -1
+assets:
+  data:
+    GAIA:
+      path: benchmarking/data/GAIA
+      treeSha256: 015ae5408ed9ed45464bd456b95d2f1bd1cca1f9e0aee2d240b165087a739c8c
+    SWE Bench:
+      path: benchmarking/data/SWE Bench
+      treeSha256: cd8155fea75b4f12b9e99e7f9d55b7dc6d86de8eab535e2188430daa0dd517a0
+  annotations:
+    GAIA:
+      path: benchmarking/processed_annotations_gaia
+      treeSha256: 5fdc0e9bf854be9f8263aa592a69cad801f7568eedf9141637a1aac4c3f6524c
+    SWE Bench:
+      path: benchmarking/processed_annotations_swe_bench
+      treeSha256: bf18b5917e79ba9fdfbdca3682d4cbecea31a774cef4b49540037c88fd1a81ef
+scripts:
+  prompt:
+    file: benchmarking/run_eval.py
+    sha256: 8e5614645ef6f56e9b68a2bd60a0e2b27192ffe2f1091409476b0344818819ce
+    promptFunction: get_prompt
+  scorer:
+    file: benchmarking/calculate_scores.py
+    sha256: ed81ebd529da189425efb9c58183e7c1dcd55a234264ea039e03428bcc5f24d2

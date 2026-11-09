@@ -14,6 +14,25 @@ from cute_tool.util.llm_util import resolve_openai_compat_env
 from cute_tool.util.log_util import timer
 from cute_tool.util.prompt_util import get_prompt
 
+_APPENDED_REFUSAL_MARKERS = (
+    "抱歉，系统检测到您当前输入的信息存在敏感内容",
+    "抱歉，系统检测到您输入的信息存在敏感内容",
+)
+
+
+def strip_appended_refusal(text: str) -> str:
+    """Remove a safety refusal appended after a complete chapter."""
+    normalized = text.strip()
+    if len(normalized) < 600:
+        return normalized
+    for marker in _APPENDED_REFUSAL_MARKERS:
+        index = normalized.rfind(marker)
+        if index < 400:
+            continue
+        if len(normalized[index:].strip()) <= 300:
+            return normalized[:index].rstrip()
+    return normalized
+
 
 def docs_to_html(docs: List[Doc], model: str = None) -> str:
     """将文档列表格式化为带编号的 HTML，供章节总结引用。"""
@@ -85,7 +104,7 @@ async def summarize_chapter(
         search_content=search_content,
     ):
         content += chunk
-    return content.strip()
+    return strip_appended_refusal(content)
 
 
 @timer()
@@ -125,7 +144,7 @@ async def update_chapter_summary(
     ):
         if chunk:
             content += chunk
-    return content.strip() or previous_summary
+    return strip_appended_refusal(content) or previous_summary
 
 
 @timer()

@@ -1,0 +1,36 @@
+schemaVersion: "1.0"
+experimentId: cache-efficiency-schema-ab
+suite: cache-efficiency
+profile: nightly
+javaMode: benchmark
+models:
+- group/deepseek
+repetitions: 3
+seed: 42
+parallelism: 1
+timeoutSeconds: 300
+retries: 1
+requireJudge: false
+isolation:
+  mode: process
+  workspace: per-cell
+  database: experiment
+  allowDirty: true
+caseDirs:
+- evals/agent/cases/ab/cache-efficiency
+base:
+  source: local
+  root: .
+  env:
+    CUTE_EVAL_CACHE_VARIANT: stable
+candidate:
+  source: local
+  root: .
+  env:
+    CUTE_EVAL_CACHE_VARIANT: schema-change
+budgets:
+  maxUsd: 0
+  maxWallMinutes: 120
+thresholds:
+  maxAccuracyRegression: 0
+  maxTokenRegressionRatio: 0.2

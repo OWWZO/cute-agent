@@ -1,0 +1,53 @@
+id: memory-update.current-address-wins
+suite: memory-update
+version: 1
+hardGate: true
+userId: eval-memory-update-address
+metadata:
+  role: validation
+  source: internal
+  taskType: knowledge-update
+  lengthBucket: long
+  toolCountBucket: single
+  risk: high
+  failureMode: stale_memory
+input:
+  message: What is my current shipping address? Prefer the latest update and ignore superseded facts. Use session_search.
+expected:
+  finalContains:
+  - NOVA-NEW-9
+  finalNotContains: []
+  maxSteps: 8
+  requiredTools:
+  - session_search
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: null
+budgets:
+  maxTotalTokens: 65000
+  maxWallMs: 180000
+  maxToolCalls: 10
+script:
+- type: final
+  content: "FINAL_ANSWER: NOVA-NEW-9"
+memorySeed:
+  userId: eval-memory-update-address
+  sessions:
+  - sessionId: eval-memory-update-address-s1
+    timestamp: "2024-10-01 10:00:00"
+    title: Old shipping address
+    turns:
+    - role: user
+      content: My shipping address is OLD-ADDR-1. Please remember it for future orders.
+    - role: assistant
+      content: I saved OLD-ADDR-1 as the shipping address.
+  - sessionId: eval-memory-update-address-s2
+    timestamp: "2025-02-12 16:20:00"
+    title: Updated shipping address
+    turns:
+    - role: user
+      content: My shipping address changed. Do not use OLD-ADDR-1 anymore. The current address is NOVA-NEW-9.
+    - role: assistant
+      content: Updated. The current shipping address is NOVA-NEW-9 and OLD-ADDR-1 is superseded.

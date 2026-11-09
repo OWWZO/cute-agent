@@ -419,7 +419,12 @@ class AgenticRAG:
             yield chunk
 
     @time_it
-    def run(self, question: str, image_urls: List[str] = None):
+    def run(
+        self,
+        question: str,
+        image_urls: List[str] = None,
+        include_retrieval_trace: bool = False,
+    ):
         logger.info(f"AIAgent: {question}, {image_urls}")
         kb_label = self._kb_id if isinstance(self._kb_id, str) else ",".join(self._kb_id or [])
         yield self._stage_event(
@@ -463,6 +468,13 @@ class AgenticRAG:
         if trace is None:
             yield self._stage_event("error", "检索链路未返回有效结果。", is_final=True)
             return
+
+        if include_retrieval_trace:
+            yield self._stage_event(
+                "retrieval_trace",
+                "",
+                retrievalTrace=trace.model_dump(mode="json"),
+            )
 
         text_chunks = [hit.to_chunk() for hit in trace.merged_text.hits]
         image_chunks = [hit.to_chunk() for hit in trace.merged_image.hits]

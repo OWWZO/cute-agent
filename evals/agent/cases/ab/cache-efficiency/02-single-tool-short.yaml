@@ -1,0 +1,61 @@
+id: cache-efficiency.single-tool-short
+suite: cache-efficiency
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: internal
+  taskType: cache-prefix
+  lengthBucket: short
+  toolCountBucket: few
+  risk: medium
+  failureMode: prompt_cache_invalidated
+input:
+  message: Call cache_gamma for key C. After it succeeds, answer CACHE-SHORT-OK.
+expected:
+  finalContains:
+  - CACHE-SHORT-OK
+  finalNotContains: []
+  maxSteps: 5
+  requiredTools:
+  - cache_gamma
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: 1.0
+budgets:
+  maxTotalTokens: 24000
+  maxWallMs: 150000
+  maxToolCalls: 5
+script:
+- type: final
+  content: CACHE-SHORT-OK
+tools:
+- name: cache_alpha
+  description: Read a stable cache probe value for the alpha namespace.
+  parameters:
+    type: object
+    properties:
+      key:
+        type: string
+    required:
+    - key
+- name: cache_beta
+  description: Read a stable cache probe value for the beta namespace.
+  parameters:
+    type: object
+    properties:
+      key:
+        type: string
+    required:
+    - key
+- name: cache_gamma
+  description: Read a stable cache probe value for the gamma namespace.
+  parameters:
+    type: object
+    properties:
+      key:
+        type: string
+    required:
+    - key

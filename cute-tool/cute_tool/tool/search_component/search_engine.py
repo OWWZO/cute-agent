@@ -19,6 +19,7 @@ from typing import Any, List
 from urllib.parse import quote
 import aiohttp
 from bs4 import BeautifulSoup
+import trafilatura
 
 try:
     from ddgs import DDGS
@@ -103,7 +104,7 @@ class SearchBase(ABC):
 
     @staticmethod
     async def _fetch_content_with_direct_http(source_url: str, timeout: int) -> str:
-        """Jina Reader 不可用时，回退到直接抓取原始页面。"""
+        """Jina Reader 不可用时，直接抓取并提取网页正文。"""
         if not _search_url_ok(source_url):
             return ""
         client_timeout = aiohttp.ClientTimeout(connect=5, total=timeout)
@@ -116,6 +117,7 @@ class SearchBase(ABC):
                     content_type = (response.content_type or "").lower()
                     if content_type not in [
                         "text/html",
+                        "application/xhtml+xml",
                         "text/plain",
                         "text/xml",
                         "application/json",
@@ -135,6 +137,22 @@ class SearchBase(ABC):
             raw_text = raw_bytes.decode("utf-8")
         except UnicodeDecodeError:
             raw_text = raw_bytes.decode("gb2312", errors="ignore")
+
+        if content_type in {"text/html", "application/xhtml+xml"}:
+            try:
+                extracted = trafilatura.extract(
+                    raw_text,
+                    url=source_url,
+                    output_format="markdown",
+                    include_comments=False,
+                    include_tables=True,
+                    include_links=True,
+                )
+            except Exception as e:
+                logger.debug(f"trafilatura error: {e}")
+                extracted = None
+            if extracted and extracted.strip():
+                return extracted.strip()
 
         soup = BeautifulSoup(raw_text, "html.parser")
         return soup.get_text(" ", strip=True)

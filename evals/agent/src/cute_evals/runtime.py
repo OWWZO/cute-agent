@@ -442,8 +442,13 @@ def _failed_trace(task: BenchmarkTask, conversation_id: str, error: str) -> RunT
         "toolInvocations": [],
         "artifacts": [],
         "conversation": [],
+        "conversationSource": "unavailable",
+        "contextEvents": [],
+        "memoryEvents": [],
         "environmentEvents": [],
+        "environmentSource": "unavailable",
         "environmentSnapshots": [],
+        "snapshotSource": "unavailable",
         "environment": {},
     }
     return RunTrace.from_dict(payload)
@@ -475,6 +480,8 @@ def merge_trace(
     else:
         llm_invocations: list[dict[str, Any]] = []
         tool_invocations: list[dict[str, Any]] = []
+        context_events: list[dict[str, Any]] = []
+        memory_events: list[dict[str, Any]] = []
         artifacts: list[dict[str, Any]] = []
         for turn_index, trace in enumerate(turn_traces, start=1):
             turn_id = f"turn-{turn_index:03d}"
@@ -484,6 +491,14 @@ def merge_trace(
                 )
             for item in trace.tool_invocations:
                 tool_invocations.append(
+                    {**item, "conversationId": conversation_id, "turnId": turn_id}
+                )
+            for item in trace.context_events:
+                context_events.append(
+                    {**item, "conversationId": conversation_id, "turnId": turn_id}
+                )
+            for item in trace.memory_events:
+                memory_events.append(
                     {**item, "conversationId": conversation_id, "turnId": turn_id}
                 )
             for item in trace.artifacts:
@@ -519,19 +534,36 @@ def merge_trace(
             },
             "llmInvocations": llm_invocations,
             "toolInvocations": tool_invocations,
+            "contextEvents": context_events,
+            "memoryEvents": memory_events,
             "artifacts": artifacts,
             "conversation": conversation,
+            "conversationSource": "runtime",
             "environmentEvents": environment_events,
+            "environmentSource": "runtime" if environment_events else "unavailable",
             "environmentSnapshots": environment_snapshots,
+            "snapshotSource": "runtime" if environment_snapshots else "unavailable",
             "environment": {"conversationId": conversation_id},
         }
         trace = RunTrace.from_dict(payload)
     trace.raw["conversation"] = conversation
+    trace.raw["conversationSource"] = trace.raw.get("conversationSource") or "unavailable"
+    trace.raw["contextEvents"] = list(trace.context_events)
+    trace.raw["memoryEvents"] = list(trace.memory_events)
     trace.raw["environmentEvents"] = environment_events
+    trace.raw["environmentSource"] = (
+        trace.raw.get("environmentSource") or "unavailable"
+    )
     trace.raw["environmentSnapshots"] = environment_snapshots
+    trace.raw["snapshotSource"] = trace.raw.get("snapshotSource") or "unavailable"
     trace.conversation = conversation
+    trace.conversation_source = str(trace.raw["conversationSource"])
+    trace.context_events = list(trace.raw.get("contextEvents") or [])
+    trace.memory_events = list(trace.raw.get("memoryEvents") or [])
     trace.environment_events = environment_events
+    trace.environment_source = str(trace.raw["environmentSource"])
     trace.environment_snapshots = environment_snapshots
+    trace.snapshot_source = str(trace.raw["snapshotSource"])
     return trace
 
 

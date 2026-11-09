@@ -20,6 +20,7 @@ import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
+import org.wwz.ai.domain.agent.ledger.model.WorkingMemoryConversationRow;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputPersistCommand;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputView;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolStructuredOutput;
@@ -39,6 +40,8 @@ import org.wwz.ai.domain.agent.ledger.replay.projector.impl.ImageGenerationToolI
 import org.wwz.ai.domain.agent.ledger.replay.projector.impl.MultiModalToolInvocationProjector;
 import org.wwz.ai.domain.agent.ledger.tooloutput.ToolOutputReader;
 import org.wwz.ai.domain.agent.ledger.tooloutput.ToolOutputWriter;
+import org.wwz.ai.domain.agent.memory.WorkingMemoryCompactionEvent;
+import org.wwz.ai.domain.agent.memory.ltm.LtmForkExecutionEvent;
 import org.wwz.ai.infrastructure.adapter.repository.ExecutionLedgerReadRepository;
 import org.wwz.ai.infrastructure.adapter.repository.ExecutionLedgerWriteRepository;
 import org.wwz.ai.infrastructure.dao.cute.IArtifactLedgerDao;
@@ -46,6 +49,9 @@ import org.wwz.ai.infrastructure.dao.cute.IDialogueRunLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.IDialogueSessionLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.ILlmInvocationLedgerDao;
 import org.wwz.ai.infrastructure.dao.cute.IToolInvocationLedgerDao;
+import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryCompactionReadDao;
+import org.wwz.ai.infrastructure.dao.cute.ILtmForkExecutionReadDao;
+import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryConversationReadDao;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -71,10 +77,17 @@ public final class ExecutionLedgerFixtureFactory {
         InMemoryLlmInvocationLedgerDao llmDao = new InMemoryLlmInvocationLedgerDao(store);
         InMemoryToolInvocationLedgerDao toolDao = new InMemoryToolInvocationLedgerDao(store);
         InMemoryArtifactLedgerDao artifactDao = new InMemoryArtifactLedgerDao(store);
+        InMemoryWorkingMemoryCompactionReadDao compactionReadDao =
+                new InMemoryWorkingMemoryCompactionReadDao(store);
+        InMemoryLtmForkExecutionReadDao ltmForkReadDao =
+                new InMemoryLtmForkExecutionReadDao(store);
+        InMemoryWorkingMemoryConversationReadDao conversationReadDao =
+                new InMemoryWorkingMemoryConversationReadDao(store);
         InMemoryToolOutputWriter toolOutputWriter = new InMemoryToolOutputWriter(store);
         InMemoryToolOutputReader toolOutputReader = new InMemoryToolOutputReader(store);
         ExecutionLedgerReadRepository readRepository = new ExecutionLedgerReadRepository(
-                runDao, sessionDao, llmDao, toolDao, artifactDao
+                runDao, sessionDao, llmDao, toolDao, artifactDao,
+                compactionReadDao, ltmForkReadDao, conversationReadDao
         );
         ExecutionLedgerWriteRepository writeRepository = new ExecutionLedgerWriteRepository(
                 runDao, sessionDao, llmDao, toolDao, artifactDao
@@ -106,7 +119,9 @@ public final class ExecutionLedgerFixtureFactory {
         return new LedgerTestContext(
                 store, recorder, queryService, replayService,
                 readRepository, writeRepository,
-                runDao, sessionDao, llmDao, toolDao, artifactDao, toolOutputWriter, toolOutputReader
+                runDao, sessionDao, llmDao, toolDao, artifactDao,
+                compactionReadDao, ltmForkReadDao, conversationReadDao,
+                toolOutputWriter, toolOutputReader
         );
     }
 
@@ -216,6 +231,9 @@ public final class ExecutionLedgerFixtureFactory {
         final ILlmInvocationLedgerDao llmDao;
         final IToolInvocationLedgerDao toolDao;
         final IArtifactLedgerDao artifactDao;
+        final IWorkingMemoryCompactionReadDao compactionReadDao;
+        final ILtmForkExecutionReadDao ltmForkReadDao;
+        final IWorkingMemoryConversationReadDao conversationReadDao;
         final ToolOutputWriter toolOutputWriter;
         final ToolOutputReader toolOutputReader;
 
@@ -230,6 +248,9 @@ public final class ExecutionLedgerFixtureFactory {
                                   ILlmInvocationLedgerDao llmDao,
                                   IToolInvocationLedgerDao toolDao,
                                   IArtifactLedgerDao artifactDao,
+                                  IWorkingMemoryCompactionReadDao compactionReadDao,
+                                  ILtmForkExecutionReadDao ltmForkReadDao,
+                                  IWorkingMemoryConversationReadDao conversationReadDao,
                                   ToolOutputWriter toolOutputWriter,
                                   ToolOutputReader toolOutputReader) {
             this.store = store;
@@ -243,6 +264,9 @@ public final class ExecutionLedgerFixtureFactory {
             this.llmDao = llmDao;
             this.toolDao = toolDao;
             this.artifactDao = artifactDao;
+            this.compactionReadDao = compactionReadDao;
+            this.ltmForkReadDao = ltmForkReadDao;
+            this.conversationReadDao = conversationReadDao;
             this.toolOutputWriter = toolOutputWriter;
             this.toolOutputReader = toolOutputReader;
         }
@@ -264,6 +288,9 @@ public final class ExecutionLedgerFixtureFactory {
         Map<Long, LlmInvocation> llmInvocations = new LinkedHashMap<>();
         Map<Long, ToolInvocation> toolInvocations = new LinkedHashMap<>();
         Map<Long, ArtifactRecord> artifacts = new LinkedHashMap<>();
+        Map<Long, WorkingMemoryCompactionEvent> compactionEvents = new LinkedHashMap<>();
+        Map<Long, LtmForkExecutionEvent> ltmForkEvents = new LinkedHashMap<>();
+        List<WorkingMemoryConversationRow> conversationRows = new ArrayList<>();
         Map<String, Map<Long, ToolOutputView>> toolOutputsByToolAndInvocationId = new LinkedHashMap<>();
         Map<String, Map<String, ToolOutputView>> toolOutputsByToolAndDirectKey = new LinkedHashMap<>();
         int queryRunByRequestIdCount;
@@ -274,6 +301,10 @@ public final class ExecutionLedgerFixtureFactory {
         int queryArtifactsByRunIdCount;
         int queryArtifactsByRunIdsCount;
         int queryArtifactsBySessionIdCount;
+        int queryCompactionByRequestIdsCount;
+        int queryMemoryForkByRequestIdsCount;
+        int queryConversationBySessionIdsCount;
+        boolean failConversationRead;
         int readToolOutputByInvocationIdCount;
         int readToolOutputByInvocationIdsCount;
     }
@@ -1000,6 +1031,15 @@ public final class ExecutionLedgerFixtureFactory {
             existing.setPromptTokens(invocation.getPromptTokens());
             existing.setCompletionTokens(invocation.getCompletionTokens());
             existing.setTotalTokens(invocation.getTotalTokens());
+            existing.setCachedPromptTokens(invocation.getCachedPromptTokens());
+            existing.setPromptTextTokens(invocation.getPromptTextTokens());
+            existing.setPromptAudioTokens(invocation.getPromptAudioTokens());
+            existing.setPromptImageTokens(invocation.getPromptImageTokens());
+            existing.setCompletionTextTokens(invocation.getCompletionTextTokens());
+            existing.setCompletionAudioTokens(invocation.getCompletionAudioTokens());
+            existing.setReasoningTokens(invocation.getReasoningTokens());
+            existing.setCacheStatus(invocation.getCacheStatus());
+            existing.setCacheRiskFlags(invocation.getCacheRiskFlags());
             existing.setFinishReason(invocation.getFinishReason());
             existing.setErrorMsg(invocation.getErrorMsg());
             existing.setFirstTokenAt(invocation.getFirstTokenAt());
@@ -1446,6 +1486,88 @@ public final class ExecutionLedgerFixtureFactory {
         }
     }
 
+    static final class InMemoryWorkingMemoryCompactionReadDao
+            implements IWorkingMemoryCompactionReadDao {
+        private final InMemoryLedgerStore store;
+
+        private InMemoryWorkingMemoryCompactionReadDao(InMemoryLedgerStore store) {
+            this.store = store;
+        }
+
+        @Override
+        public List<WorkingMemoryCompactionEvent> queryByTriggerRequestIds(
+                List<String> triggerRequestIds) {
+            store.queryCompactionByRequestIdsCount++;
+            if (triggerRequestIds == null || triggerRequestIds.isEmpty()) {
+                return List.of();
+            }
+            return store.compactionEvents.values().stream()
+                    .filter(item -> item.getDeleted() == 0
+                            && triggerRequestIds.contains(item.getTriggerRequestId()))
+                    .sorted(Comparator.comparing(WorkingMemoryCompactionEvent::getTriggerRequestId)
+                            .thenComparing(WorkingMemoryCompactionEvent::getCreateTime)
+                            .thenComparing(WorkingMemoryCompactionEvent::getId))
+                    .map(ExecutionLedgerFixtureFactory::cloneCompaction)
+                    .toList();
+        }
+    }
+
+    static final class InMemoryLtmForkExecutionReadDao
+            implements ILtmForkExecutionReadDao {
+        private final InMemoryLedgerStore store;
+
+        private InMemoryLtmForkExecutionReadDao(InMemoryLedgerStore store) {
+            this.store = store;
+        }
+
+        @Override
+        public List<LtmForkExecutionEvent> queryByTriggerRequestIds(
+                List<String> triggerRequestIds) {
+            store.queryMemoryForkByRequestIdsCount++;
+            if (triggerRequestIds == null || triggerRequestIds.isEmpty()) {
+                return List.of();
+            }
+            return store.ltmForkEvents.values().stream()
+                    .filter(item -> item.getDeleted() == 0
+                            && triggerRequestIds.contains(item.getTriggerRequestId()))
+                    .sorted(Comparator.comparing(LtmForkExecutionEvent::getTriggerRequestId)
+                            .thenComparing(LtmForkExecutionEvent::getCreateTime)
+                            .thenComparing(LtmForkExecutionEvent::getId))
+                    .map(ExecutionLedgerFixtureFactory::cloneLtmFork)
+                    .toList();
+        }
+    }
+
+    static final class InMemoryWorkingMemoryConversationReadDao
+            implements IWorkingMemoryConversationReadDao {
+        private final InMemoryLedgerStore store;
+
+        private InMemoryWorkingMemoryConversationReadDao(InMemoryLedgerStore store) {
+            this.store = store;
+        }
+
+        @Override
+        public List<WorkingMemoryConversationRow> queryBySessionIds(
+                List<String> sessionIds) {
+            store.queryConversationBySessionIdsCount++;
+            if (store.failConversationRead) {
+                throw new IllegalStateException("conversation read failed");
+            }
+            if (sessionIds == null || sessionIds.isEmpty()) {
+                return List.of();
+            }
+            return store.conversationRows.stream()
+                    .filter(row -> sessionIds.contains(row.getSessionId()))
+                    .filter(row -> !"MODEL_ONLY".equals(row.getVisibility()))
+                    .sorted(Comparator.comparing(WorkingMemoryConversationRow::getSessionId)
+                            .thenComparing(WorkingMemoryConversationRow::getTurnSeq)
+                            .thenComparing(WorkingMemoryConversationRow::getSeqNo)
+                            .thenComparing(WorkingMemoryConversationRow::getMessageId))
+                    .map(ExecutionLedgerFixtureFactory::cloneConversationRow)
+                    .toList();
+        }
+    }
+
     private static boolean equalsNullable(Object left, Object right) {
         if (left == null) {
             return right == null;
@@ -1535,10 +1657,22 @@ public final class ExecutionLedgerFixtureFactory {
                 .promptTokens(invocation.getPromptTokens())
                 .completionTokens(invocation.getCompletionTokens())
                 .totalTokens(invocation.getTotalTokens())
+                .cachedPromptTokens(invocation.getCachedPromptTokens())
+                .promptTextTokens(invocation.getPromptTextTokens())
+                .promptAudioTokens(invocation.getPromptAudioTokens())
+                .promptImageTokens(invocation.getPromptImageTokens())
+                .completionTextTokens(invocation.getCompletionTextTokens())
+                .completionAudioTokens(invocation.getCompletionAudioTokens())
+                .reasoningTokens(invocation.getReasoningTokens())
+                .systemFingerprint(invocation.getSystemFingerprint())
                 .estTotalTokens(invocation.getEstTotalTokens())
                 .estSystemTokens(invocation.getEstSystemTokens())
                 .estMessageTokens(invocation.getEstMessageTokens())
                 .estToolTokens(invocation.getEstToolTokens())
+                .messageCount(invocation.getMessageCount())
+                .toolCount(invocation.getToolCount())
+                .cacheStatus(invocation.getCacheStatus())
+                .cacheRiskFlags(invocation.getCacheRiskFlags())
                 .finishReason(invocation.getFinishReason())
                 .status(invocation.getStatus())
                 .errorMsg(invocation.getErrorMsg())
@@ -1603,6 +1737,78 @@ public final class ExecutionLedgerFixtureFactory {
                 .createTime(artifact.getCreateTime())
                 .updateTime(artifact.getUpdateTime())
                 .deleted(artifact.getDeleted())
+                .build();
+    }
+
+    private static WorkingMemoryCompactionEvent cloneCompaction(
+            WorkingMemoryCompactionEvent event) {
+        return WorkingMemoryCompactionEvent.builder()
+                .id(event.getId())
+                .sessionId(event.getSessionId())
+                .triggerRequestId(event.getTriggerRequestId())
+                .compactRequestId(event.getCompactRequestId())
+                .strategy(event.getStrategy())
+                .status(event.getStatus())
+                .beforeTokens(event.getBeforeTokens())
+                .afterTokens(event.getAfterTokens())
+                .beforeMessageCount(event.getBeforeMessageCount())
+                .afterMessageCount(event.getAfterMessageCount())
+                .thresholdTokens(event.getThresholdTokens())
+                .summaryText(event.getSummaryText())
+                .beforeMessagesJson(event.getBeforeMessagesJson())
+                .afterMessagesJson(event.getAfterMessagesJson())
+                .errorMessage(event.getErrorMessage())
+                .createTime(event.getCreateTime())
+                .updateTime(event.getUpdateTime())
+                .deleted(event.getDeleted())
+                .build();
+    }
+
+    private static LtmForkExecutionEvent cloneLtmFork(LtmForkExecutionEvent event) {
+        return LtmForkExecutionEvent.builder()
+                .id(event.getId())
+                .sessionId(event.getSessionId())
+                .triggerRequestId(event.getTriggerRequestId())
+                .forkRequestId(event.getForkRequestId())
+                .forkKind(event.getForkKind())
+                .status(event.getStatus())
+                .skipReason(event.getSkipReason())
+                .ownerType(event.getOwnerType())
+                .ownerId(event.getOwnerId())
+                .userTurns(event.getUserTurns())
+                .snapshotMessageCount(event.getSnapshotMessageCount())
+                .maxSteps(event.getMaxSteps())
+                .timeoutSeconds(event.getTimeoutSeconds())
+                .durationMs(event.getDurationMs())
+                .entriesBefore(event.getEntriesBefore())
+                .entriesAfter(event.getEntriesAfter())
+                .appliedCount(event.getAppliedCount())
+                .errorMessage(event.getErrorMessage())
+                .detailJson(event.getDetailJson())
+                .createTime(event.getCreateTime())
+                .updateTime(event.getUpdateTime())
+                .deleted(event.getDeleted())
+                .build();
+    }
+
+    private static WorkingMemoryConversationRow cloneConversationRow(
+            WorkingMemoryConversationRow row) {
+        return WorkingMemoryConversationRow.builder()
+                .turnId(row.getTurnId())
+                .messageId(row.getMessageId())
+                .sessionId(row.getSessionId())
+                .requestId(row.getRequestId())
+                .runId(row.getRunId())
+                .turnSeq(row.getTurnSeq())
+                .seqNo(row.getSeqNo())
+                .role(row.getRole())
+                .content(row.getContent())
+                .toolCallId(row.getToolCallId())
+                .toolCallsJson(row.getToolCallsJson())
+                .messageKind(row.getMessageKind())
+                .visibility(row.getVisibility())
+                .tokenEstimate(row.getTokenEstimate())
+                .createTime(row.getCreateTime())
                 .build();
     }
 

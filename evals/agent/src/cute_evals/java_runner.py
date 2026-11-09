@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 
 import jsonschema
 
@@ -16,6 +17,8 @@ from .models import EvalCase, RunTrace
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 TRACE_SCHEMA_PATH = schema_path("trace.schema.json")
+_COMPACTION_BUILD_LOCK = Lock()
+_COMPACTION_BUILT = False
 
 
 class EvalRunnerError(RuntimeError):
@@ -64,8 +67,16 @@ def _repo_root() -> Path:
     return Path(override).resolve() if override else REPO_ROOT
 
 
-def _run(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+def _run(
+    command: list[str],
+    timeout: int,
+    *,
+    input_text: str | None = None,
+    env_overrides: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
+    if env_overrides:
+        env.update(env_overrides)
     env.setdefault("MAVEN_OPTS", "-Dfile.encoding=UTF-8")
     try:
         return subprocess.run(
@@ -74,6 +85,7 @@ def _run(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
             text=True,
             encoding="utf-8",
             errors="replace",
+            input=input_text,
             capture_output=True,
             timeout=timeout,
             env=env,
@@ -86,7 +98,83 @@ def _run(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
         ) from exc
 
 
+def run_java_compaction(
+    payload: dict,
+    *,
+    build: bool = True,
+    timeout_seconds: int = 900,
+    spring_profile: str = "eval",
+    llm_model: str | None = None,
+    llm_base_url: str | None = None,
+    llm_api_key: str | None = None,
+    llm_interface_url: str | None = None,
+) -> dict:
+    global _COMPACTION_BUILT
+    if spring_profile.lower() in {"dev", "prod"}:
+        raise ValueError("compaction eval refuses dev/prod Spring profiles")
+    if build:
+        with _COMPACTION_BUILD_LOCK:
+            if not _COMPACTION_BUILT:
+                compile_java_fixture_runner()
+                _COMPACTION_BUILT = True
+    result = _run(
+        [
+            _maven_command(),
+            "-q",
+            *_maven_repo_args(),
+            "-pl",
+            "Cute-agent-app",
+            "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
+            "-Dexec.classpathScope=test",
+            "-Dexec.mainClass=org.wwz.ai.test.domain.EvalCompactionCli",
+            f"-Dexec.args=--spring-profile {spring_profile}",
+        ],
+        timeout=timeout_seconds,
+        input_text=json.dumps(payload, ensure_ascii=False),
+        env_overrides={
+            key: value
+            for key, value in {
+                "LLM_DEFAULT_MODEL": llm_model,
+                "LLM_DEFAULT_BASE_URL": llm_base_url,
+                "LLM_DEFAULT_APIKEY": llm_api_key,
+                "LLM_DEFAULT_INTERFACE_URL": llm_interface_url,
+            }.items()
+            if value
+        },
+    )
+    response: dict | None = None
+    for line in reversed(result.stdout.splitlines()):
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and "schemaVersion" in parsed:
+            response = parsed
+            break
+    if response is not None and response.get("error"):
+        raise EvalRunnerError("adapter", str(response["error"]))
+    if result.returncode != 0:
+        raise EvalRunnerError(
+            "adapter",
+            "Java compaction runner failed\n"
+            f"stdout:\n{result.stdout[-4000:]}\n"
+            f"stderr:\n{result.stderr[-4000:]}",
+        )
+    if response is None:
+        raise EvalRunnerError(
+            "adapter",
+            "Java compaction runner returned invalid JSON\n"
+            f"stdout:\n{result.stdout[-4000:]}\n"
+            f"stderr:\n{result.stderr[-4000:]}",
+        )
+    return response
+
+
 def compile_java_fixture_runner() -> None:
+    timeout = int(os.environ.get("CUTE_EVAL_BUILD_TIMEOUT_SECONDS", "1200"))
     install = _run(
         [
             _maven_command(),
@@ -98,7 +186,7 @@ def compile_java_fixture_runner() -> None:
             "install",
             "-Dmaven.test.skip=true",
         ],
-        timeout=600,
+        timeout=timeout,
     )
     if install.returncode != 0:
         raise EvalRunnerError(
@@ -117,7 +205,7 @@ def compile_java_fixture_runner() -> None:
             "test-compile",
             "-DskipTests=true",
         ],
-        timeout=600,
+        timeout=timeout,
     )
     if result.returncode != 0:
         raise EvalRunnerError(
@@ -286,8 +374,11 @@ def run_java_cases(
                     "maxTotalTokens": case.budgets.max_total_tokens,
                     "maxToolCalls": case.budgets.max_tool_calls,
                     "answerContract": case.answer_contract,
+                    "userId": case.user_id,
+                    "memorySeed": case.memory_seed,
                     "toolMode": tool_mode,
                     "toolEndpoint": tool_endpoint,
+                    "compaction": case.compaction,
                     "workspaceRoot": (
                         str(workspace_roots[case.id].resolve())
                         if workspace_roots and case.id in workspace_roots
@@ -303,13 +394,14 @@ def run_java_cases(
             encoding="utf-8",
         )
         java_out = stage / "out"
-        main_class = runner_class or (
-            "org.wwz.ai.test.domain.EvalLiveRunnerCli"
-            if mode == "live"
-            else "org.wwz.ai.test.domain.EvalFixtureRunnerCli"
-        )
+        main_class = runner_class or {
+            "fixture": "org.wwz.ai.test.domain.EvalFixtureRunnerCli",
+            "live": "org.wwz.ai.test.domain.EvalLiveRunnerCli",
+            "benchmark": "org.wwz.ai.test.domain.EvalBenchmarkLiveRunnerCli",
+            "compaction": "org.wwz.ai.test.domain.EvalCompactionCarryForwardCli",
+        }[mode]
         exec_args = f"--cases {manifest_path} --out {java_out}"
-        if mode == "live":
+        if mode in {"live", "benchmark", "compaction"}:
             exec_args += f" --spring-profile eval --eval-profile {profile}"
         result = _run(
             [
@@ -349,6 +441,13 @@ def run_java_cases(
             ) from exc
         schema = json.loads(TRACE_SCHEMA_PATH.read_text(encoding="utf-8"))
         for item in result_payload["cases"]:
+            if not item.get("tracePath"):
+                detail = item.get("error") or item.get("finalText") or "unknown failure"
+                raise EvalRunnerError(
+                    "agent",
+                    f"Java eval case {item.get('caseId', '<unknown>')} produced no "
+                    f"trace: {detail}",
+                )
             relative = str(item["tracePath"])
             source = java_out / relative
             if not source.exists():
@@ -385,6 +484,7 @@ def run_java_conversation(
     user_simulator_endpoint: str | None = None,
     initial_user_message: str | None = None,
     max_turns: int = 20,
+    independent_turns: bool = False,
     build: bool = True,
     timeout_seconds: int = 600,
 ) -> JavaConversationResult:
@@ -424,9 +524,17 @@ def run_java_conversation(
                         if turns
                         else []
                     ),
+                    "query": case.query,
                     "tools": case.tools,
                     "maxSteps": case.expected.max_steps,
+                    "maxWallMs": case.budgets.max_wall_ms,
+                    "maxTotalTokens": case.budgets.max_total_tokens,
+                    "maxToolCalls": case.budgets.max_tool_calls,
+                    "answerContract": case.answer_contract,
+                    "userId": case.user_id,
+                    "memorySeed": case.memory_seed,
                     "maxTurns": max_turns,
+                    "independentTurns": independent_turns,
                     "toolMode": tool_mode,
                     "toolEndpoint": tool_endpoint,
                     "userSimulatorEndpoint": user_simulator_endpoint,

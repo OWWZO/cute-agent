@@ -21,6 +21,7 @@ def run_inspect_attempt(
     judge_cache_dir: Path | None,
     timeout_seconds: int,
     build: bool,
+    tool_mode: str = "ephemeral",
 ) -> list[CaseResult]:
     try:
         from inspect_ai import Task
@@ -50,6 +51,7 @@ def run_inspect_attempt(
                     profile=profile,
                     build=build,
                     timeout_seconds=timeout_seconds,
+                    tool_mode=tool_mode,
                 )
             )
             state.metadata["cuteAgentEval"] = {

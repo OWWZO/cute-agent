@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryCompactionReadDao">
+
+    <resultMap id="WorkingMemoryCompactionReadMap"
+               type="org.wwz.ai.domain.agent.memory.WorkingMemoryCompactionEvent">
+        <id column="id" property="id"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="trigger_request_id" property="triggerRequestId"/>
+        <result column="compact_request_id" property="compactRequestId"/>
+        <result column="strategy" property="strategy"/>
+        <result column="status" property="status"/>
+        <result column="before_tokens" property="beforeTokens"/>
+        <result column="after_tokens" property="afterTokens"/>
+        <result column="before_message_count" property="beforeMessageCount"/>
+        <result column="after_message_count" property="afterMessageCount"/>
+        <result column="threshold_tokens" property="thresholdTokens"/>
+        <result column="summary_text" property="summaryText"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <select id="queryByTriggerRequestIds" resultMap="WorkingMemoryCompactionReadMap">
+        SELECT id, session_id, trigger_request_id, compact_request_id, strategy, status,
+               before_tokens, after_tokens, before_message_count, after_message_count,
+               threshold_tokens, summary_text, error_message, create_time
+        FROM ai_agent_working_memory_compaction
+        WHERE deleted = 0
+          AND trigger_request_id IN
+        <foreach collection="triggerRequestIds" item="triggerRequestId"
+                 open="(" separator="," close=")">
+            #{triggerRequestId}
+        </foreach>
+        ORDER BY trigger_request_id ASC, create_time ASC, id ASC
+    </select>
+
+</mapper>

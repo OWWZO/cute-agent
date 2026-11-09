@@ -87,6 +87,88 @@ class SearchEngineIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("article", content)
         self.assertEqual("http://127.0.0.1:7890", captured["request"]["proxy"])
 
+    async def test_should_use_trafilatura_markdown_for_html(self):
+        captured = {}
+
+        class FakeResponse:
+            content_type = "text/html"
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def read(self):
+                return b"<html><body><article>ignored</article></body></html>"
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            def get(self, url, **kwargs):
+                return FakeResponse()
+
+        def fake_extract(html, **kwargs):
+            captured.update(kwargs)
+            return "## 正文\n\n表格内容"
+
+        with patch(
+            "cute_tool.tool.search_component.search_engine.aiohttp.ClientSession",
+            FakeSession,
+        ), patch(
+            "cute_tool.tool.search_component.search_engine.trafilatura.extract",
+            side_effect=fake_extract,
+        ):
+            content = await SearchBase._fetch_content_with_direct_http(
+                "https://example.com/article",
+                15,
+            )
+
+        self.assertEqual("## 正文\n\n表格内容", content)
+        self.assertEqual("markdown", captured["output_format"])
+        self.assertTrue(captured["include_tables"])
+
+    async def test_should_fallback_to_beautifulsoup_when_trafilatura_is_empty(self):
+        class FakeResponse:
+            content_type = "text/html"
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def read(self):
+                return b"<html><body>fallback article</body></html>"
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            def get(self, url, **kwargs):
+                return FakeResponse()
+
+        with patch(
+            "cute_tool.tool.search_component.search_engine.aiohttp.ClientSession",
+            FakeSession,
+        ), patch(
+            "cute_tool.tool.search_component.search_engine.trafilatura.extract",
+            return_value=None,
+        ):
+            content = await SearchBase._fetch_content_with_direct_http(
+                "https://example.com/article",
+                15,
+            )
+
+        self.assertEqual("fallback article", content)
+
     @patch.object(SearchBase, "_fetch_content_with_direct_http", new_callable=AsyncMock)
     @patch.object(SearchBase, "_fetch_content_with_jina_reader", new_callable=AsyncMock)
     async def test_should_use_jina_reader_content_when_available(

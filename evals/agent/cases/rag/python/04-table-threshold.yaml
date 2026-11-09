@@ -1,0 +1,19 @@
+id: rag-python.table-threshold
+suite: rag-python
+version: 1
+hardGate: true
+judgeTask: "从费用标准表中查出交通费上限为 800 元，并带上表格行引用。"
+metadata:
+  source: project-owned
+  taskType: rag
+  failureMode: table-cell-miss
+input:
+  message: "差旅交通费的报销上限是多少？请从费用标准表中查询并给出引用。"
+expected:
+  finalContains: ["800 元"]
+  finalNotContains: ["没有上限"]
+  requiredCitations: ["[expense-table.csv#row12]"]
+budgets:
+  maxTotalTokens: 2200
+  maxWallMs: 120000
+script: []

@@ -1,0 +1,11 @@
+name: rag-python
+version: "1"
+upstream: project-owned
+license: project-owned
+scoreLabel: mrag-python-contract
+runnerMode: python-http-sse
+dataset:
+  casesDir: cases/rag/python
+  split: internal
+knowledgeBase:
+  env: CUTE_EVAL_MRAG_KB_ID

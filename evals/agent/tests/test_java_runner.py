@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import json
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,9 @@ from cute_evals.java_runner import (
     EvalRunnerError,
     export_ledger_traces,
     run_java_cases,
+    run_java_conversation,
 )
+from cute_evals.models import BudgetSpec, EvalCase, ExpectedSpec
 
 
 def _python_case():
@@ -104,3 +107,94 @@ def test_ledger_export_rejects_time_values_with_whitespace() -> None:
             to_time="2026-11-06T11:00:00",
             build=False,
         )
+
+
+def test_conversation_manifest_carries_memory_seed_and_turn_budgets(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    captured: dict = {}
+
+    def fake_run(command, timeout):
+        args = next(
+            item
+            for item in command
+            if item.startswith("-Dexec.args=")
+        )
+        exec_args = args.removeprefix("-Dexec.args=")
+        cases_path = Path(
+            exec_args.split("--cases ", 1)[1].split(" --out ", 1)[0]
+        )
+        out_path = Path(
+            exec_args.split("--out ", 1)[1].split(" --spring-profile ", 1)[0]
+        )
+        captured.update(
+            json.loads(cases_path.read_text(encoding="utf-8"))
+        )
+        out_path.mkdir(parents=True, exist_ok=True)
+        (out_path / "result.json").write_text(
+            json.dumps(
+                {
+                    "cases": [
+                        {
+                            "caseId": "memory-case",
+                            "conversationId": "session-1",
+                            "status": "SUCCESS",
+                            "finalText": "FINAL_ANSWER: ok",
+                            "turns": [],
+                            "tracePaths": [],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(java_runner, "_run", fake_run)
+    case = EvalCase(
+        id="memory-case",
+        suite="memoryagentbench-official-subset",
+        version=1,
+        hard_gate=True,
+        query="Question",
+        expected=ExpectedSpec(max_steps=10),
+        budgets=BudgetSpec(
+            max_total_tokens=80_000,
+            max_wall_ms=300_000,
+            max_tool_calls=12,
+        ),
+        script=[],
+        source_path="test",
+        user_id="eval-user",
+        memory_seed={
+            "userId": "eval-user",
+            "namespace": "eval-ns",
+            "sessions": [
+                {
+                    "sessionId": "eval-s1",
+                    "timestamp": "2024-01-01 00:00:00",
+                    "turns": [
+                        {"role": "user", "content": "context"},
+                    ],
+                }
+            ],
+        },
+        answer_contract={"linePrefix": "FINAL_ANSWER:"},
+    )
+
+    result = run_java_conversation(
+        case,
+        ["Question 1", "Question 2"],
+        tmp_path / "out",
+        independent_turns=True,
+        build=False,
+    )
+
+    row = captured["cases"][0]
+    assert row["turns"][0]["query"] == "Question 1"
+    assert row["maxTotalTokens"] == 80_000
+    assert row["memorySeed"]["sessions"][0]["sessionId"] == "eval-s1"
+    assert row["answerContract"]["linePrefix"] == "FINAL_ANSWER:"
+    assert row["independentTurns"] is True
+    assert result.task_id == "memory-case"

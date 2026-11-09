@@ -1,6 +1,7 @@
 package org.wwz.ai.infrastructure.cute.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.ObjectProvider;
@@ -38,6 +39,7 @@ import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryCompactionDao;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
@@ -45,6 +47,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 工作记忆压缩流水线：
@@ -67,7 +71,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
     public static final String STRATEGY_DROP_OLDEST = "drop-oldest";
 
     private static final String COMPACT_REQUEST_PREFIX = "wm-compact-";
-    private static final int MAX_AUDIT_JSON_CHARS = 500_000;
+    private static final int MAX_AUDIT_JSON_CHARS = WorkingMemoryCompactionEvent.MAX_PAYLOAD_CHARS;
     private static final ThreadLocal<LtmFlushParity> FLUSH_PARITY = new ThreadLocal<>();
     private static final ThreadLocal<PromptShape> PROMPT_SHAPE = new ThreadLocal<>();
     private static final ThreadLocal<ContextTokenTracker.Snapshot> TOKEN_SNAPSHOT = new ThreadLocal<>();
@@ -380,6 +384,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
     }
 
     private static final int MAX_COMPACT_PTL_RETRIES = 3;
+    private static final int MAX_COMPACT_FORMAT_RETRIES = 1;
 
     protected List<Message> fullCompact(String sessionId,
                                       String requestId,
@@ -410,9 +415,10 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
         }
 
         boolean iterative = StringUtils.isNotBlank(previous);
+        int summaryCharBudget = summaryCharBudget(budget);
         String systemPrompt = iterative
-                ? CompactionPrompt.getIterativeUpdatePrompt()
-                : CompactionPrompt.getCompactPrompt();
+                ? CompactionPrompt.getIterativeUpdatePrompt(summaryCharBudget)
+                : CompactionPrompt.getCompactPrompt(summaryCharBudget);
 
         String modelName = resolveCompactModelName();
         LLM llm = new LLM(modelName, "", runtimeDependencies());
@@ -434,13 +440,20 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
         Message system = Message.systemMessage(systemPrompt, null);
 
         // 压缩请求自身 413/超上下文时，按 tool-safe 丢掉 middle 最旧段再重试。
-        Exception lastError = null;
         List<Message> middleForSummary = middle;
-        for (int attempt = 0; attempt <= MAX_COMPACT_PTL_RETRIES; attempt++) {
+        int ptlRetries = 0;
+        int formatRetries = 0;
+        while (true) {
             String serialized = compactor.serializeMiddleForSummarizer(middleForSummary, budget);
             String userPayload = iterative
                     ? CompactionPrompt.buildIterativeUserPayload(previous, serialized)
                     : serialized + "\n\nPlease provide the conversation checkpoint now.";
+            if (formatRetries > 0) {
+                userPayload += "\n\nFORMAT CORRECTION: The previous response omitted required "
+                        + "checkpoint sections. Re-output the complete checkpoint with non-empty "
+                        + "## Goal, ## Constraints & Preferences, and ## Active State sections. "
+                        + "Keep the English headings exactly as written.";
+            }
             List<Message> askMessages = List.of(Message.userMessage(userPayload, null));
             java.util.concurrent.CompletableFuture<String> llmFuture = null;
             try {
@@ -455,17 +468,28 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                 );
                 String raw = llmFuture.get(Math.max(1, budget.getSummarizerTimeoutSeconds()), TimeUnit.SECONDS);
 
-                String formatted = CompactionPrompt.formatCompactSummary(raw);
-                if (StringUtils.isBlank(formatted)) {
-                    throw new IllegalStateException("empty compact summary");
-                }
+                List<String> literalSources = new ArrayList<>(body.stream()
+                        .filter(message -> message != null
+                                && (message.getRole()
+                                == org.wwz.ai.domain.agent.runtime.enums.RoleType.USER
+                                || message.getRole()
+                                == org.wwz.ai.domain.agent.runtime.enums.RoleType.ASSISTANT))
+                        .map(Message::getContent)
+                        .filter(StringUtils::isNotBlank)
+                        .toList());
+                literalSources.add(serialized);
+                String formatted = CompactionPrompt.preserveLiteralIdentifiers(
+                        CompactionPrompt.formatAndValidateCompactSummary(raw),
+                        literalSources);
                 String latestUser = latestActionableUser(body);
                 String grounded = CompactionPrompt.groundHistoricalTaskSnapshot(formatted, latestUser);
                 String reinject = CompactionPrompt.wrapSummaryForReinject(grounded, !tail.isEmpty());
+                reinject = CompactionPrompt.preserveLiteralIdentifiersInHandoff(
+                        reinject, literalSources);
                 List<Message> post = compactor.buildPostCompactMessages(head, reinject,
                         compactor.chooseHandoffRole(head, tail), tail);
-                log.info("full-llm compact sessionId={} attempt={} summarizeMsgs={} keepMsgs={} postMsgs={} postTokens={}",
-                        sessionId, attempt, middleForSummary.size(), tail.size(), post.size(),
+                log.info("full-llm compact sessionId={} retries={} summarizeMsgs={} keepMsgs={} postMsgs={} postTokens={}",
+                        sessionId, formatRetries + ptlRetries, middleForSummary.size(), tail.size(), post.size(),
                         compactor.estimateTokens(post));
                 return post;
             } catch (Exception e) {
@@ -475,20 +499,33 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                 if (e instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
-                lastError = e;
-                if (attempt >= MAX_COMPACT_PTL_RETRIES || !isPromptTooLongForCompact(e)) {
+                if (e instanceof CompactionPrompt.CheckpointFormatException
+                        && formatRetries < MAX_COMPACT_FORMAT_RETRIES) {
+                    formatRetries++;
+                    log.warn("compact format retry sessionId={} attempt={} reason={}",
+                            sessionId, formatRetries, e.getMessage());
+                    continue;
+                }
+                if (!isPromptTooLongForCompact(e)
+                        || ptlRetries >= MAX_COMPACT_PTL_RETRIES) {
                     throw e;
                 }
                 List<Message> truncated = compactor.truncateHeadForCompactRetry(middleForSummary);
                 if (truncated == null || truncated.size() >= middleForSummary.size()) {
                     throw e;
                 }
+                ptlRetries++;
                 log.warn("compact request too long, truncate middle and retry sessionId={} attempt={} beforeMsgs={} afterMsgs={}",
-                        sessionId, attempt + 1, middleForSummary.size(), truncated.size());
+                        sessionId, ptlRetries, middleForSummary.size(), truncated.size());
                 middleForSummary = truncated;
             }
         }
-        throw lastError != null ? lastError : new IllegalStateException("compact failed without error");
+    }
+
+    private static int summaryCharBudget(CompactionBudget budget) {
+        int targetTokens = (int) Math.ceil(
+                Math.max(0.0d, budget.getSummaryTargetRatio()) * budget.threshold());
+        return Math.max(800, Math.min(budget.getContentMaxChars(), targetTokens * 4));
     }
 
     protected List<Message> localFallback(List<Message> messages, CompactionBudget budget) {
@@ -513,8 +550,23 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
         String summary = CompactionPrompt.groundHistoricalTaskSnapshot(
                 compactor.buildStaticFallbackSummary(middle, previous, latestActionableUser(body)),
                 latestActionableUser(body));
+        List<String> literalSources = literalSources(body);
+        summary = CompactionPrompt.preserveLiteralIdentifiers(summary, literalSources);
         String wrapped = CompactionPrompt.wrapSummaryForReinject(summary, !tail.isEmpty());
+        wrapped = CompactionPrompt.preserveLiteralIdentifiersInHandoff(wrapped, literalSources);
         return compactor.buildPostCompactMessages(head, wrapped, null, tail);
+    }
+
+    private static List<String> literalSources(List<Message> messages) {
+        return new ArrayList<>(messages.stream()
+                .filter(message -> message != null
+                        && (message.getRole()
+                        == org.wwz.ai.domain.agent.runtime.enums.RoleType.USER
+                        || message.getRole()
+                        == org.wwz.ai.domain.agent.runtime.enums.RoleType.ASSISTANT))
+                .map(Message::getContent)
+                .filter(StringUtils::isNotBlank)
+                .toList());
     }
 
     private String latestActionableUser(List<Message> messages) {
@@ -781,11 +833,27 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
             }
             String json = JSON.toJSONString(slim);
             if (json != null && json.length() > MAX_AUDIT_JSON_CHARS) {
-                return json.substring(0, MAX_AUDIT_JSON_CHARS) + "...[truncated]";
+                JSONObject marker = new JSONObject();
+                marker.put("truncated", true);
+                marker.put("reason", "audit_payload_limit");
+                marker.put("originalChars", json.length());
+                marker.put("messageCount", slim.size());
+                marker.put("sha256", "sha256:" + sha256(json));
+                return marker.toJSONString();
             }
             return json;
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    private static String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(
+                    digest.digest(StringUtils.defaultString(value).getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("sha256 unavailable", e);
         }
     }
 }

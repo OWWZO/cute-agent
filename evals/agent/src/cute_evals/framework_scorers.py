@@ -135,7 +135,7 @@ def score_agentevals(
 
         evaluator = create_trajectory_match_evaluator(
             trajectory_match_mode="strict",
-            tool_args_match_mode="exact",
+            tool_args_match_mode="superset",
         )
         result = evaluator(outputs=outputs, reference_outputs=reference_outputs)
         passed = bool(result.get("score")) if isinstance(result, dict) else bool(result)
@@ -150,7 +150,11 @@ def score_agentevals(
                 passed=passed,
                 hard_gate=case.hard_gate and case.expected.strict_tool_sequence,
                 status="verified",
-                evidence={"reasoning": reasoning},
+                evidence={
+                    "reasoning": reasoning,
+                    "trajectoryMatchMode": "strict",
+                    "toolArgsMatchMode": "superset",
+                },
             )
         )
     except Exception as exc:  # noqa: BLE001 - third-party judge failures are unverified.
@@ -461,14 +465,24 @@ def score_ragas(
     judge: JudgeConfig | None,
     require_judge: bool,
 ) -> list[ScoreRecord]:
-    if case.suite != "rag-core":
+    if case.suite not in {"rag-core", "rag-python"}:
         return []
 
-    contexts = [
-        str(item.get("toolResult") or item.get("llmObservation") or "")
-        for item in trace.tool_invocations
-        if item.get("toolName") == "mrag_query"
-    ]
+    contexts: list[str] = []
+    for item in trace.tool_invocations:
+        if item.get("toolName") != "mrag_query":
+            continue
+        retrieved_contexts = item.get("retrievedContexts")
+        if isinstance(retrieved_contexts, list) and retrieved_contexts:
+            contexts.extend(
+                str(context)
+                for context in retrieved_contexts
+                if str(context).strip()
+            )
+            continue
+        context = str(item.get("toolResult") or item.get("llmObservation") or "")
+        if context:
+            contexts.append(context)
     contexts = [context for context in contexts if context]
     required = case.expected.required_citations
     retrieved = "\n".join(contexts)

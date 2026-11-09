@@ -180,6 +180,38 @@ def test_model_error_stays_in_denominator(tmp_path: Path) -> None:
     assert report["recommendation"] == "block"
 
 
+def test_total_token_ratio_sums_task_medians_instead_of_masking_with_median(
+    tmp_path: Path,
+) -> None:
+    case_dir = tmp_path / "cases"
+    spec_path = tmp_path / "experiment.yaml"
+    _write_spec(spec_path, case_dir, cases=3)
+    base_tokens = {
+        "ab-smoke.0": 100,
+        "ab-smoke.1": 200,
+        "ab-smoke.2": 400,
+    }
+    candidate_tokens = {
+        "ab-smoke.0": 100,
+        "ab-smoke.1": 200,
+        "ab-smoke.2": 300,
+    }
+
+    def executor(cell: CellSpec, attempt: int) -> CellResult:
+        result = _result(cell, "passed", 1.0)
+        result.metrics["totalTokens"] = (
+            base_tokens if cell.arm == "base" else candidate_tokens
+        )[cell.case.id]
+        return result
+
+    report = run_experiment(spec_path, tmp_path / "out", executor=executor)
+
+    assert report["metricDeltas"]["totalTokensRatio"] == pytest.approx(
+        600 / 700
+    )
+    assert report["metricDeltas"]["totalTokensDelta"] == -100
+
+
 def test_infra_error_is_reported_but_not_in_denominator(tmp_path: Path) -> None:
     case_dir = tmp_path / "cases"
     spec_path = tmp_path / "experiment.yaml"
@@ -286,7 +318,11 @@ def test_default_executor_isolates_database_repo_and_attempt_artifacts(
 
     monkeypatch.setattr("cute_evals.ab_runner.subprocess.run", fake_run)
 
-    result = _default_executor(spec, output)(cell, 0)
+    isolated_roots = {
+        **roots,
+        "candidate": roots["candidate"] / "candidate",
+    }
+    result = _default_executor(spec, output, isolated_roots)(cell, 0)
 
     assert result.status == "adapter_error"
     assert captured["staleTraceExists"] is False
@@ -295,6 +331,36 @@ def test_default_executor_isolates_database_repo_and_attempt_artifacts(
     assert env["CUTE_EVAL_MAVEN_REPO"] == str(
         output / "maven-repos" / cell.arm
     )
+
+
+def test_default_executor_reuses_maven_repo_for_same_source_root(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    spec_path = tmp_path / "experiment.yaml"
+    _write_spec(spec_path, tmp_path / "cases")
+    spec = load_experiment(spec_path)
+    output = tmp_path / "out"
+    roots = prepare_arm_roots(spec, output)
+    fingerprints = build_arm_fingerprints(spec, roots)
+    cell = build_cells(
+        spec,
+        load_experiment_cases(spec),
+        roots,
+        fingerprints,
+    )[0]
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["env"] = kwargs["env"]
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.delenv("CUTE_EVAL_MAVEN_REPO", raising=False)
+    monkeypatch.setattr("cute_evals.ab_runner.subprocess.run", fake_run)
+
+    _default_executor(spec, output, roots)(cell, 0)
+
+    assert "CUTE_EVAL_MAVEN_REPO" not in captured["env"]
 
 
 def test_ab_cell_builds_judge_from_environment(

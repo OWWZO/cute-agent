@@ -1,0 +1,49 @@
+name: agent-reward-bench
+version: "05899fcfe52c925978944a23920373b7a9c63740"
+upstream: https://github.com/McGill-NLP/agent-reward-bench
+upstreamCommit: 05899fcfe52c925978944a23920373b7a9c63740
+trajectoryDataset: McGill-NLP/agent-reward-bench
+trajectoryDatasetRevision: b6d17e646009d6cb63d5dd7be78807b680693f61
+licenseStatus: blocked-license
+licenseEvidence: "No root LICENSE was present at the pinned commit; the HF dataset card has no license field; screenshot asset terms are not separately confirmed."
+scoreNamespace: judge-calibration
+scoreLabel: blocked-license
+splits:
+  smoke: 5
+  dev: -1
+  test: -1
+expectedTargets:
+  dev: 196
+  test: 1106
+data:
+  annotations:
+    file: agent_reward_bench/data/annotations.csv
+    sha256: 155be0e6530d190c14a056f0195aaafa081c2a45a36e8f72b922c9fdc6838367
+    size: 265137
+  splits:
+    file: agent_reward_bench/data/splits.csv
+    sha256: 42bfeef886c1d7b216d31a6c8e9f7af58a6c4bd4d236df9f230e24c558c2499d
+    size: 19149
+  completeTaskIds:
+    file: agent_reward_bench/data/complete_task_ids.csv
+    sha256: 4950e0722be925dc4ff7a5d61d13a52c518e9b27e83011a76c5f1599fbff9faf
+    size: 17439
+scripts:
+  promptDefaults:
+    file: agent_reward_bench/judge/defaults.py
+    sha256: 861053f34b0a5ad56dc14f48b4eeffc11d4b19de4decdedf0e973976a31641a9
+  judge:
+    file: agent_reward_bench/judge/__init__.py
+    sha256: 1954d5cff88453eff78d50c91e3ce0579c8a938f1405db1f1b32c021bfc93aba
+  metrics:
+    file: agent_reward_bench/eval/metrics.py
+    sha256: 989a795075b74b1462d4837cbf37397f3a6bcfcae2ef7a08c87061bfa0493be5
+  evalPackage:
+    file: agent_reward_bench/eval/__init__.py
+    sha256: 630ccc60f913e128cdec5aac6b50637744331a378569151d0b3e36e169efb4a8
+  judgeRunner:
+    file: scripts/run_judge.py
+    sha256: 1a5afe14d21bebc326f4b8ecbfca5248a6209aa69e7f5a35d8c6da36565beae7
+  scorer:
+    file: scripts/score_judgments.py
+    sha256: 88d804ee91541345cb8cd494ac5e0a62797dd41ed2b812f42d190cfd047de925

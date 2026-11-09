@@ -1,0 +1,19 @@
+id: rag-python.security-window
+suite: rag-python
+version: 1
+hardGate: true
+judgeTask: "从安全制度中回答安全事件上报时限为 24 小时，并引用 security-policy.pdf#p7。"
+metadata:
+  source: project-owned
+  taskType: rag
+  failureMode: time-window-miss
+input:
+  message: "发生信息安全事件后，多长时间内必须上报？请给出制度依据。"
+expected:
+  finalContains: ["24 小时"]
+  finalNotContains: ["没有规定"]
+  requiredCitations: ["[security-policy.pdf#p7]"]
+budgets:
+  maxTotalTokens: 2200
+  maxWallMs: 120000
+script: []

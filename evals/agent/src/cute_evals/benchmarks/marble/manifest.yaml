@@ -1,0 +1,47 @@
+name: multiagentbench-marble
+version: "8d60fa17b5596b44458a52d4296061b9fc13d6f2"
+upstream: https://github.com/ulab-uiuc/MARBLE
+upstreamCommit: 8d60fa17b5596b44458a52d4296061b9fc13d6f2
+licenseStatus: blocked-license
+licenseEvidence: "Root LICENSE is MIT, but pyproject.toml declares Apache 2.0; the conflict is unresolved."
+scoreNamespace: agent-benchmark
+scoreLabel: blocked-license
+splits:
+  smoke: 1
+  official-subset: 10
+  official-full: -1
+expectedRecordsPerDomain: 100
+domains:
+  bargaining:
+    file: multiagentbench/bargaining/bargaining_main.jsonl
+    sha256: 786b03c4a7c20ba67ae59860ad6c01dd8bb4ce0528ae08515f921320488c1547
+    size: 1778988
+  coding:
+    file: multiagentbench/coding/coding_main.jsonl
+    sha256: 7189bb38cb1c099dfa42c55af9b56ad4d177df986ff0f357160928e9d401d48b
+    size: 521235
+  database:
+    file: multiagentbench/database/database_main.jsonl
+    sha256: e1128d946d49c4943849a758b0c2d22a1af57b7a71c43694107813d8a1542631
+    size: 950472
+  minecraft:
+    file: multiagentbench/minecraft/minecraft_main.jsonl
+    sha256: 232785cbd492eff0fbb821db4db7415f5cf1f01a1326e7deaffe9f59a6f1d08d
+    size: 327300
+  research:
+    file: multiagentbench/research/research_main.jsonl
+    sha256: 1c7583f1ee0583ac12a625fb5c19de7b5983344dde89a2254c1782d6309310e9
+    size: 1791147
+scripts:
+  entrypoint:
+    file: marble/main.py
+    sha256: e9807d339dccb0f3c9d87cb0700142767c1b91c7fc094fc1eb5927121a4c7392
+  evaluator:
+    file: marble/evaluator/evaluator.py
+    sha256: cc9234a9003792538acc5e01579f484d16446da696319cb0c34a7f3466990ad8
+  databaseBatchEvaluator:
+    file: scripts/database/batch_eval.py
+    sha256: 2612e7e493ba6e8ff9b3f375264fef79c303826e629a9983843201f5a734a466
+  taskConverter:
+    file: multiagentbench/jsonl2yaml.py
+    sha256: 75bac9b52e9397937367d10aeee144703709c23a68c22a80d4c0138581e32cc1

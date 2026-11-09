@@ -4,11 +4,14 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
+import org.wwz.ai.domain.agent.ledger.model.ContextEventView;
+import org.wwz.ai.domain.agent.ledger.model.ConversationMessageView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationView;
+import org.wwz.ai.domain.agent.ledger.model.MemoryEventView;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.agent.ReActAgent;
@@ -21,10 +24,13 @@ import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -174,7 +180,7 @@ public final class EvalFixtureRunnerCli {
                               ExecutionRunDetail detail,
                               JSONObject environment) {
         JSONObject trace = new JSONObject();
-        trace.put("schemaVersion", "1.0");
+        trace.put("schemaVersion", "1.1");
 
         JSONObject producer = new JSONObject();
         producer.put("agent", "cute-agent");
@@ -186,8 +192,10 @@ public final class EvalFixtureRunnerCli {
         JSONObject run = new JSONObject();
         run.put("caseId", caseId);
         run.put("runId", detail.getRun().getId());
+        run.put("runUid", detail.getRun().getRunUid());
         run.put("requestId", detail.getRun().getRequestId());
         run.put("sessionId", detail.getRun().getSessionId());
+        run.put("userIdHash", hashUserId(detail.getRun().getUserId()));
         run.put("entryAgent", detail.getRun().getEntryAgent());
         run.put("status", statusName(detail.getRun().getStatus()));
         run.put("queryText", detail.getRun().getQueryText());
@@ -206,6 +214,34 @@ public final class EvalFixtureRunnerCli {
         run.put("errorMsg", detail.getRun().getErrorMsg());
         trace.put("run", run);
 
+        JSONArray conversation = new JSONArray();
+        for (ConversationMessageView item : detail.getConversation()) {
+            JSONObject message = new JSONObject();
+            message.put("messageId", item.getMessageId());
+            message.put("conversationId", item.getConversationId());
+            message.put("turnId", item.getTurnId());
+            message.put("turnIndex", item.getTurnIndex());
+            message.put("requestId", item.getRequestId());
+            message.put("runId", item.getRunId());
+            message.put("seqNo", item.getSeqNo());
+            message.put("role", item.getRole());
+            message.put("actor", item.getActor());
+            message.put("content", item.getContent());
+            message.put("toolCallId", item.getToolCallId());
+            message.put("toolCalls", parseToolCalls(item.getToolCallsJson()));
+            message.put("messageKind", item.getMessageKind());
+            message.put("visibility", item.getVisibility());
+            message.put("tokenEstimate", item.getTokenEstimate());
+            message.put("timestamp", time(item.getTimestamp()));
+            conversation.add(message);
+        }
+        trace.put("conversation", conversation);
+        trace.put("conversationSource", detail.getConversationSource());
+        trace.put("environmentEvents", new JSONArray());
+        trace.put("environmentSource", "unavailable");
+        trace.put("environmentSnapshots", new JSONArray());
+        trace.put("snapshotSource", "unavailable");
+
         JSONArray llms = new JSONArray();
         for (LlmInvocationView item : detail.getLlmInvocations()) {
             JSONObject llm = new JSONObject();
@@ -222,6 +258,22 @@ public final class EvalFixtureRunnerCli {
             llm.put("promptTokens", item.getPromptTokens());
             llm.put("completionTokens", item.getCompletionTokens());
             llm.put("totalTokens", item.getTotalTokens());
+            llm.put("cachedPromptTokens", item.getCachedPromptTokens());
+            llm.put("promptTextTokens", item.getPromptTextTokens());
+            llm.put("promptAudioTokens", item.getPromptAudioTokens());
+            llm.put("promptImageTokens", item.getPromptImageTokens());
+            llm.put("completionTextTokens", item.getCompletionTextTokens());
+            llm.put("completionAudioTokens", item.getCompletionAudioTokens());
+            llm.put("reasoningTokens", item.getReasoningTokens());
+            llm.put("systemFingerprint", item.getSystemFingerprint());
+            llm.put("estTotalTokens", item.getEstTotalTokens());
+            llm.put("estSystemTokens", item.getEstSystemTokens());
+            llm.put("estMessageTokens", item.getEstMessageTokens());
+            llm.put("estToolTokens", item.getEstToolTokens());
+            llm.put("messageCount", item.getMessageCount());
+            llm.put("toolCount", item.getToolCount());
+            llm.put("cacheStatus", item.getCacheStatus());
+            llm.put("cacheRiskFlags", item.getCacheRiskFlags());
             llm.put("finishReason", item.getFinishReason());
             llm.put("status", statusName(item.getStatus()));
             llm.put("errorMsg", item.getErrorMsg());
@@ -240,6 +292,9 @@ public final class EvalFixtureRunnerCli {
             tool.put("llmInvocationId", item.getLlmInvocationId());
             tool.put("toolCallId", item.getToolCallId());
             tool.put("parentToolCallId", item.getParentToolCallId());
+            tool.put("subAgentId", item.getSubAgentId());
+            tool.put("subAgentType", item.getSubAgentType());
+            tool.put("subAgentDescription", item.getSubAgentDescription());
             tool.put("dispatchIndex", item.getDispatchIndex());
             tool.put("agentName", item.getAgentName());
             tool.put("stepNo", item.getStepNo());
@@ -253,9 +308,61 @@ public final class EvalFixtureRunnerCli {
             tool.put("startedAt", time(item.getStartedAt()));
             tool.put("finishedAt", time(item.getFinishedAt()));
             tool.put("durationMs", item.getDurationMs());
+            tool.put("artifactCount", item.getArtifactCount());
             toolCalls.add(tool);
         }
         trace.put("toolInvocations", toolCalls);
+
+        JSONArray contextEvents = new JSONArray();
+        for (ContextEventView item : detail.getContextEvents()) {
+            JSONObject event = new JSONObject();
+            event.put("eventId", item.getEventId());
+            event.put("type", item.getType());
+            event.put("sessionId", item.getSessionId());
+            event.put("triggerRequestId", item.getTriggerRequestId());
+            event.put("compactRequestId", item.getCompactRequestId());
+            event.put("status", item.getStatus());
+            event.put("strategy", item.getStrategy());
+            event.put("beforeTokens", item.getBeforeTokens());
+            event.put("afterTokens", item.getAfterTokens());
+            event.put("beforeMessageCount", item.getBeforeMessageCount());
+            event.put("afterMessageCount", item.getAfterMessageCount());
+            event.put("thresholdTokens", item.getThresholdTokens());
+            event.put("summaryHash", item.getSummaryHash());
+            event.put("errorCode", item.getErrorCode());
+            event.put("startedAt", time(item.getStartedAt()));
+            event.put("finishedAt", time(item.getFinishedAt()));
+            contextEvents.add(event);
+        }
+        trace.put("contextEvents", contextEvents);
+
+        JSONArray memoryEvents = new JSONArray();
+        for (MemoryEventView item : detail.getMemoryEvents()) {
+            JSONObject event = new JSONObject();
+            event.put("eventId", item.getEventId());
+            event.put("type", item.getType());
+            event.put("sessionId", item.getSessionId());
+            event.put("triggerRequestId", item.getTriggerRequestId());
+            event.put("forkRequestId", item.getForkRequestId());
+            event.put("forkKind", item.getForkKind());
+            event.put("status", item.getStatus());
+            event.put("skipReason", item.getSkipReason());
+            event.put("ownerType", item.getOwnerType());
+            event.put("ownerHash", item.getOwnerHash());
+            event.put("userTurns", item.getUserTurns());
+            event.put("snapshotMessageCount", item.getSnapshotMessageCount());
+            event.put("maxSteps", item.getMaxSteps());
+            event.put("timeoutSeconds", item.getTimeoutSeconds());
+            event.put("durationMs", item.getDurationMs());
+            event.put("entriesBefore", item.getEntriesBefore());
+            event.put("entriesAfter", item.getEntriesAfter());
+            event.put("appliedCount", item.getAppliedCount());
+            event.put("errorCode", item.getErrorCode());
+            event.put("startedAt", time(item.getStartedAt()));
+            event.put("finishedAt", time(item.getFinishedAt()));
+            memoryEvents.add(event);
+        }
+        trace.put("memoryEvents", memoryEvents);
 
         JSONArray artifacts = new JSONArray();
         for (ArtifactView item : detail.getArtifacts()) {
@@ -280,6 +387,30 @@ public final class EvalFixtureRunnerCli {
         trace.put("artifacts", artifacts);
         trace.put("environment", environment == null ? new JSONObject() : environment);
         return trace;
+    }
+
+    private static String hashUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return null;
+        }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(userId.getBytes(StandardCharsets.UTF_8));
+            return "sha256:" + HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
+    private static Object parseToolCalls(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return JSON.parse(value);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     static String statusName(Integer status) {

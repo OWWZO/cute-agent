@@ -49,6 +49,16 @@ def test_phase3_benchmarks_are_registered() -> None:
         assert args.func.__name__ == "benchmark_command"
 
 
+def test_rag_python_benchmark_is_registered_for_internal_split() -> None:
+    args = build_parser().parse_args(
+        ["benchmark", "--name", "rag-python", "--split", "internal"]
+    )
+
+    assert args.name == "rag-python"
+    assert args.split == "internal"
+    assert args.mrag_url == "http://127.0.0.1:1601"
+
+
 def test_official_skillsbench_benchmark_is_retired() -> None:
     with pytest.raises(SystemExit):
         build_parser().parse_args(["benchmark", "--name", "skillsbench"])

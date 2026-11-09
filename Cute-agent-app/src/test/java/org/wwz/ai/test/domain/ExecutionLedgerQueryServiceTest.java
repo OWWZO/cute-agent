@@ -13,6 +13,7 @@ import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationStartRecord;
+import org.wwz.ai.domain.agent.ledger.model.LlmInvocationView;
 import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationBatchStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
@@ -230,6 +231,141 @@ public class ExecutionLedgerQueryServiceTest {
         Assert.assertEquals(9000, detail.getRuns().get(0).getContextUsage().getHistory());
         Assert.assertEquals(13100, detail.getRuns().get(0).getContextUsage().getUsed());
         Assert.assertEquals("measured", detail.getRuns().get(0).getContextUsage().getSource());
+    }
+
+    @Test
+    public void shouldExposeAllLlmUsageAndPromptShapeFacts() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx =
+                ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        LocalDateTime now = LocalDateTime.now();
+        Long runId = ctx.recorder.createRun(DialogueRunStartRecord.builder()
+                .runUid("req-llm-facts-001")
+                .requestId("req-llm-facts-001")
+                .sessionId("session-llm-facts-001")
+                .entryAgent(ExecutionLedgerConstants.ENTRY_AGENT_REACT)
+                .queryText("导出 LLM 事实")
+                .startedAt(now)
+                .build());
+
+        Long valuedId = ctx.recorder.createLlmInvocation(LlmInvocationStartRecord.builder()
+                .runId(runId)
+                .requestId("req-llm-facts-001")
+                .invocationSeq(1)
+                .agentName("react")
+                .callKind("askTool")
+                .streaming(true)
+                .modelName("test-model")
+                .systemFingerprint("sha256:system")
+                .estTotalTokens(110)
+                .estSystemTokens(20)
+                .estMessageTokens(70)
+                .estToolTokens(20)
+                .messageCount(4)
+                .toolCount(2)
+                .cacheStatus("OK")
+                .cacheRiskFlags("none")
+                .startedAt(now)
+                .build());
+        ctx.recorder.finishLlmInvocation(LlmInvocationFinishRecord.builder()
+                .llmInvocationId(valuedId)
+                .requestId("req-llm-facts-001")
+                .status(ExecutionLedgerConstants.STATUS_SUCCESS)
+                .promptTokens(100)
+                .completionTokens(20)
+                .totalTokens(120)
+                .cachedPromptTokens(0)
+                .promptTextTokens(90)
+                .promptAudioTokens(1)
+                .promptImageTokens(9)
+                .completionTextTokens(15)
+                .completionAudioTokens(2)
+                .reasoningTokens(3)
+                .cacheStatus("OK")
+                .cacheRiskFlags("none")
+                .finishedAt(now.plusSeconds(1))
+                .build());
+
+        Long missingId = ctx.recorder.createLlmInvocation(LlmInvocationStartRecord.builder()
+                .runId(runId)
+                .requestId("req-llm-facts-001")
+                .invocationSeq(2)
+                .agentName("react")
+                .callKind("askTool")
+                .streaming(false)
+                .modelName("test-model")
+                .startedAt(now.plusSeconds(2))
+                .build());
+        ctx.recorder.finishLlmInvocation(LlmInvocationFinishRecord.builder()
+                .llmInvocationId(missingId)
+                .requestId("req-llm-facts-001")
+                .status(ExecutionLedgerConstants.STATUS_SUCCESS)
+                .promptTokens(50)
+                .completionTokens(10)
+                .totalTokens(60)
+                .finishedAt(now.plusSeconds(3))
+                .build());
+
+        Long mixedId = ctx.recorder.createLlmInvocation(LlmInvocationStartRecord.builder()
+                .runId(runId)
+                .requestId("req-llm-facts-001")
+                .invocationSeq(3)
+                .agentName("react")
+                .callKind("askTool")
+                .streaming(false)
+                .modelName("test-model")
+                .estTotalTokens(500)
+                .messageCount(0)
+                .toolCount(0)
+                .cacheStatus("UNKNOWN")
+                .startedAt(now.plusSeconds(4))
+                .build());
+        ctx.recorder.finishLlmInvocation(LlmInvocationFinishRecord.builder()
+                .llmInvocationId(mixedId)
+                .requestId("req-llm-facts-001")
+                .status(ExecutionLedgerConstants.STATUS_SUCCESS)
+                .promptTokens(200)
+                .completionTokens(30)
+                .totalTokens(230)
+                .reasoningTokens(30)
+                .cacheStatus("UNKNOWN")
+                .finishedAt(now.plusSeconds(5))
+                .build());
+
+        List<LlmInvocationView> views =
+                ctx.queryService.queryRunDetail("req-llm-facts-001").getLlmInvocations();
+        LlmInvocationView valued = views.get(0);
+        LlmInvocationView missing = views.get(1);
+        LlmInvocationView mixed = views.get(2);
+
+        Assert.assertEquals(Integer.valueOf(0), valued.getCachedPromptTokens());
+        Assert.assertEquals(Integer.valueOf(90), valued.getPromptTextTokens());
+        Assert.assertEquals(Integer.valueOf(1), valued.getPromptAudioTokens());
+        Assert.assertEquals(Integer.valueOf(9), valued.getPromptImageTokens());
+        Assert.assertEquals(Integer.valueOf(15), valued.getCompletionTextTokens());
+        Assert.assertEquals(Integer.valueOf(2), valued.getCompletionAudioTokens());
+        Assert.assertEquals(Integer.valueOf(3), valued.getReasoningTokens());
+        Assert.assertEquals("sha256:system", valued.getSystemFingerprint());
+        Assert.assertEquals(Integer.valueOf(110), valued.getEstTotalTokens());
+        Assert.assertEquals(Integer.valueOf(20), valued.getEstSystemTokens());
+        Assert.assertEquals(Integer.valueOf(70), valued.getEstMessageTokens());
+        Assert.assertEquals(Integer.valueOf(20), valued.getEstToolTokens());
+        Assert.assertEquals(Integer.valueOf(4), valued.getMessageCount());
+        Assert.assertEquals(Integer.valueOf(2), valued.getToolCount());
+        Assert.assertEquals("OK", valued.getCacheStatus());
+        Assert.assertEquals("none", valued.getCacheRiskFlags());
+
+        Assert.assertNull(missing.getCachedPromptTokens());
+        Assert.assertNull(missing.getSystemFingerprint());
+        Assert.assertNull(missing.getEstTotalTokens());
+        Assert.assertNull(missing.getMessageCount());
+        Assert.assertNull(missing.getCacheStatus());
+
+        Assert.assertNull(mixed.getCachedPromptTokens());
+        Assert.assertEquals(Integer.valueOf(500), mixed.getEstTotalTokens());
+        Assert.assertEquals(Integer.valueOf(0), mixed.getMessageCount());
+        Assert.assertEquals(Integer.valueOf(0), mixed.getToolCount());
+        Assert.assertEquals("UNKNOWN", mixed.getCacheStatus());
+        Assert.assertEquals(Integer.valueOf(30), mixed.getReasoningTokens());
     }
 
     @Test

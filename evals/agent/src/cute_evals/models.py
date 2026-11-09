@@ -74,6 +74,9 @@ class EvalCase:
     tools: list[dict[str, Any]] = field(default_factory=list)
     answer_contract: dict[str, Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    compaction: dict[str, Any] | None = None
+    user_id: str | None = None
+    memory_seed: dict[str, Any] | None = None
 
     @classmethod
     def from_dict(
@@ -130,6 +133,17 @@ class EvalCase:
             tools=list(raw.get("tools") or []),
             answer_contract=raw.get("answerContract"),
             metadata=dict(raw.get("metadata") or {}),
+            compaction=raw.get("compaction"),
+            user_id=(
+                str(raw["userId"]).strip()
+                if raw.get("userId") is not None and str(raw["userId"]).strip()
+                else None
+            ),
+            memory_seed=(
+                dict(raw["memorySeed"])
+                if isinstance(raw.get("memorySeed"), dict)
+                else None
+            ),
         )
         if not case.id or not case.query or (require_script and not case.script):
             raise ValueError(f"invalid eval case: {source_path}")
@@ -144,13 +158,20 @@ class RunTrace:
     final_text: str
     total_tokens: int | None
     duration_ms: int | None
+    run_uid: str | None
+    user_id_hash: str | None
     llm_invocations: list[dict[str, Any]]
     tool_invocations: list[dict[str, Any]]
     artifacts: list[dict[str, Any]]
     raw: dict[str, Any]
     conversation: list[dict[str, Any]] = field(default_factory=list)
+    conversation_source: str | None = None
+    context_events: list[dict[str, Any]] = field(default_factory=list)
+    memory_events: list[dict[str, Any]] = field(default_factory=list)
     environment_events: list[dict[str, Any]] = field(default_factory=list)
+    environment_source: str | None = None
     environment_snapshots: list[dict[str, Any]] = field(default_factory=list)
+    snapshot_source: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> RunTrace:
@@ -162,13 +183,40 @@ class RunTrace:
             final_text=str(run.get("finalSummaryText") or ""),
             total_tokens=run.get("totalTokens"),
             duration_ms=run.get("durationMs"),
+            run_uid=(
+                str(run["runUid"])
+                if run.get("runUid") is not None
+                else None
+            ),
+            user_id_hash=(
+                str(run["userIdHash"])
+                if run.get("userIdHash") is not None
+                else None
+            ),
             llm_invocations=list(raw.get("llmInvocations") or []),
             tool_invocations=list(raw.get("toolInvocations") or []),
             artifacts=list(raw.get("artifacts") or []),
             raw=raw,
             conversation=list(raw.get("conversation") or []),
+            conversation_source=(
+                str(raw["conversationSource"])
+                if raw.get("conversationSource") is not None
+                else None
+            ),
+            context_events=list(raw.get("contextEvents") or []),
+            memory_events=list(raw.get("memoryEvents") or []),
             environment_events=list(raw.get("environmentEvents") or []),
+            environment_source=(
+                str(raw["environmentSource"])
+                if raw.get("environmentSource") is not None
+                else None
+            ),
             environment_snapshots=list(raw.get("environmentSnapshots") or []),
+            snapshot_source=(
+                str(raw["snapshotSource"])
+                if raw.get("snapshotSource") is not None
+                else None
+            ),
         )
 
     def tool_names(self) -> list[str]:
@@ -204,6 +252,140 @@ class RunTrace:
             if str(item.get("status", "")).upper() == "SUCCESS"
         )
         return success / len(self.tool_invocations)
+
+    def cache_hit_metrics(self) -> dict[str, int | float | None]:
+        sampled_prompt_tokens = 0
+        sampled_cached_tokens = 0
+        sampled_invocations = 0
+        unverified_invocations = 0
+        missing_cached_tokens = 0
+        null_cached_tokens = 0
+        invalid_prompt_tokens = 0
+        for invocation in self.llm_invocations:
+            if "cachedPromptTokens" not in invocation:
+                missing_cached_tokens += 1
+                unverified_invocations += 1
+                continue
+            prompt_tokens = invocation.get("promptTokens")
+            cached_tokens = invocation.get("cachedPromptTokens")
+            if cached_tokens is None:
+                null_cached_tokens += 1
+                unverified_invocations += 1
+                continue
+            if (
+                not isinstance(prompt_tokens, int)
+                or prompt_tokens <= 0
+                or not isinstance(cached_tokens, int)
+            ):
+                invalid_prompt_tokens += 1
+                unverified_invocations += 1
+                continue
+            sampled_invocations += 1
+            sampled_prompt_tokens += prompt_tokens
+            sampled_cached_tokens += cached_tokens
+        return {
+            "sampledInvocations": sampled_invocations,
+            "unverifiedInvocations": unverified_invocations,
+            "missingCachedPromptTokens": missing_cached_tokens,
+            "nullCachedPromptTokens": null_cached_tokens,
+            "invalidPromptTokens": invalid_prompt_tokens,
+            "promptTokens": sampled_prompt_tokens,
+            "cachedPromptTokens": sampled_cached_tokens,
+            "hitRatio": (
+                sampled_cached_tokens / sampled_prompt_tokens
+                if sampled_prompt_tokens
+                else None
+            ),
+        }
+
+    def cache_efficiency_metrics(self) -> dict[str, int | float | None]:
+        """Return provider-backed cache metrics and explicit unverified counts."""
+        sampled: list[tuple[int, int, str | None]] = []
+        unverified_invocations = 0
+        missing_cached_tokens = 0
+        null_cached_tokens = 0
+        invalid_prompt_tokens = 0
+        false_ok = 0
+        risk = 0
+        for invocation in self.llm_invocations:
+            if "cachedPromptTokens" not in invocation:
+                missing_cached_tokens += 1
+                unverified_invocations += 1
+                continue
+            prompt_tokens = invocation.get("promptTokens")
+            cached_tokens = invocation.get("cachedPromptTokens")
+            if cached_tokens is None:
+                null_cached_tokens += 1
+                unverified_invocations += 1
+                continue
+            if (
+                not isinstance(prompt_tokens, int)
+                or prompt_tokens <= 0
+                or not isinstance(cached_tokens, int)
+            ):
+                invalid_prompt_tokens += 1
+                unverified_invocations += 1
+                continue
+            cache_status = str(invocation.get("cacheStatus") or "").upper()
+            if cache_status == "OK" and cached_tokens == 0:
+                false_ok += 1
+            if cache_status in {"RISK", "WARN", "INVALID"}:
+                risk += 1
+            sampled.append(
+                (
+                    prompt_tokens,
+                    cached_tokens,
+                    cache_status or None,
+                )
+            )
+
+        eligible = sampled[1:]
+        prompt_tokens = sum(item[0] for item in sampled)
+        cached_tokens = sum(item[1] for item in sampled)
+        eligible_prompt_tokens = sum(item[0] for item in eligible)
+        eligible_cached_tokens = sum(item[1] for item in eligible)
+        return {
+            "sampledInvocations": len(sampled),
+            "eligibleInvocations": len(eligible),
+            "unverifiedInvocations": unverified_invocations,
+            "missingCachedPromptTokens": missing_cached_tokens,
+            "nullCachedPromptTokens": null_cached_tokens,
+            "invalidPromptTokens": invalid_prompt_tokens,
+            "promptTokens": prompt_tokens,
+            "cachedPromptTokens": cached_tokens,
+            "hitRatio": (
+                cached_tokens / prompt_tokens
+                if prompt_tokens
+                else None
+            ),
+            "eligiblePromptTokens": eligible_prompt_tokens,
+            "eligibleCachedPromptTokens": eligible_cached_tokens,
+            "eligibleHitRatio": (
+                eligible_cached_tokens / eligible_prompt_tokens
+                if eligible_prompt_tokens
+                else None
+            ),
+            "requestHitRate": (
+                sum(1 for item in eligible if item[1] > 0) / len(eligible)
+                if eligible
+                else None
+            ),
+            "coldStartMisses": (
+                sum(1 for item in sampled[:1] if item[1] == 0)
+                if sampled
+                else None
+            ),
+            "cacheFalseOkRate": (
+                false_ok / len(sampled)
+                if sampled
+                else None
+            ),
+            "cacheRiskRate": (
+                risk / len(sampled)
+                if sampled
+                else None
+            ),
+        }
 
     def recovered_after_tool_failure(self) -> bool:
         failed = False

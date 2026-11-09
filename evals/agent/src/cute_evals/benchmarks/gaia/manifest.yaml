@@ -24,7 +24,7 @@ scorer:
   file: official_scorer.py
   symbol: question_scorer
   source: https://huggingface.co/spaces/gaia-benchmark/leaderboard/raw/main/scorer.py
-  sha256: 0d44c07f3046eec521697c22e3eaca8719cc81e422a8eaf32695c5f22bdac6e2
+  sha256: 8fc58c373425c529219668beaae234be28514a28143d037a779818e2b13dda62
 answerContract:
   version: gaia-final-answer-v1
   linePrefix: "FINAL_ANSWER:"

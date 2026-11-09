@@ -1,0 +1,189 @@
+name: agent-eval-nightly
+
+on:
+  schedule:
+    - cron: "30 18 * * *"
+  workflow_dispatch:
+    inputs:
+      longmemeval_split:
+        description: LongMemEval split
+        type: choice
+        options:
+          - official-subset
+          - official-full
+        default: official-subset
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-eval-nightly
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: eval
+          MYSQL_DATABASE: ai-agent-eval
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -peval"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    env:
+      EVAL_DATA_HOME: ${{ runner.temp }}/cute-evals-data
+      CUTE_EVAL_REPO_ROOT: ${{ github.workspace }}
+      CUTE_EVAL_DB_URL: jdbc:mysql://127.0.0.1:3306/ai-agent-eval?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      CUTE_EVAL_DB_USER: root
+      CUTE_EVAL_DB_PASSWORD: eval
+      LLM_DEFAULT_MODEL: ${{ vars.CUTE_EVAL_LLM_MODEL }}
+      LLM_DEFAULT_BASE_URL: ${{ vars.CUTE_EVAL_LLM_BASE_URL }}
+      LLM_DEFAULT_APIKEY: ${{ secrets.CUTE_EVAL_LLM_API_KEY }}
+      CUTE_EVAL_JUDGE_MODEL: ${{ vars.CUTE_EVAL_JUDGE_MODEL }}
+      CUTE_EVAL_JUDGE_BASE_URL: ${{ vars.CUTE_EVAL_JUDGE_BASE_URL }}
+      CUTE_EVAL_JUDGE_API_KEY: ${{ secrets.CUTE_EVAL_JUDGE_API_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
+        with:
+          enable-cache: true
+
+      - name: Validate live evaluation configuration
+        run: |
+          for name in LLM_DEFAULT_MODEL LLM_DEFAULT_BASE_URL LLM_DEFAULT_APIKEY CUTE_EVAL_JUDGE_MODEL CUTE_EVAL_JUDGE_BASE_URL CUTE_EVAL_JUDGE_API_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "missing required evaluation setting: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Install MySQL client and initialize evaluation schema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+          mysql -h127.0.0.1 -uroot -peval ai-agent-eval < Cute-agent-app/src/main/resources/db/schema.sql
+
+      - name: Install evaluation dependencies
+        working-directory: evals/agent
+        run: uv sync --frozen --extra dev --extra frameworks --extra phase3 --extra memoryagentbench
+
+      - name: Run deterministic contract tests
+        run: >-
+          mvn -pl Cute-agent-app -am test
+          -DskipTests=false -Dskip.tests=false
+          -Dtest=EvalMemorySeedCliTest,EvalBenchmarkBudgetTest,ExecutionLedgerQueryServiceTest,EvalTraceExportCliTest,EvalFixtureRunnerCliTest
+          -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Run Python evaluation tests
+        working-directory: evals/agent
+        run: uv run pytest
+
+      - name: Run LongMemEval official split
+        continue-on-error: true
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals benchmark
+          --name longmemeval
+          --split "${{ github.event.inputs.longmemeval_split || 'official-subset' }}"
+          --profile nightly
+          --repeat 3
+          --out .eval-runs/longmemeval-nightly
+          --judge-model "$CUTE_EVAL_JUDGE_MODEL"
+          --judge-base-url "$CUTE_EVAL_JUDGE_BASE_URL"
+          --judge-api-key "$CUTE_EVAL_JUDGE_API_KEY"
+
+      - name: Run MemoryAgentBench official subset
+        continue-on-error: true
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals benchmark
+          --name memoryagentbench
+          --split official-subset
+          --profile nightly
+          --repeat 3
+          --out .eval-runs/memoryagentbench-nightly
+
+      - name: Run memory isolation suite
+        continue-on-error: true
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals run
+          --profile nightly
+          --suite memory-isolation
+          --java-mode benchmark
+          --repeat 3
+          --out .eval-runs/memory-isolation-nightly
+          --skip-build
+
+      - name: Run memory update suite
+        continue-on-error: true
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals run
+          --profile nightly
+          --suite memory-update
+          --java-mode benchmark
+          --repeat 3
+          --out .eval-runs/memory-update-nightly
+          --skip-build
+
+      - name: Run schema-change cache A/B
+        continue-on-error: true
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals ab run
+          --experiment experiments/cache-efficiency-schema-ab.yaml
+          --out .eval-runs/cache-schema-ab
+
+      - name: Run compaction cache A/B
+        continue-on-error: true
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals ab run
+          --experiment experiments/cache-compaction-ab.yaml
+          --out .eval-runs/cache-compaction-ab
+
+      - name: Enforce nightly evaluation gate
+        if: always()
+        working-directory: evals/agent
+        run: >-
+          uv run cute-evals ops gate
+          --reports
+          .eval-runs/longmemeval-nightly/report.json
+          .eval-runs/memoryagentbench-nightly/report.json
+          .eval-runs/memory-isolation-nightly/report.json
+          .eval-runs/memory-update-nightly/report.json
+          .eval-runs/cache-schema-ab/report.json
+          .eval-runs/cache-compaction-ab/report.json
+          --out .eval-runs/gate
+          --min-pass-at-k 1.0
+
+      - name: Upload nightly evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cute-agent-eval-nightly
+          path: |
+            evals/agent/.eval-runs/longmemeval-nightly
+            evals/agent/.eval-runs/memoryagentbench-nightly
+            evals/agent/.eval-runs/memory-isolation-nightly
+            evals/agent/.eval-runs/memory-update-nightly
+            evals/agent/.eval-runs/cache-schema-ab
+            evals/agent/.eval-runs/cache-compaction-ab
+            evals/agent/.eval-runs/gate
+          if-no-files-found: warn

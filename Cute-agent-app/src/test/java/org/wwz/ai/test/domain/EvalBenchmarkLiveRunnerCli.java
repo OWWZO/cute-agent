@@ -20,6 +20,7 @@ import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.runtime.enums.AgentState;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
+import org.wwz.ai.domain.agent.runtime.prompt.AgentPrompt;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
@@ -107,7 +108,13 @@ public final class EvalBenchmarkLiveRunnerCli {
             JSONArray results = new JSONArray();
             for (int i = 0; i < cases.size(); i++) {
                 results.add(runCase(
-                        cases.getJSONObject(i), outDir, assembly, query, runRegistry, environment));
+                        cases.getJSONObject(i),
+                        outDir,
+                        assembly,
+                        query,
+                        runRegistry,
+                        applicationContext,
+                        environment));
             }
             JSONObject result = new JSONObject();
             result.put("schemaVersion", "1.0");
@@ -125,12 +132,14 @@ public final class EvalBenchmarkLiveRunnerCli {
                                       PrepareAgentContextAssembly assembly,
                                       ExecutionLedgerQueryService query,
                                       ActiveAgentRunRegistry runRegistry,
+                                      ConfigurableApplicationContext applicationContext,
                                       JSONObject environment) throws Exception {
         String caseId = evalCase.getString("id");
         JSONArray turns = evalCase.getJSONArray("turns");
         String userSimulatorEndpoint = evalCase.getString("userSimulatorEndpoint");
         boolean dynamicTurns = userSimulatorEndpoint != null
                 && !userSimulatorEndpoint.isBlank();
+        boolean independentTurns = evalCase.getBooleanValue("independentTurns");
         if (dynamicTurns) {
             String initialUserMessage = evalCase.getString("initialUserMessage");
             if (initialUserMessage == null || initialUserMessage.isBlank()) {
@@ -151,9 +160,23 @@ public final class EvalBenchmarkLiveRunnerCli {
         if (caseId == null || caseId.isBlank()) {
             throw new IllegalArgumentException("benchmark case requires id");
         }
+        String userId = evalCase.getString("userId");
+        if (userId == null || userId.isBlank()) {
+            userId = "eval-user";
+        }
 
         String suffix = UUID.randomUUID().toString().replace("-", "");
         String sessionId = "eval-benchmark-session-" + suffix;
+        JSONObject memorySeed = evalCase.getJSONObject("memorySeed");
+        if (memorySeed != null) {
+            JSONObject seedPayload = new JSONObject();
+            seedPayload.putAll(memorySeed);
+            seedPayload.putIfAbsent("userId", userId);
+            seedPayload.putIfAbsent(
+                    "namespace",
+                    "eval-seed-" + caseId.replaceAll("[^A-Za-z0-9_-]", "-"));
+            EvalMemorySeedCli.seed(seedPayload, applicationContext);
+        }
         String toolMode = evalCase.getString("toolMode");
         if (toolMode == null || toolMode.isBlank()) {
             toolMode = environment.getString("toolMode");
@@ -167,6 +190,11 @@ public final class EvalBenchmarkLiveRunnerCli {
         }
         String workspaceRoot = evalCase.getString("workspaceRoot");
         JSONObject answerContract = evalCase.getJSONObject("answerContract");
+        String cacheVariant = System.getenv("CUTE_EVAL_CACHE_VARIANT");
+        if (cacheVariant == null) {
+            cacheVariant = "stable";
+        }
+        JSONArray runToolDefinitions = variantTools(toolDefinitions, cacheVariant, suffix);
         BudgetLimits budgetLimits = BudgetLimits.from(evalCase);
         int maxTurns = evalCase.getIntValue("maxTurns");
         if (maxTurns <= 0) {
@@ -196,12 +224,12 @@ public final class EvalBenchmarkLiveRunnerCli {
                     AgentExecutionCommand.builder()
                     .requestId(requestId)
                     .sessionId(sessionId)
-                    .userId("eval-user")
+                    .userId(userId)
                     .query(promptText)
                     .agentType(AgentType.REACT.getValue())
                     .isStream(Boolean.TRUE)
                     .workspaceRoot(workspaceRoot);
-            if (!workingMemory.isEmpty()) {
+            if (!independentTurns && !workingMemory.isEmpty()) {
                 requestBuilder.workingMemoryMessages(new ArrayList<>(workingMemory));
             }
             AgentExecutionCommand request = requestBuilder.build();
@@ -217,10 +245,10 @@ public final class EvalBenchmarkLiveRunnerCli {
             if (!"production".equalsIgnoreCase(toolMode)) {
                 ToolCollection ephemeral = new ToolCollection();
                 ephemeral.setAgentContext(context);
-                if (toolDefinitions != null) {
-                    for (int i = 0; i < toolDefinitions.size(); i++) {
+                if (runToolDefinitions != null) {
+                    for (int i = 0; i < runToolDefinitions.size(); i++) {
                         ephemeral.addTool(new SchemaTool(
-                                toolDefinitions.getJSONObject(i),
+                                runToolDefinitions.getJSONObject(i),
                                 toolEndpoint));
                     }
                 }
@@ -235,11 +263,22 @@ public final class EvalBenchmarkLiveRunnerCli {
             if (maxSteps != null && maxSteps > 0) {
                 agent.setMaxSteps(maxSteps);
             }
+            if (answerContract != null) {
+                agent.setSystemPrompt(
+                        AgentPrompt.REACT_SYSTEM_PROMPT + "\n\n"
+                                + "# Benchmark output contract\n"
+                                + "The user's answer contract overrides any general reply format. "
+                                + "If it requires `FINAL_ANSWER:`, every no-tool final reply must "
+                                + "end with exactly one `FINAL_ANSWER: <answer>` line. Never output "
+                                + "`$$$`, an artifact list, or a bare `None` in a benchmark run."
+                );
+            }
             RunBudget runBudget = RunBudget.create(
                     budgetLimits.maxTotalTokens,
                     budgetLimits.maxWallMs,
                     budgetLimits.maxToolCalls,
-                    agent.getMaxSteps()
+                    agent.getMaxSteps(),
+                    0.8
             );
             context.setRunBudget(runBudget);
 
@@ -309,6 +348,7 @@ public final class EvalBenchmarkLiveRunnerCli {
             turnEnvironment.put("turnId", turnId);
             turnEnvironment.put("turnIndex", turnIndex + 1);
             turnEnvironment.put("toolMode", toolMode);
+            turnEnvironment.put("cacheVariant", cacheVariant);
             turnEnvironment.put("officialQuery", queryText);
             turnEnvironment.put("promptQuery", promptText);
             turnEnvironment.put("answerContract", answerContract);
@@ -354,14 +394,16 @@ public final class EvalBenchmarkLiveRunnerCli {
             }
             turnResults.add(turnResult);
 
-            if (agent.getMemory() != null) {
+            if (!independentTurns && agent.getMemory() != null) {
                 workingMemory = new ArrayList<>(agent.getMemory().getMessages());
             }
             finalText = turnText == null ? "" : turnText;
             if (status != ExecutionLedgerConstants.STATUS_SUCCESS) {
                 aggregateStatus = status;
                 aggregateError = errorMsg;
-                break;
+                if (dynamicTurns) {
+                    break;
+                }
             }
             if (dynamicTurns) {
                 JSONObject next = requestUserSimulator(
@@ -399,6 +441,7 @@ public final class EvalBenchmarkLiveRunnerCli {
         result.put("caseId", caseId);
         result.put("conversationId", sessionId);
         result.put("sessionId", sessionId);
+        result.put("userId", userId);
         result.put("status", EvalFixtureRunnerCli.statusName(aggregateStatus));
         result.put("finalText", finalText);
         result.put("turns", turnResults);
@@ -410,6 +453,44 @@ public final class EvalBenchmarkLiveRunnerCli {
             result.put("error", aggregateError);
         }
         return result;
+    }
+
+    static JSONArray variantTools(JSONArray source,
+                                  String variant,
+                                  String suffix) {
+        if (source == null || source.isEmpty()) {
+            return source;
+        }
+        JSONArray copy = new JSONArray();
+        for (int i = 0; i < source.size(); i++) {
+            copy.add(source.getJSONObject(i).clone());
+        }
+        if ("schema-change".equalsIgnoreCase(variant)
+                || "schema-churn".equalsIgnoreCase(variant)) {
+            for (int i = 0; i < copy.size(); i++) {
+                copy.set(i, reorderObjectFields(copy.getJSONObject(i)));
+            }
+        } else if ("volatile-description".equalsIgnoreCase(variant)) {
+            JSONObject first = copy.getJSONObject(0);
+            String description = first.getString("description");
+            first.put("description",
+                    (description == null ? "" : description)
+                            + "\nEvaluation cache nonce: " + suffix);
+        }
+        return copy;
+    }
+
+    private static JSONObject reorderObjectFields(JSONObject source) {
+        JSONObject reordered = new JSONObject(true);
+        for (String key : List.of("parameters", "description", "name")) {
+            if (source.containsKey(key)) {
+                reordered.put(key, source.get(key));
+            }
+        }
+        for (String key : source.keySet()) {
+            reordered.putIfAbsent(key, source.get(key));
+        }
+        return reordered;
     }
 
     static String promptWithContract(String query, JSONObject answerContract) {

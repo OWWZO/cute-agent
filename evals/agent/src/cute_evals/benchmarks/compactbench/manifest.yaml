@@ -1,0 +1,19 @@
+name: compactbench
+version: 0.3.0
+suiteVersion: 2.0.1
+upstream: https://github.com/compactbench/compactbench
+scoreLabel: official-public
+snapshot:
+  kind: github-main-archive
+  url: https://codeload.github.com/compactbench/compactbench/zip/refs/heads/main
+  sha256: 8fd94d802cd8f44897541a39fe8b83697e496466bc96cf361b10f3ad5f086eae
+methodClass: CuteAgentCompactor
+methodFile: java_method.py
+suites:
+  smoke: starter
+  development: practice
+  focused: drills
+notes:
+  - CompactBench 0.3 is not yet published on PyPI.
+  - Use a local source snapshot matching the SHA-256 above.
+  - Public suite data, probes, reader, and scorer are never modified.

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/judge_benchmark.schema.json",
+  "title": "Cute Agent Judge Benchmark Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "subject",
+    "benchmark",
+    "scoreNamespace",
+    "scoreLabel",
+    "tasks",
+    "metrics"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "string"},
+    "subject": {
+      "type": "object",
+      "required": ["type", "model"],
+      "properties": {
+        "type": {"const": "judge"},
+        "model": {"type": "string"},
+        "baseUrl": {"type": ["string", "null"]},
+        "temperature": {"type": ["number", "null"]},
+        "topP": {"type": ["number", "null"]},
+        "maxTokens": {"type": ["integer", "null"]},
+        "promptHash": {"type": ["string", "null"]}
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "upstream",
+        "licenseStatus"
+      ],
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "upstream": {"type": "string"},
+        "upstreamCommit": {"type": ["string", "null"]},
+        "datasetHash": {"type": ["string", "null"]},
+        "evaluatorHash": {"type": ["string", "null"]},
+        "licenseStatus": {"type": "string"}
+      }
+    },
+    "scoreNamespace": {"const": "judge-calibration"},
+    "scoreLabel": {
+      "enum": [
+        "official-full",
+        "official-test",
+        "official-subset",
+        "compatibility-subset",
+        "internal-calibration",
+        "partial-not-official",
+        "unverified",
+        "blocked-license"
+      ]
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["taskId", "status"],
+        "properties": {
+          "taskId": {"type": "string"},
+          "status": {"enum": ["verified", "unverified", "failed"]},
+          "prediction": {"type": ["object", "null"]},
+          "rawResponse": {"type": ["string", "null"]},
+          "error": {"type": ["object", "null"]},
+          "metadata": {"type": "object"}
+        }
+      }
+    },
+    "metrics": {"type": "object"},
+    "environment": {"type": "object"}
+  }
+}

@@ -17,6 +17,19 @@ def _median(values: list[float | int | None]) -> float | None:
     return median(present) if present else None
 
 
+def _ratio_text(metrics: dict[str, Any]) -> str:
+    ratio = metrics.get("hitRatio")
+    sampled = int(metrics.get("sampledInvocations") or 0)
+    unverified = int(metrics.get("unverifiedInvocations") or 0)
+    missing = int(metrics.get("missingCachedPromptTokens") or 0)
+    null = int(metrics.get("nullCachedPromptTokens") or 0)
+    value = f"{float(ratio):.1%}" if ratio is not None else "n/a"
+    return (
+        f"{value} (samples={sampled}, unverified={unverified}, "
+        f"missing={missing}, null={null})"
+    )
+
+
 def _wilson_interval(
     successes: int,
     total: int,
@@ -99,7 +112,11 @@ def _failure_categories(result: CaseResult) -> list[str]:
         "token_budget": "budget",
         "wall_time": "budget",
         "artifact_count": "artifact",
+        "answer_present": "answer_contract",
+        "expected_facts": "oracle_mismatch",
         "citation_coverage": "citation",
+        "citation_recall": "retrieval",
+        "stage_contract": "run_status",
         "sql_execution": "data_oracle",
         "sql_result": "data_oracle",
         "task_success": "oracle_mismatch",
@@ -228,10 +245,110 @@ def _case_summary(case_id: str, attempts: list[CaseResult]) -> dict[str, Any]:
         "medianFirstTokenMs": _median(
             [item.trace.first_token_ms() for item in ordered]
         ),
+        "cacheHitMetrics": _merge_cache_metrics(ordered),
         "failureCategories": dict(sorted(categories.items())),
         "toolFailureClasses": dict(sorted(tool_failures.items())),
         "tracePaths": [item.trace_path for item in ordered],
         "scores": [score.to_dict() for score in first.scores],
+    }
+
+
+def _merge_cache_metrics(items: list[CaseResult]) -> dict[str, int | float | None]:
+    sampled_invocations = 0
+    unverified_invocations = 0
+    missing_cached_tokens = 0
+    null_cached_tokens = 0
+    invalid_prompt_tokens = 0
+    prompt_tokens = 0
+    cached_tokens = 0
+    for item in items:
+        metrics = item.trace.cache_hit_metrics()
+        sampled_invocations += int(metrics["sampledInvocations"] or 0)
+        unverified_invocations += int(metrics["unverifiedInvocations"] or 0)
+        missing_cached_tokens += int(
+            metrics["missingCachedPromptTokens"] or 0
+        )
+        null_cached_tokens += int(metrics["nullCachedPromptTokens"] or 0)
+        invalid_prompt_tokens += int(metrics["invalidPromptTokens"] or 0)
+        prompt_tokens += int(metrics["promptTokens"] or 0)
+        cached_tokens += int(metrics["cachedPromptTokens"] or 0)
+    return {
+        "sampledInvocations": sampled_invocations,
+        "unverifiedInvocations": unverified_invocations,
+        "missingCachedPromptTokens": missing_cached_tokens,
+        "nullCachedPromptTokens": null_cached_tokens,
+        "invalidPromptTokens": invalid_prompt_tokens,
+        "promptTokens": prompt_tokens,
+        "cachedPromptTokens": cached_tokens,
+        "hitRatio": cached_tokens / prompt_tokens if prompt_tokens else None,
+    }
+
+
+def _compaction_summary(case_summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    compressed = []
+    controls = []
+    for item in case_summaries:
+        scores = {score["name"]: score for score in item["scores"]}
+        if "compaction_triggered" in scores:
+            compressed.append((item, scores))
+        elif "compaction_control_clean" in scores:
+            controls.append((item, scores))
+    if not compressed and not controls:
+        return {}
+
+    strategies: Counter[str] = Counter()
+    ratios: list[float] = []
+    before_tokens = 0
+    after_tokens = 0
+    for _, scores in compressed:
+        triggered = scores.get("compaction_triggered") or {}
+        for strategy in (triggered.get("evidence") or {}).get("strategies") or []:
+            strategies[str(strategy)] += 1
+        ratio_score = scores.get("compression_ratio") or {}
+        ratio = ratio_score.get("value")
+        evidence = ratio_score.get("evidence") or {}
+        if isinstance(ratio, (int, float)):
+            ratios.append(float(ratio))
+        if isinstance(evidence.get("beforeTokens"), (int, float)):
+            before_tokens += int(evidence["beforeTokens"])
+        if isinstance(evidence.get("afterTokens"), (int, float)):
+            after_tokens += int(evidence["afterTokens"])
+
+    return {
+        "compressedCaseCount": len(compressed),
+        "triggeredCaseCount": sum(
+            1
+            for _, scores in compressed
+            if (scores.get("compaction_triggered") or {}).get("value") is True
+        ),
+        "carryForwardQualityPassCount": sum(
+            1 for item, _ in compressed if item["qualityPassAt1"]
+        ),
+        "carryForwardStrictPassCount": sum(
+            1 for item, _ in compressed if item["passAt1"]
+        ),
+        "controlCaseCount": len(controls),
+        "controlCleanCount": sum(
+            1
+            for _, scores in controls
+            if (scores.get("compaction_control_clean") or {}).get("value") is True
+        ),
+        "strategies": dict(sorted(strategies.items())),
+        "fullLlmCount": sum(
+            count
+            for strategy, count in strategies.items()
+            if strategy.startswith("full-llm")
+        ),
+        "fallbackCount": sum(
+            count
+            for strategy, count in strategies.items()
+            if "fallback" in strategy
+        ),
+        "medianCompressionRatio": _median(ratios),
+        "beforeTokens": before_tokens if ratios else None,
+        "afterTokens": after_tokens if ratios else None,
+        "reclaimedTokens": before_tokens - after_tokens if ratios else None,
+        "expandedCaseCount": sum(1 for ratio in ratios if ratio < 1.0),
     }
 
 
@@ -304,6 +421,41 @@ def _strata(case_summaries: list[dict[str, Any]]) -> dict[str, Any]:
                 for name, items in sorted(groups.items())
             }
     return result
+
+
+def _is_diagnostic_score(score: dict[str, Any]) -> bool:
+    return (
+        str(score.get("scorer") or "").endswith(".diagnostic")
+        or str(score.get("name") or "").startswith("diagnostic_")
+    )
+
+
+def _diagnostic_summary(case_summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    scores = []
+    grouped: dict[str, list[float]] = {}
+    for case in case_summaries:
+        for score in case.get("scores") or []:
+            if not _is_diagnostic_score(score):
+                continue
+            scores.append({
+                "caseId": case["caseId"],
+                "name": score.get("name"),
+                "value": score.get("value"),
+                "unit": score.get("unit"),
+                "status": score.get("status"),
+                "evidence": score.get("evidence") or {},
+            })
+            value = score.get("value")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                grouped.setdefault(str(score.get("name")), []).append(float(value))
+    metrics = {}
+    for name, values in sorted(grouped.items()):
+        metrics[name] = {
+            "samples": len(values),
+            "mean": sum(values) / len(values),
+            "median": _median(values),
+        }
+    return {"scores": scores, "metrics": metrics}
 
 
 def build_baseline(report: dict[str, Any]) -> dict[str, Any]:
@@ -460,6 +612,7 @@ def build_report(
     slo_pass_at_k_count = sum(
         1 for item in case_summaries if item["sloPassAtK"]
     )
+    cache_metrics = _merge_cache_metrics(cases)
     payload = {
         "runId": f"eval-{datetime.now().strftime('%Y%m%d%H%M%S')}",
         "profile": profile,
@@ -515,7 +668,10 @@ def build_report(
             },
             "failureCategories": dict(sorted(failure_counts.items())),
             "toolFailureClasses": dict(sorted(tool_failure_counts.items())),
+            "cache": cache_metrics,
+            "compaction": _compaction_summary(case_summaries),
             "strata": _strata(case_summaries),
+            "diagnostics": _diagnostic_summary(case_summaries),
             "advisoryUnverifiedScores": sum(
                 1
                 for item in cases
@@ -555,6 +711,7 @@ def _render_html(payload: dict[str, Any]) -> str:
             f"<td>{escape(str(case['medianTotalTokens']))}</td>"
             f"<td>{escape(str(case['medianDurationMs']))}</td>"
             f"<td>{escape(str(case['medianFirstTokenMs']))}</td>"
+            f"<td>{escape(_ratio_text(case['cacheHitMetrics']))}</td>"
             f"<td>{escape(categories)}</td>"
             f"<td>{escape(tool_failures)}</td>"
             f"<td>{traces}</td>"
@@ -578,6 +735,31 @@ def _render_html(payload: dict[str, Any]) -> str:
         f"{name}={count}"
         for name, count in (summary.get("toolFailureClasses") or {}).items()
     ) or "none"
+    cache = summary.get("cache") or {}
+    cache_text = _ratio_text(cache)
+    compaction = summary.get("compaction") or {}
+    compaction_html = ""
+    if compaction:
+        strategies = ", ".join(
+            f"{escape(name)}={count}"
+            for name, count in (compaction.get("strategies") or {}).items()
+        ) or "none"
+        ratio = compaction.get("medianCompressionRatio")
+        ratio_text = f"{float(ratio):.2f}x" if ratio is not None else "n/a"
+        compaction_html = (
+            "<p><strong>Compaction:</strong> "
+            f"triggered {compaction['triggeredCaseCount']}/"
+            f"{compaction['compressedCaseCount']}; "
+            f"carry-forward quality {compaction['carryForwardQualityPassCount']}/"
+            f"{compaction['compressedCaseCount']}; "
+            f"strict {compaction['carryForwardStrictPassCount']}/"
+            f"{compaction['compressedCaseCount']}; "
+            f"control clean {compaction['controlCleanCount']}/"
+            f"{compaction['controlCaseCount']}; "
+            f"median ratio {ratio_text}; "
+            f"expanded {compaction['expandedCaseCount']}; "
+            f"strategies {strategies}</p>"
+        )
     strata_rows = []
     for dimension, groups in (summary.get("strata") or {}).items():
         for group, values in groups.items():
@@ -616,6 +798,55 @@ def _render_html(payload: dict[str, Any]) -> str:
         if strata_rows
         else ""
     )
+    official_score_rows = []
+    diagnostic_score_rows = []
+    for case in payload["caseSummaries"]:
+        for score in case.get("scores") or []:
+            row = (
+                "<tr>"
+                f"<td>{escape(str(case['caseId']))}</td>"
+                f"<td>{escape(str(score.get('scorer')))}</td>"
+                f"<td>{escape(str(score.get('name')))}</td>"
+                f"<td>{escape(str(score.get('value')))}</td>"
+                f"<td>{escape(str(score.get('unit')))}</td>"
+                f"<td>{escape(str(score.get('pass')))}</td>"
+                f"<td>{escape(str(score.get('status')))}</td>"
+                f"<td><code>{escape(json.dumps(score.get('evidence') or {}, ensure_ascii=False))}</code></td>"
+                "</tr>"
+            )
+            if _is_diagnostic_score(score):
+                diagnostic_score_rows.append(row)
+            else:
+                official_score_rows.append(row)
+    score_table_head = (
+        "<thead><tr><th>Case</th><th>Scorer</th><th>Metric</th>"
+        "<th>Value</th><th>Unit</th><th>Pass</th><th>Status</th>"
+        "<th>Evidence</th></tr></thead>"
+    )
+    official_scores_html = (
+        "<h2>Official and gate scores</h2>"
+        f"<table>{score_table_head}<tbody>{''.join(official_score_rows)}</tbody></table>"
+        if official_score_rows
+        else ""
+    )
+    diagnostics = payload["summary"].get("diagnostics") or {}
+    diagnostic_metrics = diagnostics.get("metrics") or {}
+    diagnostic_metrics_html = ""
+    if diagnostic_metrics:
+        metric_text = ", ".join(
+            f"{escape(name)}={float(values['mean']):.4f}"
+            for name, values in diagnostic_metrics.items()
+        )
+        diagnostic_metrics_html = (
+            "<p><strong>Diagnostic means:</strong> "
+            f"{metric_text}</p>"
+        )
+    diagnostic_scores_html = (
+        "<h2>Diagnostics (advisory only)</h2>"
+        f"<table>{score_table_head}<tbody>{''.join(diagnostic_score_rows)}</tbody></table>"
+        if diagnostic_score_rows
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -650,14 +881,19 @@ def _render_html(payload: dict[str, Any]) -> str:
     <div class="card">SLO pass@1: {summary["sloPassAt1"]:.2%}</div>
     <div class="card">pass@1: {summary["passAt1"]:.2%}</div>
     <div class="card">pass^k: {summary["passAtK"]:.2%}</div>
+    <div class="card">Cache hit: {escape(cache_text)}</div>
   </div>
   <p><strong>Baseline regressions:</strong> {escape(regressions)}</p>
   <p><strong>Tool failure classes:</strong> {escape(tool_failure_classes)}</p>
   {benchmark_html}
+  {compaction_html}
   <p><strong>Inspect log:</strong> <code>{escape(str(payload.get("inspectLog") or "-"))}</code></p>
   {strata_html}
+  {official_scores_html}
+  {diagnostic_metrics_html}
+  {diagnostic_scores_html}
   <table>
-    <thead><tr><th>Case</th><th>Status</th><th>Strict pass</th><th>Quality pass</th><th>SLO pass</th><th>Median tokens</th><th>Median wall ms</th><th>Median first token ms</th><th>Failure categories</th><th>Injected tool failures</th><th>Traces</th></tr></thead>
+    <thead><tr><th>Case</th><th>Status</th><th>Strict pass</th><th>Quality pass</th><th>SLO pass</th><th>Median tokens</th><th>Median wall ms</th><th>Median first token ms</th><th>Cache hit (samples)</th><th>Failure categories</th><th>Injected tool failures</th><th>Traces</th></tr></thead>
     <tbody>{''.join(rows)}</tbody>
   </table>
 </body>

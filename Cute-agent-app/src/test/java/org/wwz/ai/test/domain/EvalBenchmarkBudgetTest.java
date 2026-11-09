@@ -1,6 +1,7 @@
 package org.wwz.ai.test.domain;
 
 import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.JSONArray;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationView;
@@ -92,6 +93,41 @@ public class EvalBenchmarkBudgetTest {
         assertEquals(11, trace.getJSONObject("run").getIntValue("promptTokens"));
         assertEquals(6, trace.getJSONObject("run").getIntValue("completionTokens"));
         assertEquals(17, trace.getJSONObject("run").getIntValue("totalTokens"));
+    }
+
+    @Test
+    public void schemaCacheVariantPreservesToolOrderAndSemantics() {
+        JSONArray tools = new JSONArray();
+        JSONObject alpha = new JSONObject();
+        alpha.put("name", "alpha");
+        alpha.put("description", "first");
+        alpha.put("parameters", new JSONObject());
+        tools.add(alpha);
+        JSONObject beta = new JSONObject();
+        beta.put("name", "beta");
+        beta.put("description", "second");
+        beta.put("parameters", new JSONObject());
+        tools.add(beta);
+
+        JSONArray stable = EvalBenchmarkLiveRunnerCli.variantTools(
+                tools, "stable", "nonce");
+        JSONArray changed = EvalBenchmarkLiveRunnerCli.variantTools(
+                tools, "schema-change", "nonce");
+
+        assertEquals("alpha", changed.getJSONObject(0).getString("name"));
+        assertEquals("beta", changed.getJSONObject(1).getString("name"));
+        assertEquals(
+                "parameters",
+                changed.getJSONObject(0).keySet().iterator().next()
+        );
+        assertEquals(
+                stable.getJSONObject(0).getJSONObject("parameters").toJSONString(),
+                changed.getJSONObject(0).getJSONObject("parameters").toJSONString()
+        );
+        assertEquals(
+                stable.getJSONObject(1).getString("description"),
+                changed.getJSONObject(1).getString("description")
+        );
     }
 
     @Test

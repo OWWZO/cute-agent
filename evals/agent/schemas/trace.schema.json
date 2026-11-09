@@ -20,8 +20,13 @@
       "required": ["requestId", "sessionId", "status", "finalSummaryText"],
       "properties": {
         "caseId": {"type": ["string", "null"]},
+        "runUid": {"type": ["string", "null"]},
         "requestId": {"type": "string"},
         "sessionId": {"type": "string"},
+        "userIdHash": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
         "entryAgent": {"type": ["string", "null"]},
         "status": {"type": "string"},
         "queryText": {"type": ["string", "null"]},
@@ -50,7 +55,23 @@
           "startedAt": {"type": ["string", "null"]},
           "firstTokenAt": {"type": ["string", "null"]},
           "finishedAt": {"type": ["string", "null"]},
-          "totalTokens": {"type": ["integer", "null"]}
+          "totalTokens": {"type": ["integer", "null"]},
+          "cachedPromptTokens": {"type": ["integer", "null"]},
+          "promptTextTokens": {"type": ["integer", "null"]},
+          "promptAudioTokens": {"type": ["integer", "null"]},
+          "promptImageTokens": {"type": ["integer", "null"]},
+          "completionTextTokens": {"type": ["integer", "null"]},
+          "completionAudioTokens": {"type": ["integer", "null"]},
+          "reasoningTokens": {"type": ["integer", "null"]},
+          "systemFingerprint": {"type": ["string", "null"]},
+          "estTotalTokens": {"type": ["integer", "null"]},
+          "estSystemTokens": {"type": ["integer", "null"]},
+          "estMessageTokens": {"type": ["integer", "null"]},
+          "estToolTokens": {"type": ["integer", "null"]},
+          "messageCount": {"type": ["integer", "null"]},
+          "toolCount": {"type": ["integer", "null"]},
+          "cacheStatus": {"type": ["string", "null"]},
+          "cacheRiskFlags": {"type": ["string", "null"]}
         }
       }
     },
@@ -60,18 +81,86 @@
         "type": "object",
         "properties": {
           "toolCallId": {"type": ["string", "null"]},
+          "subAgentId": {"type": ["string", "null"]},
+          "subAgentType": {"type": ["string", "null"]},
+          "subAgentDescription": {"type": ["string", "null"]},
           "toolName": {"type": "string"},
           "inputJson": {"type": ["string", "null"]},
           "toolResult": {"type": ["string", "null"]},
           "status": {"type": "string"},
           "errorMsg": {"type": ["string", "null"]},
-          "durationMs": {"type": ["integer", "null"]}
+          "durationMs": {"type": ["integer", "null"]},
+          "artifactCount": {"type": ["integer", "null"]}
+        }
+      }
+    },
+    "contextEvents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["eventId", "type"],
+        "properties": {
+          "eventId": {"type": "string"},
+          "type": {"type": "string"},
+          "sessionId": {"type": ["string", "null"]},
+          "triggerRequestId": {"type": ["string", "null"]},
+          "compactRequestId": {"type": ["string", "null"]},
+          "status": {"type": ["string", "null"]},
+          "strategy": {"type": ["string", "null"]},
+          "beforeTokens": {"type": ["integer", "null"]},
+          "afterTokens": {"type": ["integer", "null"]},
+          "beforeMessageCount": {"type": ["integer", "null"]},
+          "afterMessageCount": {"type": ["integer", "null"]},
+          "thresholdTokens": {"type": ["integer", "null"]},
+          "summaryHash": {
+            "type": ["string", "null"],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "errorCode": {"type": ["string", "null"]},
+          "startedAt": {"type": ["string", "null"]},
+          "finishedAt": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "memoryEvents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["eventId", "type"],
+        "properties": {
+          "eventId": {"type": "string"},
+          "type": {"type": "string"},
+          "sessionId": {"type": ["string", "null"]},
+          "triggerRequestId": {"type": ["string", "null"]},
+          "forkRequestId": {"type": ["string", "null"]},
+          "forkKind": {"type": ["string", "null"]},
+          "status": {"type": ["string", "null"]},
+          "skipReason": {"type": ["string", "null"]},
+          "ownerType": {"type": ["string", "null"]},
+          "ownerHash": {
+            "type": ["string", "null"],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "userTurns": {"type": ["integer", "null"]},
+          "snapshotMessageCount": {"type": ["integer", "null"]},
+          "maxSteps": {"type": ["integer", "null"]},
+          "timeoutSeconds": {"type": ["integer", "null"]},
+          "durationMs": {"type": ["integer", "null"]},
+          "entriesBefore": {"type": ["integer", "null"]},
+          "entriesAfter": {"type": ["integer", "null"]},
+          "appliedCount": {"type": ["integer", "null"]},
+          "errorCode": {"type": ["string", "null"]},
+          "startedAt": {"type": ["string", "null"]},
+          "finishedAt": {"type": ["string", "null"]}
         }
       }
     },
     "artifacts": {
       "type": "array",
       "items": {"type": "object"}
+    },
+    "conversationSource": {
+      "type": ["string", "null"]
     },
     "conversation": {
       "type": "array",
@@ -80,15 +169,26 @@
         "required": ["messageId", "role", "content"],
         "properties": {
           "messageId": {"type": "string"},
-          "conversationId": {"type": "string"},
-          "turnId": {"type": "string"},
-          "turnIndex": {"type": "integer"},
-          "role": {"type": "string"},
-          "actor": {"type": "string"},
-          "content": {"type": "string"},
+          "conversationId": {"type": ["string", "null"]},
+          "turnId": {"type": ["string", "null"]},
+          "turnIndex": {"type": ["integer", "null"]},
+          "requestId": {"type": ["string", "null"]},
+          "runId": {"type": ["integer", "null"]},
+          "seqNo": {"type": ["integer", "null"]},
+          "role": {"type": ["string", "null"]},
+          "actor": {"type": ["string", "null"]},
+          "content": {"type": ["string", "null"]},
+          "toolCallId": {"type": ["string", "null"]},
+          "toolCalls": {"type": ["object", "array", "null"]},
+          "messageKind": {"type": ["string", "null"]},
+          "visibility": {"type": ["string", "null"]},
+          "tokenEstimate": {"type": ["integer", "null"]},
           "timestamp": {"type": ["string", "null"]}
         }
       }
+    },
+    "environmentSource": {
+      "type": ["string", "null"]
     },
     "environmentEvents": {
       "type": "array",
@@ -103,6 +203,9 @@
           "payload": {"type": "object"}
         }
       }
+    },
+    "snapshotSource": {
+      "type": ["string", "null"]
     },
     "environmentSnapshots": {
       "type": "array",

@@ -26,6 +26,18 @@ public class ExecutionRunDetail {
     @Builder.Default
     private List<ArtifactView> artifacts = List.of();
 
+    @Builder.Default
+    private List<ContextEventView> contextEvents = List.of();
+
+    @Builder.Default
+    private List<MemoryEventView> memoryEvents = List.of();
+
+    @Builder.Default
+    private List<ConversationMessageView> conversation = List.of();
+
+    @Builder.Default
+    private String conversationSource = "unavailable";
+
     public List<LlmInvocationView> getLlmInvocations() {
         return immutableCopy(llmInvocations);
     }
@@ -36,6 +48,18 @@ public class ExecutionRunDetail {
 
     public List<ArtifactView> getArtifacts() {
         return immutableCopy(artifacts);
+    }
+
+    public List<ContextEventView> getContextEvents() {
+        return immutableCopy(contextEvents);
+    }
+
+    public List<MemoryEventView> getMemoryEvents() {
+        return immutableCopy(memoryEvents);
+    }
+
+    public List<ConversationMessageView> getConversation() {
+        return immutableCopy(conversation);
     }
 
     private <T> List<T> immutableCopy(List<T> source) {

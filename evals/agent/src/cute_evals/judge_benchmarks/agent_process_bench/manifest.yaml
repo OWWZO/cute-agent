@@ -1,0 +1,37 @@
+name: agent-process-bench
+version: "0a42606b178a8c69d40c5765dc05c342f921e578"
+upstream: https://github.com/RUCBM/AgentProcessBench
+upstreamCommit: 0a42606b178a8c69d40c5765dc05c342f921e578
+licenseStatus: blocked-license
+licenseEvidence: "No root LICENSE file was present at the pinned commit."
+scoreNamespace: judge-calibration
+scoreLabel: blocked-license
+expectedRecordsPerDataset: 250
+splits:
+  smoke: 5
+  official-subset: 25
+  official-full: -1
+datasets:
+  bfcl:
+    file: data/AgentProcessBench/bfcl.jsonl
+    sha256: 6aee0b71eff7feb872c6b54d962f8831b56f7bebf770cba9cb657f219afb6fe5
+    size: 15010475
+  gaia_dev:
+    file: data/AgentProcessBench/gaia_dev.jsonl
+    sha256: f7b75c668fc1e6ad943e8f6d93a21a9a8f5f076841e1230e1ed2fc6d05ce8192
+    size: 11957593
+  hotpotqa:
+    file: data/AgentProcessBench/hotpotqa.jsonl
+    sha256: 160eef2ded872d8dc6ddf4cee5752295fda691b6a9e99b5bafc2d484e6309c57
+    size: 3174572
+  tau2:
+    file: data/AgentProcessBench/tau2.jsonl
+    sha256: 6f22818ff88822512767fe735f56e7b78bed4b9aaf26959144feb92f127e1e95
+    size: 9960563
+scripts:
+  annotate:
+    file: eval/llm_annotation.py
+    sha256: e9de4dd8e8df7bc709a58dc961a625e8b33c4d749e057ef67b92972b8d1ce16b
+  compare:
+    file: eval/compare.py
+    sha256: 0364f8e3ed9a188ed85c1ce669713c4414a2d6f9857811cd92cee064957eeaba

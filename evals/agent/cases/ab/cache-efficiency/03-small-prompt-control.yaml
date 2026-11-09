@@ -1,0 +1,33 @@
+id: cache-efficiency.small-prompt-control
+suite: cache-efficiency
+version: 1
+hardGate: true
+metadata:
+  role: validation
+  source: internal
+  taskType: cache-small-prompt-control
+  lengthBucket: short
+  toolCountBucket: none
+  risk: low
+  failureMode: false_cache_miss
+input:
+  message: Answer exactly CACHE-CONTROL-OK without calling a tool.
+expected:
+  finalContains:
+  - CACHE-CONTROL-OK
+  finalNotContains: []
+  maxSteps: 2
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: null
+budgets:
+  maxTotalTokens: 8000
+  maxWallMs: 60000
+  maxToolCalls: 1
+script:
+- type: final
+  content: CACHE-CONTROL-OK
+tools: []

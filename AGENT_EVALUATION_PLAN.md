@@ -2,10 +2,21 @@
 
 > 状态：阶段一、1.5、2–4 子集已完成；2026-11-07 增加 `official-full` 执行开关、
 > 生产型内部题库、私有 holdout、子目标进度、参考路线指标，以及 P1 运行守卫
-> （共享预算、强制收尾、质量/SLO 双指标、网络断路）
+> （共享预算、强制收尾、质量/SLO 双指标、网络断路）。
+> 2026-11-09 登记阶段 10：AgentProcessBench、TRAIL、AgentRewardBench、
+> MultiAgentBench / MARBLE。同日完成 `ProcessView`、通用裁判契约、
+> AgentProcessBench 20 题 dry-run、TRAIL 10 题 dry-run，以及 AgentRewardBench
+> 元数据 / 官方 Prompt / 官方评分脚本接入和 5 题 dry-run；同时完成
+> MultiAgentTraceView 和 MARBLE 500 题元数据 dry-run。前三项正式运行仍被许可证门禁阻塞；
+> MARBLE 还受许可证冲突和官方环境运行器尚未实现阻塞。
+> 同日完成 MemoryAgentBench official-subset 和 official-full Scorer：official-full
+> 固定 22 个官方 source、146 个 context、3,671 道题，覆盖 exact/substring、Ruler
+> recall、LongMemEval judge、InfBench F1 和 Recsys Recall@1/5/10。subset 本机 live
+> 单次验收为 20/20 turn 成功；
+> 题目级 15/20 = 75%，context 级 quality@1=25%、slo@1=100%，不能当作完整官方成绩。
 > 适用项目：Cute Agent（Java + React）
 > 核心事实源：Execution Ledger / Run 执行账本
-> 日期：2026-11-07
+> 日期：2026-11-09
 
 ---
 
@@ -451,7 +462,6 @@ evals/agent/
 | `jinja2` | HTML 报告 | 第一阶段 |
 | `pytest` | Adapter/Scorer/报告测试 | 第一阶段 |
 | `ragas` | RAG 评分 | 第一阶段 RAG 子阶段 |
-| `langfuse` / `opik` | 观测平台 | 后续可选 |
 
 所有依赖锁定版本；模型 ID、Judge prompt、Case schema 和 Benchmark commit 也要锁。
 
@@ -1024,6 +1034,10 @@ EVAL_DATA_HOME/
 | P2 | Cute-Agent skill-sim | 本地技能选择、加载和恢复 | 消息 + Fixture | 低 | 5 类 Case |
 | P2 | SWE-bench Lite | 代码修复 | 容器 + patch/test | 高 | Lite 子集 |
 | P2 | AgentDojo | 提示注入、工具安全 | 环境在环 | 中高 | 安全子集 |
+| P1 | AgentProcessBench | 轨迹逐步骤质量、首次错误定位 | 官方轨迹 + 裁判校准 | 低 | 官方子集后全量 |
+| P1 | TRAIL | 轨迹错误分类、错误位置定位 | 官方 Trace + 裁判校准 | 低 | GAIA 子集后全量 |
+| P2 | AgentRewardBench | 自动轨迹裁判的成败判断可信度 | 官方 Web 轨迹 + 人工标签 | 中高 | dev 子集后 test |
+| P2 | MultiAgentBench / MARBLE | 多 Agent 协作、竞争、任务完成 | 官方环境在环 | 很高 | 单环境 smoke 后扩展 |
 | P3 | OSWorld | 真机/VM 桌面操作 | VM + 截图 | 很高 | 极小 smoke |
 | P3 | 全量 SWE-bench / WebArena | 完整能力上限 | 重型环境 | 很高 | Release 前 |
 
@@ -1306,6 +1320,359 @@ EVAL_DATA_HOME/
 | MLE-bench | 机器学习工程任务，环境重 | 有代码/数据 Agent 需求时 |
 | AutoGenBench | 更偏参考执行协议 | 不直接接入，吸收设计 |
 | BrowserGym | 是环境/框架，不是单一榜 | 与 WebArena/WorkArena 一起用 |
+
+### 10.13 轨迹质量、裁判可信度与多 Agent 协作（部分实现）
+
+状态：**部分实现。** `ProcessView`、裁判 schema / 错误分类、
+AgentProcessBench、TRAIL 和 AgentRewardBench 外部官方 harness 已落地；MARBLE
+已完成题集、脚本和 MultiAgentTraceView 接入，官方环境运行器仍未实现。
+AgentProcessBench 正式模型跑分尚未执行，原因是 pinned commit 未发现根 LICENSE。
+TRAIL 已通过 10 题 dry-run，但 GAIA/SWE 派生 Trace 的再分发条件仍需确认。
+AgentRewardBench 已完成代码、三个元数据 CSV、HF dataset revision、官方 Prompt 和
+官方评分脚本锁定，并完成 5 个唯一 dev 轨迹的 dry-run；代码根无 LICENSE、HF
+dataset card 无 license 字段、截图资产条款未确认，因此正式跑分保持 `blocked-license`。
+MARBLE 已完成五个 domain 的官方 JSONL、entrypoint / evaluator 哈希和
+`MultiAgentTraceView`，并完成 5 / 50 / 500 题 dry-run；根 LICENSE 与
+pyproject license 冲突未解决，官方环境运行器未实现。
+
+本批正式纳入：
+
+1. AgentProcessBench
+2. TRAIL
+3. AgentRewardBench
+4. MultiAgentBench / MARBLE
+
+这四项必须进入统一评测体系，但不能混成一张“Agent 成功率”表。前三个主要评价
+**裁判或错误定位器是否可信**，MARBLE 才直接评价**多 Agent 系统在环境里是否把任务做成**。
+
+#### 10.13.1 被评对象与分数边界
+
+| 项目 | 官方真正评价的对象 | 对 Cute Agent 的价值 | 能否直接当作 Cute Agent 分数 |
+|---|---|---|---|
+| AgentProcessBench | 给定完整轨迹，逐 assistant step 预测 `-1/0/+1` 的裁判模型 | 校准“步骤质量评分器”，发现首次错误和后续连带错误 | 不能。官方分是裁判分，不是 Agent 任务成功分 |
+| TRAIL | 给定完整 Trace，找出错误类别、位置、证据并做质量评分的调试器 | 校准错误分类、错误定位和根因分析；直接映射 Execution Ledger | 不能。官方分是 Trace 调试器分 |
+| AgentRewardBench | 自动裁判对 Web Agent 轨迹的 success / side effect / optimality / looping 判断 | 验证现有 DeepEval、agentevals 或新轨迹裁判是否会“把失败判成功” | 不能。官方分是裁判与人工标签的一致度 |
+| MultiAgentBench / MARBLE | 多 Agent 系统在官方协作或竞争环境中的任务表现 | 直接补“多 Agent 协作质量”能力空白 | 可以，但只能在官方环境、官方任务和官方 evaluator 下产生 |
+
+统一原则：
+
+- 裁判榜的分数写入 `judge-calibration` 命名空间。
+- Cute Agent 自己的轨迹分数写入 `product-derived` 命名空间。
+- MARBLE 等直接任务评测写入 `agent-benchmark` 命名空间。
+- 三类分数不得相加、平均或互相替代。
+- 本地模型裁判结果只能标 `compatibility-subset` 或 `internal-calibration`，不能写官方榜成绩。
+
+#### 10.13.2 上游固定基线
+
+2026-11-09 只做了只读核验。正式开发时必须重新确认 upstream HEAD 是否变化，
+并固定 commit、数据集 revision、文件 SHA-256、官方 evaluator SHA-256 和许可证结论。
+
+| 项目 | 当前 canonical upstream | 本轮核验 HEAD | 计划锁定内容 |
+|---|---|---|---|
+| AgentProcessBench | `RUCBM/AgentProcessBench` | `0a42606b178a8c69d40c5765dc05c342f921e578` | 仓库、四份官方数据、评测脚本、许可证 |
+| TRAIL | `patronus-ai/trail-benchmark` | `0ffbed9db859b4a66250dc783fa4dccf86869595` | 官方 148 条 Trace、标签、评分脚本、许可证 |
+| AgentRewardBench | `McGill-NLP/agent-reward-bench` | `05899fcfe52c925978944a23920373b7a9c63740` | 代码、HF dataset revision、split、人工标签、截图资产 |
+| MultiAgentBench / MARBLE | `ulab-uiuc/MARBLE`；旧地址 `MultiagentBench/MARBLE` 已指向新仓库 | `8d60fa17b5596b44458a52d4296061b9fc13d6f2` | 官方环境、任务、配置、evaluator、容器资产 |
+
+许可证与访问门禁：
+
+- MARBLE 根 `LICENSE` 是 MIT，但 `pyproject.toml` 标记 Apache 2.0；冲突解除前不得
+  复制源码进本项目，只能保留 upstream 调用方式和计划。
+- AgentProcessBench 本轮未在仓库根发现可直接确认的 `LICENSE`；数据许可必须单独核验。
+- AgentRewardBench 本轮未在仓库根发现可直接确认的 `LICENSE`；代码、HF 数据和
+  截图资产要分别核验，不能只看其中一项。
+- TRAIL 根 `LICENSE` 为 MIT；仍需确认数据集再分发和商业使用条款。
+- 任一许可证或数据访问条件不明确时，状态必须是 `blocked-license`，不得开始正式跑分。
+
+#### 10.13.3 AgentProcessBench
+
+官方能力：
+
+- 1000 条轨迹，四个来源各 250 条：`hotpotqa`、`gaia_dev`、`bfcl`、`tau2`。
+- 官方目标是预测每条 assistant step 的 `-1`、`0`、`+1` 标签，并给出最终结果标签。
+- 官方指标为 `step_micro_acc` 和 `firsterroracc`。
+
+重要边界：
+
+- AgentProcessBench 中的 `bfcl` 只是官方轨迹来源之一。接入它不等于重新引入
+  BFCL Agent Adapter，也不能产出 BFCL Agent 分数。
+- 官方轨迹和标签只读；Cute Agent 的 Trace 只能通过外部 projector 转成相同输入视图。
+
+两种模式：
+
+| 模式 | 被测对象 | 输入 | 输出 | 标签 |
+|---|---|---|---|---|
+| 官方裁判校准 | `group/deepseek`、DeepEval、agentevals 或候选轨迹裁判 | 官方 1000 条轨迹 | `step_micro_acc`、`firsterroracc` | `official-full` / `official-subset` |
+| Cute Trace 质量评分 | 已校准裁判 | Execution Ledger 投影出的 Cute ProcessView | 每步质量、首次错误、最终结果一致性 | `product-derived` |
+
+实现方式：
+
+1. 官方仓库只读检出到 `EVAL_DATA_HOME/agent-process-bench/<commit>/`。
+2. `OfficialTraceAdapter` 原样加载四份 JSONL，不重写 prompt、标签或 tool evidence。
+3. `JudgeUnderTestAdapter` 只负责调用候选裁判并把输出规范化为官方 JSON schema。
+4. 官方评分脚本原样运行；本项目只读取结果并转换成统一 `ScoreRecord`。
+5. Cute Trace 通过独立 `ProcessViewProjector` 投影；step 一律对应一个 assistant
+   message 或一个 React 决策阶段，并保留稳定 `stepId`。
+6. `tool-call`、`tool-result`、异常、重试和 artifact 只作为该 step 的证据，不能伪装成新 step。
+
+先跑范围：
+
+- smoke：四个来源各 5 条，共 20 条。
+- official-subset：四个来源各 25 条，共 100 条。
+- official-full：全部 1000 条，只在 Nightly / Release 跑。
+
+验收：
+
+- 四个来源分别有分数，不能只报总体平均。
+- 报告同时给出 step 级混淆矩阵和首次错误位置分布。
+- 裁判解析失败、拒答和输出 schema 错误必须单列，不能静默当 `0` 分通过。
+- Cute Trace 的投影结果能人工回看到具体 assistant message 和工具证据。
+
+#### 10.13.4 TRAIL
+
+官方能力：
+
+- 148 条真实 Agent 执行 Trace，包含 841 个已标注错误。
+- 来源分为 `GAIA` 和 `SWE Bench` 两个 split。
+- 官方标签覆盖 reasoning、tool、planning、environment 等 21 类错误，并带错误位置、
+  证据、描述和影响级别。
+- 官方评分包含 `location_accuracy`、`joint_accuracy`、类别级分数和相关指标。
+
+用途：
+
+- 它不是给 Cute Agent 出任务，而是测试“拿到一条已经失败的 Trace，能不能找出
+  错在哪、属于哪类、证据是什么”。
+- 这正好补齐当前“知道失败，但归因不够稳定”的短板。
+
+两种模式：
+
+| 模式 | 被测对象 | 输入 | 输出 | 标签 |
+|---|---|---|---|---|
+| 官方 Trace 调试校准 | 错误定位裁判 | 官方 Trace 和官方问题 | 官方 `errors[]` JSON | `official-full` / `official-subset` |
+| Cute Trace 根因报告 | 已校准错误定位裁判 | Cute ProcessView | 错误类别、span、证据、影响、修复建议 | `product-derived` |
+
+实现方式：
+
+1. 固定官方 148 条 Trace、processed annotations 和 `calculate_scores.py` 哈希。
+2. 官方 split 原样读取；先 GAIA，再 SWE Bench。
+3. 输出必须引用稳定的 `spanId` / `eventId`，不能只写自然语言“某一步出了问题”。
+4. Cute Trace 的 `llm.invocation`、`tool.invocation`、`compaction`、`memory`、
+   `artifact` 和 run terminal event 都要映射为可定位的 span。
+5. 每条错误必须包含：`category`、`location`、`evidence`、`impact`、`description`。
+6. 无法给出证据的结论标 `unverified`，不进入错误统计的已确认分子。
+
+先跑范围：
+
+- smoke：GAIA 10 条。
+- official-subset：GAIA 全 split 后再接 SWE Bench 10 条。
+- official-full：148 条全部跑，输出官方计算脚本结果。
+
+验收：
+
+- 错误位置能稳定回到 Java Execution Ledger 的具体行或事件。
+- 同一 Trace 重复裁判时，错误类别和位置不能大范围漂移。
+- 不允许为了命中率改写官方错误标签或把多个错误合并成一个。
+
+#### 10.13.5 AgentRewardBench
+
+实现状态（2026-11-09）：
+
+- 已固定 upstream commit `05899fcfe52c925978944a23920373b7a9c63740` 和 HF dataset
+  revision `b6d17e646009d6cb63d5dd7be78807b680693f61`。
+- 已实现 `AgentRewardBenchAdapter`、manifest、三个官方 CSV 和官方脚本 SHA-256 校验。
+- 已实现 `smoke / dev / test` 三类 split：smoke 从官方 dev split 选 5 个唯一轨迹，
+  dev/test 使用官方 split 全量；不修改任务、人工标签或 split。
+- 已实现 `axtree / screen / both / none` 四种证据变体；Prompt 常量从官方
+  `judge/defaults.py` 原样提取，judgment 目录格式原样落盘，再调用官方
+  `score_judgments.py`。
+- 已完成 5 题 smoke dry-run；正式模型跑分仍被 `blocked-license` 阻塞。
+- 全量 test 只有在所有官方目标都有 verified judgment 时才标 `official-test`，
+  否则标 `partial-not-official`；结果始终写入 `judge-calibration` 命名空间。
+
+官方能力：
+
+- 评价“自动裁判是否能正确判断 Web Agent 轨迹的成败与质量”。
+- 人工标签至少覆盖 `trajectory_success`、`trajectory_side_effect`、
+  `trajectory_optimality`、`trajectory_looping`。
+- 官方评分使用 accuracy、precision、recall、F1、TNR、NPV 和人工一致度。
+
+用途：
+
+- 在把 DeepEval、agentevals 或自定义轨迹裁判提升为 Release 门禁前，先用人工标签
+  验证它不会系统性误判。
+- 最危险的不是“把成功判失败”，而是“把失败判成功”造成假发布。
+
+两种模式：
+
+| 模式 | 被测对象 | 输入 | 输出 | 标签 |
+|---|---|---|---|---|
+| 官方裁判校准 | 自动轨迹裁判 | 官方 cleaned trajectory、截图和人工标签 | 官方 judge 指标 | `official-full` / `official-test` / `official-subset` |
+| Cute Web Trace 裁判 | 已校准裁判 | BrowserSkill / WebArena 类 Cute Trace | success、side effect、optimality、looping | `product-derived` |
+
+实现方式：
+
+1. 先核对 HF dataset 许可证、revision、split 和下载体积；截图为大资产，不能先拉全量。
+2. 先下载元数据、`annotations.csv`、`splits.csv` 和 dev smoke 所需文件。
+3. 官方文本轨迹和截图原样使用；Adapter 只做字段映射和本地路径解析。
+4. 裁判输出按官方 schema 解析；解析失败不计作“失败轨迹”，单独进入 retry / error。
+5. Cute Web Trace 必须补充页面 URL、DOM 摘要、截图引用、动作序列和工具结果 hash，
+   否则裁判无法可靠判断 side effect 和 looping。
+
+先跑范围：
+
+- smoke：官方 dev split 的小样本。
+- official-test：dev 稳定后跑完整 test，耗时和下载体积在启动前必须二次确认。
+- 全量未完成时只能标 `partial-not-official`。
+
+验收：
+
+- 同时报告 false-pass 和 false-fail；false-pass 作为高风险项。
+- 只有达到稳定人工一致度后，裁判才可进入 advisory 或 hard gate。
+- 裁判未校准前，不得用其结论覆盖确定性 Oracle。
+
+#### 10.13.6 MultiAgentBench / MARBLE
+
+实现状态（2026-11-09，部分实现）：
+
+- 已固定 commit `8d60fa17b5596b44458a52d4296061b9fc13d6f2`。
+- 已实现 `MultiAgentTraceView`：从 Ledger 的 `subAgentId / subAgentType /
+  subAgentDescription` 还原 main/sub-agent 归属、工具事件和 handoff；
+  缺少父关系时只标记 `implicit-main`，不伪造多级树。
+- 已实现 `MarbleAdapter`、五个 domain 的 JSONL SHA-256、entrypoint / evaluator /
+  batch evaluator / task converter 的 SHA-256。
+- 已完成 smoke 5 题、official-subset 50 题、official-full 500 题的元数据 dry-run。
+- `LICENSE` 写 MIT，而 `pyproject.toml` 写 Apache 2.0；冲突未解除，状态为
+  `blocked-license`。
+- 官方 Docker/DB/Minecraft 环境运行器尚未实现；非 dry-run 会在启动环境前失败关闭。
+
+官方能力：
+
+- 直接评价多 Agent 在协作、竞争环境中的任务完成、协作机制和环境结果。
+- 仓库包含 research、database、coding、Minecraft、Werewolf 等多类环境；
+  不同环境的启动方式和官方 evaluator 不同。
+- 这项不是裁判校准，而是完整 Agent System 的环境在环评测。
+
+当前项目缺口：
+
+- Ledger 已有 `subAgentId`、`subAgentType`、`subAgentDescription`。
+- 但还没有统一导出父子 Agent 树、消息、交接、共享目标、共享记忆、工具竞争和
+  团队级 artifact。
+- 因此现在可以审计“发生过某个子 Agent 工具调用”，不能完整回答“团队协作是否有效”。
+
+实现方式：
+
+1. 先完成 `MultiAgentTraceView`，字段至少包括：
+   - `teamRunId`、`agentRunId`、`parentAgentRunId`
+   - `role`、`goal`、`status`、`startedAt`、`endedAt`
+   - agent 间 message / handoff / delegation 边
+   - 每个 agent 的 LLM、tool、memory、artifact 和 budget
+   - 共享状态版本、冲突、重复工作、最终收敛结果
+2. `MarbleEnvironmentAdapter` 只包装官方环境，不复制官方任务和 evaluator。
+3. Cute Agent 作为外部 agent system 接入官方任务；每个任务从独立环境快照启动。
+4. 如果官方环境要求 Docker / DB / Minecraft server，在 Docker daemon 不可用时
+   fail-closed，不能标 official-full。
+5. 第一轮优先选不依赖重型容器的官方环境做 smoke；数据库和 Minecraft 环境单独
+   放在 Release 或专用 Linux 运行机。
+
+指标：
+
+- 官方任务分数和官方 evaluator 结论。
+- team success、`pass@1`、`pass^k`。
+- handoff 成功率、无效 handoff 数、重复工作数、角色闲置率。
+- 团队和单 Agent 的 token、延迟、工具调用、artifact 数。
+- 通信轮数、通信 token 占比、冲突解决率、任务收敛轮数。
+- 环境错误、Adapter 错误、模型决策错误、协作机制错误必须分开归因。
+
+先跑范围：
+
+- smoke：一个非容器官方环境的 3–5 个 task。
+- official-subset：单环境 10–20 个 task，`repeat=3`。
+- full：逐环境扩展；未完成的 domain 不能合并成 official-full。
+
+验收：
+
+- 能从一个 `teamRunId` 还原完整父子 Agent 树和协作时间线。
+- 每个 task 独立 reset，不共享数据库、浏览器、记忆或文件副作用。
+- 官方任务、环境、工具和 evaluator 零修改。
+- 只有官方 evaluator 可运行时才发布 official 分数。
+
+#### 10.13.7 统一接入架构
+
+当前 `BenchmarkAdapter` 适合“给 Agent 一个任务，让 Agent 执行”的 Benchmark；
+它不适合直接承载“给裁判一条官方轨迹”的裁判榜。新增两个很小的扩展族，不另造平台：
+
+```text
+Agent Benchmark
+  Task -> AgentAdapter -> Execution Ledger Trace -> Official Task Evaluator
+
+Judge Benchmark
+  Official Trace -> JudgeAdapter -> Judge Output -> Official Judge Evaluator
+
+Product Trace Analysis
+  Execution Ledger Trace -> ProcessViewProjector -> Calibrated Judge -> Report
+```
+
+计划中的接口边界：
+
+| 组件 | 职责 | 禁止事项 |
+|---|---|---|
+| `ProcessViewProjector` | 把 Java Trace 投影成统一 step / span 视图 | 修改原始 Trace、伪造缺失证据 |
+| `JudgeBenchmarkAdapter` | 加载官方轨迹、调用候选裁判、规范化输出 | 修改官方标签、把候选裁判当 Agent |
+| `OfficialJudgeScorer` | 原样调用上游评分脚本或固定算法 | 改评分逻辑、重算官方指标口径 |
+| `MultiAgentEnvironmentAdapter` | 包装 MARBLE 官方环境与 evaluator | 复制任务、修改环境、静默跳题 |
+| `ScoreRecord` | 保存三类分数和证据 | 把 judge / product-derived / official 混算 |
+
+计划文件布局：
+
+```text
+evals/agent/
+├── schemas/
+│   ├── process_view.schema.json
+│   ├── judge_benchmark.schema.json
+│   └── multi_agent_trace.schema.json
+├── src/cute_evals/
+│   ├── process_view.py
+│   ├── judge_benchmarks/
+│   │   ├── base.py
+│   │   ├── agent_process_bench/
+│   │   ├── trail/
+│   │   └── agent_reward_bench/
+│   └── benchmarks/
+│       └── marble/
+└── tests/
+    ├── test_process_view.py
+    ├── test_agent_process_bench_adapter.py
+    ├── test_trail_adapter.py
+    ├── test_agent_reward_bench_adapter.py
+    └── test_marble_adapter.py
+```
+
+报告必须包含：
+
+- `subject.type = judge | agent | multi-agent`
+- `scoreNamespace = judge-calibration | product-derived | agent-benchmark`
+- `scoreLabel = official-full | official-subset | compatibility-subset | internal-calibration | partial-not-official | unverified | blocked-license`
+- upstream commit、dataset revision、数据 hash、evaluator hash、judge prompt hash
+- 模型 ID、温度、top_p、max_tokens、reasoning effort、调用时间
+- 官方分与 Cute 派生分分开显示
+- 解析失败、超时、环境失败、裁判拒答和 `unverified` 数量
+
+CI 策略：
+
+- PR：只跑 schema、投影、错题 fixture 和裁判输出解析，不下载官方大资产。
+- Nightly：AgentProcessBench 100 题、TRAIL GAIA 子集、AgentRewardBench dev smoke、
+  MARBLE 单环境 smoke。
+- Release：官方 full 或明确披露的 official-subset；未完成全部 task 时只能
+  标 `partial-not-official`。
+
+阶段 10 的完成定义：
+
+- 四个项目均有固定 upstream、许可证结论、dataset hash、evaluator hash。
+- 四个项目均有独立报告，不混分。
+- 前三个项目能证明候选裁判的真实可信度，而不是“让裁判自评”。
+- Cute Agent 的真实 Execution Ledger 能投影成步骤级质量报告和根因报告。
+- MARBLE 至少一个官方环境完成可复现 smoke，且多 Agent 树可还原。
+- 任何重型环境不可用时会在运行前 fail-closed，并说明阻塞层。
 
 ---
 
@@ -1852,6 +2219,13 @@ SQLite 官方子集和 Spider2-Lite 官方 SQLite 子集均已接入。
 - deterministic fixture：`7/7` 通过，`pass@1=100%`、`pass^k=100%`。
 - 配置本地 Judge 并启用 `--require-judge` 后：`7/7` 通过，三层指标均 `verified`。
 - 当前报告示例：`D:\cute-eval-tmp\rag-core-v5\report.html`。
+- 2026-11-09 增加 `rag-python` 直连评测：`benchmark --name rag-python
+  --split internal` 直接调用 MRAG HTTP 服务，不经过 Java Agent；`rag-core`
+  继续专门评测 Java 工具选择和结果消费。
+- MRAG 服务新增默认关闭的 `includeRetrievalTrace` 评测开关。只有显式开启时才在
+  SSE 中返回完整 `RetrievalTrace`，并分别计算答案引用覆盖、检索召回、耗时和可用
+  时的 Ragas faithfulness；检索 trace 缺失时 `citation_recall` 必须标为
+  `unverified`。
 
 4B 已完成内容：
 
@@ -2032,7 +2406,7 @@ SQLite 官方子集和 Spider2-Lite 官方 SQLite 子集均已接入。
 
 启动状态（2026-11-06）：**第一版已实现，线上 Trace 自动采样与 Python 每日调度已实现。**
 已完成 append-only 评测历史、趋势报告、A/B 矩阵汇总、release gate、Badcase 人工审核入库、
-Execution Ledger 只读导出、问题/健康对照分层采样和健康审计报告。可选观测平台尚未接入。
+Execution Ledger 只读导出、问题/健康对照分层采样和健康审计报告。不接入第三方观测平台。
 
 交付：
 
@@ -2045,7 +2419,7 @@ Execution Ledger 只读导出、问题/健康对照分层采样和健康审计�
 - [已完成] Python 常驻调度命令 `ops schedule`；默认关闭，显式 `--enable` 才启动，固定时刻触发、
   串行执行、失败写状态、单进程运行。
 - [未承诺] 自动 Oracle / 自动审批：线上 Trace 的任务正确性不能凭健康指标推断，必须人工确认 Oracle。
-- 可选 Langfuse / Opik / Phoenix 观测。
+- 评测事实只来自本机 Java Execution Ledger 的只读导出，不接入第三方观测平台。
 
 第一版实现细节：
 
@@ -2087,6 +2461,297 @@ Execution Ledger 只读导出、问题/健康对照分层采样和健康审计�
 - 每个线上 badcase 都能固化为 Case。
 - 每个版本都有可比较基线。
 - 评测不是一次性项目，而是持续门禁。
+
+### 阶段 9：连续性与长期记忆评测（部分已实现）
+
+详细计划见
+[`AGENT_CONTINUITY_MEMORY_CACHE_PLAN.md`](AGENT_CONTINUITY_MEMORY_CACHE_PLAN.md)。
+
+本阶段把三个容易混淆的能力域拆开：
+
+- 上下文压缩：CompactBench 官方数据 + 内部 `compaction-carry-forward`。
+- 长期记忆：LongMemEval、MemoryAgentBench 官方数据 + 内部记忆隔离/更新控制组。
+- 缓存与成本：没有统一公开 Agent 榜单，使用内部 `cache-efficiency` A/B。
+- 前置 P0-1：把数据库已有的 16 个 LLM 成本、缓存、推理和 token 形状字段
+  从 Execution Ledger 完整导出到统一 Trace。
+- 前置 P0-2–P0-5：补齐 Run/用户/子 Agent 字段、压缩事件、LTM fork 事件、会话和环境数组。
+- 不接入 OpenTelemetry、OpenInference、Langfuse、Phoenix、Jaeger、Tempo
+  或其他第三方观测平台；Java Execution Ledger 是唯一执行事实源。
+
+复用现有 Runner、BenchmarkAdapter、A/B Cell、Execution Ledger 和报告体系；
+公开 Benchmark 的数据、题目、标签和 Oracle 一律不改。
+
+2026-11-08 已实现并真实运行：
+
+- LongMemEval oracle Adapter 与 `official-subset`；本地 `group/deepseek` 只能标记
+  `compatibility-subset`。
+- `EvalMemorySeedCli`、`memory-isolation`、`memory-update`。
+- `cache-efficiency` A/B；最终 schema-change 采用无语义字段重排。
+- Nightly / Release Workflow 与统一 `ops gate`。
+
+2026-11-09 对 LongMemEval 运行契约和裁判稳定性做优化后，连续两轮完整子集达到
+14/14（100%）、组合通过 14/14，且没有 unverified 或预算失败；详见
+[`AGENT_CONTINUITY_MEMORY_CACHE_PLAN.md`](AGENT_CONTINUITY_MEMORY_CACHE_PLAN.md)
+的实测快照。该结果仍是 `compatibility-subset`，不是官方榜单成绩。
+
+仍未实现：LongMemEval cleaned 全量、LoCoMo，以及完整官方裁判模型环境下的榜单
+提交验收。MemoryAgentBench official-full 已完成 22 个官方 source、146 个 context、
+3,671 道题的 Adapter 和官方 Scorer；尚未执行全量 live 跑分，不能宣称已有官方成绩。
+
+### 阶段 10：轨迹质量、裁判可信度与多 Agent 协作（部分实现）
+
+状态：**部分实现（2026-11-09）。**
+
+已完成：
+
+- `ProcessView` 无损投影、JSON schema 和确定性测试。
+- `JudgeBenchmarkTask / Prediction / OutputError` 通用契约。
+- AgentProcessBench manifest、资产 SHA-256、官方 harness 调用和 mock 测试。
+- AgentProcessBench 20 题 dry-run：hotpotqa / gaia_dev / bfcl / tau2 各 5 题。
+- TRAIL manifest、Git tree hash、官方 Prompt 模板提取、官方评分 harness 和 mock 测试。
+- TRAIL 10 题 GAIA dry-run。
+- AgentRewardBench manifest、代码 / CSV / HF dataset revision 锁定、官方 Prompt
+  提取、官方评分 harness 和 5 题 dev dry-run。
+- MultiAgentTraceView、MARBLE manifest、五个 domain 500 题资产锁定和
+  smoke / official-subset / official-full 元数据 dry-run。
+
+未完成：
+
+- AgentProcessBench 正式模型跑分：`blocked-license`。
+- TRAIL 正式模型跑分：`blocked-license`。
+- AgentRewardBench 正式模型跑分：`blocked-license`。
+- MARBLE 正式环境跑分：`blocked-license` 且官方环境运行器未实现。
+
+优先级：P1。阶段 9 已覆盖连续上下文和长期记忆；本阶段补两个新维度：
+
+1. “轨迹是否真的好”，而不只是“轨迹是否合规”。
+2. “多 Agent 协作是否真的有效”，而不只是“Ledger 里有没有 subAgent 字段”。
+
+本阶段严格按以下顺序执行，不并行铺开：
+
+1. 先做通用 `ProcessView` 和 `JudgeBenchmarkAdapter`。
+2. 接 AgentProcessBench。
+3. 再接 TRAIL。
+4. 然后接 AgentRewardBench（已完成 dry-run，正式跑分待许可）。
+5. 用已校准裁判分析 Cute Agent 真实 Trace。
+6. 最后接 MARBLE 多 Agent 环境。
+
+#### 阶段 10.0：许可、版本和视图冻结
+
+规模：S。
+
+交付：
+
+- 四个 upstream 的 license review 记录；结论只能是
+  `approved`、`restricted` 或 `blocked-license`。
+- 固定 commit、dataset revision、文件 SHA-256、官方 evaluator SHA-256。
+- `process_view.schema.json`、`judge_benchmark.schema.json`、
+  `multi_agent_trace.schema.json`。
+- `judge-calibration`、`product-derived`、`agent-benchmark` 三个报告命名空间。
+
+退出条件：
+
+- 任何 license 未通过的项目不得运行正式评测。
+- 官方数据、题目、标签、环境、evaluator 零修改。
+- 缺失 step / span 证据时投影失败，不用空值或猜测补齐。
+
+#### 阶段 10.1：通用 ProcessView 与裁判适配层
+
+规模：M。
+
+交付：
+
+- `ProcessViewProjector`：
+  - 把 Execution Ledger 投影成稳定的 run / turn / step / span。
+  - step 与 assistant message 或 React 决策阶段一一对应。
+  - tool call、tool result、异常、重试、compaction、memory、artifact 作为 step 证据。
+  - 保留 `runUid`、`requestId`、`sessionId`、`turnId`、`stepId`、`spanId`。
+- `JudgeBenchmarkAdapter`：
+  - 加载官方轨迹。
+  - 调用候选裁判。
+  - 严格解析官方输出 schema。
+  - 把结果交给官方评分器或固定评分算法。
+- `JudgeOutputError` 分类：
+  - `invalid_json`
+  - `missing_steps`
+  - `invalid_label`
+  - `timeout`
+  - `rate_limited`
+  - `refused`
+- 单测不依赖真实模型，先验证官方数据只读、字段映射、错误分类和分数隔离。
+
+退出条件：
+
+- 同一个 Trace 连续投影两次，step 数量和 step ID 完全一致。
+- 投影结果能人工回到 Ledger 的具体 LLM / tool / artifact 行。
+- 裁判输出错误不会被静默转换成低分或通过。
+- `judge-calibration` 分数不能进入 Cute Agent 产品分数。
+
+#### 阶段 10.2：AgentProcessBench
+
+规模：M。
+
+开发顺序：
+
+1. 固定 upstream commit 和数据 hash。
+2. 官方 smoke：四个来源各 5 条，共 20 条。
+3. official-subset：四个来源各 25 条，共 100 条。
+4. 解析稳定后跑 official-full 1000 条。
+5. 用同一裁判分析 Cute-private Trace，生成 `product-derived` 步骤质量报告。
+
+交付：
+
+- `agent_process_bench` manifest / adapter / tests。
+- 官方 `step_micro_acc`、`firsterroracc` 及 step 混淆矩阵。
+- Cute Trace 的逐 step `-1/0/+1`、首次错误位置、证据引用和最终结果一致性。
+
+退出条件：
+
+- 官方四个来源分栏报告。
+- `bfcl` 仅作为 AgentProcessBench 官方轨迹来源，不重新引入 BFCL Agent 评测。
+- 本地裁判结果标 `compatibility-subset`，不能冒充官方榜单。
+
+#### 阶段 10.3：TRAIL
+
+规模：M。
+
+开发顺序：
+
+1. 固定 148 条 Trace、841 个官方错误、21 类标签和评分脚本 hash。
+2. GAIA smoke 10 条。
+3. GAIA split 跑通后接 SWE Bench smoke 10 条。
+4. 最后跑全部 148 条并原样运行官方评分。
+
+交付：
+
+- `trail` manifest / adapter / tests。
+- 官方 `location_accuracy`、`joint_accuracy`、类别级分数和相关指标。
+- Cute Trace 错误定位报告：
+  - `category`
+  - `location`
+  - `evidence`
+  - `impact`
+  - `description`
+  - 修复建议
+
+退出条件：
+
+- 错误位置能落到稳定的 `spanId` / Ledger 行。
+- 无证据结论标 `unverified`。
+- 不合并官方错误，不改官方标签，不用自然语言位置替代可定位位置。
+
+#### 阶段 10.4：AgentRewardBench
+
+规模：M–L。
+
+开发顺序：
+
+1. 核对代码、HF 数据、截图和 split 的许可与访问条款。
+2. 只下载元数据、标签和 dev smoke 所需轨迹。
+3. 跑官方 dev smoke，验证裁判输出解析、超时和失败分类。
+4. 人工确认下载体积、运行时间和成本后，再跑完整 test split。
+
+交付：
+
+- `agent_reward_bench` manifest / adapter / tests。
+- `trajectory_success`、`trajectory_side_effect`、`trajectory_optimality`、
+  `trajectory_looping` 四个维度的 accuracy / precision / recall / F1 / TNR / NPV。
+- false-pass、false-fail、unsure、invalid judgment 分栏统计。
+
+退出条件：
+
+- false-pass 作为高风险指标单独展示。
+- 本地裁判完成人工标签校准前，只能 advisory。
+- 全量 test 未跑完时标 `partial-not-official`，不得引用排行榜名次。
+
+#### 阶段 10.5：用校准裁判分析 Cute Agent 真实 Trace
+
+规模：M。
+
+目标不是再给 Cute Agent 加几个泛化指标，而是回答具体问题：
+
+- 哪一步开始偏离目标。
+- 是否选错工具、参数错误、误解工具输出或重复无效动作。
+- 是否是多走了一步的合理探索，还是计划本身失败。
+- Prompt、工具 schema、预算或环境限制分别造成了什么错误。
+- Token 高消耗来自必要推理、冗余工具、长观察结果，还是失败重试。
+
+交付：
+
+- `cute-evals trace analyze --input <trace.json>` 的计划入口。
+- 每个失败 Trace 的根因报告和证据链。
+- 与 `subgoals`、`referenceToolSequence`、token、latency、tool result hash 对齐。
+- 裁判置信度低时标 `unverified`，不强行给结论。
+
+退出条件：
+
+- 至少 20 条真实 Trace 完成人工复核。
+- 每条根因结论都能回到具体 step / tool / LLM / artifact 证据。
+- 报告能输出“下一步应改什么”，而不是只给一个质量分。
+
+#### 阶段 10.6：MultiAgentBench / MARBLE
+
+规模：XL。
+
+前置条件：
+
+- 阶段 10.1 的 `MultiAgentTraceView` 冻结。
+- 许可证冲突已解决。
+- 至少一个官方环境能在本机或专用 Linux 运行机复现。
+
+开发顺序：
+
+1. 固定 canonical upstream commit、官方环境资产和 evaluator hash。
+2. 先选一个不需要重型容器的官方环境做 3–5 task smoke。
+3. 跑单环境 10–20 task，`repeat=3`。
+4. 再接需要 Docker / DB / Minecraft server 的环境。
+5. 每个 domain 独立报告，不把部分 domain 合并成 official-full。
+
+交付：
+
+- `marble` manifest / adapter / tests。
+- `MultiAgentTraceView`：
+  - 父子 Agent 树。
+  - role / goal / status。
+  - agent message、handoff、delegation。
+  - 每个 Agent 的 LLM、tool、memory、artifact、budget。
+  - 团队共享状态、冲突、重复工作、收敛结果。
+- 官方任务分、team `pass@1`、`pass^k`。
+- handoff 成功率、重复工作数、通信开销、角色利用率、收敛轮数。
+
+退出条件：
+
+- 一个 `teamRunId` 能还原完整团队时间线。
+- 任务之间环境完全 reset。
+- 官方 evaluator 可运行；否则 fail-closed 并标 `unverified` 或环境阻塞。
+- Docker / DB / Minecraft 不可用时不得宣称 official-full。
+
+#### 阶段 10.7：CI、报告与门禁
+
+PR：
+
+- 只跑 manifest / schema / projector / parser fixture。
+- 不下载官方大资产，不调用真实模型。
+
+Nightly：
+
+- AgentProcessBench 100 题。
+- TRAIL GAIA 子集。
+- AgentRewardBench dev smoke。
+- MARBLE 单环境 smoke。
+
+Release：
+
+- 官方 full 或明确披露的 official-subset。
+- 完整报告必须区分 official / compatibility / internal / partial / unverified。
+- 裁判没有完成校准时，不能成为 hard gate。
+- 多 Agent 环境错误必须与模型协作错误分开。
+
+退出条件：
+
+- 所有报告都有 upstream、hash、模型配置和命令。
+- 所有失败可定位到模型、工具、环境、Adapter、Oracle 或许可阻塞。
+- 阶段 10 完成后才允许声称项目具备“轨迹质量”和“多 Agent 协作”两类公开基准评测能力。
 
 ---
 
@@ -2150,6 +2815,45 @@ Execution Ledger 只读导出、问题/健康对照分层采样和健康审计�
 
 这样才能回答“能不能上榜”和“上线是否划算”，而不是只看一个分数。
 
+### 12.5 裁判可信度
+
+适用于 AgentProcessBench、TRAIL、AgentRewardBench，以及任何准备进入门禁的
+DeepEval / agentevals / 自定义轨迹裁判。
+
+- 官方 step micro accuracy。
+- 首次错误定位准确率。
+- 错误类别 precision / recall / F1。
+- 错误位置 accuracy 与错误类别+位置 joint accuracy。
+- 轨迹 success 判断 accuracy / precision / recall / F1。
+- `false-pass`：人工判失败、裁判判成功。
+- `false-fail`：人工判成功、裁判判失败。
+- TNR / NPV，重点防止裁判对失败轨迹“全放行”。
+- invalid JSON、missing steps、invalid label、timeout、rate limit、refusal。
+- 同一输入重复裁判的一致率。
+
+说明：
+
+- 这些分数属于 `judge-calibration`，不进入 Cute Agent 任务成功率。
+- 本地模型结果只能标 `compatibility-subset` 或 `internal-calibration`。
+
+### 12.6 多 Agent 协作
+
+- 官方环境任务分。
+- team success、`pass@1`、`pass^k`。
+- 父子 Agent 树完整率。
+- handoff 成功率、无效 handoff 数。
+- 重复工作数、角色闲置率、冲突解决率。
+- 团队通信轮数、通信 token、通信 token 占比。
+- 团队 token、单 Agent token、工具调用数、wall time。
+- 任务收敛轮数、deadlock / livelock 次数。
+- 环境错误、Adapter 错误、模型决策错误、协作机制错误的分层计数。
+
+说明：
+
+- 这些分数属于 `agent-benchmark`，只能来自官方环境和官方 evaluator。
+- 未运行完整 domain 时标 `official-subset`；未全部完成时标
+  `partial-not-official`。
+
 ---
 
 ## 13. CI 门禁设计
@@ -2170,6 +2874,8 @@ Execution Ledger 只读导出、问题/健康对照分层采样和健康审计�
 - 外部环境仍用 fixture / snapshot。
 - core Case 重复 3 次。
 - 跑 GAIA、tau² 的小子集。
+- 阶段 10 接入后跑 AgentProcessBench 100 题、TRAIL GAIA 子集、
+  AgentRewardBench dev smoke 和 MARBLE 单环境 smoke。
 - 计算 pass@1、pass^k、token、延迟。
 - 与 baseline diff。
 - advisory 为主，稳定后再硬卡。
@@ -2179,6 +2885,8 @@ Execution Ledger 只读导出、问题/健康对照分层采样和健康审计�
 - 跑完整 core + regression + safety。
 - 跑 Docker/VM/Browser Benchmark 子集。
 - 跑 live model 3–5 次。
+- 阶段 10 接入后跑裁判校准 full/subset 和至少一个 MARBLE 官方环境；
+  未完成全部 domain 时只发布 official-subset。
 - 检查预算、稳定性、安全。
 - 人工复核失败和高风险 Case。
 
@@ -2204,6 +2912,9 @@ Execution Ledger 只读导出、问题/健康对照分层采样和健康审计�
   "profile": "pr",
   "agent": "cute-agent",
   "model": "fixed-model",
+  "subjectType": "agent",
+  "scoreNamespace": "agent-benchmark",
+  "scoreLabel": "official-subset",
   "suite": "react-core",
   "caseResults": [],
   "scores": [],
@@ -2227,7 +2938,8 @@ Execution Ledger 只读导出、问题/健康对照分层采样和健康审计�
 - 失败证据。
 - Trace / artifact 链接。
 - baseline diff。
-- Benchmark 标签：内部 / 官方全量 / 官方子集 / unverified。
+- Benchmark 标签：内部 / 官方全量 / 官方子集 / compatibility-subset /
+  partial-not-official / unverified / blocked-license。
 
 ### 14.3 结果目录
 
@@ -2429,10 +3141,33 @@ Live 模型入口、独立评测库和 `eval` Profile 已接线；真实模型�
 16. 接 Terminal-Bench / SWE-bench Lite。
 17. 接 WebArena / AgentDojo。
 18. 最后评估 OSWorld 和完整重型套件。
+19. 按
+    [`AGENT_CONTINUITY_MEMORY_CACHE_PLAN.md`](AGENT_CONTINUITY_MEMORY_CACHE_PLAN.md)
+    接入上下文压缩、长期记忆和缓存效率；先完成 Trace 字段与压缩审计修复，再接公开数据集。
+20. [部分完成] 冻结 `ProcessView`、裁判输入输出 schema、三个分数命名空间；
+    AgentProcessBench 已完成许可证、commit、dataset 和 evaluator 锁定，
+    另外三项 upstream 尚未完成。
+21. [部分完成] AgentProcessBench 已接入官方 harness 并完成 20 题 dry-run；
+    正式模型跑分被 `blocked-license` 阻塞，100 题和 1000 题尚未运行。
+22. [部分完成] TRAIL 已接入官方 Prompt / 评分 harness，并完成 10 题 GAIA dry-run；
+    正式跑分和 148 条全量被数据许可门禁阻塞。
+23. [部分完成] 接 AgentRewardBench：已完成 manifest、HF dataset revision、官方
+    Prompt / 评分 harness、5 题 dev dry-run；正式模型跑分被 `blocked-license` 阻塞。
+24. [已登记，未开发] 用已校准裁判分析 Cute Agent 私有真实 Trace，产出 step 质量、
+    首次错误、根因、证据和修复建议；结果只标 `product-derived`。
+25. [部分完成] 接 MultiAgentBench / MARBLE：已完成 MultiAgentTraceView、五个
+    domain 资产锁定和 5 / 50 / 500 题 dry-run；许可证冲突未解除，官方环境运行器
+    尚未实现，非 dry-run fail-closed。
+26. [已完成] 接 MemoryAgentBench official-subset 和 official-full：official-subset
+    为 4 个官方 category、4 个 context、20 道题；official-full 为 22 个官方 source、
+    146 个 context、3,671 道题。官方 chunk / query template / exact / substring /
+    Ruler recall / LongMemEval judge / InfBench F1 / Recsys Recall 已锁定；全量 live
+    跑分尚未执行。
 
 说明：第 11–12 项是阶段 1.5；第 13 项是阶段 2；第 14 项是新增的阶段 2.5。
 tau² airline 子集、GAIA Level 1 两题和 BIRD 2026 Mini-Dev SQLite 8 题子集
-已经接入；完整 GAIA 和后续重型 Benchmark 尚未接入。
+已经接入；完整 GAIA 和后续重型 Benchmark 尚未接入。第 20–25 项是阶段 10，
+第 20–25 项均已有资产/代码入口；第 21–23、25 项正式运行仍受许可证或环境阻塞。
 
 不要在第 1–5 步未稳定时同时安装所有 Benchmark。那样得到的不是评测能力，而是不可归因的失败堆积。
 

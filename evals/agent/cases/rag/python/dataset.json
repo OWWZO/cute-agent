@@ -1,0 +1,15 @@
+{
+  "name": "cute-agent-mrag-python",
+  "version": 1,
+  "revision": "2026-11-09",
+  "description": "Project-owned direct Python MRAG quality suite. This suite bypasses the Java Agent.",
+  "labels": [
+    {"caseId": "rag-python.cited-answer", "scenario": "direct-page", "evidenceTypes": ["page"]},
+    {"caseId": "rag-python.multi-source-policy", "scenario": "multi-source", "evidenceTypes": ["page"]},
+    {"caseId": "rag-python.conflicting-versions", "scenario": "source-conflict", "evidenceTypes": ["page"]},
+    {"caseId": "rag-python.table-threshold", "scenario": "table-row", "evidenceTypes": ["table"]},
+    {"caseId": "rag-python.image-evidence", "scenario": "image-evidence", "evidenceTypes": ["image"]},
+    {"caseId": "rag-python.security-window", "scenario": "time-window", "evidenceTypes": ["page"]},
+    {"caseId": "rag-python.no-evidence", "scenario": "abstention", "evidenceTypes": []}
+  ]
+}

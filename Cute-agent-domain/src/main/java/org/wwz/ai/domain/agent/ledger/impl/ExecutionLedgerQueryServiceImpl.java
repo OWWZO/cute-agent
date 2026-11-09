@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.ledger.impl;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.ObjectProvider;
@@ -14,6 +15,8 @@ import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.entity.LlmInvocation;
 import org.wwz.ai.domain.agent.ledger.entity.ToolInvocation;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
+import org.wwz.ai.domain.agent.ledger.model.ConversationMessageView;
+import org.wwz.ai.domain.agent.ledger.model.ContextEventView;
 import org.wwz.ai.domain.agent.ledger.model.ConversationSessionCursor;
 import org.wwz.ai.domain.agent.ledger.model.ConversationSessionPage;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
@@ -21,17 +24,26 @@ import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationView;
+import org.wwz.ai.domain.agent.ledger.model.MemoryEventView;
 import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
+import org.wwz.ai.domain.agent.ledger.model.WorkingMemoryConversationRow;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputNames;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolStructuredOutput;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.domain.agent.ledger.tooloutput.ToolOutputReader;
+import org.wwz.ai.domain.agent.memory.WorkingMemoryCompactionEvent;
+import org.wwz.ai.domain.agent.memory.ltm.LtmForkExecutionEvent;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -40,6 +52,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryService {
 
     private final IExecutionLedgerReadRepository executionLedgerReadRepository;
@@ -80,6 +93,19 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
         List<LlmInvocation> llmInvocations = executionLedgerReadRepository.queryLlmInvocationsByRunId(run.getId());
         List<ToolInvocation> toolInvocations = executionLedgerReadRepository.queryToolInvocationsByRunId(run.getId());
         List<ArtifactRecord> artifacts = executionLedgerReadRepository.queryArtifactsByRunIdWithSubagentFold(run.getId());
+        List<WorkingMemoryCompactionEvent> compactionEvents =
+                executionLedgerReadRepository.queryCompactionEventsByTriggerRequestIds(
+                        StringUtils.isBlank(run.getRequestId())
+                                ? List.of()
+                                : List.of(run.getRequestId())
+                );
+        List<LtmForkExecutionEvent> memoryForkEvents =
+                executionLedgerReadRepository.queryMemoryForkEventsByTriggerRequestIds(
+                        StringUtils.isBlank(run.getRequestId())
+                                ? List.of()
+                                : List.of(run.getRequestId())
+                );
+        ConversationData conversation = loadConversation(run.getSessionId());
         List<ToolInvocationView> toolViews = toToolViews(
                 toolInvocations,
                 run.getRequestId(),
@@ -95,6 +121,10 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
                 .llmInvocations(toLlmViews(llmInvocations))
                 .toolInvocations(toolViews)
                 .artifacts(artifactViews)
+                .contextEvents(toContextEventViews(compactionEvents))
+                .memoryEvents(toMemoryEventViews(memoryForkEvents))
+                .conversation(conversation.messages())
+                .conversationSource(conversation.source())
                 .build();
     }
 
@@ -163,6 +193,27 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
                 artifactsByRunId
         );
         enrichStructuredOutputs(toolViews, allArtifacts);
+        List<String> triggerRequestIds = runViewsById.values().stream()
+                .map(DialogueRunView::getRequestId)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .toList();
+        List<ContextEventView> contextViews = toContextEventViews(
+                executionLedgerReadRepository.queryCompactionEventsByTriggerRequestIds(
+                        triggerRequestIds
+                )
+        );
+        List<MemoryEventView> memoryViews = toMemoryEventViews(
+                executionLedgerReadRepository.queryMemoryForkEventsByTriggerRequestIds(
+                        triggerRequestIds
+                )
+        );
+        Map<String, ConversationData> conversationsBySessionId =
+                loadConversations(runViewsById.values().stream()
+                        .map(DialogueRunView::getSessionId)
+                        .filter(StringUtils::isNotBlank)
+                        .distinct()
+                        .toList());
 
         Map<Long, List<LlmInvocationView>> llmViewsByRunId = llmViews.stream()
                 .filter(view -> view != null && view.getRunId() != null)
@@ -178,6 +229,20 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
                         LinkedHashMap::new,
                         Collectors.toCollection(ArrayList::new)
                 ));
+        Map<String, List<ContextEventView>> contextViewsByRequestId = contextViews.stream()
+                .filter(view -> view != null && view.getTriggerRequestId() != null)
+                .collect(Collectors.groupingBy(
+                        ContextEventView::getTriggerRequestId,
+                        LinkedHashMap::new,
+                        Collectors.toCollection(ArrayList::new)
+                ));
+        Map<String, List<MemoryEventView>> memoryViewsByRequestId = memoryViews.stream()
+                .filter(view -> view != null && view.getTriggerRequestId() != null)
+                .collect(Collectors.groupingBy(
+                        MemoryEventView::getTriggerRequestId,
+                        LinkedHashMap::new,
+                        Collectors.toCollection(ArrayList::new)
+                ));
 
         List<ExecutionRunDetail> details = new ArrayList<>(runs.size());
         for (DialogueRunView run : runs) {
@@ -185,11 +250,19 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
                 details.add(emptyRunDetail(run));
                 continue;
             }
+            ConversationData conversation = conversationsBySessionId.getOrDefault(
+                    run.getSessionId(), ConversationData.unavailable());
             details.add(ExecutionRunDetail.builder()
                     .run(run)
                     .llmInvocations(llmViewsByRunId.getOrDefault(run.getId(), List.of()))
                     .toolInvocations(toolViewsByRunId.getOrDefault(run.getId(), List.of()))
                     .artifacts(artifactsByRunId.getOrDefault(run.getId(), List.of()))
+                    .contextEvents(contextViewsByRequestId.getOrDefault(
+                            run.getRequestId(), List.of()))
+                    .memoryEvents(memoryViewsByRequestId.getOrDefault(
+                            run.getRequestId(), List.of()))
+                    .conversation(conversation.messages())
+                    .conversationSource(conversation.source())
                     .build());
         }
         return details;
@@ -611,10 +684,22 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
                     .promptTokens(invocation.getPromptTokens())
                     .completionTokens(invocation.getCompletionTokens())
                     .totalTokens(invocation.getTotalTokens())
+                    .cachedPromptTokens(invocation.getCachedPromptTokens())
+                    .promptTextTokens(invocation.getPromptTextTokens())
+                    .promptAudioTokens(invocation.getPromptAudioTokens())
+                    .promptImageTokens(invocation.getPromptImageTokens())
+                    .completionTextTokens(invocation.getCompletionTextTokens())
+                    .completionAudioTokens(invocation.getCompletionAudioTokens())
+                    .reasoningTokens(invocation.getReasoningTokens())
+                    .systemFingerprint(invocation.getSystemFingerprint())
                     .estTotalTokens(invocation.getEstTotalTokens())
                     .estSystemTokens(invocation.getEstSystemTokens())
                     .estMessageTokens(invocation.getEstMessageTokens())
                     .estToolTokens(invocation.getEstToolTokens())
+                    .messageCount(invocation.getMessageCount())
+                    .toolCount(invocation.getToolCount())
+                    .cacheStatus(invocation.getCacheStatus())
+                    .cacheRiskFlags(invocation.getCacheRiskFlags())
                     .finishReason(invocation.getFinishReason())
                     .status(invocation.getStatus())
                     .errorMsg(invocation.getErrorMsg())
@@ -791,7 +876,321 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
                 .artifacts(run == null || run.getArtifactSummaries() == null
                         ? List.of()
                         : run.getArtifactSummaries())
+                .contextEvents(List.of())
+                .memoryEvents(List.of())
+                .conversation(List.of())
+                .conversationSource("unavailable")
                 .build();
+    }
+
+    private List<ContextEventView> toContextEventViews(
+            List<WorkingMemoryCompactionEvent> events) {
+        if (events == null) {
+            return List.of();
+        }
+        List<ContextEventView> views = new ArrayList<>(events.size());
+        for (WorkingMemoryCompactionEvent event : events) {
+            if (event != null) {
+                views.add(toContextEventView(event));
+            }
+        }
+        return views;
+    }
+
+    private ContextEventView toContextEventView(WorkingMemoryCompactionEvent event) {
+        String status = compactionStatus(event.getStatus());
+        return ContextEventView.builder()
+                .eventId(event.getId() == null
+                        ? "compaction:unknown"
+                        : "compaction:" + event.getId())
+                .type("compaction")
+                .sessionId(event.getSessionId())
+                .triggerRequestId(event.getTriggerRequestId())
+                .compactRequestId(event.getCompactRequestId())
+                .status(status)
+                .strategy(event.getStrategy())
+                .beforeTokens(event.getBeforeTokens())
+                .afterTokens(event.getAfterTokens())
+                .beforeMessageCount(event.getBeforeMessageCount())
+                .afterMessageCount(event.getAfterMessageCount())
+                .thresholdTokens(event.getThresholdTokens())
+                .summaryHash(hashText(event.getSummaryText()))
+                .errorCode("failed".equals(status)
+                        ? classifyCompactionError(event.getErrorMessage())
+                        : null)
+                .startedAt(null)
+                // 审计行在压缩完成后写入，create_time 只能作为完成时间上界。
+                .finishedAt(event.getCreateTime())
+                .build();
+    }
+
+    private String compactionStatus(Integer status) {
+        if (status == null) {
+            return "unknown";
+        }
+        return switch (status) {
+            case WorkingMemoryCompactionEvent.STATUS_SUCCESS -> "success";
+            case WorkingMemoryCompactionEvent.STATUS_FAILED -> "failed";
+            default -> "unknown";
+        };
+    }
+
+    private String classifyCompactionError(String errorMessage) {
+        if (StringUtils.isBlank(errorMessage)) {
+            return "COMPACTION_FAILED_UNSPECIFIED";
+        }
+        String normalized = errorMessage.toLowerCase(Locale.ROOT);
+        if (normalized.contains("circuit")) {
+            return "COMPACTION_CIRCUIT_OPEN";
+        }
+        if (normalized.contains("timeout") || normalized.contains("timed out")) {
+            return "COMPACTION_TIMEOUT";
+        }
+        if (normalized.contains("rate limit") || normalized.contains("429")) {
+            return "COMPACTION_RATE_LIMITED";
+        }
+        if (normalized.contains("json")
+                || normalized.contains("parse")
+                || normalized.contains("malformed")) {
+            return "COMPACTION_INVALID_RESPONSE";
+        }
+        if (normalized.contains("permission")
+                || normalized.contains("unauthorized")
+                || normalized.contains("forbidden")
+                || normalized.contains("401")
+                || normalized.contains("403")) {
+            return "COMPACTION_PERMISSION_DENIED";
+        }
+        if (normalized.contains("token")
+                || normalized.contains("context length")
+                || normalized.contains("too long")) {
+            return "COMPACTION_CONTEXT_LIMIT";
+        }
+        return "COMPACTION_FAILED";
+    }
+
+    private String hashText(String value) {
+        if (StringUtils.isBlank(value)) {
+            return null;
+        }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            return "sha256:" + HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
+    private List<MemoryEventView> toMemoryEventViews(
+            List<LtmForkExecutionEvent> events) {
+        if (events == null) {
+            return List.of();
+        }
+        List<MemoryEventView> views = new ArrayList<>(events.size());
+        for (LtmForkExecutionEvent event : events) {
+            if (event != null) {
+                views.add(toMemoryEventView(event));
+            }
+        }
+        return views;
+    }
+
+    private MemoryEventView toMemoryEventView(LtmForkExecutionEvent event) {
+        String status = memoryForkStatus(event.getStatus());
+        return MemoryEventView.builder()
+                .eventId(event.getId() == null
+                        ? "memory-fork:unknown"
+                        : "memory-fork:" + event.getId())
+                .type("memory_fork")
+                .sessionId(event.getSessionId())
+                .triggerRequestId(event.getTriggerRequestId())
+                .forkRequestId(event.getForkRequestId())
+                .forkKind(event.getForkKind())
+                .status(status)
+                .skipReason(safeForkSkipReason(event.getSkipReason()))
+                .ownerType(event.getOwnerType())
+                .ownerHash(hashText(event.getOwnerId()))
+                .userTurns(event.getUserTurns())
+                .snapshotMessageCount(event.getSnapshotMessageCount())
+                .maxSteps(event.getMaxSteps())
+                .timeoutSeconds(event.getTimeoutSeconds())
+                .durationMs(event.getDurationMs())
+                .entriesBefore(event.getEntriesBefore())
+                .entriesAfter(event.getEntriesAfter())
+                .appliedCount(event.getAppliedCount())
+                .errorCode(("failed".equals(status) || "timeout".equals(status))
+                        ? classifyMemoryForkError(event.getErrorMessage())
+                        : null)
+                .startedAt(null)
+                // 审计行在 fork 结束后写入，create_time 只能作为完成时间上界。
+                .finishedAt(event.getCreateTime())
+                .build();
+    }
+
+    private String memoryForkStatus(Integer status) {
+        if (status == null) {
+            return "unknown";
+        }
+        return switch (status) {
+            case LtmForkExecutionEvent.STATUS_SUCCESS -> "success";
+            case LtmForkExecutionEvent.STATUS_FAILED -> "failed";
+            case LtmForkExecutionEvent.STATUS_SKIPPED -> "skipped";
+            case LtmForkExecutionEvent.STATUS_TIMEOUT -> "timeout";
+            default -> "unknown";
+        };
+    }
+
+    private String safeForkSkipReason(String reason) {
+        if (StringUtils.isBlank(reason)) {
+            return null;
+        }
+        String normalized = reason.trim();
+        return switch (normalized) {
+            case "disabled", "empty-messages", "nested-fork", "null-owner",
+                    "duplicate-request", "session-in-flight", "min-turns",
+                    "store-null", "deps-null", "in-flight", "executor-error",
+                    "executor-rejected", "deps-or-store-or-owner-null",
+                    "parity-null", "blank-directive" -> normalized;
+            default -> "other";
+        };
+    }
+
+    private String classifyMemoryForkError(String errorMessage) {
+        if (StringUtils.isBlank(errorMessage)) {
+            return "MEMORY_FORK_FAILED_UNSPECIFIED";
+        }
+        String normalized = errorMessage.toLowerCase(Locale.ROOT);
+        if (normalized.contains("timeout") || normalized.contains("timed out")) {
+            return "MEMORY_FORK_TIMEOUT";
+        }
+        if (normalized.contains("rate limit") || normalized.contains("429")) {
+            return "MEMORY_FORK_RATE_LIMITED";
+        }
+        if (normalized.contains("json")
+                || normalized.contains("parse")
+                || normalized.contains("malformed")) {
+            return "MEMORY_FORK_INVALID_RESPONSE";
+        }
+        if (normalized.contains("permission")
+                || normalized.contains("unauthorized")
+                || normalized.contains("forbidden")
+                || normalized.contains("401")
+                || normalized.contains("403")) {
+            return "MEMORY_FORK_PERMISSION_DENIED";
+        }
+        if (normalized.contains("database")
+                || normalized.contains("sql")
+                || normalized.contains("store")) {
+            return "MEMORY_FORK_STORE_ERROR";
+        }
+        if (normalized.contains("token")
+                || normalized.contains("context length")
+                || normalized.contains("too long")) {
+            return "MEMORY_FORK_CONTEXT_LIMIT";
+        }
+        return "MEMORY_FORK_FAILED";
+    }
+
+    private ConversationData loadConversation(String sessionId) {
+        if (StringUtils.isBlank(sessionId)) {
+            return ConversationData.unavailable();
+        }
+        try {
+            List<WorkingMemoryConversationRow> rows =
+                    executionLedgerReadRepository.queryConversationBySessionId(sessionId);
+            return rows == null
+                    ? ConversationData.unavailable()
+                    : new ConversationData("working_memory", toConversationViews(rows));
+        } catch (RuntimeException e) {
+            log.warn("load working-memory conversation failed sessionId={}: {}",
+                    sessionId, e.toString());
+            return ConversationData.unavailable();
+        }
+    }
+
+    private Map<String, ConversationData> loadConversations(List<String> sessionIds) {
+        if (CollectionUtils.isEmpty(sessionIds)) {
+            return Map.of();
+        }
+        try {
+            List<WorkingMemoryConversationRow> rows =
+                    executionLedgerReadRepository.queryConversationBySessionIds(sessionIds);
+            if (rows == null) {
+                return unavailableConversations(sessionIds);
+            }
+            Map<String, List<WorkingMemoryConversationRow>> rowsBySessionId =
+                    rows.stream()
+                            .filter(row -> row != null && row.getSessionId() != null)
+                            .collect(Collectors.groupingBy(
+                                    WorkingMemoryConversationRow::getSessionId,
+                                    LinkedHashMap::new,
+                                    Collectors.toCollection(ArrayList::new)
+                            ));
+            Map<String, ConversationData> conversations = new LinkedHashMap<>();
+            for (String sessionId : sessionIds) {
+                conversations.put(sessionId, new ConversationData(
+                        "working_memory",
+                        toConversationViews(rowsBySessionId.getOrDefault(
+                                sessionId, List.of()))
+                ));
+            }
+            return conversations;
+        } catch (RuntimeException e) {
+            log.warn("load working-memory conversations failed sessionCount={}: {}",
+                    sessionIds.size(), e.toString());
+            return unavailableConversations(sessionIds);
+        }
+    }
+
+    private Map<String, ConversationData> unavailableConversations(List<String> sessionIds) {
+        Map<String, ConversationData> conversations = new LinkedHashMap<>();
+        for (String sessionId : sessionIds) {
+            conversations.put(sessionId, ConversationData.unavailable());
+        }
+        return conversations;
+    }
+
+    private List<ConversationMessageView> toConversationViews(
+            List<WorkingMemoryConversationRow> rows) {
+        if (rows == null) {
+            return List.of();
+        }
+        List<ConversationMessageView> views = new ArrayList<>(rows.size());
+        for (WorkingMemoryConversationRow row : rows) {
+            if (row == null) {
+                continue;
+            }
+            views.add(ConversationMessageView.builder()
+                    .messageId(row.getMessageId() == null
+                            ? "unknown"
+                            : String.valueOf(row.getMessageId()))
+                    .conversationId(row.getSessionId())
+                    .turnId(row.getTurnId() == null
+                            ? null
+                            : String.valueOf(row.getTurnId()))
+                    .turnIndex(row.getTurnSeq())
+                    .requestId(row.getRequestId())
+                    .runId(row.getRunId())
+                    .seqNo(row.getSeqNo())
+                    .role(row.getRole())
+                    .actor(row.getRole())
+                    .content(StringUtils.defaultString(row.getContent()))
+                    .toolCallId(row.getToolCallId())
+                    .toolCallsJson(row.getToolCallsJson())
+                    .messageKind(row.getMessageKind())
+                    .visibility(row.getVisibility())
+                    .tokenEstimate(row.getTokenEstimate())
+                    .timestamp(row.getCreateTime())
+                    .build());
+        }
+        return views;
+    }
+
+    private record ConversationData(String source, List<ConversationMessageView> messages) {
+        private static ConversationData unavailable() {
+            return new ConversationData("unavailable", List.of());
+        }
     }
 
     private List<ArtifactView> toArtifactViews(List<ArtifactRecord> artifacts) {

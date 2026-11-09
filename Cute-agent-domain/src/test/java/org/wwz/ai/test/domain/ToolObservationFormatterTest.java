@@ -304,6 +304,57 @@ public class ToolObservationFormatterTest {
     }
 
     @Test
+    public void sessionSearchReadKeepsLateUserFactAndCompactsLongAssistantText() {
+        Map<String, Object> assistant = new LinkedHashMap<>();
+        assistant.put("id", 1);
+        assistant.put("seq_no", 0);
+        assistant.put("role", "ASSISTANT");
+        assistant.put("content", "a".repeat(12_000));
+        Map<String, Object> user = new LinkedHashMap<>();
+        user.put("id", 2);
+        user.put("seq_no", 1);
+        user.put("role", "USER");
+        user.put("content", "By the way, my cat's name is Luna.");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("mode", "read");
+        data.put("session_id", "s1");
+        data.put("message_count", 2);
+        data.put("truncated", false);
+        data.put("messages", List.of(assistant, user));
+
+        String projected = ToolObservationFormatter.format("session_search", data);
+
+        Assert.assertTrue(projected.contains("my cat's name is Luna"));
+        Assert.assertFalse(projected.contains("a".repeat(8_000)));
+        Assert.assertTrue(projected.length() < 10_000);
+    }
+
+    @Test
+    public void sessionSearchDiscoverPreservesAnchorWithoutEchoingArguments() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("session_id", "s1");
+        result.put("match_message_id", 42);
+        result.put("matched_role", "USER");
+        result.put("title", "History");
+        result.put("snippet", "the cat's name is Luna");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("tool", "session_search");
+        data.put("query", "cat name");
+        data.put("mode", "discover");
+        data.put("count", 1);
+        data.put("results", List.of(result));
+
+        String projected = ToolObservationFormatter.format("session_search", data);
+
+        Assert.assertTrue(projected.contains("session=s1"));
+        Assert.assertTrue(projected.contains("match=42"));
+        Assert.assertTrue(projected.contains("Luna"));
+        Assert.assertFalse(projected.contains("\"query\""));
+    }
+
+    @Test
     public void webFetchKeepsContentAndDropsRequestEcho() {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("ok", Boolean.TRUE);

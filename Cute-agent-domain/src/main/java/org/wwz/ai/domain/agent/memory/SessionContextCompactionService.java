@@ -31,7 +31,10 @@ public interface SessionContextCompactionService {
     }
 
     /**
-     * 若超阈值则压缩；失败时降级为 drop-oldest。默认 main scope。
+     * 若超阈值则压缩。默认 main scope。
+     * <p>失败契约：鉴权、配额等永久失败返回入口快照并记录 {@code abort-unchanged}；
+     * 超时、限流、网络等临时失败显式降级为 local-fallback / drop-oldest。
+     * 两种结果都必须写入审计事件，不能一方面宣称 drop-oldest、另一方面静默保留原上下文。</p>
      */
     default List<Message> applyIfNeeded(String sessionId, String requestId, List<Message> messages) {
         return applyIfNeeded(sessionId, WorkingMemoryScopes.MAIN, requestId, messages);

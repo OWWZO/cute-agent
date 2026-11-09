@@ -716,7 +716,16 @@ async def post_mrag_query(body: MultimodalRAGRequest):
         try:
             # MRAG 的 stage 事件直接透传，普通 OpenAI chunk 统一转成同一 JSON 形状；同时
             # 累积 answer/raw_chunks，流结束后写入 turn，保证实时显示和历史回放使用同一事实。
-            for chunk in agent.run(body.question, body.image_urls):
+            chunks = (
+                agent.run(
+                    body.question,
+                    body.image_urls,
+                    include_retrieval_trace=True,
+                )
+                if body.include_retrieval_trace
+                else agent.run(body.question, body.image_urls)
+            )
+            for chunk in chunks:
                 payload = _normalize_mrag_chunk(chunk)
                 if not payload:
                     continue

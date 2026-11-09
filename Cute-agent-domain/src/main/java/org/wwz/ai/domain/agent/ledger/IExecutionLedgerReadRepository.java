@@ -5,11 +5,14 @@ import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.entity.LlmInvocation;
 import org.wwz.ai.domain.agent.ledger.entity.ToolInvocation;
+import org.wwz.ai.domain.agent.memory.WorkingMemoryCompactionEvent;
+import org.wwz.ai.domain.agent.memory.ltm.LtmForkExecutionEvent;
 import org.wwz.ai.domain.agent.ledger.model.ConversationSessionCursor;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
+import org.wwz.ai.domain.agent.ledger.model.WorkingMemoryConversationRow;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -152,6 +155,34 @@ public interface IExecutionLedgerReadRepository {
      * <p>契约同 {@link #queryLlmInvocationsByRunIds(List)}。</p>
      */
     List<ArtifactRecord> queryArtifactsByRunIdsWithSubagentFold(List<Long> runIds);
+
+    /**
+     * 按触发请求批量查询压缩审计事件。
+     * <p>契约：{@code triggerRequestIds} 为 {@code null} 或空时返回空列表，绝不返回
+     * {@code null}；调用方一次最多传入 {@link #MAX_BATCH_RUN_IDS} 个 id。</p>
+     */
+    List<WorkingMemoryCompactionEvent> queryCompactionEventsByTriggerRequestIds(
+            List<String> triggerRequestIds);
+
+    /**
+     * 按触发请求批量查询 LTM fork 执行事件。
+     * <p>契约同 {@link #queryCompactionEventsByTriggerRequestIds(List)}。</p>
+     */
+    List<LtmForkExecutionEvent> queryMemoryForkEventsByTriggerRequestIds(
+            List<String> triggerRequestIds);
+
+    /**
+     * 读取一个会话的可见工作记忆消息。
+     * <p>按 turn_seq、seq_no、消息 id 升序返回；不读取 base64 图片。</p>
+     */
+    List<WorkingMemoryConversationRow> queryConversationBySessionId(String sessionId);
+
+    /**
+     * 批量读取多个会话的可见工作记忆消息。
+     * <p>契约同 {@link #queryLlmInvocationsByRunIds(List)}。</p>
+     */
+    List<WorkingMemoryConversationRow> queryConversationBySessionIds(
+            List<String> sessionIds);
 
     /**
      * 单会话产物查询的默认入口；等价于

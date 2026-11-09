@@ -1,5 +1,6 @@
 package org.wwz.ai.test.domain;
 
+import com.alibaba.fastjson.JSON;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -74,6 +75,9 @@ public class SessionContextCompactionOutcomeTest {
         Assert.assertTrue(CompactionPrompt.getIterativeUpdatePrompt().contains("PREVIOUS SUMMARY"));
         Assert.assertTrue(CompactionPrompt.getIterativeUpdatePrompt().contains("NEW TURNS TO INCORPORATE"));
         Assert.assertTrue(CompactionPrompt.getCompactPrompt().contains("## Blocked"));
+        Assert.assertTrue(CompactionPrompt.getCompactPrompt(952).contains("under 952 characters"));
+        Assert.assertTrue(CompactionPrompt.getIterativeUpdatePrompt(952)
+                .contains("under 952 characters"));
         Assert.assertFalse(CompactionPrompt.getIterativeUpdatePrompt().contains("{new_turns}"));
         String wrapped = CompactionPrompt.wrapSummaryForReinject("## Goal\nship it", true);
         Assert.assertTrue(wrapped.startsWith(CompactionPrompt.CONTEXT_COMPACTION_PREFIX));
@@ -91,13 +95,158 @@ public class SessionContextCompactionOutcomeTest {
     }
 
     @Test
+    public void structuredCheckpointReportsMissingCarryForwardSections() {
+        String incomplete = """
+                ## Goal
+                finish the task
+                ## Constraints & Preferences
+                do not delete data
+                """;
+        Assert.assertEquals(
+                List.of("Active State"),
+                CompactionPrompt.missingRequiredCheckpointSections(incomplete));
+
+        CompactionPrompt.CheckpointFormatException error = Assert.assertThrows(
+                CompactionPrompt.CheckpointFormatException.class,
+                () -> CompactionPrompt.formatAndValidateCompactSummary(incomplete));
+        Assert.assertTrue(error.getMessage().contains("Active State"));
+
+        String complete = """
+                ## Goal
+                finish the task
+                ## Constraints & Preferences
+                do not delete data
+                ## Active State
+                generate the final report
+                """;
+        Assert.assertTrue(
+                CompactionPrompt.missingRequiredCheckpointSections(complete).isEmpty());
+    }
+
+    @Test
+    public void checkpointNormalizesRealModelHeadingVariants() {
+        String raw = "\u001B[5;1H### **Goal:** preserve GOAL-ALPHA\n"
+                + "### 约束与偏好：do not delete raw data\n"
+                + "#### 当前状态：generate the final report\n"
+                + "## Historical Task Snapshothandoff facts\n"
+                + "## Completed Actions-produced the checkpoint\n"
+                + "## BlockedNone## Key Decisionscontinue with verification\n";
+
+        String normalized = CompactionPrompt.formatAndValidateCompactSummary(raw);
+
+        Assert.assertFalse(normalized.contains("\u001B"));
+        Assert.assertTrue(normalized.contains("## Goal\npreserve GOAL-ALPHA"));
+        Assert.assertTrue(normalized.contains(
+                "## Constraints & Preferences\ndo not delete raw data"));
+        Assert.assertTrue(normalized.contains(
+                "## Active State\ngenerate the final report"));
+        Assert.assertTrue(normalized.contains(
+                "## Historical Task Snapshot\nhandoff facts"));
+        Assert.assertTrue(normalized.contains(
+                "## Completed Actions\nproduced the checkpoint"));
+        Assert.assertTrue(normalized.contains("## Blocked\nNone"));
+        Assert.assertTrue(normalized.contains(
+                "## Key Decisions\ncontinue with verification"));
+        Assert.assertTrue(
+                CompactionPrompt.missingRequiredCheckpointSections(raw).isEmpty());
+    }
+
+    @Test
+    public void checkpointPreservesLiteralSourceIdentifiers() {
+        String summary = """
+                ## Goal
+                preserve the active task
+                ## Critical Context
+                existing fact
+                """;
+
+        String preserved = CompactionPrompt.preserveLiteralIdentifiers(
+                summary,
+                List.of(
+                        "目标 GOAL-BETA：保持当前状态",
+                        "输出 UNKNOWN-ACTIVE",
+                        "已完成动作 DONE-REPORT-77，下一步 NEXT-VERIFY-77",
+                        "下一步标识 NEXT-STEP-REPORT"));
+
+        Assert.assertTrue(preserved.contains(
+                "- Final answer MUST include these literal identifiers verbatim: "
+                        + "GOAL-BETA, UNKNOWN-ACTIVE, "
+                        + "DONE-REPORT-77, NEXT-VERIFY-77, NEXT-STEP-REPORT"));
+        Assert.assertTrue(preserved.contains("existing fact"));
+    }
+
+    @Test
+    public void finalHandoffPreservesLiteralIdentifiersAfterWrapping() {
+        String handoff = CompactionPrompt.wrapSummaryForReinject(
+                """
+                        ## Goal
+                        keep the current task
+                        ## Critical Context
+                        existing fact
+                        """,
+                true);
+
+        String preserved = CompactionPrompt.preserveLiteralIdentifiersInHandoff(
+                handoff,
+                List.of(
+                        "目标 GOAL-BETA：保持当前状态",
+                        "约束 CONSTRAINT-NO-DELETE：不得删除原始数据",
+                        "下一步 NEXT-STEP-REPORT"));
+
+        Assert.assertTrue(preserved.contains(
+                "- Final answer MUST include these literal identifiers verbatim: "
+                        + "GOAL-BETA, CONSTRAINT-NO-DELETE, NEXT-STEP-REPORT"));
+        Assert.assertTrue(preserved.contains(CompactionPrompt.END_MARKER));
+        Assert.assertTrue(preserved.indexOf("Final answer MUST include these literal identifiers")
+                < preserved.indexOf(CompactionPrompt.END_MARKER));
+    }
+
+    @Test
+    public void negativeIdentifierMentionsAreNotForcedIntoFinalAnswer() {
+        String preserved = CompactionPrompt.preserveLiteralIdentifiers(
+                """
+                        ## Goal
+                        keep the current task
+                        ## Critical Context
+                        existing fact
+                        """,
+                List.of(
+                        "不得编造 ACTIVE-FAKE",
+                        "输出 UNKNOWN-ACTIVE"));
+
+        Assert.assertFalse(preserved.contains("ACTIVE-FAKE"));
+        Assert.assertTrue(preserved.contains("UNKNOWN-ACTIVE"));
+    }
+
+    @Test
+    public void constraintIdentifierIsNotFilteredByItsProhibitiveText() {
+        String preserved = CompactionPrompt.preserveLiteralIdentifiers(
+                """
+                        ## Goal
+                        keep the current task
+                        ## Critical Context
+                        existing fact
+                        """,
+                List.of("约束 CONSTRAINT-NO-DELETE：任何情况下都不能删除原始数据"));
+
+        Assert.assertTrue(preserved.contains(
+                "- Final answer MUST include these literal identifiers verbatim: "
+                        + "CONSTRAINT-NO-DELETE"));
+    }
+
+    @Test
     public void staticFallbackProducesCheckpoint() {
         WorkingMemoryCompactor compactor = new WorkingMemoryCompactor();
         String fallback = compactor.buildStaticFallbackSummary(
-                List.of(Message.userMessage("old request", null)), null, "latest request");
+                List.of(
+                        Message.userMessage("old request", null),
+                        Message.assistantMessage("x".repeat(20_000), null)),
+                null,
+                "latest request");
         Assert.assertTrue(fallback.contains("## Historical Task Snapshot"));
         Assert.assertTrue(fallback.contains("## Active State"));
         Assert.assertFalse(fallback.isBlank());
+        Assert.assertTrue(fallback.length() < 4000);
         Assert.assertFalse(CompactionBudget.defaults().isSessionMemoryEnabled());
     }
 
@@ -317,6 +466,44 @@ public class SessionContextCompactionOutcomeTest {
                 eq("s-full-persist"), eq("main"), anyString(), eq(compactResult));
     }
 
+    @Test
+    public void oversizedAuditPayloadRemainsValidJson() {
+        AtomicReference<WorkingMemoryCompactionEvent> audited = new AtomicReference<>();
+        String handoff = CompactionPrompt.wrapSummaryForReinject(
+                """
+                        ## Goal
+                        keep the audit valid
+                        ## Constraints & Preferences
+                        do not store a broken JSON prefix
+                        ## Active State
+                        verify the persisted event
+                        """,
+                false);
+        RecordingService service = new RecordingService(
+                audited,
+                List.of(Message.userMessage(handoff, null)),
+                null,
+                null,
+                false,
+                false,
+                5,
+                true);
+
+        service.applyIfNeeded("s-audit", "main", "req-audit", hugeAuditMessages());
+
+        WorkingMemoryCompactionEvent event = audited.get();
+        Assert.assertNotNull(event);
+        Assert.assertNotNull(event.getBeforeMessagesJson());
+        Assert.assertTrue(
+                event.getBeforeMessagesJson().length()
+                        <= WorkingMemoryCompactionEvent.MAX_PAYLOAD_CHARS);
+        com.alibaba.fastjson.JSONObject marker =
+                JSON.parseObject(event.getBeforeMessagesJson());
+        Assert.assertTrue(marker.getBooleanValue("truncated"));
+        Assert.assertEquals("audit_payload_limit", marker.getString("reason"));
+        Assert.assertTrue(marker.getString("sha256").startsWith("sha256:"));
+    }
+
     private static List<Message> oversizedMessages() {
         List<Message> messages = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
@@ -328,6 +515,15 @@ public class SessionContextCompactionOutcomeTest {
         return messages;
     }
 
+    private static List<Message> hugeAuditMessages() {
+        List<Message> messages = new ArrayList<>();
+        for (int i = 0; i < 120; i++) {
+            messages.add(Message.userMessage(
+                    "audit-row-" + i + " " + "x".repeat(1_000), null));
+        }
+        return messages;
+    }
+
     private static final class RecordingService extends SessionContextCompactionServiceImpl {
         private final AtomicReference<WorkingMemoryCompactionEvent> audited;
         private List<Message> compactResult;
@@ -336,6 +532,7 @@ public class SessionContextCompactionOutcomeTest {
         private boolean forceCircuit;
         private final boolean microEnabled;
         private final int microKeepRecentToolResults;
+        private final boolean auditStoreMessages;
 
         private RecordingService(AtomicReference<WorkingMemoryCompactionEvent> audited,
                                  List<Message> compactResult,
@@ -350,6 +547,25 @@ public class SessionContextCompactionOutcomeTest {
                                  boolean persistProjection,
                                  boolean microEnabled,
                                  int microKeepRecentToolResults) {
+            this(
+                    audited,
+                    compactResult,
+                    failWith,
+                    workingMemory,
+                    persistProjection,
+                    microEnabled,
+                    microKeepRecentToolResults,
+                    false);
+        }
+
+        private RecordingService(AtomicReference<WorkingMemoryCompactionEvent> audited,
+                                 List<Message> compactResult,
+                                 Exception failWith,
+                                 SessionWorkingMemoryService workingMemory,
+                                 boolean persistProjection,
+                                 boolean microEnabled,
+                                 int microKeepRecentToolResults,
+                                 boolean auditStoreMessages) {
             super(nullProvider(), workingMemory, recordingDao(audited),
                     CompactionBudget.defaults().toBuilder()
                             .microEnabled(microEnabled)
@@ -358,7 +574,7 @@ public class SessionContextCompactionOutcomeTest {
                             .keepMaxTokens(200)
                             .microKeepRecentToolResults(microKeepRecentToolResults)
                             .persistProjection(persistProjection)
-                            .auditStoreMessages(false)
+                            .auditStoreMessages(auditStoreMessages)
                             .build(),
                     null);
             this.audited = audited;
@@ -366,6 +582,7 @@ public class SessionContextCompactionOutcomeTest {
             this.failWith = failWith;
             this.microEnabled = microEnabled;
             this.microKeepRecentToolResults = microKeepRecentToolResults;
+            this.auditStoreMessages = auditStoreMessages;
         }
 
         @Override

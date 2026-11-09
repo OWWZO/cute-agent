@@ -144,6 +144,7 @@ def execute_cell(
             judge_cache_dir=judge_cache_dir,
             attempt=int(payload["repetition"]),
         )
+        cache = trace.cache_efficiency_metrics()
         status, ownership, task_score = _status_for(case_result)
         source_trace = run_dir / "traces" / case.id / "trace.json"
         if source_trace.exists():
@@ -156,7 +157,15 @@ def execute_cell(
                 "run": trace.raw.get("run") or {},
                 "llmInvocations": trace.llm_invocations,
                 "toolInvocations": trace.tool_invocations,
+                "contextEvents": trace.context_events,
+                "memoryEvents": trace.memory_events,
                 "artifacts": trace.artifacts,
+                "conversation": trace.conversation,
+                "conversationSource": trace.conversation_source,
+                "environmentEvents": trace.environment_events,
+                "environmentSource": trace.environment_source,
+                "environmentSnapshots": trace.environment_snapshots,
+                "snapshotSource": trace.snapshot_source,
             },
         )
         result = CellResult(
@@ -182,6 +191,14 @@ def execute_cell(
                 "wallMs": trace.duration_ms,
                 "firstTokenMs": trace.first_token_ms(),
                 "estimatedCost": None,
+                "promptTokens": cache["promptTokens"],
+                "cachedPromptTokens": cache["cachedPromptTokens"],
+                "cacheHitRatio": cache["hitRatio"],
+                "eligibleCacheHitRatio": cache["eligibleHitRatio"],
+                "cacheRequestHitRate": cache["requestHitRate"],
+                "cacheUnverifiedInvocations": cache["unverifiedInvocations"],
+                "cacheFalseOkRate": cache["cacheFalseOkRate"],
+                "cacheRiskRate": cache["cacheRiskRate"],
             },
             scores=[score.to_dict() for score in case_result.scores],
             retry_history=[],
@@ -216,7 +233,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cell", required=True)
     parser.add_argument("--work-dir", required=True)
     parser.add_argument("--profile", default="pr")
-    parser.add_argument("--java-mode", choices=["fixture", "live"], default="fixture")
+    parser.add_argument(
+        "--java-mode",
+        choices=["fixture", "live", "benchmark", "compaction"],
+        default="fixture",
+    )
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--require-judge", action="store_true")
     return parser

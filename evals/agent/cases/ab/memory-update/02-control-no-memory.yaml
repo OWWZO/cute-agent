@@ -1,0 +1,35 @@
+id: memory-update.control-no-memory
+suite: memory-update
+version: 1
+hardGate: true
+userId: eval-memory-update-control
+metadata:
+  role: validation
+  source: internal
+  taskType: knowledge-update-control
+  lengthBucket: short
+  toolCountBucket: single
+  risk: high
+  failureMode: false_memory
+input:
+  message: "What is my current shipping address? If no stored memory contains it, answer exactly FINAL_ANSWER: UNKNOWN."
+expected:
+  finalContains:
+  - "FINAL_ANSWER: UNKNOWN"
+  finalNotContains:
+  - NOVA-NEW-9
+  - OLD-ADDR-1
+  maxSteps: 5
+  requiredTools: []
+  requiredToolSequence: []
+  strictToolSequence: false
+  forbiddenTools: []
+  requireToolRecovery: false
+  minToolSuccessRate: null
+budgets:
+  maxTotalTokens: 30000
+  maxWallMs: 120000
+  maxToolCalls: 4
+script:
+- type: final
+  content: "FINAL_ANSWER: UNKNOWN"
