@@ -14,9 +14,13 @@ import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryMessageDao;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Hermes 风格的消息级历史浏览器。搜索只看 main working-memory 投影；READY 与
@@ -36,6 +40,31 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
     private static final int MAX_WINDOW = 20;
     private static final int FULL_CONTENT_RESULT_LIMIT = 3;
     private static final int MAX_FALLBACK_TOKENS = 3;
+    private static final int SEARCH_SNIPPET_MAX_CHARS = 1_200;
+    private static final int SEARCH_SNIPPET_CONTEXT_BEFORE = 300;
+    private static final int MULTI_WINDOW_RESULT_LIMIT = 2;
+    private static final int MULTI_WINDOW_COUNT = 3;
+    private static final int LABEL_EVIDENCE_LIMIT = 6;
+    private static final int AGGREGATE_LABEL_EVIDENCE_LIMIT = 8;
+    private static final int LABEL_SAMPLE_MAX_CHARS = 360;
+    private static final Pattern LABEL_SAMPLE_PATTERN = Pattern.compile(
+            "(?m)(?:^|\\r?\\n)\\s*([^\\r\\n]{1,500}?)\\s*(?:\\r?\\n\\s*)?label\\s*:\\s*(\\d+)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Set<String> FAILURE_INTENT_TERMS = Set.of(
+            "work", "fail", "failure", "declin", "reject", "error", "issu",
+            "broken", "pend", "cancel", "accept", "process");
+    private static final Set<String> FAILURE_QUERY_CUES = Set.of(
+            "not", "fail", "failure", "declin", "reject", "error", "issu",
+            "broken", "pend", "cancel", "won", "doesn", "isn");
+    private static final Set<String> RESTRICTION_INTENT_TERMS = Set.of(
+            "restriction", "limitation", "limit", "allow", "availabl");
+    private static final Set<String> SEARCH_STOP_WORDS = Set.of(
+            "a", "an", "and", "archival", "are", "as", "at", "be", "below", "by",
+            "complete", "context", "did", "do", "does", "for", "from", "had", "has",
+            "have", "how", "in", "is", "it", "memory", "of", "on", "or", "question",
+            "search", "task", "that", "the", "this", "to", "was", "were", "what",
+            "when", "where", "which", "who", "why", "with");
     /**
      * Long-context memory chunks can exceed 4k tokens (roughly 16k chars).
      * Keep the complete chunk visible so retrieval does not turn into repeated
@@ -110,6 +139,7 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         if (tokens.isEmpty()) {
             return discoverPayload(query, roles, List.of(), "none", false, List.of());
         }
+        List<String> matchingTokens = searchTokens(tokens);
         String normalizedScope = normalizeScope(scope);
         String sessionScopeId = firstNonBlank(requestedSessionId, currentSessionId);
         if ("session".equals(normalizedScope)) {
@@ -126,28 +156,40 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         List<WorkingMemorySearchMessage> raw;
         String backend;
         try {
-            raw = "session".equals(normalizedScope)
+            raw = new ArrayList<>("session".equals(normalizedScope)
                     ? workingMemoryMessageDao.searchFullTextBySession(sessionScopeId, query, scanLimit, roles)
-                    : searchByUserIdOrSession(userId, currentSessionId, query, scanLimit, true, roles);
+                    : searchByUserIdOrSession(userId, currentSessionId, query, scanLimit, true, roles));
             backend = "fulltext";
         } catch (Exception e) {
             backend = "scan";
             log.warn("working-memory FULLTEXT unavailable, falling back to scan: {}", e.toString());
             try {
-                raw = "session".equals(normalizedScope)
+                raw = new ArrayList<>("session".equals(normalizedScope)
                         ? workingMemoryMessageDao.scanBySession(sessionScopeId, query, scanLimit, roles)
-                        : searchByUserIdOrSession(userId, currentSessionId, query, scanLimit, false, roles);
+                        : searchByUserIdOrSession(userId, currentSessionId, query, scanLimit, false, roles));
             } catch (Exception scanError) {
                 log.warn("working-memory scan failed: {}", scanError.toString());
                 return error("failed to search message history: " + messageOf(scanError));
             }
         }
+        for (String expansionTerm : intentExpansionTerms(matchingTokens)) {
+            try {
+                raw.addAll("session".equals(normalizedScope)
+                        ? workingMemoryMessageDao.scanBySession(
+                                sessionScopeId, expansionTerm, scanLimit, roles)
+                        : searchByUserIdOrSession(
+                                userId, currentSessionId, expansionTerm, scanLimit, false, roles));
+            } catch (Exception scanError) {
+                log.warn("working-memory intent expansion failed term={}: {}",
+                        expansionTerm, scanError.toString());
+            }
+        }
 
-        List<WorkingMemorySearchMessage> matched = rankCandidates(raw, query, tokens);
+        List<WorkingMemorySearchMessage> matched = rankCandidates(raw, query, matchingTokens);
         boolean fallback = matched.isEmpty();
         List<String> fallbackTerms = List.of();
         if (fallback) {
-            fallbackTerms = fallbackTokens(tokens);
+            fallbackTerms = fallbackTokens(matchingTokens);
             List<WorkingMemorySearchMessage> fallbackHits = new ArrayList<>();
             int fallbackLimit = Math.min(scanLimit, Math.max(limit * 2, 10));
             for (String term : fallbackTerms) {
@@ -162,7 +204,7 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
                             term, scanError.toString());
                 }
             }
-            matched = rankCandidates(fallbackHits, query, tokens);
+            matched = rankCandidates(fallbackHits, query, matchingTokens);
             backend = "token-scan";
         }
         boolean excludeLiveCurrent = !"session".equals(normalizedScope);
@@ -173,11 +215,19 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
             results.add(lightweightResult(
                     hits.get(index),
                     query,
-                    tokens,
+                    matchingTokens,
                     sessionMetadata,
-                    index < FULL_CONTENT_RESULT_LIMIT));
+                    index < FULL_CONTENT_RESULT_LIMIT,
+                    index < MULTI_WINDOW_RESULT_LIMIT));
         }
-        return discoverPayload(query, roles, results, backend, fallback, fallbackTerms);
+        return discoverPayload(
+                query,
+                roles,
+                results,
+                backend,
+                fallback,
+                fallbackTerms,
+                aggregateLabelEvidence(matched, query, matchingTokens));
     }
 
     private String discoverPayload(String query,
@@ -186,6 +236,17 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
                                    String backend,
                                    boolean fallback,
                                    List<String> fallbackTerms) {
+        return discoverPayload(
+                query, roles, results, backend, fallback, fallbackTerms, List.of());
+    }
+
+    private String discoverPayload(String query,
+                                   List<String> roles,
+                                   List<Map<String, Object>> results,
+                                   String backend,
+                                   boolean fallback,
+                                   List<String> fallbackTerms,
+                                   List<Map<String, Object>> labelEvidence) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("success", true);
         payload.put("mode", "discover");
@@ -197,6 +258,9 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         payload.put("fallback", fallback);
         if (fallback) {
             payload.put("fallback_terms", fallbackTerms);
+        }
+        if (!labelEvidence.isEmpty()) {
+            payload.put("label_evidence", labelEvidence);
         }
         return JSON.toJSONString(payload);
     }
@@ -272,7 +336,8 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
                                                   String query,
                                                   List<String> tokens,
                                                   Map<String, Map<String, Object>> sessionMetadata,
-                                                  boolean includeContent) {
+                                                  boolean includeContent,
+                                                  boolean includeMultiWindowEvidence) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("session_id", hit.getSessionId());
         result.put("match_message_id", hit.getId());
@@ -290,6 +355,11 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
             } else {
                 result.put("content", content);
                 result.put("content_truncated", false);
+            }
+        } else if (includeMultiWindowEvidence) {
+            List<String> windows = evidenceWindows(hit.getContent(), query, tokens);
+            if (windows.size() > 1) {
+                result.put("evidence_windows", windows);
             }
         }
         if (hit.getSearchScore() != null) {
@@ -579,6 +649,229 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         return shaped;
     }
 
+    private static List<Map<String, Object>> labelEvidence(String content,
+                                                            String query,
+                                                            List<String> tokens) {
+        if (StringUtils.isBlank(content) || !content.toLowerCase(Locale.ROOT).contains("label")) {
+            return List.of();
+        }
+        Matcher matcher = LABEL_SAMPLE_PATTERN.matcher(content);
+        Map<String, LabelEvidence> bestByLabel = new LinkedHashMap<>();
+        while (matcher.find()) {
+            String sample = matcher.group(1).replaceAll("\\s+", " ").trim();
+            if (StringUtils.isBlank(sample)) {
+                continue;
+            }
+            String label = matcher.group(2);
+            double score = scoreLabelSample(sample, query, tokens);
+            LabelEvidence candidate = new LabelEvidence(
+                    label,
+                    clip(sample, LABEL_SAMPLE_MAX_CHARS),
+                    matcher.start(1),
+                    score
+            );
+            LabelEvidence previous = bestByLabel.get(label);
+            if (previous == null || candidate.score() > previous.score()) {
+                bestByLabel.put(label, candidate);
+            }
+        }
+        List<LabelEvidence> ranked = new ArrayList<>(bestByLabel.values());
+        ranked.sort(Comparator
+                .comparingDouble(LabelEvidence::score)
+                .reversed()
+                .thenComparingInt(LabelEvidence::position));
+        List<Map<String, Object>> evidence = new ArrayList<>();
+        for (int index = 0; index < Math.min(LABEL_EVIDENCE_LIMIT, ranked.size()); index++) {
+            LabelEvidence item = ranked.get(index);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("label", item.label());
+            row.put("sample", item.sample());
+            row.put("score", Math.round(item.score() * 100.0d) / 100.0d);
+            evidence.add(row);
+        }
+        return evidence;
+    }
+
+    private static List<Map<String, Object>> aggregateLabelEvidence(
+            List<WorkingMemorySearchMessage> hits,
+            String query,
+            List<String> tokens) {
+        Map<String, Map<String, Object>> bestByLabel = new LinkedHashMap<>();
+        for (WorkingMemorySearchMessage hit : safeList(hits)) {
+            for (Map<String, Object> item : labelEvidence(hit.getContent(), query, tokens)) {
+                String label = String.valueOf(item.get("label"));
+                Map<String, Object> previous = bestByLabel.get(label);
+                if (previous == null
+                        || numericScore(item) > numericScore(previous)) {
+                    bestByLabel.put(label, item);
+                }
+            }
+        }
+        List<Map<String, Object>> ranked = new ArrayList<>(bestByLabel.values());
+        ranked.sort(Comparator
+                .comparingDouble(WorkingMemorySessionSearchService::numericScore)
+                .reversed());
+        return List.copyOf(ranked.subList(
+                0,
+                Math.min(AGGREGATE_LABEL_EVIDENCE_LIMIT, ranked.size())));
+    }
+
+    private static double numericScore(Map<String, Object> item) {
+        Object score = item.get("score");
+        return score instanceof Number number ? number.doubleValue() : 0.0d;
+    }
+
+    private static double scoreLabelSample(String sample, String query, List<String> tokens) {
+        Set<String> queryTerms = normalizedTerms(query);
+        queryTerms.addAll(normalizedTerms(String.join(" ", tokens == null ? List.of() : tokens)));
+        Set<String> sampleTerms = normalizedTerms(sample);
+        double score = 0.0d;
+        for (String term : queryTerms) {
+            if (!sampleTerms.contains(term)) {
+                continue;
+            }
+            score += term.length() >= 7 ? 2.5d : 1.25d;
+        }
+        String lowerSample = sample.toLowerCase(Locale.ROOT);
+        String lowerQuery = StringUtils.defaultString(query).toLowerCase(Locale.ROOT).trim();
+        if (!lowerQuery.isEmpty() && lowerSample.contains(lowerQuery)) {
+            score += 6.0d;
+        }
+        if (hasIntentTerm(queryTerms, FAILURE_INTENT_TERMS)
+                && hasIntentTerm(sampleTerms, FAILURE_INTENT_TERMS)) {
+            score += 5.0d;
+        }
+        if (hasIntentTerm(queryTerms, RESTRICTION_INTENT_TERMS)
+                && hasIntentTerm(sampleTerms, RESTRICTION_INTENT_TERMS)) {
+            score += 1.5d;
+        }
+        return score;
+    }
+
+    private static boolean hasIntentTerm(Set<String> terms, Set<String> intentTerms) {
+        for (String term : terms) {
+            if (intentTerms.contains(term)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<String> normalizedTerms(String text) {
+        Set<String> terms = new LinkedHashSet<>();
+        if (StringUtils.isBlank(text)) {
+            return terms;
+        }
+        for (String raw : text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+")) {
+            String term = normalizeTerm(raw);
+            if (StringUtils.isNotBlank(term) && !SEARCH_STOP_WORDS.contains(term)) {
+                terms.add(term);
+            }
+        }
+        return terms;
+    }
+
+    private static String normalizeTerm(String value) {
+        String term = StringUtils.trimToEmpty(value);
+        if (term.length() > 5 && term.endsWith("ing")) {
+            term = term.substring(0, term.length() - 3);
+        } else if (term.length() > 4 && term.endsWith("ed")) {
+            term = term.substring(0, term.length() - 2);
+        } else if (term.length() > 4 && term.endsWith("ies")) {
+            term = term.substring(0, term.length() - 3) + "y";
+        } else if (term.length() > 3 && term.endsWith("s") && !term.endsWith("ss")) {
+            term = term.substring(0, term.length() - 1);
+        }
+        return term;
+    }
+
+    private static List<String> evidenceWindows(String content,
+                                                String query,
+                                                List<String> tokens) {
+        String text = StringUtils.defaultString(content);
+        if (text.length() <= SEARCH_SNIPPET_MAX_CHARS) {
+            return List.of(text);
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        LinkedHashSet<Integer> positions = new LinkedHashSet<>();
+        addOccurrences(positions, lower, StringUtils.defaultString(query).toLowerCase(Locale.ROOT));
+        for (String token : tokens == null ? List.<String>of() : tokens) {
+            addOccurrences(positions, lower, StringUtils.defaultString(token).toLowerCase(Locale.ROOT));
+        }
+        if (positions.isEmpty()) {
+            return List.of(snippet(text, query, tokens));
+        }
+
+        List<EvidenceWindow> candidates = new ArrayList<>();
+        Set<String> queryTerms = normalizedTerms(
+                String.join(" ", tokens == null ? List.of() : tokens));
+        for (Integer position : positions) {
+            int start = Math.max(0, position - SEARCH_SNIPPET_CONTEXT_BEFORE);
+            int end = Math.min(text.length(), start + SEARCH_SNIPPET_MAX_CHARS);
+            String windowText = text.substring(start, end);
+            double score = scoreEvidenceWindow(windowText, queryTerms);
+            candidates.add(new EvidenceWindow(start, end, score));
+        }
+        candidates.sort(Comparator
+                .comparingDouble(EvidenceWindow::score)
+                .reversed()
+                .thenComparingInt(EvidenceWindow::start));
+
+        List<EvidenceWindow> selected = new ArrayList<>();
+        Set<Integer> buckets = new LinkedHashSet<>();
+        int bucketSize = Math.max(1, SEARCH_SNIPPET_MAX_CHARS / 3);
+        for (EvidenceWindow candidate : candidates) {
+            if (!buckets.add(candidate.start() / bucketSize)) {
+                continue;
+            }
+            selected.add(candidate);
+            if (selected.size() >= MULTI_WINDOW_COUNT) {
+                break;
+            }
+        }
+        selected.sort(Comparator.comparingInt(EvidenceWindow::start));
+        List<String> windows = new ArrayList<>(selected.size());
+        for (EvidenceWindow window : selected) {
+            windows.add((window.start() > 0 ? "..." : "")
+                    + text.substring(window.start(), window.end())
+                    + (window.end() < text.length() ? "..." : ""));
+        }
+        return windows;
+    }
+
+    private static void addOccurrences(Set<Integer> positions, String text, String needle) {
+        if (StringUtils.isBlank(text) || StringUtils.isBlank(needle)) {
+            return;
+        }
+        int from = 0;
+        int added = 0;
+        while (from < text.length() && added < 40) {
+            int found = text.indexOf(needle, from);
+            if (found < 0) {
+                break;
+            }
+            positions.add(found);
+            from = found + Math.max(1, needle.length());
+            added++;
+        }
+    }
+
+    private static double scoreEvidenceWindow(String windowText, Set<String> queryTerms) {
+        Set<String> windowTerms = normalizedTerms(windowText);
+        double score = 0.0d;
+        for (String term : queryTerms) {
+            if (windowTerms.contains(term)) {
+                score += term.length() >= 7 ? 2.0d : 1.0d;
+            }
+        }
+        return score;
+    }
+
+    private static String clip(String value, int maxChars) {
+        String text = StringUtils.defaultString(value).strip();
+        return text.length() <= maxChars ? text : text.substring(0, maxChars) + "...";
+    }
+
     private static String snippet(String content, String query, List<String> tokens) {
         String text = StringUtils.defaultString(content);
         String needle = StringUtils.defaultString(query);
@@ -596,11 +889,13 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
                 }
             }
         }
-        if (text.length() <= 280 || match < 0) {
-            return text.length() <= 280 ? text : text.substring(0, 280) + "...";
+        if (text.length() <= SEARCH_SNIPPET_MAX_CHARS || match < 0) {
+            return text.length() <= SEARCH_SNIPPET_MAX_CHARS
+                    ? text
+                    : text.substring(0, SEARCH_SNIPPET_MAX_CHARS) + "...";
         }
-        int start = Math.max(0, match - 100);
-        int end = Math.min(text.length(), start + 280);
+        int start = Math.max(0, match - SEARCH_SNIPPET_CONTEXT_BEFORE);
+        int end = Math.min(text.length(), start + SEARCH_SNIPPET_MAX_CHARS);
         return (start > 0 ? "..." : "") + text.substring(start, end) + (end < text.length() ? "..." : "");
     }
 
@@ -677,12 +972,17 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
                     StringUtils.isNotBlank(phrase) && haystack.contains(phrase),
                     (double) matched / tokens.size()));
         }
+        boolean hasFullCoverage = ranked.stream()
+                .anyMatch(item -> item.coverage() >= 1.0d);
+        if (hasFullCoverage) {
+            ranked.removeIf(item -> item.coverage() < 1.0d);
+        }
         ranked.sort(Comparator
                 .comparing(RankedMessage::phraseMatch, Comparator.reverseOrder())
-                .thenComparing(RankedMessage::coverage, Comparator.reverseOrder())
                 .thenComparing(
                         item -> item.message().getSearchScore(),
                         Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(RankedMessage::coverage, Comparator.reverseOrder())
                 .thenComparing(
                         item -> item.message().getTurnSeq(),
                         Comparator.nullsLast(Comparator.reverseOrder()))
@@ -698,20 +998,50 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
     private static List<String> fallbackTokens(List<String> tokens) {
         List<String> candidates = new ArrayList<>();
         for (String token : tokens) {
-            if (token.length() >= 3 && !candidates.contains(token)) {
+            if (!candidates.contains(token)) {
                 candidates.add(token);
             }
         }
         if (candidates.isEmpty() && !tokens.isEmpty()) {
             candidates.add(tokens.get(0));
         }
-        candidates.sort(Comparator.comparingInt(String::length).reversed());
         return List.copyOf(candidates.subList(0, Math.min(MAX_FALLBACK_TOKENS, candidates.size())));
+    }
+
+    private static List<String> intentExpansionTerms(List<String> tokens) {
+        if (!hasIntentTerm(normalizedTerms(String.join(" ", tokens)), FAILURE_QUERY_CUES)) {
+            return List.of();
+        }
+        return List.of("rejected", "declined", "failed");
+    }
+
+    private static List<String> searchTokens(List<String> tokens) {
+        List<String> result = new ArrayList<>();
+        for (String token : tokens) {
+            String cleaned = token
+                    .replaceAll("^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$", "")
+                    .trim();
+            if (StringUtils.isBlank(cleaned)
+                    || SEARCH_STOP_WORDS.contains(cleaned.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            boolean duplicate = result.stream().anyMatch(value -> value.equalsIgnoreCase(cleaned));
+            if (!duplicate) {
+                result.add(cleaned);
+            }
+        }
+        return result.isEmpty() ? tokens : result;
     }
 
     private record RankedMessage(WorkingMemorySearchMessage message,
                                  boolean phraseMatch,
                                  double coverage) {
+    }
+
+    private record LabelEvidence(String label, String sample, int position, double score) {
+    }
+
+    private record EvidenceWindow(int start, int end, double score) {
     }
 
     private static int resolveLimit(Integer limit) {

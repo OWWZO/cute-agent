@@ -106,13 +106,6 @@ public abstract class ReActAgent extends BaseAgent {
      */
     @Override
     protected String finalizeAfterBudget(String reason) {
-        if (context == null || getLlm() == null || getMemory() == null) {
-            return null;
-        }
-        if (context.isRunCancelled()) {
-            setState(AgentState.FINISHED);
-            return null;
-        }
         String guidance = """
                 Execution budget is now in its finalization reserve.
                 STOP all exploration and do not request or call any tool.
@@ -121,6 +114,32 @@ public abstract class ReActAgent extends BaseAgent {
                 If the contract requires `FINAL_ANSWER:`, output exactly one such line and no extra text.
                 Do not write an artifact marker such as `$$$`, and never end with a bare "None".
                 """;
+        return completeWithFinalAnswer(reason, guidance);
+    }
+
+    /**
+     * Benchmark-only recovery for a model turn that finished without any final text.
+     */
+    public String recoverEmptyFinalAnswer() {
+        String guidance = """
+                The previous reply ended without a final answer.
+                Do not request or call any tool.
+                Using only the evidence already in this conversation, produce the final answer now.
+                Follow the answer contract from the user message exactly.
+                If the contract requires `FINAL_ANSWER:`, output exactly one such line and no extra text.
+                Do not write an artifact marker such as `$$$`, and never end with a bare "None".
+                """;
+        return completeWithFinalAnswer("empty_final_answer", guidance);
+    }
+
+    private String completeWithFinalAnswer(String reason, String guidance) {
+        if (context == null || getLlm() == null || getMemory() == null) {
+            return null;
+        }
+        if (context.isRunCancelled()) {
+            setState(AgentState.FINISHED);
+            return null;
+        }
         List<Message> messages = new ArrayList<>(getMemory().getMessages());
         messages.add(Message.userMessage(guidance, null));
         String systemPrompt = StringUtils.defaultIfBlank(

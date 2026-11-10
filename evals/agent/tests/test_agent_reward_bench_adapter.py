@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from cute_evals.judge_benchmarks import JudgeOutputError, LicenseBlockedError
+from cute_evals.judge_benchmarks import JudgeOutputError
 from cute_evals.judge_benchmarks.agent_reward_bench import (
     AgentRewardBenchAdapter,
 )
@@ -183,12 +183,18 @@ def _trajectory_root(tmp_path: Path) -> Path:
     return root
 
 
-def test_official_manifest_is_license_blocked() -> None:
+def test_official_manifest_is_local_research_only() -> None:
     adapter = AgentRewardBenchAdapter(Path("."), MANIFEST)
 
-    assert adapter.report_metadata()["licenseStatus"] == "blocked-license"
-    with pytest.raises(LicenseBlockedError, match="license status is blocked-license"):
-        adapter.assert_run_allowed()
+    metadata = adapter.report_metadata()
+    assert metadata["licenseStatus"] == "local-research"
+    assert metadata["usagePolicy"] == {
+        "mode": "local-research",
+        "officialScore": False,
+        "publicationAllowed": False,
+        "gateEligible": False,
+    }
+    adapter.assert_run_allowed()
 
 
 def test_smoke_uses_unique_official_targets_without_mutating_csv(

@@ -25,6 +25,11 @@ phase3 = [
     "datasets>=3,<5",
     "huggingface-hub>=0.24,<2",
 ]
+judge = [
+    "openai>=1,<4",
+    "scikit-learn>=1.5,<2",
+    "tqdm>=4.65,<5",
+]
 memoryagentbench = [
     "nltk>=3.8,<4",
     "pyarrow>=15,<27",
@@ -83,6 +88,8 @@ packages = ["src/cute_evals"]
 "schemas/process_view.schema.json" = "cute_evals/schemas/process_view.schema.json"
 "schemas/multi_agent_trace.schema.json" = "cute_evals/schemas/multi_agent_trace.schema.json"
 "schemas/judge_benchmark.schema.json" = "cute_evals/schemas/judge_benchmark.schema.json"
+"schemas/trajectory_quality.schema.json" = "cute_evals/schemas/trajectory_quality.schema.json"
+"schemas/agent_benchmark.schema.json" = "cute_evals/schemas/agent_benchmark.schema.json"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

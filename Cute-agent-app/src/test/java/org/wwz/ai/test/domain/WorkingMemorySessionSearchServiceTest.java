@@ -198,14 +198,14 @@ public class WorkingMemorySessionSearchServiceTest {
         IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
         WorkingMemorySearchMessage partial = message(
                 "session-partial", 1L, "r1", 0, "Portbury Brand niece", "USER", 2);
-        WorkingMemorySearchMessage complete = message(
+        WorkingMemorySearchMessage broader = message(
                 "session-complete", 2L, "r2", 0,
-                "Portbury Brand niece Valerie inheritance", "USER", 2);
+                "Portbury Brand niece Valerie", "USER", 2);
         when(dao.searchFullTextByUserId(
                 eq("user-1"),
                 eq("Portbury Brand niece Valerie inheritance"),
                 eq(8),
-                anyList())).thenReturn(List.of(partial, complete));
+                anyList())).thenReturn(List.of(partial, broader));
 
         JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
                 SessionSearchRequest.builder()
@@ -219,6 +219,33 @@ public class WorkingMemorySessionSearchServiceTest {
                 "session-complete",
                 payload.getJSONArray("results").getJSONObject(0).getString("session_id"));
         Assert.assertFalse(payload.getBooleanValue("fallback"));
+    }
+
+    @Test
+    public void discoveryPrefersFullCoverageCandidatesWhenAvailable() {
+        IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
+        WorkingMemorySearchMessage partial = message(
+                "session-partial", 1L, "r1", 0, "Portbury Brand niece", "USER", 2);
+        WorkingMemorySearchMessage full = message(
+                "session-full", 2L, "r2", 0,
+                "Portbury Brand niece Valerie inheritance", "USER", 2);
+        when(dao.searchFullTextByUserId(
+                eq("user-1"),
+                eq("Portbury Brand niece Valerie inheritance"),
+                eq(8),
+                anyList())).thenReturn(List.of(partial, full));
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .query("Portbury Brand niece Valerie inheritance")
+                        .limit(2)
+                        .build()));
+
+        Assert.assertEquals(1, payload.getIntValue("count"));
+        Assert.assertEquals(
+                "session-full",
+                payload.getJSONArray("results").getJSONObject(0).getString("session_id"));
     }
 
     @Test
@@ -256,6 +283,137 @@ public class WorkingMemorySessionSearchServiceTest {
     }
 
     @Test
+    public void discoverySnippetCentersLargeChunksOnTheMatchedEvidence() {
+        IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
+        String content = "prefix ".repeat(200)
+                + "Nobuhiro Watsuki is famous for Rurouni Kenshin."
+                + " suffix ".repeat(1_000);
+        WorkingMemorySearchMessage hit = message(
+                "session-1", 1L, "r1", 0, content, "USER", 2);
+        when(dao.searchFullTextByUserId(eq("user-1"), eq("Watsuki"), eq(4), anyList()))
+                .thenReturn(List.of(hit));
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .query("Watsuki")
+                        .limit(1)
+                        .build()));
+
+        String snippet = payload.getJSONArray("results")
+                .getJSONObject(0)
+                .getString("snippet");
+        Assert.assertTrue(snippet.contains("Nobuhiro Watsuki is famous for Rurouni Kenshin."));
+        Assert.assertTrue(snippet.startsWith("..."));
+        Assert.assertTrue(snippet.endsWith("..."));
+        Assert.assertTrue(snippet.length() <= 1_210);
+    }
+
+    @Test
+    public void discoveryRanksLabelEvidenceByTaskIntent() {
+        IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
+        String workingCard = """
+                My disposable virtual card isn't working.
+                label: 28
+
+                Why did my transfer fail?
+                label: 73
+                """;
+        String restrictions = """
+                For the disposable cards, what are the restrictions?
+                label: 67
+                """;
+        WorkingMemorySearchMessage strong = message(
+                "session-1", 1L, "r1", 0, workingCard, "USER", 2);
+        WorkingMemorySearchMessage weak = message(
+                "session-2", 2L, "r2", 0, restrictions, "USER", 2);
+        String query = "Are there restrictions for my disposable card since it does not seem to be working?";
+        when(dao.searchFullTextByUserId(eq("user-1"), eq(query), eq(4), anyList()))
+                .thenReturn(List.of(weak, strong));
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .query(query)
+                        .limit(1)
+                        .build()));
+
+        JSONArray evidence = payload.getJSONArray("label_evidence");
+        Assert.assertNotNull(evidence);
+        Assert.assertEquals("28", evidence.getJSONObject(0).getString("label"));
+        Assert.assertTrue(evidence.getJSONObject(0)
+                .getString("sample").contains("isn't working"));
+    }
+
+    @Test
+    public void discoveryExpandsFailureIntentBeyondFullTextTopHits() {
+        IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
+        WorkingMemorySearchMessage weak = message(
+                "session-weak",
+                1L,
+                "r1",
+                0,
+                "For the disposable cards, what are the restrictions? label: 67",
+                "USER",
+                2);
+        WorkingMemorySearchMessage rejected = message(
+                "session-rejected",
+                2L,
+                "r2",
+                0,
+                "My disposable virtual card got rejected label: 28",
+                "USER",
+                2);
+        String query = "Are there restrictions for my disposable card since it does not seem to be working?";
+        when(dao.searchFullTextByUserId(eq("user-1"), eq(query), eq(4), anyList()))
+                .thenReturn(List.of(weak));
+        when(dao.scanByUserId(eq("user-1"), eq("rejected"), eq(4), anyList()))
+                .thenReturn(List.of(rejected));
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .query(query)
+                        .limit(1)
+                        .build()));
+
+        Assert.assertEquals(
+                "28",
+                payload.getJSONArray("label_evidence").getJSONObject(0).getString("label"));
+    }
+
+    @Test
+    public void discoveryReturnsMultipleEvidenceWindowsForLongChunks() {
+        IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
+        String content = "prefix ".repeat(250)
+                + "Kathryn moved to Lisbon."
+                + " filler ".repeat(700)
+                + "Lisbon employer is Northstar Labs."
+                + " suffix ".repeat(250);
+        WorkingMemorySearchMessage hit = message(
+                "session-1", 1L, "r1", 0, content, "USER", 2);
+        String query = "Kathryn Lisbon employer";
+        when(dao.searchFullTextByUserId(eq("user-1"), eq(query), eq(4), anyList()))
+                .thenReturn(List.of(hit));
+
+        JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
+                SessionSearchRequest.builder()
+                        .userId("user-1")
+                        .query(query)
+                        .limit(1)
+                        .build()));
+
+        JSONArray windows = payload.getJSONArray("results")
+                .getJSONObject(0)
+                .getJSONArray("evidence_windows");
+        Assert.assertNotNull(windows);
+        Assert.assertTrue(windows.size() >= 2);
+        String joined = windows.toJSONString();
+        Assert.assertTrue(joined.contains("Kathryn moved to Lisbon"));
+        Assert.assertTrue(joined.contains("Northstar Labs"));
+    }
+
+    @Test
     public void discoveryFallsBackToTokenScanWhenFullTextHasNoHits() {
         IWorkingMemoryMessageDao dao = mock(IWorkingMemoryMessageDao.class);
         WorkingMemorySearchMessage hit = message(
@@ -265,25 +423,26 @@ public class WorkingMemorySessionSearchServiceTest {
                 2);
         when(dao.searchFullTextByUserId(
                 eq("user-1"),
-                eq("Portbury Brand niece Valerie inheritance"),
+                eq("Search Archival Memory Portbury Brand niece Valerie inheritance"),
                 eq(8),
                 anyList())).thenReturn(List.of());
         when(dao.scanByUserId(
                 eq("user-1"),
-                eq("inheritance"),
+                eq("Portbury"),
                 eq(8),
                 anyList())).thenReturn(List.of(hit));
 
         JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
                 SessionSearchRequest.builder()
                         .userId("user-1")
-                        .query("Portbury Brand niece Valerie inheritance")
+                        .query("Search Archival Memory Portbury Brand niece Valerie inheritance")
                         .limit(2)
                         .build()));
 
         Assert.assertTrue(payload.getBooleanValue("fallback"));
         Assert.assertEquals("token-scan", payload.getString("search_backend"));
-        Assert.assertEquals("inheritance", payload.getJSONArray("fallback_terms").getString(0));
+        Assert.assertEquals("Portbury", payload.getJSONArray("fallback_terms").getString(0));
+        Assert.assertFalse(payload.getJSONArray("fallback_terms").contains("Archival"));
         Assert.assertEquals(1, payload.getIntValue("count"));
         Assert.assertEquals(
                 "session-1",

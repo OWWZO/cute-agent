@@ -154,6 +154,11 @@ class MarbleAdapter:
                 )
         return tasks
 
+    def task_rows(self, domain: str) -> list[dict[str, Any]]:
+        if domain not in self.manifest["domains"]:
+            raise ValueError(f"unsupported MARBLE domain: {domain}")
+        return self._rows(domain)
+
     @staticmethod
     def dataset_hash(assets: dict[str, Any]) -> str:
         payload = "\n".join(

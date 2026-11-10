@@ -372,5 +372,394 @@ def project_process_view(trace: RunTrace | dict[str, Any]) -> ProcessView:
     )
 
 
+def _invocation_order(invocation: dict[str, Any], index: int) -> tuple[Any, ...]:
+    invocation_seq = invocation.get("invocationSeq")
+    step_no = invocation.get("stepNo")
+    started_at = str(invocation.get("startedAt") or "")
+    invocation_id = invocation.get("id")
+    return (
+        invocation_seq if isinstance(invocation_seq, int) else 2**31,
+        step_no if isinstance(step_no, int) else 2**31,
+        started_at,
+        invocation_id if isinstance(invocation_id, int) else index,
+    )
+
+
+def project_ledger_process_view(trace: RunTrace | dict[str, Any]) -> ProcessView:
+    """Reconstruct judgeable steps from ledger facts when conversation is absent."""
+    run_trace = trace if isinstance(trace, RunTrace) else RunTrace.from_dict(trace)
+    invocations = [
+        item
+        for item in run_trace.llm_invocations
+        if isinstance(item, dict)
+    ]
+    if not invocations:
+        raise ProcessViewError(
+            "trace has no conversation and no LLM invocations; "
+            "process quality cannot be judged"
+        )
+    invocations = [
+        item
+        for _, item in sorted(
+            enumerate(invocations),
+            key=lambda pair: _invocation_order(pair[1], pair[0]),
+        )
+    ]
+
+    tools = [
+        item
+        for item in run_trace.tool_invocations
+        if isinstance(item, dict)
+    ]
+    tools_by_llm: dict[str, list[dict[str, Any]]] = {}
+    tools_by_step: dict[str, list[dict[str, Any]]] = {}
+    for tool in tools:
+        llm_id = tool.get("llmInvocationId")
+        if llm_id is not None:
+            tools_by_llm.setdefault(str(llm_id), []).append(tool)
+        step_no = tool.get("stepNo")
+        if isinstance(step_no, int):
+            tools_by_step.setdefault(str(step_no), []).append(tool)
+
+    messages: list[ProcessMessage] = []
+    query = str((run_trace.raw.get("run") or {}).get("queryText") or "")
+    if query:
+        messages.append(
+            ProcessMessage(
+                message_index=0,
+                role="user",
+                content=query,
+                source_id=f"{run_trace.request_id}:query",
+                metadata={"source": "run.queryText"},
+            )
+        )
+
+    linked_tool_ids: set[str] = set()
+    step_messages: list[ProcessMessage] = []
+    step_tools: dict[int, list[dict[str, Any]]] = {}
+    for invocation in invocations:
+        invocation_id = invocation.get("id")
+        linked = (
+            list(tools_by_llm.get(str(invocation_id), []))
+            if invocation_id is not None
+            else []
+        )
+        if not linked:
+            step_no = invocation.get("stepNo")
+            candidates = (
+                tools_by_step.get(str(step_no), [])
+                if isinstance(step_no, int)
+                else []
+            )
+            if len(candidates) == 1:
+                linked = list(candidates)
+        linked.sort(
+            key=lambda item: (
+                item.get("dispatchIndex")
+                if isinstance(item.get("dispatchIndex"), int)
+                else 2**31,
+                str(item.get("startedAt") or ""),
+                item.get("id") if isinstance(item.get("id"), int) else 2**31,
+            )
+        )
+        for tool in linked:
+            tool_call_id = tool.get("toolCallId")
+            if tool_call_id is not None:
+                linked_tool_ids.add(str(tool_call_id))
+        message_index = len(messages)
+        response_text = invocation.get("responseText")
+        tool_calls = [
+            {
+                "id": (
+                    str(tool["toolCallId"])
+                    if tool.get("toolCallId") is not None
+                    else str(tool.get("id"))
+                ),
+                "type": "function",
+                "function": {
+                    "name": tool.get("toolName"),
+                    "arguments": tool.get("inputJson"),
+                },
+            }
+            for tool in linked
+        ]
+        message = ProcessMessage(
+            message_index=message_index,
+            role="assistant",
+            content=response_text if isinstance(response_text, str) else "",
+            source_id=(
+                f"llm-invocation:{invocation_id}"
+                if invocation_id is not None
+                else f"{run_trace.request_id}:llm:{len(step_messages) + 1}"
+            ),
+            actor=(
+                str(invocation["agentName"])
+                if invocation.get("agentName") is not None
+                else None
+            ),
+            tool_calls=tool_calls or None,
+            metadata={
+                "source": "ledger.llmInvocation",
+                "llmInvocationId": invocation_id,
+                "stepNo": invocation.get("stepNo"),
+                "responseTextAvailable": isinstance(response_text, str)
+                and bool(response_text.strip()),
+                "reasoningContentAvailable": isinstance(
+                    invocation.get("reasoningContent"),
+                    str,
+                )
+                and bool(str(invocation.get("reasoningContent")).strip()),
+                "declaredToolCallCount": invocation.get("toolCallCount"),
+                "linkedToolCallCount": len(linked),
+                "status": invocation.get("status"),
+            },
+        )
+        messages.append(message)
+        step_messages.append(message)
+        step_tools[message_index] = linked
+
+        for tool in linked:
+            tool_call_id = (
+                str(tool["toolCallId"])
+                if tool.get("toolCallId") is not None
+                else str(tool.get("id"))
+            )
+            messages.append(
+                ProcessMessage(
+                    message_index=len(messages),
+                    role="tool",
+                    content=str(
+                        tool.get("toolResult")
+                        or tool.get("llmObservation")
+                        or ""
+                    ),
+                    source_id=tool_call_id,
+                    actor=(
+                        str(tool["agentName"])
+                        if tool.get("agentName") is not None
+                        else None
+                    ),
+                    tool_call_id=tool_call_id,
+                    metadata={
+                        "source": "ledger.toolInvocation",
+                        "toolInvocationId": tool.get("id"),
+                        "toolName": tool.get("toolName"),
+                        "status": tool.get("status"),
+                        "errorMsg": tool.get("errorMsg"),
+                        "durationMs": tool.get("durationMs"),
+                    },
+                )
+            )
+
+    if not step_messages:
+        raise ProcessViewError(
+            "trace has no reconstructable assistant steps"
+        )
+
+    assistant_indices = [message.message_index for message in step_messages]
+    steps: list[ProcessStep] = []
+    for ordinal, (message, invocation) in enumerate(
+        zip(step_messages, invocations, strict=True),
+        start=1,
+    ):
+        evidence: list[ProcessEvidence] = [
+            ProcessEvidence(
+                evidence_id=_stable_id(
+                    "llm",
+                    str(
+                        invocation.get("id")
+                        or f"{run_trace.request_id}:{ordinal}"
+                    ),
+                ),
+                kind="llm",
+                source_id=(
+                    str(invocation["id"])
+                    if invocation.get("id") is not None
+                    else None
+                ),
+                status=(
+                    str(invocation["status"])
+                    if invocation.get("status") is not None
+                    else None
+                ),
+                payload={
+                    key: _json_value(invocation.get(key))
+                    for key in (
+                        "agentName",
+                        "stepNo",
+                        "invocationSeq",
+                        "modelName",
+                        "callKind",
+                        "responseText",
+                        "reasoningContent",
+                        "startedAt",
+                        "firstTokenAt",
+                        "finishedAt",
+                        "finishReason",
+                        "promptTokens",
+                        "completionTokens",
+                        "reasoningTokens",
+                        "totalTokens",
+                        "cachedPromptTokens",
+                        "cacheStatus",
+                        "cacheRiskFlags",
+                        "errorMsg",
+                    )
+                    if invocation.get(key) is not None
+                },
+            )
+        ]
+        for tool in step_tools.get(message.message_index, []):
+            tool_call_id = (
+                str(tool["toolCallId"])
+                if tool.get("toolCallId") is not None
+                else str(tool.get("id"))
+            )
+            evidence.append(
+                ProcessEvidence(
+                    evidence_id=_stable_id("tool-call", tool_call_id),
+                    kind="tool_call",
+                    source_id=tool_call_id,
+                    status="REQUESTED",
+                    payload={
+                        "toolInvocationId": tool.get("id"),
+                        "toolName": tool.get("toolName"),
+                        "arguments": tool.get("inputJson"),
+                        "llmInvocationId": tool.get("llmInvocationId"),
+                        "dispatchIndex": tool.get("dispatchIndex"),
+                    },
+                )
+            )
+            evidence.append(
+                ProcessEvidence(
+                    evidence_id=_stable_id("tool-result", tool_call_id),
+                    kind="tool_result",
+                    source_id=tool_call_id,
+                    status=(
+                        str(tool["status"])
+                        if tool.get("status") is not None
+                        else None
+                    ),
+                    payload={
+                        "content": _json_value(
+                            tool.get("toolResult")
+                            or tool.get("llmObservation")
+                            or ""
+                        ),
+                        "toolName": tool.get("toolName"),
+                        "errorMsg": tool.get("errorMsg"),
+                        "durationMs": tool.get("durationMs"),
+                        "artifactCount": tool.get("artifactCount"),
+                    },
+                )
+            )
+        steps.append(
+            ProcessStep(
+                step_id=_stable_id(
+                    "step",
+                    message.source_id or f"message:{message.message_index}",
+                ),
+                ordinal=ordinal,
+                message_index=message.message_index,
+                content=message.content,
+                status=str(invocation.get("status") or "OBSERVED"),
+                evidence=evidence,
+            )
+        )
+
+    orphan_evidence: list[ProcessEvidence] = []
+    for tool in tools:
+        tool_call_id = (
+            str(tool["toolCallId"])
+            if tool.get("toolCallId") is not None
+            else str(tool.get("id"))
+        )
+        if tool_call_id in linked_tool_ids:
+            continue
+        orphan_evidence.append(
+            ProcessEvidence(
+                evidence_id=_stable_id("tool-result", tool_call_id),
+                kind="tool_result",
+                source_id=tool_call_id,
+                status=(
+                    str(tool["status"])
+                    if tool.get("status") is not None
+                    else None
+                ),
+                payload={
+                    "toolName": tool.get("toolName"),
+                    "toolResult": _json_value(
+                        tool.get("toolResult")
+                        or tool.get("llmObservation")
+                        or ""
+                    ),
+                    "errorMsg": tool.get("errorMsg"),
+                    "llmInvocationId": tool.get("llmInvocationId"),
+                    "stepNo": tool.get("stepNo"),
+                },
+            )
+        )
+
+    raw = run_trace.raw
+    run = raw.get("run") or {}
+    raw_tools = raw.get("tools") or run.get("tools") or []
+    verification = {
+        "responseTextMissing": sum(
+            1
+            for invocation in invocations
+            if not isinstance(invocation.get("responseText"), str)
+            or not str(invocation.get("responseText")).strip()
+        ),
+        "firstTokenAtMissing": sum(
+            1
+            for invocation in invocations
+            if invocation.get("firstTokenAt") is None
+        ),
+        "cachedPromptTokensMissing": sum(
+            1
+            for invocation in invocations
+            if invocation.get("cachedPromptTokens") is None
+        ),
+        "orphanToolInvocations": len(orphan_evidence),
+        "toolCallCountMismatches": sum(
+            1
+            for invocation in invocations
+            if isinstance(invocation.get("toolCallCount"), int)
+            and str(invocation.get("id")) in tools_by_llm
+            and int(invocation["toolCallCount"])
+            != len(tools_by_llm[str(invocation.get("id"))])
+        ),
+    }
+    return ProcessView(
+        run_id=str(run.get("runUid") or run.get("requestId") or ""),
+        request_id=run_trace.request_id,
+        session_id=(
+            str(run["sessionId"])
+            if run.get("sessionId") is not None
+            else None
+        ),
+        query=query,
+        status=run_trace.status,
+        final_text=run_trace.final_text,
+        messages=messages,
+        assistant_message_indices=assistant_indices,
+        steps=steps,
+        tools=[
+            item
+            for item in raw_tools
+            if isinstance(item, dict)
+        ],
+        orphan_evidence=orphan_evidence,
+        source={
+            "schemaVersion": raw.get("schemaVersion"),
+            "producer": raw.get("producer") or {},
+            "conversationSource": "ledger-reconstructed",
+            "reconstructionVersion": "1.0",
+            "originalConversationSource": run_trace.conversation_source,
+            "verification": verification,
+        },
+    )
+
+
 def process_view_json(view: ProcessView) -> str:
     return json.dumps(view.to_dict(), ensure_ascii=False, indent=2)

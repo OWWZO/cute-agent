@@ -89,11 +89,31 @@ uv run cute-evals run --profile pr --require-judge
 ```powershell
 uv run cute-evals process-view `
   --trace .eval-runs\snapshot\trace.json `
+  --source auto `
   --out .eval-runs\snapshot\process-view.json
 ```
 
 `ProcessView` 只做无损投影：assistant message 是 step，LLM、tool、artifact 和异常
-作为 step 证据；缺少 assistant message 时直接失败，不会补造步骤。
+作为 step 证据。`--source auto` 优先读取真实 `conversation`；旧 Trace 没有
+`conversation` 时，从 Execution Ledger 的 LLM / tool 事实重建步骤，并标记
+`source=ledger-reconstructed`。缺失的 `responseText`、`firstTokenAt`、
+`cachedPromptTokens` 只进入缺口统计，不补造。
+
+用校准后的步骤质量裁判和根因裁判分析 Cute Agent 真实 Ledger Trace：
+
+```powershell
+uv run cute-evals trajectory-quality `
+  --trace .eval-runs\snapshot\trace.json `
+  --out .eval-runs\snapshot\trajectory-quality `
+  --judge-model group/deepseek `
+  --judge-base-url http://127.0.0.1:3425/v1 `
+  --agent-process-bench-source D:\cute-evals-data\AgentProcessBench `
+  --trail-source D:\cute-evals-data\trail-benchmark
+```
+
+这类报告固定写入 `product-derived` / `internal-calibration`，并设置
+`officialScore=false`、`publicationAllowed=false`、`gateEligible=false`、
+`advisory=true`。它用于产品自查，不是官方 leaderboard 成绩。
 
 AgentProcessBench 的正式入口：
 
@@ -183,7 +203,7 @@ sub-agent 归属；没有父关系字段时只标记 `parentRelationship: implic
 不会伪造多级父子链。子 Agent 的工具事实保留，子 Agent 的 assistant step
 不在当前 Trace 中时不补造。
 
-MARBLE / MultiAgentBench 的 dry-run 入口：
+MARBLE / MultiAgentBench 的入口：
 
 ```powershell
 uv run cute-evals multiagent-benchmark `
@@ -201,8 +221,16 @@ uv run cute-evals multiagent-benchmark `
   official-full 是 500 题。
 - 官方根 `LICENSE` 是 MIT，但 `pyproject.toml` 声明 Apache 2.0，冲突未解决，
   因此当前是 `blocked-license`。
-- 当前只完成题集/资产接入和 MultiAgentTraceView；官方 Docker/DB/Minecraft
-  环境运行器尚未实现，正式入口会在启动任何环境前失败关闭。
+- 已实现非 dry-run runner：校验官方资产哈希、调用官方 `jsonl2yaml.py`、启动
+  官方 `marble/main.py`、读取官方输出，并区分 `verified / unverified / failed`。
+- 固定 commit 的官方 `marble/evaluator/evaluator.py:324` 存在缩进导致的
+  `SyntaxError`。只有显式传入 `--compatibility-local --repair-evaluator-syntax`
+  才做内存中的语法兼容修复；这类结果最多标 `compatibility-subset`，不能发布为官方成绩。
+- 已验证 research task 1 会产生官方任务评估，但多个 agent 因 arXiv HTTP 429
+  未完成，`task_results=[]`，所以该次输出是 `unverified`，不能把
+  `innovation=4 / safety=4 / feasibility=3` 当作 MARBLE 官方分数。
+- 超时会被收敛为结构化 `unverified` 报告，`environment.timedOut=true`，不会把
+  `TimeoutExpired` 直接抛给 CLI。
 
 ## Baseline
 

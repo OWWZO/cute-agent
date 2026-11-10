@@ -319,6 +319,9 @@ public final class ToolObservationFormatter {
     }
 
     private static final int SESSION_SEARCH_MAX_CHARS = 9_000;
+    private static final int SESSION_DISCOVER_FULL_RESULT_LIMIT = 2;
+    private static final int SESSION_DISCOVER_FULL_CONTENT_MAX_CHARS = 1_800;
+    private static final int SESSION_DISCOVER_EVIDENCE_MAX_CHARS = 1_200;
 
     private static String projectSessionMessages(Map<?, ?> data) {
         List<?> messages = list(data.get("messages"));
@@ -379,7 +382,35 @@ public final class ToolObservationFormatter {
         if (StringUtils.isNotBlank(backend)) {
             out.append(" backend=").append(backend);
         }
-        for (Object item : results) {
+        if (Boolean.TRUE.equals(data.get("fallback"))) {
+            out.append(" fallback=true");
+            List<?> fallbackTerms = list(data.get("fallback_terms"));
+            if (!fallbackTerms.isEmpty()) {
+                out.append(" fallback_terms=").append(StringUtils.join(fallbackTerms, ","));
+            }
+        }
+        if (!results.isEmpty()) {
+            out.append("\nconflict_policy=Prefer the newest last_active_at as current truth "
+                    + "unless the question explicitly asks about an earlier or historical state.");
+        }
+        List<?> labelEvidence = list(data.get("label_evidence"));
+        if (!labelEvidence.isEmpty()) {
+            out.append("\nlabel_evidence=ranked matches from the complete retrieved context:");
+            for (Object evidenceItem : labelEvidence) {
+                if (!(evidenceItem instanceof Map<?, ?> evidenceRow)) {
+                    continue;
+                }
+                out.append("\n  label=").append(text(evidenceRow.get("label")))
+                        .append(" score=").append(text(evidenceRow.get("score")))
+                        .append(" sample=")
+                        .append(truncate(text(evidenceRow.get("sample")), 360));
+                if (out.length() >= SESSION_SEARCH_MAX_CHARS) {
+                    break;
+                }
+            }
+        }
+        for (int index = 0; index < results.size(); index++) {
+            Object item = results.get(index);
             if (!(item instanceof Map<?, ?> row)) {
                 continue;
             }
@@ -390,12 +421,65 @@ public final class ToolObservationFormatter {
             if (StringUtils.isNotBlank(title)) {
                 out.append(" title=").append(truncate(title, 120));
             }
+            String lastActiveAt = text(row.get("last_active_at"));
+            if (StringUtils.isNotBlank(lastActiveAt)) {
+                out.append(" last_active_at=").append(truncate(lastActiveAt, 80));
+            }
+            Object searchScore = row.get("search_score");
+            if (searchScore != null) {
+                out.append(" search_score=").append(searchScore);
+            }
+            if (Boolean.TRUE.equals(row.get("content_truncated"))) {
+                out.append(" content_truncated=true");
+            }
+
+            String content = text(row.get("content"));
             String snippet = text(row.get("snippet"));
-            if (StringUtils.isNotBlank(snippet)) {
-                out.append("\n  ").append(truncate(snippet.strip(), 320));
+            List<?> evidenceWindows = list(row.get("evidence_windows"));
+            boolean useFullContent = index < SESSION_DISCOVER_FULL_RESULT_LIMIT
+                    && StringUtils.isNotBlank(content)
+                    && content.length() <= SESSION_DISCOVER_FULL_CONTENT_MAX_CHARS;
+            if (useFullContent) {
+                int remaining = SESSION_SEARCH_MAX_CHARS - out.length() - 32;
+                int cap = Math.max(0, Math.min(SESSION_DISCOVER_FULL_CONTENT_MAX_CHARS, remaining));
+                if (cap > 0) {
+                    String normalized = content.strip();
+                    out.append("\n  content: ").append(truncate(normalized, cap));
+                    if (normalized.length() > cap) {
+                        out.append(" content_truncated_at_observation_budget=true");
+                    }
+                }
+            } else if (!evidenceWindows.isEmpty()) {
+                for (int windowIndex = 0; windowIndex < evidenceWindows.size(); windowIndex++) {
+                    String evidenceWindow = text(evidenceWindows.get(windowIndex));
+                    if (StringUtils.isBlank(evidenceWindow)) {
+                        continue;
+                    }
+                    out.append("\n  evidence_window[").append(windowIndex + 1).append("]: ")
+                            .append(truncate(
+                                    evidenceWindow.strip(),
+                                    SESSION_DISCOVER_EVIDENCE_MAX_CHARS));
+                    if (out.length() >= SESSION_SEARCH_MAX_CHARS) {
+                        break;
+                    }
+                }
+                if (StringUtils.isNotBlank(content)) {
+                    out.append(" content_omitted_large=true");
+                }
+            } else if (StringUtils.isNotBlank(snippet)) {
+                out.append("\n  evidence: ")
+                        .append(truncate(snippet.strip(), SESSION_DISCOVER_EVIDENCE_MAX_CHARS));
+                if (StringUtils.isNotBlank(content)) {
+                    out.append(" content_omitted_large=true");
+                }
+            }
+            if (out.length() >= SESSION_SEARCH_MAX_CHARS) {
+                break;
             }
         }
-        return out.toString();
+        return out.length() <= SESSION_SEARCH_MAX_CHARS
+                ? out.toString()
+                : ToolObservationSerializer.truncateForLlm(out.toString(), SESSION_SEARCH_MAX_CHARS);
     }
 
     private static String projectSessionBrowse(Map<?, ?> data) {

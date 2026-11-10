@@ -8,6 +8,10 @@ from cute_evals.judge_benchmarks import (
     JudgeOutputKind,
     parse_judge_prediction,
 )
+from cute_evals.judge_benchmarks.base import (
+    judge_score_label,
+    judge_usage_policy,
+)
 
 
 def _task() -> JudgeBenchmarkTask:
@@ -99,3 +103,13 @@ def test_empty_response_is_explicitly_unverified_input() -> None:
         parse_judge_prediction(_task(), "")
 
     assert error.value.kind is JudgeOutputKind.EMPTY_RESPONSE
+
+
+def test_local_research_cannot_emit_an_official_score() -> None:
+    assert judge_score_label("local-research", "official-subset") == "local-research"
+    assert judge_usage_policy("local-research") == {
+        "mode": "local-research",
+        "officialScore": False,
+        "publicationAllowed": False,
+        "gateEligible": False,
+    }

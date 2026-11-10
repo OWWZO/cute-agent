@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/agent_benchmark.schema.json",
+  "title": "Cute Agent Multi-Agent Benchmark Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "subject",
+    "benchmark",
+    "scoreNamespace",
+    "scoreLabel",
+    "usagePolicy",
+    "tasks",
+    "metrics",
+    "environment",
+    "limitations"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "string"},
+    "subject": {
+      "type": "object",
+      "required": ["type", "name", "model"],
+      "properties": {
+        "type": {"const": "multi-agent-system"},
+        "name": {"type": "string"},
+        "model": {"type": "string"}
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "upstream",
+        "licenseStatus",
+        "datasetHash",
+        "evaluatorHash"
+      ],
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "upstream": {"type": "string"},
+        "upstreamCommit": {"type": ["string", "null"]},
+        "licenseStatus": {"type": "string"},
+        "datasetHash": {"type": "string"},
+        "evaluatorHash": {"type": "string"},
+        "runtimeEvaluatorHash": {"type": ["string", "null"]}
+      }
+    },
+    "scoreNamespace": {"const": "agent-benchmark"},
+    "scoreLabel": {
+      "enum": [
+        "official-full",
+        "official-subset",
+        "compatibility-subset",
+        "partial-not-official",
+        "unverified",
+        "blocked-license",
+        "blocked-official-source"
+      ]
+    },
+    "usagePolicy": {
+      "type": "object",
+      "required": [
+        "mode",
+        "officialScore",
+        "publicationAllowed",
+        "gateEligible",
+        "advisory"
+      ],
+      "properties": {
+        "mode": {
+          "enum": ["official", "local-research", "blocked", "unverified"]
+        },
+        "officialScore": {"type": "boolean"},
+        "publicationAllowed": {"type": "boolean"},
+        "gateEligible": {"type": "boolean"},
+        "advisory": {"type": "boolean"}
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "taskId",
+          "domain",
+          "officialTaskId",
+          "agentCount",
+          "status",
+          "executionStatus"
+        ],
+        "properties": {
+          "taskId": {"type": "string"},
+          "domain": {"type": "string"},
+          "officialTaskId": {"type": ["string", "integer"]},
+          "agentCount": {"type": "integer", "minimum": 1},
+          "status": {"enum": ["verified", "unverified", "failed"]},
+          "executionStatus": {
+            "enum": ["completed", "degraded", "failed"]
+          },
+          "iterationCount": {"type": "integer", "minimum": 0},
+          "agentResultCount": {"type": "integer", "minimum": 0},
+          "communicationCount": {"type": "integer", "minimum": 0},
+          "tokenUsage": {"type": ["integer", "null"]},
+          "observedTaskEvaluation": {"type": ["object", "null"]},
+          "planningScores": {"type": "array"},
+          "communicationScores": {"type": "array"}
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "taskCount",
+        "verifiedTasks",
+        "unverifiedTasks",
+        "failedTasks",
+        "verifiedOverallScore",
+        "observedOverallScore"
+      ],
+      "properties": {
+        "taskCount": {"type": "integer", "minimum": 1},
+        "verifiedTasks": {"type": "integer", "minimum": 0},
+        "unverifiedTasks": {"type": "integer", "minimum": 0},
+        "failedTasks": {"type": "integer", "minimum": 0},
+        "verifiedOverallScore": {"type": ["number", "null"]},
+        "observedOverallScore": {"type": ["number", "null"]}
+      }
+    },
+    "environment": {"type": "object"},
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

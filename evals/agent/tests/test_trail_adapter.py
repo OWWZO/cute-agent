@@ -6,10 +6,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import pytest
 import yaml
 
-from cute_evals.judge_benchmarks import LicenseBlockedError
 from cute_evals.judge_benchmarks.trail import TrailAdapter
 from cute_evals.judge_benchmarks.trail.adapter import (
     _parse_metric_files,
@@ -137,12 +135,18 @@ def _fixture_source(tmp_path: Path) -> tuple[Path, Path]:
     return source, manifest_path
 
 
-def test_official_manifest_is_license_blocked() -> None:
+def test_official_manifest_is_local_research_only() -> None:
     adapter = TrailAdapter(Path("."), MANIFEST)
 
-    assert adapter.report_metadata()["licenseStatus"] == "blocked-license"
-    with pytest.raises(LicenseBlockedError, match="license status is blocked-license"):
-        adapter.assert_run_allowed()
+    metadata = adapter.report_metadata()
+    assert metadata["licenseStatus"] == "local-research"
+    assert metadata["usagePolicy"] == {
+        "mode": "local-research",
+        "officialScore": False,
+        "publicationAllowed": False,
+        "gateEligible": False,
+    }
+    adapter.assert_run_allowed()
 
 
 def test_tasks_select_official_files_without_mutating_them(

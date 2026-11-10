@@ -7,6 +7,8 @@ from enum import Enum
 from typing import Any, Protocol
 
 JUDGE_SCORE_NAMESPACE = "judge-calibration"
+LOCAL_RESEARCH_LICENSE_STATUS = "local-research"
+RUNNABLE_LICENSE_STATUSES = frozenset({"approved", LOCAL_RESEARCH_LICENSE_STATUS})
 VALID_SCORE_LABELS = frozenset(
     {
         "official-full",
@@ -14,11 +16,35 @@ VALID_SCORE_LABELS = frozenset(
         "official-subset",
         "compatibility-subset",
         "internal-calibration",
+        "local-research",
         "partial-not-official",
         "unverified",
         "blocked-license",
     }
 )
+
+
+def judge_usage_policy(license_status: str) -> dict[str, bool | str]:
+    local_research = license_status == LOCAL_RESEARCH_LICENSE_STATUS
+    approved = license_status == "approved"
+    return {
+        "mode": (
+            LOCAL_RESEARCH_LICENSE_STATUS
+            if local_research
+            else "official"
+            if approved
+            else "blocked"
+        ),
+        "officialScore": approved,
+        "publicationAllowed": approved,
+        "gateEligible": approved,
+    }
+
+
+def judge_score_label(license_status: str, official_label: str) -> str:
+    if license_status == LOCAL_RESEARCH_LICENSE_STATUS:
+        return LOCAL_RESEARCH_LICENSE_STATUS
+    return official_label
 
 
 class JudgeOutputKind(str, Enum):

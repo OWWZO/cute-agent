@@ -20,8 +20,11 @@ from ..base import (
     JUDGE_SCORE_NAMESPACE,
     JudgeBenchmarkRecord,
     LicenseBlockedError,
+    RUNNABLE_LICENSE_STATUSES,
+    judge_score_label,
+    judge_usage_policy,
 )
-from ..client import OpenAICompatibleJudge
+from ..client import JudgeRequestError, OpenAICompatibleJudge
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 DEFAULT_MANIFEST = PACKAGE_ROOT / "manifest.yaml"
@@ -174,7 +177,7 @@ class TrailAdapter:
         return verified
 
     def assert_run_allowed(self) -> None:
-        if self.license_status != "approved":
+        if self.license_status not in RUNNABLE_LICENSE_STATUSES:
             raise LicenseBlockedError(
                 self.name,
                 self.license_status,
@@ -268,7 +271,10 @@ class TrailAdapter:
         )
 
     def build_prompt(self, task: TrailTask) -> str:
-        return self._official_prompt_template().format(trace=task.trace_text)
+        return self.official_prompt_template().format(trace=task.trace_text)
+
+    def official_prompt_template(self) -> str:
+        return self._official_prompt_template()
 
     def run(
         self,
@@ -298,9 +304,16 @@ class TrailAdapter:
         records: list[JudgeBenchmarkRecord] = []
 
         def _run_task(task: TrailTask) -> tuple[TrailTask, str, dict[str, Any] | None]:
-            response = judge.complete(
-                [{"role": "user", "content": self.build_prompt(task)}]
-            )
+            prompt = self.build_prompt(task)
+            try:
+                response = judge.complete(
+                    [{"role": "user", "content": prompt}]
+                )
+            except JudgeRequestError as exc:
+                return task, "", {
+                    "kind": exc.kind,
+                    "message": str(exc),
+                }
             error = _validate_trail_response(response)
             return task, response, error
 
@@ -319,10 +332,11 @@ class TrailAdapter:
                     task.annotation_path,
                     annotation_dir / task.annotation_path.name,
                 )
-                (result_dir / task.trace_path.name).write_text(
-                    response,
-                    encoding="utf-8",
-                )
+                if response:
+                    (result_dir / task.trace_path.name).write_text(
+                        response,
+                        encoding="utf-8",
+                    )
                 records.append(
                     JudgeBenchmarkRecord(
                         task_id=task.id,
@@ -353,10 +367,13 @@ class TrailAdapter:
             )
         metrics = _parse_metric_files(results_dir)
         complete = all(record.status == "verified" for record in records)
-        score_label = (
-            "official-full" if split == "official-full"
-            else "official-subset"
-        ) if complete else "partial-not-official"
+        score_label = judge_score_label(
+            self.license_status,
+            (
+                "official-full" if split == "official-full"
+                else "official-subset"
+            ) if complete else "partial-not-official",
+        )
         report = {
             "schemaVersion": "1.0",
             "subject": {
@@ -379,6 +396,7 @@ class TrailAdapter:
             },
             "scoreNamespace": self.score_namespace,
             "scoreLabel": score_label,
+            "usagePolicy": judge_usage_policy(self.license_status),
             "tasks": [record.to_dict() for record in records],
             "metrics": {
                 "split": split,
@@ -415,6 +433,7 @@ class TrailAdapter:
             "licenseStatus": self.license_status,
             "scoreNamespace": self.score_namespace,
             "scoreLabel": self.score_label,
+            "usagePolicy": judge_usage_policy(self.license_status),
         }
 
 

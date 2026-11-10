@@ -33,11 +33,12 @@ public class SessionSearchTool implements BaseTool {
         return """
                 Search past conversation messages in durable session history (Hermes-style).
                 FOUR CALLING SHAPES (mode inferred from args; no mode field):
-                  1) DISCOVERY — pass query: returns matching sessions with title, snippet, match_message_id, and matched_terms. Does not dump session bodies. Use session_id + around_message_id to read a hit. query + session_id searches inside that session.
+                  1) DISCOVERY — pass query: returns matching sessions with title, match_message_id, matched_terms, recency, rank, and evidence. Short top results include full content; large results include one or more match-centered evidence windows instead of a misleading prefix. Labeled examples also expose label_evidence with the sample text and numeric label. Use session_id + around_message_id to read a specific hit. query + session_id searches inside that session.
                   2) SCROLL — pass session_id + around_message_id (+ optional window): returns ±window visible messages centered on the anchor (total up to 2*window+1). messages_before/messages_after are in-window counts; when either is < window you have reached that end. Scroll forward with messages[-1].id; backward with messages[0].id.
                   3) READ — pass session_id only: dumps visible messages (first 20 + last 10 when large). window is ignored. When truncated, pass around_message_id to scroll the middle.
                   4) BROWSE — no mode-specific args: recent sessions chronologically.
-                Uses MySQL ngram FULLTEXT when available; falls back to scan. Hits must contain every query token or count is 0.
+                Uses MySQL ngram FULLTEXT when available. Full-coverage hits are preferred; if none exist, the service returns the best partial/token-scan candidates and marks fallback=true.
+                Discovery exposes last_active_at, search_score, and content_truncated so you can judge recency, rank, and evidence completeness. When memory facts conflict, prefer the newest last_active_at unless the question explicitly asks about an earlier or historical state.
                 All modes default to role_filter=user,assistant (hides tool/system). Pass 'user,assistant,tool' to include tool output.
                 query cannot be combined with around_message_id. limit/window omitted use defaults; 0 is an error.
                 Search is restricted to main working-memory history and includes INVALID projections.

@@ -7,7 +7,11 @@ import pytest
 from jsonschema import validate
 
 from cute_evals.models import RunTrace
-from cute_evals.process_view import ProcessViewError, project_process_view
+from cute_evals.process_view import (
+    ProcessViewError,
+    project_ledger_process_view,
+    project_process_view,
+)
 
 
 def _trace() -> dict:
@@ -146,3 +150,167 @@ def test_rejects_trace_without_conversation() -> None:
 
     with pytest.raises(ProcessViewError, match="no conversation messages"):
         project_process_view(RunTrace.from_dict(payload))
+
+
+def test_reconstructs_ledger_steps_without_conversation() -> None:
+    payload = {
+        "schemaVersion": "1.1",
+        "producer": {"agent": "cute-agent"},
+        "run": {
+            "runUid": "run-ledger-1",
+            "requestId": "req-ledger-1",
+            "sessionId": "sess-ledger-1",
+            "status": "SUCCESS",
+            "queryText": "wake the sub-agent and inspect progress",
+            "finalSummaryText": "the sub-agent is still running",
+        },
+        "llmInvocations": [
+            {
+                "id": 101,
+                "invocationSeq": 1,
+                "stepNo": 1,
+                "agentName": "react",
+                "status": "SUCCESS",
+                "responseText": None,
+                "reasoningContent": "plan the wake-up",
+                "toolCallCount": 1,
+                "totalTokens": 30,
+            },
+            {
+                "id": 102,
+                "invocationSeq": 2,
+                "stepNo": 2,
+                "agentName": "react",
+                "status": "SUCCESS",
+                "responseText": None,
+                "reasoningContent": None,
+                "toolCallCount": 1,
+                "totalTokens": 20,
+            },
+            {
+                "id": 103,
+                "invocationSeq": 3,
+                "stepNo": 3,
+                "agentName": "react",
+                "status": "SUCCESS",
+                "responseText": "the sub-agent is still running",
+                "toolCallCount": 0,
+                "totalTokens": 10,
+            },
+        ],
+        "toolInvocations": [
+            {
+                "id": 201,
+                "llmInvocationId": 101,
+                "toolCallId": "call-send",
+                "stepNo": 1,
+                "dispatchIndex": 1,
+                "agentName": "react",
+                "toolName": "SendMessage",
+                "inputJson": "{\"to\":\"agent-1\"}",
+                "toolResult": "{\"ok\":true}",
+                "status": "SUCCESS",
+            },
+            {
+                "id": 202,
+                "llmInvocationId": 102,
+                "toolCallId": "call-output",
+                "stepNo": 2,
+                "dispatchIndex": 1,
+                "agentName": "react",
+                "toolName": "TaskOutput",
+                "inputJson": "{\"task_id\":\"task-1\"}",
+                "toolResult": "{\"status\":\"running\"}",
+                "status": "SUCCESS",
+            },
+        ],
+        "artifacts": [],
+        "tools": [],
+    }
+
+    view = project_ledger_process_view(RunTrace.from_dict(payload))
+
+    assert view.source["conversationSource"] == "ledger-reconstructed"
+    assert view.source["verification"]["responseTextMissing"] == 2
+    assert view.assistant_message_indices == [1, 3, 5]
+    assert [step.ordinal for step in view.steps] == [1, 2, 3]
+    assert [message.role for message in view.messages] == [
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "tool",
+        "assistant",
+    ]
+    assert view.steps[0].content == ""
+    assert [item.kind for item in view.steps[0].evidence] == [
+        "llm",
+        "tool_call",
+        "tool_result",
+    ]
+    assert view.steps[2].content == "the sub-agent is still running"
+
+    schema_path = (
+        Path(__file__).resolve().parents[1]
+        / "schemas"
+        / "process_view.schema.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    validate(view.to_dict(), schema)
+
+
+def test_ledger_projection_preserves_one_llm_with_multiple_tools() -> None:
+    payload = {
+        "run": {
+            "runUid": "run-ledger-2",
+            "requestId": "req-ledger-2",
+            "status": "SUCCESS",
+            "queryText": "read both files",
+            "finalSummaryText": "done",
+        },
+        "llmInvocations": [
+            {
+                "id": 301,
+                "invocationSeq": 1,
+                "stepNo": 1,
+                "status": "SUCCESS",
+                "toolCallCount": 2,
+                "totalTokens": 12,
+            }
+        ],
+        "toolInvocations": [
+            {
+                "id": 401,
+                "llmInvocationId": 301,
+                "toolCallId": "call-a",
+                "dispatchIndex": 1,
+                "toolName": "read_file",
+                "inputJson": "{\"path\":\"a.txt\"}",
+                "toolResult": "alpha",
+                "status": "SUCCESS",
+            },
+            {
+                "id": 402,
+                "llmInvocationId": 301,
+                "toolCallId": "call-b",
+                "dispatchIndex": 2,
+                "toolName": "read_file",
+                "inputJson": "{\"path\":\"b.txt\"}",
+                "toolResult": "beta",
+                "status": "SUCCESS",
+            },
+        ],
+        "artifacts": [],
+    }
+
+    view = project_ledger_process_view(RunTrace.from_dict(payload))
+
+    assert view.assistant_message_indices == [1]
+    assert [item.kind for item in view.steps[0].evidence] == [
+        "llm",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+    ]
+    assert view.orphan_evidence == []

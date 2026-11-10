@@ -26,6 +26,11 @@ from .benchmarks.gaia import GAIAAdapter
 from .benchmarks.longmemeval import LongMemEvalAdapter
 from .benchmarks.memoryagentbench import MemoryAgentBenchAdapter
 from .benchmarks.marble import MarbleAdapter
+from .benchmarks.marble.runner import (
+    MarbleRunBlocked,
+    MarbleRunConfig,
+    run_marble,
+)
 from .benchmarks.rag import RagAdapter, run_mrag
 from .benchmarks.spider2 import Spider2Adapter
 from .benchmarks.tau2 import Tau2Adapter, Tau2UserSimulator
@@ -66,7 +71,7 @@ from .ops_schedule import (
 from .overfit import build_overfit_report, overfit_blocks
 from .rag_dataset import load_rag_dataset_manifest
 from .report import build_baseline, build_report
-from .process_view import project_process_view
+from .process_view import project_ledger_process_view, project_process_view
 from .runtime import (
     ConversationEntry,
     EnvironmentEvent,
@@ -75,6 +80,11 @@ from .runtime import (
     snapshot_payload,
 )
 from .scorers import score_case
+from .trajectory_quality import (
+    QualityJudgeConfig,
+    resolve_trace_paths,
+    run_trajectory_quality,
+)
 from .trace_tools import (
     approve_case_draft,
     counterfactual_replay,
@@ -849,6 +859,11 @@ def _report_benchmark(
             ),
             "runnerMode": mode,
             "repeat": repeat,
+            "sampling": {
+                "temperature": 0.0,
+                "mode": "deterministic",
+                "source": "application-eval.yml",
+            },
             "suite": f"{adapter.name}-{metadata['split']}",
             "datasetHash": metadata["datasetHash"],
             "scoreLabel": metadata["scoreLabel"],
@@ -1650,7 +1665,13 @@ def benchmark_command(args: argparse.Namespace) -> int:
 def process_view_command(args: argparse.Namespace) -> int:
     trace_path = Path(args.trace).resolve()
     payload = json.loads(trace_path.read_text(encoding="utf-8"))
-    view = project_process_view(payload)
+    source = args.source
+    if source == "auto":
+        source = "conversation" if payload.get("conversation") else "ledger"
+    if source == "conversation":
+        view = project_process_view(payload)
+    else:
+        view = project_ledger_process_view(payload)
     output_path = Path(args.out).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
@@ -1662,6 +1683,50 @@ def process_view_command(args: argparse.Namespace) -> int:
         f"messages={len(view.messages)}"
     )
     print(f"output: {output_path}")
+    return 0
+
+
+def trajectory_quality_command(args: argparse.Namespace) -> int:
+    model = args.judge_model or os.environ.get("CUTE_EVAL_JUDGE_MODEL")
+    base_url = args.judge_base_url or os.environ.get("CUTE_EVAL_JUDGE_BASE_URL")
+    api_key = args.judge_api_key or os.environ.get("CUTE_EVAL_JUDGE_API_KEY")
+    if not model or not base_url or not api_key:
+        raise ValueError(
+            "trajectory-quality requires judge model, base URL, and API key"
+        )
+    trace_paths = resolve_trace_paths(
+        args.trace,
+        Path(args.manifest).resolve() if args.manifest else None,
+    )
+    apb_source = (
+        Path(args.agent_process_bench_source).resolve()
+        if args.agent_process_bench_source
+        else None
+    )
+    trail_source = (
+        Path(args.trail_source).resolve()
+        if args.trail_source
+        else None
+    )
+    report = run_trajectory_quality(
+        trace_paths,
+        output_dir=Path(args.out).resolve(),
+        config=QualityJudgeConfig(
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+            timeout_seconds=args.timeout,
+        ),
+        apb_source_dir=apb_source,
+        trail_source_dir=trail_source,
+        concurrency=args.concurrency,
+    )
+    print(
+        f"trajectory quality: runs={report['metrics']['runCount']} "
+        f"stepVerified={report['metrics']['stepQualityVerifiedRuns']} "
+        f"rootCauseVerified={report['metrics']['rootCauseVerifiedRuns']}"
+    )
+    print(f"report: {Path(args.out).resolve() / 'report.json'}")
     return 0
 
 
@@ -1753,11 +1818,71 @@ def multiagent_benchmark_command(args: argparse.Namespace) -> int:
         )
         print(f"report: {report_path}")
         return 0
-    adapter.assert_run_allowed()
-    raise RuntimeError(
-        "MARBLE official environment adapter is not implemented; "
-        "no simulation was started"
+    python_executable = (
+        Path(args.python).resolve()
+        if args.python
+        else (
+            Path(os.environ["MARBLE_PYTHON"]).resolve()
+            if os.environ.get("MARBLE_PYTHON")
+            else None
+        )
     )
+    if python_executable is None:
+        raise ValueError(
+            "MARBLE run requires --python or MARBLE_PYTHON "
+            "pointing to an installed MARBLE environment"
+        )
+    try:
+        report = run_marble(
+            adapter,
+            MarbleRunConfig(
+                python_executable=python_executable,
+                domain=args.domain,
+                task_ids=tuple(args.task_id or [1]),
+                llm_model=args.llm_model,
+                output_dir=output_dir,
+                timeout_seconds=args.timeout,
+                compatibility_local=args.compatibility_local,
+                repair_evaluator_syntax=args.repair_evaluator_syntax,
+                offline_tools=args.offline_tools,
+            ),
+        )
+    except MarbleRunBlocked as exc:
+        blocked = {
+            "schemaVersion": "1.0",
+            "subject": {
+                "type": "multi-agent-system",
+                "name": "MARBLE BaseAgent",
+                "model": args.llm_model,
+            },
+            "benchmark": adapter.report_metadata(),
+            "scoreNamespace": "agent-benchmark",
+            "scoreLabel": "blocked-official-source",
+            "usagePolicy": {
+                "mode": "blocked",
+                "officialScore": False,
+                "publicationAllowed": False,
+                "gateEligible": False,
+                "advisory": True,
+            },
+            "blocked": {"message": str(exc), **exc.details},
+        }
+        blocked_path = output_dir / "blocked.json"
+        blocked_path.write_text(
+            json.dumps(blocked, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"MARBLE blocked: {exc}")
+        print(f"report: {blocked_path}")
+        return 2
+    print(
+        f"MARBLE {report['scoreLabel']}: "
+        f"tasks={report['metrics']['taskCount']} "
+        f"verified={report['metrics']['verifiedTasks']} "
+        f"unverified={report['metrics']['unverifiedTasks']}"
+    )
+    print(f"report: {output_dir / 'report.json'}")
+    return 0
 
 
 def judge_benchmark_command(args: argparse.Namespace) -> int:
@@ -1850,6 +1975,7 @@ def judge_benchmark_command(args: argparse.Namespace) -> int:
             model=args.judge_model,
             base_url=args.judge_base_url,
             api_key=args.judge_api_key,
+            max_tokens=65536,
         ),
         split=args.split,
         output_dir=output_dir,
@@ -1978,7 +2104,7 @@ def _agent_reward_bench_command(args: argparse.Namespace) -> int:
             model=args.judge_model,
             base_url=args.judge_base_url,
             api_key=args.judge_api_key,
-            max_tokens=1024,
+            max_tokens=65536,
         ),
         split=args.split,
         output_dir=output_dir,
@@ -2069,6 +2195,7 @@ def _trail_judge_benchmark_command(args: argparse.Namespace) -> int:
             model=args.judge_model,
             base_url=args.judge_base_url,
             api_key=args.judge_api_key,
+            max_tokens=65536,
         ),
         split=args.split,
         output_dir=output_dir,
@@ -2302,7 +2429,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     process_view.add_argument("--trace", required=True)
     process_view.add_argument("--out", required=True)
+    process_view.add_argument(
+        "--source",
+        choices=["auto", "conversation", "ledger"],
+        default="auto",
+    )
     process_view.set_defaults(func=process_view_command)
+
+    trajectory_quality = subparsers.add_parser(
+        "trajectory-quality",
+        help="score a real Execution Ledger trace with calibrated judges",
+    )
+    trajectory_quality.add_argument("--trace", action="append")
+    trajectory_quality.add_argument("--manifest")
+    trajectory_quality.add_argument("--out", required=True)
+    trajectory_quality.add_argument("--judge-model")
+    trajectory_quality.add_argument("--judge-base-url")
+    trajectory_quality.add_argument("--judge-api-key")
+    trajectory_quality.add_argument("--agent-process-bench-source")
+    trajectory_quality.add_argument("--trail-source")
+    trajectory_quality.add_argument("--concurrency", type=int, default=1)
+    trajectory_quality.add_argument("--timeout", type=int, default=300)
+    trajectory_quality.set_defaults(func=trajectory_quality_command)
 
     multi_agent_view = subparsers.add_parser(
         "multi-agent-view",
@@ -2329,6 +2477,38 @@ def build_parser() -> argparse.ArgumentParser:
     multiagent_benchmark.add_argument("--source-dir")
     multiagent_benchmark.add_argument("--manifest")
     multiagent_benchmark.add_argument("--out", required=True)
+    multiagent_benchmark.add_argument("--python")
+    multiagent_benchmark.add_argument(
+        "--domain",
+        default="research",
+        help="current executable domain: research",
+    )
+    multiagent_benchmark.add_argument(
+        "--task-id",
+        type=int,
+        action="append",
+        help="official task id; defaults to 1",
+    )
+    multiagent_benchmark.add_argument(
+        "--llm-model",
+        default="openai/group/deepseek",
+    )
+    multiagent_benchmark.add_argument(
+        "--compatibility-local",
+        action="store_true",
+        help="allow local compatibility execution without changing the manifest",
+    )
+    multiagent_benchmark.add_argument(
+        "--repair-evaluator-syntax",
+        action="store_true",
+        help="apply the known indentation-only evaluator repair in memory",
+    )
+    multiagent_benchmark.add_argument(
+        "--offline-tools",
+        action="store_true",
+        help="disable external research tools for an offline compatibility run",
+    )
+    multiagent_benchmark.add_argument("--timeout", type=int, default=1800)
     multiagent_benchmark.add_argument("--dry-run", action="store_true")
     multiagent_benchmark.set_defaults(func=multiagent_benchmark_command)
 

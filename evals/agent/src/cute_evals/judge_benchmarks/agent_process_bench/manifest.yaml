@@ -2,10 +2,10 @@ name: agent-process-bench
 version: "0a42606b178a8c69d40c5765dc05c342f921e578"
 upstream: https://github.com/RUCBM/AgentProcessBench
 upstreamCommit: 0a42606b178a8c69d40c5765dc05c342f921e578
-licenseStatus: blocked-license
-licenseEvidence: "No root LICENSE file was present at the pinned commit."
+licenseStatus: local-research
+licenseEvidence: "Repository owner authorized local-only internal research on 2026-11-10; no upload, redistribution, official score, or release gate use."
 scoreNamespace: judge-calibration
-scoreLabel: blocked-license
+scoreLabel: local-research
 expectedRecordsPerDataset: 250
 splits:
   smoke: 5

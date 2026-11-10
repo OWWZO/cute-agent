@@ -355,6 +355,109 @@ public class ToolObservationFormatterTest {
     }
 
     @Test
+    public void sessionSearchDiscoverProjectsFullTopContentAndSnippetForRest() {
+        Map<String, Object> first = new LinkedHashMap<>();
+        first.put("session_id", "s1");
+        first.put("match_message_id", 41);
+        first.put("matched_role", "USER");
+        first.put("last_active_at", "2026-11-09T10:00:00Z");
+        first.put("search_score", 8.5);
+        first.put("content", "The current address is 18 River Street.");
+        first.put("snippet", "current address");
+        Map<String, Object> second = new LinkedHashMap<>();
+        second.put("session_id", "s2");
+        second.put("match_message_id", 42);
+        second.put("matched_role", "USER");
+        second.put("content", "The current employer is Northstar Labs.");
+        Map<String, Object> third = new LinkedHashMap<>();
+        third.put("session_id", "s3");
+        third.put("match_message_id", 43);
+        third.put("matched_role", "USER");
+        third.put("content", "FULL_THIRD_RESULT_SHOULD_NOT_BE_PROJECTED");
+        third.put("snippet", "third result snippet");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("mode", "discover");
+        data.put("count", 3);
+        data.put("search_backend", "token-scan");
+        data.put("fallback", Boolean.TRUE);
+        data.put("fallback_terms", List.of("address", "employer"));
+        data.put("results", List.of(first, second, third));
+
+        String projected = ToolObservationFormatter.format("session_search", data);
+
+        Assert.assertTrue(projected.contains("content: The current address is 18 River Street."));
+        Assert.assertTrue(projected.contains("content: The current employer is Northstar Labs."));
+        Assert.assertFalse(projected.contains("FULL_THIRD_RESULT_SHOULD_NOT_BE_PROJECTED"));
+        Assert.assertTrue(projected.contains("evidence: third result snippet"));
+        Assert.assertTrue(projected.contains("last_active_at=2026-11-09T10:00:00Z"));
+        Assert.assertTrue(projected.contains("search_score=8.5"));
+        Assert.assertTrue(projected.contains("fallback=true"));
+        Assert.assertTrue(projected.contains("fallback_terms=address,employer"));
+        Assert.assertTrue(projected.contains("Prefer the newest last_active_at"));
+    }
+
+    @Test
+    public void sessionSearchDiscoverTruncatesOversizedContentWithinBudget() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("session_id", "s1");
+        result.put("match_message_id", 42);
+        result.put("matched_role", "USER");
+        result.put("content_truncated", Boolean.TRUE);
+        result.put("content", "PREFIX_SHOULD_NOT_BE_PROJECTED" + "x".repeat(20_000));
+        result.put("snippet", "target fact with serial 307");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("mode", "discover");
+        data.put("count", 1);
+        data.put("results", List.of(result));
+
+        String projected = ToolObservationFormatter.format("session_search", data);
+
+        Assert.assertTrue(projected.length() <= 9_000);
+        Assert.assertTrue(projected.contains("content_truncated=true"));
+        Assert.assertTrue(projected.contains("evidence: target fact with serial 307"));
+        Assert.assertTrue(projected.contains("content_omitted_large=true"));
+        Assert.assertFalse(projected.contains("PREFIX_SHOULD_NOT_BE_PROJECTED"));
+        Assert.assertFalse(projected.contains("x".repeat(3_000)));
+    }
+
+    @Test
+    public void sessionSearchDiscoverProjectsMultiWindowAndLabelEvidence() {
+        Map<String, Object> firstLabel = new LinkedHashMap<>();
+        firstLabel.put("label", "28");
+        firstLabel.put("score", 8.75);
+        firstLabel.put("sample", "My disposable virtual card isn't working.");
+        Map<String, Object> secondLabel = new LinkedHashMap<>();
+        secondLabel.put("label", "67");
+        secondLabel.put("score", 7.25);
+        secondLabel.put("sample", "What are the restrictions on disposable cards?");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("session_id", "s1");
+        result.put("match_message_id", 42);
+        result.put("matched_role", "USER");
+        result.put("content", "x".repeat(2_000));
+        result.put("evidence_windows", List.of(
+                "first window: disposable card is not working",
+                "second window: disposable card restrictions"));
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("mode", "discover");
+        data.put("count", 1);
+        data.put("results", List.of(result));
+        data.put("label_evidence", List.of(firstLabel, secondLabel));
+
+        String projected = ToolObservationFormatter.format("session_search", data);
+
+        Assert.assertTrue(projected.contains("evidence_window[1]:"));
+        Assert.assertTrue(projected.contains("evidence_window[2]:"));
+        Assert.assertTrue(projected.contains("label_evidence=ranked matches"));
+        Assert.assertTrue(projected.contains("label=28"));
+        Assert.assertTrue(projected.contains("sample=My disposable virtual card isn't working."));
+        Assert.assertTrue(projected.contains("content_omitted_large=true"));
+    }
+
+    @Test
     public void webFetchKeepsContentAndDropsRequestEcho() {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("ok", Boolean.TRUE);

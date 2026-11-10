@@ -2,10 +2,10 @@ name: trail
 version: "0ffbed9db859b4a66250dc783fa4dccf86869595"
 upstream: https://github.com/patronus-ai/trail-benchmark
 upstreamCommit: 0ffbed9db859b4a66250dc783fa4dccf86869595
-licenseStatus: blocked-license
-licenseEvidence: "Repository code is MIT; GAIA/SWE-derived trace redistribution is not separately confirmed."
+licenseStatus: local-research
+licenseEvidence: "Repository owner authorized local-only internal research on 2026-11-10; no upload, redistribution, official score, or release gate use."
 scoreNamespace: judge-calibration
-scoreLabel: blocked-license
+scoreLabel: local-research
 verification: git-tree
 splits:
   smoke:

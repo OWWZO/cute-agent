@@ -14,6 +14,11 @@
 > recall、LongMemEval judge、InfBench F1 和 Recsys Recall@1/5/10。subset 本机 live
 > 单次验收为 20/20 turn 成功；
 > 题目级 15/20 = 75%，context 级 quality@1=25%、slo@1=100%，不能当作完整官方成绩。
+> 2026-11-10 完成第 4 步：真实 Execution Ledger 经 `ledger-reconstructed`
+> ProcessView 送入已校准 AgentProcessBench / TRAIL 裁判，产出 `product-derived`
+> 轨迹质量报告。第 5 步 MARBLE runner 已实现并真实启动官方代码，但固定 commit 的
+> 官方 evaluator 有 SyntaxError，且 research 外部工具出现 arXiv HTTP 429；当前只能
+> 产出 `compatibility-local` / `unverified` 证据，不能宣称官方 agent-benchmark 成绩。
 > 适用项目：Cute Agent（Java + React）
 > 核心事实源：Execution Ledger / Run 执行账本
 > 日期：2026-11-09
@@ -1323,17 +1328,20 @@ EVAL_DATA_HOME/
 
 ### 10.13 轨迹质量、裁判可信度与多 Agent 协作（部分实现）
 
-状态：**部分实现。** `ProcessView`、裁判 schema / 错误分类、
+状态：**第 4 步已完成；第 5 步 runner 已实现但官方成绩受阻。** `ProcessView`、裁判 schema / 错误分类、
 AgentProcessBench、TRAIL 和 AgentRewardBench 外部官方 harness 已落地；MARBLE
-已完成题集、脚本和 MultiAgentTraceView 接入，官方环境运行器仍未实现。
+已完成题集、脚本、MultiAgentTraceView 和官方 runner 接入。
 AgentProcessBench 正式模型跑分尚未执行，原因是 pinned commit 未发现根 LICENSE。
 TRAIL 已通过 10 题 dry-run，但 GAIA/SWE 派生 Trace 的再分发条件仍需确认。
 AgentRewardBench 已完成代码、三个元数据 CSV、HF dataset revision、官方 Prompt 和
 官方评分脚本锁定，并完成 5 个唯一 dev 轨迹的 dry-run；代码根无 LICENSE、HF
 dataset card 无 license 字段、截图资产条款未确认，因此正式跑分保持 `blocked-license`。
-MARBLE 已完成五个 domain 的官方 JSONL、entrypoint / evaluator 哈希和
-`MultiAgentTraceView`，并完成 5 / 50 / 500 题 dry-run；根 LICENSE 与
-pyproject license 冲突未解决，官方环境运行器未实现。
+MARBLE 已完成五个 domain 的官方 JSONL、entrypoint / evaluator 哈希、
+`MultiAgentTraceView` 和官方 runner，并完成 5 / 50 / 500 题 dry-run；
+根 LICENSE 与 pyproject license 冲突未解决。真实 research smoke 已启动官方代码，
+但固定 commit 的 `marble/evaluator/evaluator.py:324` 存在 SyntaxError；显式
+`--repair-evaluator-syntax` 后仍因 arXiv HTTP 429 造成 agent 结果不完整，
+因此没有可发布的官方 `agent-benchmark` 成绩。
 
 本批正式纳入：
 
@@ -1532,7 +1540,7 @@ pyproject license 冲突未解决，官方环境运行器未实现。
 
 #### 10.13.6 MultiAgentBench / MARBLE
 
-实现状态（2026-11-09，部分实现）：
+实现状态（2026-11-10，runner 已实现，官方成绩受阻）：
 
 - 已固定 commit `8d60fa17b5596b44458a52d4296061b9fc13d6f2`。
 - 已实现 `MultiAgentTraceView`：从 Ledger 的 `subAgentId / subAgentType /
@@ -1543,7 +1551,23 @@ pyproject license 冲突未解决，官方环境运行器未实现。
 - 已完成 smoke 5 题、official-subset 50 题、official-full 500 题的元数据 dry-run。
 - `LICENSE` 写 MIT，而 `pyproject.toml` 写 Apache 2.0；冲突未解除，状态为
   `blocked-license`。
-- 官方 Docker/DB/Minecraft 环境运行器尚未实现；非 dry-run 会在启动环境前失败关闭。
+- 已实现非 dry-run runner：校验五个 domain 的 JSONL hash，调用官方
+  `multiagentbench/jsonl2yaml.py` 生成 config，启动官方 `marble/main.py`，
+  读取官方输出 JSONL，并校验每个 agent 是否有完整结果。
+- 只有完整执行才标记 `verified`；超时、执行不完整、兼容修复和外部工具降级只能
+  标记 `unverified` 或 `failed`，不生成官方成绩。
+- 固定 commit 的官方 `marble/evaluator/evaluator.py:324` 存在缩进导致的
+  `SyntaxError`。只有显式 `--compatibility-local --repair-evaluator-syntax`
+  才在运行副本中做缩进修复；evaluator hash 会同时记录修复前和运行时的值。
+- 2026-11-10 的 research task 1 真实运行产生了
+  `task_evaluation={innovation:4, safety:4, feasibility:3}`，但多个 agent 因
+  arXiv HTTP 429 失败，`task_results=[]`、`communications=[]`。该结果只能作为
+  本地兼容性证据，不能当作 MARBLE 官方分数。
+- 官方输出证据：
+  `D:\cute-eval-tmp\marble-official-20261110\outputs\research-task-1.jsonl`。
+- 超时被收敛为结构化 `unverified` 报告，`environment.timedOut=true`；
+  `D:\cute-eval-tmp\marble-official-20261110\cli-smoke-timeout-v2\report.json`
+  已实际验证。
 
 官方能力：
 
@@ -3153,11 +3177,14 @@ Live 模型入口、独立评测库和 `eval` Profile 已接线；真实模型�
     正式跑分和 148 条全量被数据许可门禁阻塞。
 23. [部分完成] 接 AgentRewardBench：已完成 manifest、HF dataset revision、官方
     Prompt / 评分 harness、5 题 dev dry-run；正式模型跑分被 `blocked-license` 阻塞。
-24. [已登记，未开发] 用已校准裁判分析 Cute Agent 私有真实 Trace，产出 step 质量、
-    首次错误、根因、证据和修复建议；结果只标 `product-derived`。
+24. [已完成] 用已校准裁判分析 Cute Agent 私有真实 Trace：新增
+    `trajectory-quality`，支持 conversation / Ledger 投影、步骤质量、首次错误、
+    根因、证据和修复建议；真实 Ledger 样本已产出 `product-derived` 报告。
 25. [部分完成] 接 MultiAgentBench / MARBLE：已完成 MultiAgentTraceView、五个
-    domain 资产锁定和 5 / 50 / 500 题 dry-run；许可证冲突未解除，官方环境运行器
-    尚未实现，非 dry-run fail-closed。
+    domain 资产锁定、5 / 50 / 500 题 dry-run 和官方 runner；真实 research task 1
+    已启动官方代码。官方 evaluator 在当前 commit 有 SyntaxError，且 arXiv HTTP 429
+    导致 agent 结果不完整，因此只能产出 `compatibility-local` / `unverified` 证据，
+    尚无官方 `agent-benchmark` 成绩。
 26. [已完成] 接 MemoryAgentBench official-subset 和 official-full：official-subset
     为 4 个官方 category、4 个 context、20 道题；official-full 为 22 个官方 source、
     146 个 context、3,671 道题。官方 chunk / query template / exact / substring /
@@ -3168,6 +3195,8 @@ Live 模型入口、独立评测库和 `eval` Profile 已接线；真实模型�
 tau² airline 子集、GAIA Level 1 两题和 BIRD 2026 Mini-Dev SQLite 8 题子集
 已经接入；完整 GAIA 和后续重型 Benchmark 尚未接入。第 20–25 项是阶段 10，
 第 20–25 项均已有资产/代码入口；第 21–23、25 项正式运行仍受许可证或环境阻塞。
+第 4 步的 Cute 私有 Trace 报告已完成，见
+`D:\cute-eval-tmp\trajectory-quality-20261110\real-live-v1\report.json`。
 
 不要在第 1–5 步未稳定时同时安装所有 Benchmark。那样得到的不是评测能力，而是不可归因的失败堆积。
 

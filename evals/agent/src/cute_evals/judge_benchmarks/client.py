@@ -19,7 +19,7 @@ class OpenAICompatibleJudge:
     api_key: str
     temperature: float = 0.0
     top_p: float = 1.0
-    max_tokens: int = 8192
+    max_tokens: int = 65536
     timeout_seconds: int = 300
 
     def complete(

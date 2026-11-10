@@ -4,10 +4,10 @@ upstream: https://github.com/McGill-NLP/agent-reward-bench
 upstreamCommit: 05899fcfe52c925978944a23920373b7a9c63740
 trajectoryDataset: McGill-NLP/agent-reward-bench
 trajectoryDatasetRevision: b6d17e646009d6cb63d5dd7be78807b680693f61
-licenseStatus: blocked-license
-licenseEvidence: "No root LICENSE was present at the pinned commit; the HF dataset card has no license field; screenshot asset terms are not separately confirmed."
+licenseStatus: local-research
+licenseEvidence: "Repository owner authorized local-only internal research on 2026-11-10; no upload, redistribution, official score, or release gate use."
 scoreNamespace: judge-calibration
-scoreLabel: blocked-license
+scoreLabel: local-research
 splits:
   smoke: 5
   dev: -1

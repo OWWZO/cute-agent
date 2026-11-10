@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/trajectory_quality.schema.json",
+  "title": "Cute Agent Product-Derived Trajectory Quality Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "subject",
+    "benchmark",
+    "scoreNamespace",
+    "scoreLabel",
+    "usagePolicy",
+    "metrics",
+    "runs",
+    "limitations"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "string"},
+    "subject": {
+      "type": "object",
+      "required": ["type", "name", "runCount"],
+      "properties": {
+        "type": {"const": "agent"},
+        "name": {"type": "string"},
+        "runCount": {"type": "integer", "minimum": 1}
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "required": ["name", "version", "judgeModel", "judgeBaseUrl"],
+      "properties": {
+        "name": {"const": "cute-agent-trajectory-quality"},
+        "version": {"type": "string"},
+        "judgeModel": {"type": "string"},
+        "judgeBaseUrl": {"type": "string"},
+        "temperature": {"type": "number"},
+        "topP": {"type": "number"},
+        "maxTokens": {"type": "integer"},
+        "agentProcessBenchSource": {"type": ["string", "null"]},
+        "trailSource": {"type": ["string", "null"]}
+      }
+    },
+    "scoreNamespace": {"const": "product-derived"},
+    "scoreLabel": {"const": "internal-calibration"},
+    "usagePolicy": {
+      "type": "object",
+      "required": [
+        "mode",
+        "officialScore",
+        "publicationAllowed",
+        "gateEligible",
+        "advisory"
+      ],
+      "properties": {
+        "mode": {"const": "internal-calibration"},
+        "officialScore": {"const": false},
+        "publicationAllowed": {"const": false},
+        "gateEligible": {"const": false},
+        "advisory": {"const": true}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "runCount",
+        "stepQualityVerifiedRuns",
+        "rootCauseVerifiedRuns",
+        "unverifiedJudgments",
+        "stepLabelCounts",
+        "runsWithFirstError",
+        "rootCauseCategories"
+      ],
+      "properties": {
+        "runCount": {"type": "integer", "minimum": 1},
+        "stepQualityVerifiedRuns": {"type": "integer", "minimum": 0},
+        "rootCauseVerifiedRuns": {"type": "integer", "minimum": 0},
+        "unverifiedJudgments": {"type": "integer", "minimum": 0},
+        "stepLabelCounts": {"type": "object"},
+        "runsWithFirstError": {"type": "integer", "minimum": 0},
+        "rootCauseCategories": {"type": "object"}
+      }
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "runId",
+          "requestId",
+          "status",
+          "tracePath",
+          "traceSha256",
+          "processViewSource",
+          "facts",
+          "judgments"
+        ],
+        "properties": {
+          "runId": {"type": "string"},
+          "requestId": {"type": "string"},
+          "sessionId": {"type": ["string", "null"]},
+          "status": {"type": "string"},
+          "tracePath": {"type": "string"},
+          "traceSha256": {"type": "string"},
+          "processViewSource": {
+            "enum": ["conversation", "ledger-reconstructed"]
+          },
+          "facts": {
+            "type": "object",
+            "required": [
+              "runStatus",
+              "tokens",
+              "cache",
+              "steps",
+              "tools",
+              "artifacts",
+              "limitations"
+            ]
+          },
+          "judgments": {
+            "type": "object",
+            "required": ["stepQuality", "rootCause"],
+            "properties": {
+              "stepQuality": {
+                "type": "object",
+                "required": [
+                  "status",
+                  "promptSource",
+                  "promptHash",
+                  "prediction",
+                  "rawResponse",
+                  "error"
+                ],
+                "properties": {
+                  "status": {
+                    "enum": ["verified", "unverified", "failed"]
+                  },
+                  "promptSource": {"type": "string"},
+                  "promptHash": {"type": "string"},
+                  "prediction": {"type": ["object", "null"]},
+                  "rawResponse": {"type": ["string", "null"]},
+                  "error": {"type": ["object", "null"]}
+                }
+              },
+              "rootCause": {
+                "type": "object",
+                "required": [
+                  "status",
+                  "promptSource",
+                  "promptHash",
+                  "result",
+                  "rawResponse",
+                  "error"
+                ],
+                "properties": {
+                  "status": {
+                    "enum": ["verified", "unverified", "failed"]
+                  },
+                  "promptSource": {"type": "string"},
+                  "promptHash": {"type": "string"},
+                  "result": {"type": ["object", "null"]},
+                  "rawResponse": {"type": ["string", "null"]},
+                  "error": {"type": ["object", "null"]}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

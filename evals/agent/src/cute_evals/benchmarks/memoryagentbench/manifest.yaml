@@ -166,7 +166,9 @@ answerContract:
     Only when the task explicitly asks to assign a numerical label from the
     provided mapping, put that numeric label in the final answer (for example,
     `FINAL_ANSWER: 18`), not `label: 18`. Multiple-choice questions must return
-    the complete selected option text, not an option number.
+    the complete selected option text, not an option number. Copy the selected
+    option verbatim, including spaces, punctuation, and capitalization (for
+    example `B.Hila Weber` is not the same as `B. Hila Weber`).
     Return only the requested value and finish with exactly one line of the form
     `FINAL_ANSWER: <answer>`. Do not include explanations or a second answer line.
 answerContractByScorer:
@@ -196,6 +198,7 @@ budgets:
   maxTokens: 120000
   maxSteps: 10
   maxToolCalls: 12
+  softLimitPercent: 0.65
 officialFull:
   status: implemented
   requiresJudge: true

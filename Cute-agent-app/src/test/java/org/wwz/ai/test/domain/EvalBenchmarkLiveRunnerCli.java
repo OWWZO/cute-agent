@@ -278,7 +278,7 @@ public final class EvalBenchmarkLiveRunnerCli {
                     budgetLimits.maxWallMs,
                     budgetLimits.maxToolCalls,
                     agent.getMaxSteps(),
-                    0.8
+                    budgetLimits.softLimitPercent
             );
             context.setRunBudget(runBudget);
 
@@ -298,6 +298,19 @@ public final class EvalBenchmarkLiveRunnerCli {
                 budgetExceeded = runBudget.exceededReason();
                 if (budgetExceeded == null) {
                     budgetExceeded = watchdog.exceededReason();
+                }
+                if (budgetExceeded == null
+                        && answerContract != null
+                        && agent.getState() == AgentState.FINISHED
+                        && finalAnswerError(turnText) != null) {
+                    String recovered = agent.recoverEmptyFinalAnswer();
+                    if (recovered != null && !recovered.isBlank()) {
+                        turnText = recovered;
+                    }
+                    budgetExceeded = runBudget.exceededReason();
+                    if (budgetExceeded == null) {
+                        budgetExceeded = watchdog.exceededReason();
+                    }
                 }
                 if (budgetExceeded != null) {
                     errorCode = "EVAL_BUDGET_EXCEEDED";
@@ -356,6 +369,7 @@ public final class EvalBenchmarkLiveRunnerCli {
             budget.put("maxWallMs", budgetLimits.maxWallMs);
             budget.put("maxTotalTokens", budgetLimits.maxTotalTokens);
             budget.put("maxToolCalls", budgetLimits.maxToolCalls);
+            budget.put("softLimitPercent", budgetLimits.softLimitPercent);
             budget.put("usedTotalTokens", sumTokens(detail));
             budget.put("usedToolCalls", detail.getToolInvocations().size());
             budget.put("control", runBudget.snapshot());
@@ -560,20 +574,24 @@ public final class EvalBenchmarkLiveRunnerCli {
         private final Integer maxWallMs;
         private final Integer maxTotalTokens;
         private final Integer maxToolCalls;
+        private final double softLimitPercent;
 
         private BudgetLimits(Integer maxWallMs,
                              Integer maxTotalTokens,
-                             Integer maxToolCalls) {
+                             Integer maxToolCalls,
+                             Double softLimitPercent) {
             this.maxWallMs = maxWallMs;
             this.maxTotalTokens = maxTotalTokens;
             this.maxToolCalls = maxToolCalls;
+            this.softLimitPercent = softLimitPercent == null ? 0.8 : softLimitPercent;
         }
 
         static BudgetLimits from(JSONObject evalCase) {
             return new BudgetLimits(
                     positiveOrNull(evalCase.getInteger("maxWallMs")),
                     positiveOrNull(evalCase.getInteger("maxTotalTokens")),
-                    positiveOrNull(evalCase.getInteger("maxToolCalls"))
+                    positiveOrNull(evalCase.getInteger("maxToolCalls")),
+                    evalCase.getDouble("softLimitPercent")
             );
         }
 
@@ -581,6 +599,10 @@ public final class EvalBenchmarkLiveRunnerCli {
             return maxWallMs != null
                     || maxTotalTokens != null
                     || maxToolCalls != null;
+        }
+
+        double softLimitPercent() {
+            return softLimitPercent;
         }
 
         private static Integer positiveOrNull(Integer value) {

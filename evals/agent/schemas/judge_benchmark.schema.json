@@ -53,6 +53,7 @@
         "official-subset",
         "compatibility-subset",
         "internal-calibration",
+        "local-research",
         "partial-not-official",
         "unverified",
         "blocked-license"

@@ -23,9 +23,11 @@ public class EvalBenchmarkBudgetTest {
         casePayload.put("maxWallMs", 1000);
         casePayload.put("maxTotalTokens", 100);
         casePayload.put("maxToolCalls", 3);
+        casePayload.put("softLimitPercent", 0.65);
         EvalBenchmarkLiveRunnerCli.BudgetLimits limits =
                 EvalBenchmarkLiveRunnerCli.BudgetLimits.from(casePayload);
 
+        assertEquals(0.65, limits.softLimitPercent(), 0.0001);
         assertFalse(EvalBenchmarkLiveRunnerCli.budgetExceeded(999, 100, 3, limits));
         assertTrue(EvalBenchmarkLiveRunnerCli.budgetExceeded(1001, 0, 0, limits));
         assertTrue(EvalBenchmarkLiveRunnerCli.budgetExceeded(0, 101, 0, limits));

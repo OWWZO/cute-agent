@@ -41,6 +41,7 @@ class BudgetSpec:
     max_total_tokens: int | None = None
     max_wall_ms: int | None = None
     max_tool_calls: int | None = None
+    soft_limit_percent: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +126,7 @@ class EvalCase:
                 max_total_tokens=budgets.get("maxTotalTokens"),
                 max_wall_ms=budgets.get("maxWallMs"),
                 max_tool_calls=budgets.get("maxToolCalls"),
+                soft_limit_percent=budgets.get("softLimitPercent"),
             ),
             script=list(raw.get("script") or []),
             source_path=source_path,

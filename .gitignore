@@ -121,10 +121,12 @@ Thumbs.db
 /evals/agent/.pytest_cache/
 /evals/agent/.judge-cache/
 /evals/agent/.deepeval/
+/evals/agent/outputs/
 /evals/agent/cases/private/badcase/*.yaml
 !/evals/agent/cases/private/badcase/README.md
 /evals/agent/cases/private/holdout/*.yaml
 !/evals/agent/cases/private/holdout/README.md
+/outputs/
 
 # 启动脚本的生成物（依赖 classpath 缓存与 JVM argfile），按需重建
 /scripts/.classpath.txt

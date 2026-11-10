@@ -22,6 +22,9 @@ from ..base import (
     JudgeOutputError,
     JudgeOutputKind,
     LicenseBlockedError,
+    RUNNABLE_LICENSE_STATUSES,
+    judge_score_label,
+    judge_usage_policy,
 )
 from ..client import OpenAICompatibleJudge
 
@@ -243,7 +246,7 @@ class AgentRewardBenchAdapter:
         return verified
 
     def assert_run_allowed(self) -> None:
-        if self.license_status != "approved":
+        if self.license_status not in RUNNABLE_LICENSE_STATUSES:
             raise LicenseBlockedError(
                 self.name,
                 self.license_status,
@@ -626,6 +629,7 @@ class AgentRewardBenchAdapter:
             score_label = "official-subset"
         else:
             score_label = "partial-not-official"
+        score_label = judge_score_label(self.license_status, score_label)
         report = {
             "schemaVersion": "1.0",
             "subject": {
@@ -652,6 +656,7 @@ class AgentRewardBenchAdapter:
             },
             "scoreNamespace": self.score_namespace,
             "scoreLabel": score_label,
+            "usagePolicy": judge_usage_policy(self.license_status),
             "tasks": [record.to_dict() for record in records],
             "metrics": {
                 "split": split,
@@ -749,6 +754,7 @@ class AgentRewardBenchAdapter:
             "licenseStatus": self.license_status,
             "scoreNamespace": self.score_namespace,
             "scoreLabel": self.score_label,
+            "usagePolicy": judge_usage_policy(self.license_status),
         }
 
 

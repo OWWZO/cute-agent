@@ -647,6 +647,7 @@ class MemoryAgentBenchAdapter:
                 max_total_tokens=int(budgets["maxTokens"]),
                 max_wall_ms=int(budgets["maxWallMs"]),
                 max_tool_calls=int(budgets["maxToolCalls"]),
+                soft_limit_percent=float(budgets.get("softLimitPercent", 0.65)),
             ),
             script=[{"type": "final", "content": "FINAL_ANSWER: fixture"}],
             source_path=str(self.manifest_path),

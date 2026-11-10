@@ -19,6 +19,9 @@ from ..base import (
     JudgeBenchmarkTask,
     JudgePrediction,
     LicenseBlockedError,
+    RUNNABLE_LICENSE_STATUSES,
+    judge_score_label,
+    judge_usage_policy,
 )
 from ..client import OpenAICompatibleJudge
 
@@ -177,7 +180,7 @@ class AgentProcessBenchAdapter:
         return verified
 
     def assert_run_allowed(self) -> None:
-        if self.license_status != "approved":
+        if self.license_status not in RUNNABLE_LICENSE_STATUSES:
             raise LicenseBlockedError(
                 self.name,
                 self.license_status,
@@ -374,7 +377,10 @@ class AgentProcessBenchAdapter:
             )
         metrics = _parse_compare_output(compared.stdout, list(DATASET_NAMES))
         records = self._prediction_records(predictions_dir, model_tag)
-        score_label = "official-full" if limit < 0 else "official-subset"
+        score_label = judge_score_label(
+            self.license_status,
+            "official-full" if limit < 0 else "official-subset",
+        )
         report = {
             "schemaVersion": "1.0",
             "subject": {
@@ -396,6 +402,7 @@ class AgentProcessBenchAdapter:
             },
             "scoreNamespace": self.score_namespace,
             "scoreLabel": score_label,
+            "usagePolicy": judge_usage_policy(self.license_status),
             "tasks": [record.to_dict() for record in records],
             "metrics": {
                 "datasets": metrics,
@@ -469,4 +476,5 @@ class AgentProcessBenchAdapter:
             "licenseStatus": self.license_status,
             "scoreNamespace": self.score_namespace,
             "scoreLabel": self.score_label,
+            "usagePolicy": judge_usage_policy(self.license_status),
         }
