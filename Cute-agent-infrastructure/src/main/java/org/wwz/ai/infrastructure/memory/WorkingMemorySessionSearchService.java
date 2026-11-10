@@ -356,7 +356,8 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
                 result.put("content", content);
                 result.put("content_truncated", false);
             }
-        } else if (includeMultiWindowEvidence) {
+        }
+        if (includeMultiWindowEvidence) {
             List<String> windows = evidenceWindows(hit.getContent(), query, tokens);
             if (windows.size() > 1) {
                 result.put("evidence_windows", windows);

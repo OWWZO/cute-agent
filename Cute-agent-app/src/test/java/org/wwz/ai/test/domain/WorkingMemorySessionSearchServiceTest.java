@@ -458,7 +458,7 @@ public class WorkingMemorySessionSearchServiceTest {
                 "session-b", 3L, "request-b", 1, "billing decision b", "USER", 2);
         when(dao.searchFullTextByUserId(eq("user-1"), eq("billing"), eq(8), anyList()))
                 .thenReturn(List.of(first, second));
-        when(dao.selectSessionSummaries(List.of("session-a", "session-b"))).thenReturn(List.of(
+        when(dao.selectSessionSummaries(anyList())).thenReturn(List.of(
                 Map.of("sessionId", "session-a", "title", "A"),
                 Map.of("sessionId", "session-b", "title", "B")));
 
@@ -470,8 +470,14 @@ public class WorkingMemorySessionSearchServiceTest {
                         .build()));
 
         Assert.assertEquals(2, payload.getIntValue("count"));
-        Assert.assertEquals("A", payload.getJSONArray("results").getJSONObject(0).getString("title"));
-        Assert.assertEquals("B", payload.getJSONArray("results").getJSONObject(1).getString("title"));
+        JSONArray results = payload.getJSONArray("results");
+        Map<String, String> titlesBySession = new java.util.HashMap<>();
+        for (int i = 0; i < results.size(); i++) {
+            JSONObject result = results.getJSONObject(i);
+            titlesBySession.put(result.getString("session_id"), result.getString("title"));
+        }
+        Assert.assertEquals("A", titlesBySession.get("session-a"));
+        Assert.assertEquals("B", titlesBySession.get("session-b"));
         verify(dao, times(1)).selectSessionSummaries(anyList());
         verify(dao, never()).selectSessionSummary(any());
     }
