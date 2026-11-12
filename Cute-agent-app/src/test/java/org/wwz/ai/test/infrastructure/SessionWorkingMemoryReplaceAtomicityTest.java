@@ -15,6 +15,8 @@ import org.wwz.ai.domain.agent.memory.WorkingMemoryTurn;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.infrastructure.cute.service.impl.SessionWorkingMemoryServiceImpl;
 import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryMessageDao;
+import org.wwz.ai.infrastructure.dao.cute.WorkingMemoryTermScanHit;
+import org.wwz.ai.infrastructure.dao.cute.WorkingMemoryTermScanTerm;
 import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryTurnDao;
 
 import javax.sql.DataSource;
@@ -155,6 +157,12 @@ public class SessionWorkingMemoryReplaceAtomicityTest {
         @Override
         public List<WorkingMemorySearchMessage> scanByUserId(String userId, String query,
                                                             int limit, List<String> roles) {
+            return List.of();
+        }
+
+        @Override
+        public List<WorkingMemoryTermScanHit> scanTerms(String userId, String sessionId,
+                                                        List<WorkingMemoryTermScanTerm> terms, List<String> roles) {
             return List.of();
         }
 

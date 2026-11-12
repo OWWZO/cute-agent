@@ -37,6 +37,11 @@ public interface IWorkingMemoryMessageDao {
                                                    @Param("limit") int limit,
                                                    @Param("roles") List<String> roles);
 
+    List<WorkingMemoryTermScanHit> scanTerms(@Param("userId") String userId,
+                                             @Param("sessionId") String sessionId,
+                                             @Param("terms") List<WorkingMemoryTermScanTerm> terms,
+                                             @Param("roles") List<String> roles);
+
     /**
      * 查询滚动定位锚点；消息不属于该 session、已删除或不可见时返回 null。
      */

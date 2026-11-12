@@ -45,6 +45,27 @@
         <result column="search_score" property="searchScore"/>
     </resultMap>
 
+    <resultMap id="WorkingMemoryTermScanHitMap" type="org.wwz.ai.infrastructure.dao.cute.WorkingMemoryTermScanHit">
+        <id column="id" property="id"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="memory_scope" property="memoryScope"/>
+        <result column="turn_id" property="turnId"/>
+        <result column="request_id" property="requestId"/>
+        <result column="origin_message_key" property="originMessageKey"/>
+        <result column="run_id" property="runId"/>
+        <result column="turn_seq" property="turnSeq"/>
+        <result column="seq_no" property="seqNo"/>
+        <result column="role" property="role"/>
+        <result column="content" property="content"/>
+        <result column="reasoning_content" property="reasoningContent"/>
+        <result column="tool_call_id" property="toolCallId"/>
+        <result column="tool_calls_json" property="toolCallsJson"/>
+        <result column="message_kind" property="messageKind"/>
+        <result column="turn_status" property="turnStatus"/>
+        <result column="search_score" property="searchScore"/>
+        <result column="term_group" property="termGroup"/>
+    </resultMap>
+
     <insert id="batchInsertMessages">
         INSERT INTO ai_agent_working_memory_message (
             session_id, memory_scope, turn_id, request_id, origin_message_key, run_id, seq_no, role, content, reasoning_content,
@@ -176,6 +197,58 @@
                    LIKE LOWER(CONVERT(CONCAT('%', #{query}, '%') USING utf8mb4) COLLATE utf8mb4_unicode_ci))
         ORDER BY t.create_time DESC, t.turn_seq DESC, m.seq_no DESC, m.id DESC
         LIMIT #{limit}
+    </select>
+
+    <!-- One round trip for all expansion/fallback terms; each branch keeps its
+         original top-N and ordering, and term_group keeps the two sets separate. -->
+    <select id="scanTerms" resultMap="WorkingMemoryTermScanHitMap">
+        SELECT ranked.*
+        FROM (
+            <foreach collection="terms" item="term" separator=" UNION ALL ">
+                SELECT * FROM (
+                    SELECT <include refid="searchColumns"/>,
+                       #{term.termGroup} AS term_group,
+                       #{term.termRank} AS term_rank
+                FROM ai_agent_working_memory_message m
+                INNER JOIN ai_agent_working_memory_turn t ON m.turn_id = t.id
+                <if test="userId != null and userId != ''">
+                    INNER JOIN ai_agent_dialogue_session s ON s.session_id = m.session_id AND s.deleted = 0
+                        AND s.session_kind = 'conversation'
+                </if>
+                WHERE m.memory_scope = 'main'
+                  AND m.deleted = 0
+                  AND t.deleted = 0
+                  <choose>
+                      <when test="userId != null and userId != ''">
+                          AND s.user_id = #{userId}
+                      </when>
+                      <when test="sessionId != null and sessionId != ''">
+                          AND m.session_id = #{sessionId}
+                      </when>
+                      <otherwise>
+                          AND 1 = 0
+                      </otherwise>
+                  </choose>
+                  <include refid="roleFilter"/>
+                  <include refid="visibleFilter"/>
+                  AND (LOWER(CONVERT(COALESCE(m.content, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+                           LIKE LOWER(CONVERT(CONCAT('%', #{term.query}, '%') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+                       OR LOWER(CONVERT(COALESCE(m.tool_calls_json, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+                           LIKE LOWER(CONVERT(CONCAT('%', #{term.query}, '%') USING utf8mb4) COLLATE utf8mb4_unicode_ci))
+                  ORDER BY
+                  <choose>
+                      <when test="userId != null and userId != ''">
+                          t.create_time DESC, t.turn_seq DESC, m.seq_no DESC, m.id DESC
+                      </when>
+                      <otherwise>
+                          t.turn_seq DESC, m.seq_no DESC, m.id DESC
+                      </otherwise>
+                  </choose>
+                  LIMIT #{term.termLimit}
+                ) term_hits
+            </foreach>
+        ) ranked
+        ORDER BY ranked.term_rank ASC
     </select>
 
     <select id="selectScrollAnchor" resultMap="WorkingMemorySearchMessageMap">

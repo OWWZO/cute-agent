@@ -25,6 +25,30 @@ public class WorkingMemoryMapperBindingTest {
 
         Assert.assertTrue(configuration.hasStatement(NAMESPACE + ".selectScrollBefore"));
         Assert.assertTrue(configuration.hasStatement(NAMESPACE + ".selectScrollAfter"));
+        Assert.assertTrue(configuration.hasStatement(NAMESPACE + ".scanTerms"));
+    }
+
+    @Test
+    public void batchedTermScanKeepsUserIsolationAndPerTermLimits() throws Exception {
+        Configuration configuration = parse("mybatis/mapper/working_memory_message_mapper.xml");
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("userId", "user-1");
+        params.put("sessionId", null);
+        params.put("roles", List.of("USER", "ASSISTANT"));
+        params.put("terms", List.of(
+                new org.wwz.ai.infrastructure.dao.cute.WorkingMemoryTermScanTerm(
+                        "rejected", 0, 8, 0),
+                new org.wwz.ai.infrastructure.dao.cute.WorkingMemoryTermScanTerm(
+                        "declined", 1, 10, 1)));
+
+        String sql = normalize(configuration.getMappedStatement(NAMESPACE + ".scanTerms")
+                .getBoundSql(params)
+                .getSql());
+        Assert.assertTrue(sql.contains("m.memory_scope = 'main'"));
+        Assert.assertTrue(sql.contains("s.session_kind = 'conversation'"));
+        Assert.assertEquals(2, countOccurrences(sql, "LIMIT ?"));
+        Assert.assertEquals(1, countOccurrences(sql, "UNION ALL"));
     }
 
     /**
@@ -70,5 +94,15 @@ public class WorkingMemoryMapperBindingTest {
 
     private static String normalize(String sql) {
         return sql == null ? "" : sql.replaceAll("\\s+", " ").trim();
+    }
+
+    private static int countOccurrences(String text, String fragment) {
+        int count = 0;
+        int index = text.indexOf(fragment);
+        while (index >= 0) {
+            count++;
+            index = text.indexOf(fragment, index + fragment.length());
+        }
+        return count;
     }
 }
