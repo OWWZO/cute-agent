@@ -3,6 +3,7 @@ package org.wwz.ai.domain.agent.rag.port;
 import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelInfo;
 import org.wwz.ai.domain.agent.rag.model.chatmodel.ChatModelSchema;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -45,6 +46,13 @@ public interface IChatModelMetadataRepository {
      * {@code modelCode} 为空白时返回空列表。</p>
      */
     List<ChatModelSchema> listDistinctSchemas(String modelCode);
+
+    /**
+     * 按多个 {@code modelCode} 去重读取字段；重复行按 id 倒序取最新一条。
+     * <p>一次 {@code IN} 查询最多读取 {@link #MAX_DISTINCT_SCHEMA_ROWS} 行；
+     * 空白 / 空集合返回空列表且不发 SQL。</p>
+     */
+    List<ChatModelSchema> listDistinctSchemas(Collection<String> modelCodes);
 
     /** 同一事务内批量插入，不做 upsert；入参为 null/空时为空操作。 */
     void saveModelSchemas(List<ChatModelSchema> schemaList);

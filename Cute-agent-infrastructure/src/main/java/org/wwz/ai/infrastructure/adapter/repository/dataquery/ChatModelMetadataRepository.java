@@ -16,9 +16,12 @@ import org.wwz.ai.infrastructure.dao.po.cute.chatmodel.ChatModelInfoPO;
 import org.wwz.ai.infrastructure.dao.po.cute.chatmodel.ChatModelSchemaPO;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 问数模型元数据仓储实现。
@@ -96,6 +99,54 @@ public class ChatModelMetadataRepository implements IChatModelMetadataRepository
                     modelCode, MAX_DISTINCT_SCHEMA_ROWS);
         }
         return distinctSchemas(schemaList);
+    }
+
+    @Override
+    public List<ChatModelSchema> listDistinctSchemas(Collection<String> modelCodes) {
+        Set<String> codes = normalizedCodes(modelCodes);
+        if (codes.isEmpty()) {
+            return List.of();
+        }
+        // 单条 IN SQL 的 LIMIT 是全局上限；调用方需控制 codes 数量，避免多模型合计触顶。
+        List<ChatModelSchemaPO> schemaList = chatModelSchemaMapper.selectList(
+                Wrappers.<ChatModelSchemaPO>lambdaQuery()
+                        .in(ChatModelSchemaPO::getModelCode, codes)
+                        .orderByDesc(ChatModelSchemaPO::getId)
+                        .last("LIMIT " + MAX_DISTINCT_SCHEMA_ROWS)
+        );
+        if (schemaList != null && schemaList.size() >= MAX_DISTINCT_SCHEMA_ROWS) {
+            log.warn("chatModelSchema.distinct_query reached batch limit={} modelCount={}",
+                    MAX_DISTINCT_SCHEMA_ROWS, codes.size());
+        }
+        return inCodeOrder(distinctSchemas(schemaList), codes);
+    }
+
+    private Set<String> normalizedCodes(Collection<String> modelCodes) {
+        Set<String> codes = new LinkedHashSet<>();
+        if (modelCodes == null) {
+            return codes;
+        }
+        for (String modelCode : modelCodes) {
+            if (StringUtils.isNotBlank(modelCode)) {
+                codes.add(modelCode.trim());
+            }
+        }
+        return codes;
+    }
+
+    private List<ChatModelSchema> inCodeOrder(List<ChatModelSchema> schemas, Collection<String> modelCodes) {
+        Map<String, List<ChatModelSchema>> byModelCode = new LinkedHashMap<>();
+        for (ChatModelSchema schema : schemas) {
+            byModelCode.computeIfAbsent(schema.getModelCode(), ignored -> new ArrayList<>()).add(schema);
+        }
+        List<ChatModelSchema> result = new ArrayList<>();
+        for (String modelCode : modelCodes) {
+            List<ChatModelSchema> group = byModelCode.remove(modelCode);
+            if (group != null) {
+                result.addAll(group);
+            }
+        }
+        return result;
     }
 
     private List<ChatModelSchema> distinctSchemas(List<ChatModelSchemaPO> schemaList) {
