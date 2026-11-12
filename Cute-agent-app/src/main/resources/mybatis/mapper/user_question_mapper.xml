@@ -22,24 +22,16 @@
         <result column="deleted" property="deleted"/>
     </resultMap>
 
-    <!-- 判重与写入在同一条语句内完成，避免 hasOpenBySessionId + insert 的 check-then-act 窗口。 -->
-    <insert id="insertIfAbsent" parameterType="org.wwz.ai.infrastructure.dao.cute.po.UserQuestionPO" useGeneratedKeys="true" keyProperty="id">
+    <!-- 由 uk_user_question_open 唯一索引兜底并发写入，重复键在仓储层转成业务错误。 -->
+    <insert id="insert" parameterType="org.wwz.ai.infrastructure.dao.cute.po.UserQuestionPO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO ai_agent_user_question (
             question_id, user_id, session_id, source_run_id, source_request_id,
             tool_invocation_id, tool_call_id, questions_json, answers_json, status,
             expires_at, resume_request_id, resume_context_json, create_time, update_time, deleted
-        )
-        SELECT
+        ) VALUES (
             #{questionId}, #{userId}, #{sessionId}, #{sourceRunId}, #{sourceRequestId},
             #{toolInvocationId}, #{toolCallId}, #{questionsJson}, #{answersJson}, #{status},
             #{expiresAt}, #{resumeRequestId}, #{resumeContextJson}, NOW(), NOW(), 0
-        FROM DUAL
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM ai_agent_user_question
-            WHERE session_id = #{sessionId}
-              AND deleted = 0
-              AND status IN ('PENDING', 'RESUME_PENDING')
         )
     </insert>
 
