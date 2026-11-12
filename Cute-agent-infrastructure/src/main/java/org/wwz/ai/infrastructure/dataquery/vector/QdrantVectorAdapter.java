@@ -313,8 +313,10 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
         Map<String, Object> must = filter.getMust();
         ResolvedEndpoint endpoint = resolveEndpoint();
         if (shouldUseRestApi(endpoint)) {
+            Map<String, Object> restFilter = convertFilterToRest(must);
+            assertNonEmptyFilterConditions(must, ((List<?>) restFilter.get("must")).size(), "REST");
             Map<String, Object> body = new LinkedHashMap<>();
-            body.put("filter", convertFilterToRest(must));
+            body.put("filter", restFilter);
             try {
                 executeRestRequest(endpoint, "POST", "/collections/" + collectionName + "/points/delete?wait=true", body);
             } catch (IOException e) {
@@ -322,10 +324,20 @@ public class QdrantVectorAdapter implements VectorSearchPort, VectorIndexAdminPo
             }
             return;
         }
+        Points.Filter grpcFilter = toQdrantFilter(must);
+        assertNonEmptyFilterConditions(must, grpcFilter.getMustCount(), "gRPC");
         try {
-            getClient().deleteAsync(collectionName, toQdrantFilter(must)).get();
+            getClient().deleteAsync(collectionName, grpcFilter).get();
         } catch (Exception e) {
             throw new VectorPortException("Qdrant gRPC 按过滤删除失败", e);
+        }
+    }
+
+    private static void assertNonEmptyFilterConditions(Map<String, Object> must, int conditionCount, String transport) {
+        if (conditionCount == 0 && !must.isEmpty()) {
+            log.warn("Qdrant {} 过滤删除没有生效条件，已拒绝: {}", transport, must.keySet());
+            throw new IllegalArgumentException(
+                    "Qdrant " + transport + " 过滤删除没有生效条件，已拒绝: " + must.keySet());
         }
     }
 
