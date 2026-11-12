@@ -40,8 +40,7 @@ public class AskUserQuestionToolInvocationProjector extends AbstractToolInvocati
                                               List<ArtifactView> artifacts,
                                               AgentStreamAccumulator state) {
         Map<String, Object> input = readMap(invocation == null ? null : invocation.getInputJson());
-        Map<String, Object> observation = readMap(invocation == null ? null : StringUtils.defaultIfBlank(
-                invocation.getToolResult(), invocation.getLlmObservation()));
+        Map<String, Object> observation = readMap(invocation == null ? null : invocation.resolveResultText());
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("messageType", "ask_user_question");
 

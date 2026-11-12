@@ -22,7 +22,7 @@ export interface DocxPreviewFit {
  * 不做放大（放大只会把纸张拉模糊，且与官方预览行为不一致）。
  *
  * `availableWidth` 必须是内容盒宽度；调用方应先排除 padding、border 和滚动条。
- * 任一尺寸非有限值或不为正时返回 `null`，调用方不得沿用上一次 fit。
+ * 任一尺寸非有限值或不为正时返回 `null`；调用方应保留上一次有效 fit 保持布局稳定。
  */
 export function calculateDocxPreviewFit({
   availableWidth,
@@ -52,15 +52,15 @@ export function calculateDocxPreviewFit({
   };
 }
 
+const SCALE_EPSILON = 0.001;
+const PIXEL_EPSILON = 0.5;
+
 /**
  * 判断两次 fit 是否「足够接近」。
  *
  * 拖动面板会按帧触发 ResizeObserver，浮点抖动若直接写入 state 会导致
  * 每帧重渲染；用阈值把亚像素变化吸收掉。
  */
-const SCALE_EPSILON = 0.001;
-const PIXEL_EPSILON = 0.5;
-
 export function isSameDocxPreviewFit(
   current: DocxPreviewFit | null,
   next: DocxPreviewFit

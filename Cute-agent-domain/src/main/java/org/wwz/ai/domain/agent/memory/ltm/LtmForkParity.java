@@ -3,7 +3,6 @@ package org.wwz.ai.domain.agent.memory.ltm;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;

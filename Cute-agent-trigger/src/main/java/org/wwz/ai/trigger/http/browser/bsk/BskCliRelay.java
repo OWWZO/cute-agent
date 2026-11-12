@@ -56,6 +56,11 @@ public class BskCliRelay {
     /** 取消方法：网关先查本地令牌，再转发给扩展（对齐 Rust {@code handle_cancel}）。 */
     private static final String METHOD_CANCEL = "cancel";
 
+    private static final String METHOD_TOOL_DIALOG_STATUS = "tool.dialog_status";
+    private static final String METHOD_TOOL_DIALOG_ACCEPT = "tool.dialog_accept";
+    private static final String METHOD_TOOL_DIALOG_DISMISS = "tool.dialog_dismiss";
+    private static final String METHOD_TOOL_RECORD_STOP = "tool.record_stop";
+
     /** daemon 层操作恢复方法：扩展不实现，由网关的 operation registry 回答。 */
     private static final String METHOD_OPERATION_AWAIT = "tool.operation_await";
     private static final String METHOD_OPERATION_CANCEL = "tool.operation_cancel";
@@ -67,15 +72,15 @@ public class BskCliRelay {
 
     /** 这些 tool 方法不注册 dialog operation，直接按普通控制请求转发。 */
     private static final Set<String> NON_DIALOG_AWARE_TOOL_METHODS = Set.of(
-            "tool.session_start",
-            "tool.session_stop",
-            "tool.dialog_status",
-            "tool.dialog_accept",
-            "tool.dialog_dismiss",
-            "tool.operation_await",
-            "tool.operation_cancel",
-            "tool.wait_ms",
-            "tool.record_stop",
+            METHOD_TOOL_SESSION_START,
+            METHOD_TOOL_SESSION_STOP,
+            METHOD_TOOL_DIALOG_STATUS,
+            METHOD_TOOL_DIALOG_ACCEPT,
+            METHOD_TOOL_DIALOG_DISMISS,
+            METHOD_OPERATION_AWAIT,
+            METHOD_OPERATION_CANCEL,
+            METHOD_TOOL_WAIT_MS,
+            METHOD_TOOL_RECORD_STOP,
             "tool.debug");
 
     /** 控制面方法不进入 session 串行车道。 */
@@ -87,12 +92,12 @@ public class BskCliRelay {
             METHOD_TOOL_WAIT_MS,
             METHOD_OPERATION_AWAIT,
             METHOD_OPERATION_CANCEL,
-            "tool.session_start",
-            "tool.session_stop",
-            "tool.dialog_status",
-            "tool.dialog_accept",
-            "tool.dialog_dismiss",
-            "tool.record_stop",
+            METHOD_TOOL_SESSION_START,
+            METHOD_TOOL_SESSION_STOP,
+            METHOD_TOOL_DIALOG_STATUS,
+            METHOD_TOOL_DIALOG_ACCEPT,
+            METHOD_TOOL_DIALOG_DISMISS,
+            METHOD_TOOL_RECORD_STOP,
             "tool.debug");
 
     /**

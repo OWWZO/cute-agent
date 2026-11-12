@@ -32,17 +32,19 @@ function resolveMapHeight(height?: number): string {
   return `min(${Math.min(720, Math.max(200, height ?? 400))}px, max(280px, 82vw))`;
 }
 
+type RouteKind = "none" | "street" | "overview" | "loading";
+
 function resolveRouteKind(
   route: boolean | undefined,
   streetPoints: LatLng[] | null | undefined
-): "none" | "street" | "overview" | "loading" {
+): RouteKind {
   if (!route) return "none";
   if (streetPoints?.length) return "street";
   if (streetPoints === null) return "overview";
   return "loading";
 }
 
-function resolveRouteNote(routeKind: "none" | "street" | "overview" | "loading"): string {
+function resolveRouteNote(routeKind: RouteKind): string {
   if (routeKind === "street") {
     return "The line follows streets (OSRM / OpenStreetMap, driving profile); it is an overview, not turn-by-turn directions.";
   }

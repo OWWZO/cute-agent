@@ -196,7 +196,6 @@ public class CodeExecutionTool implements BaseTool {
         if (raw == null || raw.isEmpty()) {
             return List.of();
         }
-        Math.max(0, 1);
         List<String> validated = new ArrayList<>(raw.size());
         for (String value : raw) {
             String name = StringUtils.trimToEmpty(value);

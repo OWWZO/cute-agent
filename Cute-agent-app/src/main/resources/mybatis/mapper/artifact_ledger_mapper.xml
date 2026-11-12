@@ -182,38 +182,7 @@
     </select>
 
     <select id="queryBySessionIdLimit" resultMap="ArtifactRecordMap">
-        SELECT a.*
-        FROM ai_agent_artifact a
-        INNER JOIN ai_agent_dialogue_run r ON r.id = a.run_id
-        WHERE r.session_id = #{sessionId}
-          AND a.deleted = 0
-          AND a.visibility = 'visible'
-        UNION
-        SELECT a.*
-        FROM ai_agent_artifact a
-        INNER JOIN ai_agent_tool_invocation c ON c.id = a.tool_invocation_id
-        INNER JOIN ai_agent_tool_invocation p ON p.tool_call_id = c.parent_tool_call_id
-        INNER JOIN ai_agent_dialogue_run pr ON pr.id = p.run_id
-        WHERE a.deleted = 0
-          AND a.visibility = 'visible'
-          AND c.deleted = 0
-          AND p.deleted = 0
-          AND pr.deleted = 0
-          AND c.sub_agent_id IS NOT NULL
-          AND pr.session_id = #{sessionId}
-        UNION
-        SELECT a.*
-        FROM ai_agent_artifact a
-        INNER JOIN ai_agent_dialogue_run r ON r.id = a.run_id
-        WHERE a.deleted = 0
-          AND a.visibility = 'visible'
-          AND r.session_id IN (
-              SELECT s.session_id
-              FROM ai_agent_dialogue_session s
-              WHERE s.parent_session_id = #{sessionId}
-                AND s.deleted = 0
-          )
-        ORDER BY create_time ASC, id ASC
+        <include refid="artifactQueryBySessionId"/>
         LIMIT #{limit}
     </select>
 

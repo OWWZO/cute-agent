@@ -221,7 +221,7 @@ const main = async () => {
     const chunk = files.slice(offset, offset + scanConcurrency);
     const results = await Promise.all(chunk.map(scanFile));
     for (const fileViolations of results) {
-      if (fileViolations == null) continue;
+      if (fileViolations === null) continue;
       scanned++;
       violations.push(...fileViolations);
     }

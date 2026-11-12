@@ -9,8 +9,8 @@ import java.util.Map;
 
 /**
  * Structured answer for one NL2SQL-generated query.
- * <p>结果集字段排除出 toString/equals：避免误日志把整表数据（可能含 PII）打出来，
- * 也避免 equals/hashCode 随行数线性变慢。</p>
+ * <p>结果集、生成的 SQL 与 NL2SQL 原始结果都排除出 toString/equals：避免误日志把整表数据
+ * （可能含 PII）或大段生成内容打出来，也避免 equals/hashCode 随这些字段线性变慢。</p>
  */
 @Data
 @ToString(exclude = {"dataList", "querySqlList", "nl2sqlResult"})

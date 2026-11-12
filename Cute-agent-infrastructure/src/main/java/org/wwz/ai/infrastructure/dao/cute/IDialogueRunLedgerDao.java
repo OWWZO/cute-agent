@@ -51,7 +51,7 @@ public interface IDialogueRunLedgerDao {
      * {@code create_time ASC, id ASC} 稳定排序和元组比较。</p>
      */
     List<DialogueRunView> queryBySessionIdAfter(@Param("sessionId") String sessionId,
-                                                @Param("afterCreateTime") java.time.LocalDateTime afterCreateTime,
+                                                @Param("afterCreateTime") LocalDateTime afterCreateTime,
                                                 @Param("afterId") Long afterId,
                                                 @Param("limit") int limit);
 
@@ -69,7 +69,7 @@ public interface IDialogueRunLedgerDao {
      * （单实例部署下是充要条件；多实例见 BackgroundRunReconciler 的 R1 风险说明）。
      * WAITING_INPUT(5) 是 HITL 合法停驻态，不在扫描范围内。
      */
-    List<DialogueRun> queryOrphanedRunningRuns(@Param("startedBefore") java.time.LocalDateTime startedBefore,
+    List<DialogueRun> queryOrphanedRunningRuns(@Param("startedBefore") LocalDateTime startedBefore,
                                                @Param("limit") int limit);
 
 }

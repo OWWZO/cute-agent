@@ -34,7 +34,7 @@ public interface ExecutionLedgerQueryService {
     /** 最近工具调用查询的硬上限，与其它台账分页保持一致。 */
     int MAX_RECENT_TOOL_INVOCATION_PAGE_SIZE = 100;
     /** 单次会话 artifact 查询的硬上限，避免长会话把整张产物表读进内存。 */
-    int MAX_SESSION_ARTIFACTS = 500;
+    int MAX_SESSION_ARTIFACTS = IExecutionLedgerReadRepository.DEFAULT_SESSION_ARTIFACT_LIMIT;
 
     /** 已授权调用方使用：调用方必须先完成归属校验。 */
     ExecutionRunDetail queryRunDetail(String requestId);

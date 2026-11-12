@@ -107,7 +107,10 @@ export function FeaturedConversationsView(
                         />
                       </PaginationItem>
                     ) : null}
-                    {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNo) => (
+                    {Array.from(
+                      { length: totalPages },
+                      (_, index) => index + 1
+                    ).map((pageNo) => (
                       <PaginationItem key={pageNo}>
                         <PaginationLink
                           href="#"

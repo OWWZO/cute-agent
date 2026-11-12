@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass, field
 from typing import Any
@@ -13,11 +12,6 @@ MULTI_AGENT_VIEW_SCHEMA_VERSION = "1.0"
 
 class MultiAgentViewError(ValueError):
     """Raised when agent ownership cannot be recovered without guessing."""
-
-
-def _stable_id(prefix: str, value: str) -> str:
-    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
-    return f"{prefix}-{digest}"
 
 
 @dataclass(slots=True)

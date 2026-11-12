@@ -135,8 +135,8 @@ export const MonthsBetween = defineFunction({
     const [y1, m1, d1] = ymd(parseDate(from).day);
     const [y2, m2, d2] = ymd(parseDate(to).day);
     let months = (y2 - y1) * 12 + (m2 - m1);
-  // MonthsBetween counts complete calendar months; this is not always the inverse
-  // of AddMonths after AddMonths clamps an end-of-month date.
+    // MonthsBetween counts complete calendar months; this is not always the inverse
+    // of AddMonths after AddMonths clamps an end-of-month date.
     if (months > 0 && d2 < d1) months -= 1;
     if (months < 0 && d2 > d1) months += 1;
     return months;

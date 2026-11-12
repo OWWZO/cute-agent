@@ -11,6 +11,8 @@ RUN mvn -B -pl Cute-agent-app -am package \
 FROM node:22-bookworm-slim AS opencli-build
 
 WORKDIR /opt/opencli
+# 前置条件：构建上下文中的 Cute-BrowserStack submodule 必须已初始化
+#   git submodule update --init --recursive Cute-BrowserStack
 COPY Cute-BrowserStack/adapter-host/package.json Cute-BrowserStack/adapter-host/package-lock.json ./
 COPY Cute-BrowserStack/adapter-host/scripts ./scripts
 RUN npm ci

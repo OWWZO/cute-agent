@@ -24,8 +24,9 @@ const BLOCK_FENCE = "userselect";
 const BLOCK_PATTERN = /(?:\n\n)?# userselect:\n```userselect\n([\s\S]*?)\n```\s*$/;
 
 /**
- * The selection entry points are responsible for applying these limits before dispatching.
- * The builders/parsers below intentionally remain lossless and do not validate or truncate.
+ * Only `CONVERSATION_SELECTION_MAX_TEXT_LENGTH` is applied by the selection entry point.
+ * The other two constants are not enforced; `useComposerPromptContexts` applies the global
+ * `MAX_PROMPT_CONTEXT_*` caps instead. The builders/parsers below stay lossless.
  */
 export const CONVERSATION_SELECTION_MAX_TEXT_LENGTH = 8_000;
 export const CONVERSATION_SELECTION_MAX_COUNT = 8;

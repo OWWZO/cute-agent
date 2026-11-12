@@ -83,6 +83,7 @@ public final class DialogueSessionAggregate {
 
     /**
      * 结束指定 run：先落 run 终态，再同步会话 finishedRunCount；失败时额外累计 failedRunCount。
+     * <p>只接受 SUCCESS / FAILED / TIMEOUT / STOPPED 四种终态，不接受 HITL 的 WAITING_INPUT。</p>
      */
     public DialogueRun finishRun(String requestId, Integer status, String summary, LocalDateTime now) {
         LocalDateTime finishedAt = now == null ? LocalDateTime.now() : now;

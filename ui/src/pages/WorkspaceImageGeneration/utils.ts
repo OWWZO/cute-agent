@@ -6,10 +6,7 @@ import type {
 import {
   normalizeFileUrlForBrowser,
   normalizeToolBaseUrlForBrowser,
-  trimTrailingSlash,
 } from "@/utils/fileUrl";
-
-export { trimTrailingSlash };
 
 const DATA_URL_RE = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i;
 const DATA_URL_IN_TEXT_RE =

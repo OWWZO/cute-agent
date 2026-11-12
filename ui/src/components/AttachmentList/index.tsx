@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   FILE_KIND_TONE,
   type FileKind,
+  resolveFileExtension,
   resolveFileKind,
 } from "@/utils/fileKind";
 
@@ -68,10 +69,6 @@ function WorkspaceFilesEntry({ onOpen }: { onOpen?: () => void }) {
   );
 }
 
-function resolveExt(file: CHAT.TFile): string {
-  return (file.type || file.name?.split(".").pop() || "").toLowerCase();
-}
-
 /** Attachment 列表把 py 并入 code 展示。 */
 function resolveKind(file: CHAT.TFile): FileKind {
   if (isImageFileLike(file)) {
@@ -82,7 +79,7 @@ function resolveKind(file: CHAT.TFile): FileKind {
 }
 
 function typeLabel(file: CHAT.TFile, kind: FileKind): string {
-  const ext = resolveExt(file).toUpperCase();
+  const ext = resolveFileExtension(file.type, file.name).toUpperCase();
   switch (kind) {
     case "img":
       return file.originFileName || describeFromName(file.name) || `Image · ${ext || "PNG"}`;

@@ -77,12 +77,13 @@ export interface CodeViewerProps extends HTMLAttributes<HTMLDivElement> {
    */
   commentResetKey?: string;
   /**
-   * 要滚动到的评论范围。必须与 `focusRequestId` 同时传入；两者都缺失时不会聚焦。
+   * 要滚动到的评论范围。必须与 `focusRequestId` 同时传入；任一缺失都不会聚焦。
    */
   focusedRange?: CodeCommentRange | null;
   /**
-   * 聚焦请求的一次性标识。每次新聚焦都应生成新值；仅修改 `focusedRange`
-   * 而沿用旧 id 不会再次触发滚动。
+   * 聚焦请求的标识，同时用作评论 id：必须与评论的 `data-code-comment-id` 一致，
+   * 否则只能退化为按行号滚动。重复聚焦时可通过改变或先清空再恢复 `focusedRange`
+   * 触发 effect。
    */
   focusRequestId?: string;
   /**

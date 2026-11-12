@@ -11,7 +11,7 @@ import { filterToolCatalog, type ToolCatalogFilterCategory } from "./toolCatalog
 
 export type ToolCatalogProps = {
   embedded?: boolean;
-  onStartToolTask: (draft: ToolTaskDraft) => void;
+  onStartToolTask: (draft: ToolTaskDraft) => void | Promise<void>;
 };
 
 export default function ToolCatalog({ embedded, onStartToolTask }: ToolCatalogProps) {

@@ -207,17 +207,15 @@ public class SessionWorkingMemoryServiceImpl implements SessionWorkingMemoryServ
         if (messages == null || messages.isEmpty()) {
             return 0;
         }
-        int total = 0;
-        int projectableCount = 0;
+        List<Message> projectable = new ArrayList<>();
         for (Message message : messages) {
             if (message != null && message.getRole() != null) {
-                total += tokenCounter.estimateOneMessage(message);
-                projectableCount++;
+                projectable.add(message);
             }
         }
-        if (projectableCount == 0) {
+        if (projectable.isEmpty()) {
             return 0;
         }
-        return tokenCounter.estimateMessages(List.of()) + total;
+        return tokenCounter.estimateMessages(projectable);
     }
 }

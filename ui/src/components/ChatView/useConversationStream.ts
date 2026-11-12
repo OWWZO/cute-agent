@@ -1989,7 +1989,8 @@ export function useConversationStream(
     }
   );
 
-  applySessionObservationRef.current = (conversationId, chats) => {    const plan = planSessionObservation({
+  applySessionObservationRef.current = (conversationId, chats) => {
+    const plan = planSessionObservation({
       conversationId,
       chats,
       live: [...liveStreamsRef.current.values()].map((entry) => ({

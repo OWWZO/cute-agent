@@ -81,6 +81,9 @@ public interface JdbcDialect {
         return " LIMIT " + ((long) start * pageSize) + "," + pageSize;
     }
 
+    /**
+     * 分页 SPI：由方言或单测显式调用；主执行路径当前只使用 {@link #formatSql(String)}。
+     */
     default String formatPagingSql(int start, int pageSize, String sql) {
         // 外部页码按 1 开始；0 或负数都收敛到第 1 页，避免拼出 LIMIT -N。
         if (start < 1) {
@@ -120,6 +123,9 @@ public interface JdbcDialect {
                 newSql.matches("(?s).*\\bLIMIT\\s+\\d+\\s+OFFSET\\s+\\d+\\s*(\\s|;|$).*");
     }
 
+    /**
+     * 限流分页 SPI：由方言或单测显式调用；主执行路径当前只使用 {@link #formatSql(String)}。
+     */
     default String formatLimitSql(int start, int pageSize, String sql) {
         // 已经带 LIMIT 的 SQL 原样保留，否则追加当前方言的分页片段。
         String newSql = formatSql(sql);

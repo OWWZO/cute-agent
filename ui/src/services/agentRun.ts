@@ -16,7 +16,8 @@ function resolveTrustedOrigin(): string {
 
 export function isTrustedAgentRunUrl(url: string): boolean {
   try {
-    return new URL(url, resolveTrustedOrigin()).origin === resolveTrustedOrigin();
+    const trustedOrigin = resolveTrustedOrigin();
+    return new URL(url, trustedOrigin).origin === trustedOrigin;
   } catch {
     return false;
   }

@@ -19,7 +19,7 @@ export type ToolTaskDialogProps = {
   tool: ToolCatalogItem;
   toolFunction: ToolFunction;
   onClose: () => void;
-  onStartToolTask: (draft: ToolTaskDraft) => void;
+  onStartToolTask: (draft: ToolTaskDraft) => void | Promise<void>;
   onSubmitted: () => void;
 };
 

@@ -24,20 +24,24 @@ import java.util.Map;
 @AllArgsConstructor
 public class AgentStreamResult {
 
+    private static final String DEFAULT_STATUS = "running";
+    private static final String DEFAULT_CONTENT_TYPE = "markdown";
+    private static final String DEFAULT_FRAME_TYPE = "result";
+
     /**
      * 无参构造必须显式补默认值：{@code @Builder.Default} 只对 builder 生效，
      * 字段初始化器会被 Lombok 移到 {@code $default$xxx()}，直接 new 的实时帧会得到 null。
      */
     public AgentStreamResult() {
-        this.status = "running";
+        this.status = DEFAULT_STATUS;
         this.contentDelta = "";
         this.content = "";
-        this.contentType = "markdown";
-        this.frameType = "result";
+        this.contentType = DEFAULT_CONTENT_TYPE;
+        this.frameType = DEFAULT_FRAME_TYPE;
     }
 
     @Builder.Default
-    private String status = "running";
+    private String status = DEFAULT_STATUS;
     @Builder.Default
     private String contentDelta = "";
     @Builder.Default
@@ -48,7 +52,7 @@ public class AgentStreamResult {
     @EqualsAndHashCode.Exclude
     private Map<String, Object> eventData;
     @Builder.Default
-    private String contentType = "markdown";
+    private String contentType = DEFAULT_CONTENT_TYPE;
     private String traceId;
     private String requestId;
     private boolean encrypted;
@@ -56,7 +60,7 @@ public class AgentStreamResult {
     @EqualsAndHashCode.Exclude
     private List<String> messages;
     @Builder.Default
-    private String frameType = "result";
+    private String frameType = DEFAULT_FRAME_TYPE;
     private String errorMessage;
     private long sequence;
     private Long retryAfterMs;

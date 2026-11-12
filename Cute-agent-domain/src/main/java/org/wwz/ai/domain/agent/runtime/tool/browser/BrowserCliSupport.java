@@ -145,7 +145,7 @@ public final class BrowserCliSupport {
         }
     }
 
-    /** 发布 viewport：树/URL 走 SSE，截图转 artifact 引用后从观察里移除。 */
+    /** 发布 viewport：树/URL 走 SSE，截图转 artifact 引用；stdout 原文仍保留截图数据。 */
     public static void publishViewport(AgentContext agentContext, String stdout, Map<String, Object> fields) {
         Map<String, Object> payload = extractViewport(stdout);
         if (payload.isEmpty()) {
@@ -160,6 +160,7 @@ public final class BrowserCliSupport {
         Object image = payload.get("imageBase64");
         if (image != null) {
             String artifactRef = BrowserViewportPublisher.uploadPng(agentContext, String.valueOf(image));
+            // 兼容调用方可能显式放入的顶层键；payload 中的截图数据不在 fields 顶层。
             fields.remove("imageBase64");
             if (artifactRef != null) {
                 fields.put("artifactRef", artifactRef);

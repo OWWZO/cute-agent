@@ -334,15 +334,17 @@ def build_cells(
     fingerprints: dict[str, str],
 ) -> list[CellSpec]:
     cells: list[CellSpec] = []
+    spec_hash = spec.spec_hash
+    case_fingerprints = [case_fingerprint(case) for case in cases]
     for arm_name in ("base", "candidate"):
         arm = spec.base if arm_name == "base" else spec.candidate
         for model in spec.models:
-            for case in cases:
+            for case_index, case in enumerate(cases):
                 for repetition in range(1, spec.repetitions + 1):
                     cell_key = sha256_text(
                         "|".join(
                             [
-                                spec.spec_hash,
+                                spec_hash,
                                 arm_name,
                                 model,
                                 case.id,
@@ -354,7 +356,7 @@ def build_cells(
                         "|".join(
                             [
                                 fingerprints[arm_name],
-                                case_fingerprint(case),
+                                case_fingerprints[case_index],
                             ]
                         )
                     )
@@ -362,7 +364,7 @@ def build_cells(
                         CellSpec(
                             cell_key=cell_key,
                             experiment_id=spec.experiment_id,
-                            experiment_spec_hash=spec.spec_hash,
+                            experiment_spec_hash=spec_hash,
                             arm=arm_name,
                             model=model,
                             case=case,
@@ -488,10 +490,13 @@ def load_existing_cells(
     cells_dir = output_dir / "cells"
     if not cells_dir.exists():
         return result
+    cell_schema: dict[str, Any] | None = None
     for path in sorted(cells_dir.glob("*.json")):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-            jsonschema.validate(payload, _json_schema("cell.schema.json"))
+            if cell_schema is None:
+                cell_schema = _json_schema("cell.schema.json")
+            jsonschema.validate(payload, cell_schema)
             cell = CellResult.from_dict(payload)
         except (OSError, ValueError, KeyError, json.JSONDecodeError, jsonschema.ValidationError) as exc:
             raise ValueError(f"invalid existing cell result: {path}: {exc}") from exc

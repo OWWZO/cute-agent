@@ -352,10 +352,9 @@ function applyRunStatus(
   }
 }
 
-/** 一帧可渲染的子会话事件；实时路径额外带原始帧用于判定收口。 */
+/** 一帧可渲染的子会话事件。 */
 type ChildSessionFrameEvent = {
   eventData: MESSAGE.EventData;
-  frame?: Record<string, unknown>;
 };
 
 function readReplayFrameEvents(
@@ -390,10 +389,7 @@ function readLiveFrameEvents(
     }
     const eventData = readChildSessionEventData(frame);
     if (eventData) {
-      events.push({
-        eventData,
-        frame
-      });
+      events.push({ eventData });
     }
   }
   return events;

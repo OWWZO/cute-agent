@@ -38,7 +38,11 @@ DEFAULT_MANIFEST = PACKAGE_ROOT / "manifest.yaml"
 
 
 def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _invocation_arguments(item: dict[str, Any]) -> dict[str, Any]:

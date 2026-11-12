@@ -237,16 +237,12 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                 try {
                     AgentExecutorSupport.execute(dispatchExecutor, "dispatch", agentRequest.getRequestId(),
                             () -> dispatchOnExecutor(agentRequest, deferredStream));
-                } catch (AgentExecutorBusyException e) {
-                    log.warn("{} deferred dispatch busy", agentRequest.getRequestId(), e);
-                    activeAgentRunRegistry.end(agentRequest.getRequestId());
-                    try {
-                        deferredStream.completeWithError(e);
-                    } finally {
-                        notifyRunSettled(agentRequest);
-                    }
                 } catch (RuntimeException e) {
-                    log.error("{} deferred dispatch failed", agentRequest.getRequestId(), e);
+                    if (e instanceof AgentExecutorBusyException) {
+                        log.warn("{} deferred dispatch busy", agentRequest.getRequestId(), e);
+                    } else {
+                        log.error("{} deferred dispatch failed", agentRequest.getRequestId(), e);
+                    }
                     activeAgentRunRegistry.end(agentRequest.getRequestId());
                     try {
                         deferredStream.completeWithError(e);

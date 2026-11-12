@@ -8,6 +8,7 @@ import {
   MAX_PROMPT_CONTEXT_TOTAL_CHARS,
   WEB_ELEMENT_ADD_TO_CHAT_EVENT,
   WEB_ELEMENT_REMOVE_FROM_CHAT_EVENT,
+  createPromptContextId,
   isCodeCommentAddToChatEvent,
   isCodeCommentPayload,
   isCodeCommentRemoveFromChatEvent,
@@ -21,7 +22,6 @@ import {
   type ConversationSelectionAttachment,
   type WebElementAttachment,
 } from "@/lib/promptContexts";
-import { createPromptContextId } from "@/lib/promptContexts";
 
 export interface ComposerPromptContextState {
   codeComments: readonly CodeCommentAttachment[];

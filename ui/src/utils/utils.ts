@@ -240,12 +240,12 @@ export const parseCSVData = (str: string) =>  {
   const jsonObj = str.split('\n');
   let arrHeader: string[] = [];
 
-  jsonObj.forEach((line, index) => {
+  jsonObj.forEach((line, rowIndex) => {
     if (line.length > 0) {
       const row = `${line}`;
       if (row.trim().length > 0) {
         const kv = line.split(',');
-        if (index === 0) {
+        if (rowIndex === 0) {
           // 获取column表头
           arrHeader = kv;
         } else {
@@ -257,15 +257,9 @@ export const parseCSVData = (str: string) =>  {
 
             if (!arrHeader[index]) continue;
             if (!obj[name]) {
-              try {
-                if (kv[index]) {
-                  obj[name] = String(kv[index]);
-                } else {
-                  obj[name] = '';
-                }
-              } catch (err: unknown) {
-                // throw new Error(err);
-                console.error(err);
+              if (kv[index]) {
+                obj[name] = String(kv[index]);
+              } else {
                 obj[name] = '';
               }
             }
