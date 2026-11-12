@@ -6,7 +6,9 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
+import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
@@ -22,6 +24,19 @@ import java.util.regex.Pattern;
  * 只用于「链接展示可达性」这类不产生网络请求的场景。</p>
  */
 public final class OutboundUrlGuard {
+
+    @FunctionalInterface
+    public interface HostResolver {
+        InetAddress[] resolve(String host) throws UnknownHostException;
+    }
+
+    public record ValidatedHttpUrl(URI uri, String host, List<InetAddress> addresses) {
+        public ValidatedHttpUrl {
+            Objects.requireNonNull(uri, "uri");
+            Objects.requireNonNull(host, "host");
+            addresses = List.copyOf(Objects.requireNonNull(addresses, "addresses"));
+        }
+    }
 
     private static final Pattern NUMERIC_HOST = Pattern.compile("^[0-9.]+$");
     private static final Pattern HEX_IPV4_PART = Pattern.compile("^0[xX][0-9a-fA-F]+$");
@@ -42,25 +57,48 @@ public final class OutboundUrlGuard {
      * @throws IllegalArgumentException 地址非法或解析到非公网地址
      */
     public static String validateHttpUrl(String rawUrl) {
-        URI uri = parseHttpUri(rawUrl);
-        String host = stripBrackets(uri.getHost());
-        if (isBlockedHostForDisplay(host)) {
-            throw new IllegalArgumentException("目标地址指向内网或非法主机: " + host);
-        }
-        if (!isIpLiteral(host)) {
-            InetAddress[] addresses;
-            try {
-                addresses = InetAddress.getAllByName(host);
-            } catch (UnknownHostException e) {
-                throw new IllegalArgumentException("目标域名无法解析: " + host, e);
-            }
-            for (InetAddress address : addresses) {
-                if (isBlockedAddress(address)) {
-                    throw new IllegalArgumentException("目标域名解析到非公网地址: " + host);
-                }
-            }
-        }
+        resolveHttpUrl(rawUrl);
         return rawUrl;
+    }
+
+    /**
+     * 解析并校验一次 URL，返回后续连接必须固定使用的地址集合。
+     */
+    public static ValidatedHttpUrl resolveHttpUrl(String rawUrl) {
+        return resolveHttpUrl(rawUrl, InetAddress::getAllByName);
+    }
+
+    public static ValidatedHttpUrl resolveHttpUrl(String rawUrl, HostResolver resolver) {
+        Objects.requireNonNull(resolver, "resolver");
+        URI uri = parseHttpUri(rawUrl);
+        String rawHost = stripBrackets(uri.getHost());
+        String host = normalizeHost(rawHost);
+        if (isBlockedHostForDisplay(rawHost)) {
+            throw new IllegalArgumentException("目标地址指向内网或非法主机: " + rawHost);
+        }
+        InetAddress[] resolved;
+        if (!isIpLiteral(host)) {
+            try {
+                resolved = resolver.resolve(rawHost);
+            } catch (UnknownHostException e) {
+                throw new IllegalArgumentException("目标域名无法解析: " + rawHost, e);
+            }
+        } else {
+            try {
+                resolved = new InetAddress[]{InetAddress.getByName(host)};
+            } catch (UnknownHostException e) {
+                throw new IllegalArgumentException("目标 IP 地址非法: " + rawHost, e);
+            }
+        }
+        if (resolved == null || resolved.length == 0) {
+            throw new IllegalArgumentException("目标域名无法解析: " + rawHost);
+        }
+        for (InetAddress address : resolved) {
+            if (isBlockedAddress(address)) {
+                throw new IllegalArgumentException("目标域名解析到非公网地址: " + rawHost);
+            }
+        }
+        return new ValidatedHttpUrl(uri, host, List.of(resolved));
     }
 
     /**

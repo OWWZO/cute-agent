@@ -4,20 +4,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
-import org.wwz.ai.domain.agent.security.OutboundUrlGuard;
+import org.wwz.ai.domain.agent.security.PinnedHttpFetcher;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,13 +26,6 @@ import java.util.Map;
 public class SkillPackageService {
 
     private static final int MAX_REDIRECTS = 5;
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
-    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
-            .connectTimeout(CONNECT_TIMEOUT)
-            // 重定向必须逐跳校验，禁止客户端自动跟随到内网地址。
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
 
     private final SkillRuntimeOptions skillRuntimeOptions;
     private final SkillRegistry skillRegistry;
@@ -198,64 +185,18 @@ public class SkillPackageService {
             return installZip(bytes, url.substring(url.lastIndexOf('/') + 1), replace, SkillTrustLevel.URL);
         } catch (SkillLoadException e) {
             throw e;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new SkillLoadException("下载被中断", e);
         } catch (Exception e) {
             throw new SkillLoadException("下载/导入失败：" + e.getMessage(), e);
         }
     }
 
-    private byte[] downloadZip(String url) throws IOException, InterruptedException {
-        URI uri = URI.create(OutboundUrlGuard.validateHttpUrl(url));
-        for (int redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
-            HttpRequest request = HttpRequest.newBuilder(uri)
-                    .timeout(REQUEST_TIMEOUT)
-                    .GET()
-                    .build();
-            HttpResponse<InputStream> response =
-                    HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            int status = response.statusCode();
-            if (isRedirect(status)) {
-                String location = response.headers().firstValue("Location").orElse(null);
-                response.body().close();
-                if (StringUtils.isBlank(location)) {
-                    throw new SkillLoadException("下载失败：重定向缺少 Location");
-                }
-                uri = URI.create(OutboundUrlGuard.validateHttpUrl(uri.resolve(location.trim()).toString()));
-                continue;
-            }
-            try (InputStream body = response.body()) {
-                if (status != 200) {
-                    throw new SkillLoadException("下载失败：HTTP " + status);
-                }
-                long declared = response.headers().firstValueAsLong("Content-Length").orElse(-1L);
-                if (declared > SkillPackageParser.MAX_PACKAGE_BYTES) {
-                    throw new SkillLoadException("技能包超过 32MB");
-                }
-                return readLimited(body, SkillPackageParser.MAX_PACKAGE_BYTES);
-            }
+    private byte[] downloadZip(String url) throws IOException {
+        try {
+            return PinnedHttpFetcher.fetch(
+                    url, MAX_REDIRECTS, SkillPackageParser.MAX_PACKAGE_BYTES);
+        } catch (IOException e) {
+            throw new SkillLoadException(e.getMessage(), e);
         }
-        throw new SkillLoadException("下载失败：重定向次数超过 " + MAX_REDIRECTS);
-    }
-
-    private static boolean isRedirect(int status) {
-        return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
-    }
-
-    private static byte[] readLimited(InputStream in, long maxBytes) throws IOException {
-        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        long total = 0L;
-        int read;
-        while ((read = in.read(buffer)) != -1) {
-            total += read;
-            if (total > maxBytes) {
-                throw new SkillLoadException("技能包超过 32MB");
-            }
-            out.write(buffer, 0, read);
-        }
-        return out.toByteArray();
     }
 
     public List<Map<String, Object>> listInstalled() {

@@ -2,6 +2,10 @@ package org.wwz.ai.domain.agent.security;
 
 import org.junit.Test;
 
+import java.net.InetAddress;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
@@ -78,9 +82,34 @@ public class OutboundUrlGuardTest {
         assertFalse(OutboundUrlGuard.isBlockedHostForDisplay("owwzo.top"));
     }
 
+    @Test
+    public void anyPrivateAddressInDnsResultIsRejected() throws Exception {
+        OutboundUrlGuard.HostResolver resolver = host -> new InetAddress[]{
+                InetAddress.getByName("93.184.216.34"),
+                InetAddress.getByName("127.0.0.1")
+        };
+        assertRejected("https://example.com/skill.zip", resolver);
+    }
+
+    @Test
+    public void validatedAddressesAreReturnedWithoutChangingOriginalHost() throws Exception {
+        InetAddress publicAddress = InetAddress.getByName("93.184.216.34");
+        OutboundUrlGuard.ValidatedHttpUrl target = OutboundUrlGuard.resolveHttpUrl(
+                "https://example.com/skill.zip",
+                host -> new InetAddress[]{publicAddress});
+
+        assertEquals("example.com", target.host());
+        assertEquals("example.com", target.uri().getHost());
+        assertEquals(List.of(publicAddress), target.addresses());
+    }
+
     private static void assertRejected(String url) {
+        assertRejected(url, InetAddress::getAllByName);
+    }
+
+    private static void assertRejected(String url, OutboundUrlGuard.HostResolver resolver) {
         try {
-            OutboundUrlGuard.validateHttpUrl(url);
+            OutboundUrlGuard.resolveHttpUrl(url, resolver);
             fail("should reject: " + url);
         } catch (IllegalArgumentException expected) {
             assertNotNull(expected.getMessage());
