@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import os
 import socket
 import re
@@ -11,6 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from loguru import logger
 
@@ -574,6 +576,73 @@ def generate_excel(params: dict[str, Any], output_path: Path) -> dict[str, Any]:
     }
 
 
+def _resolve_public_template_address(host: str, port: int) -> str:
+    """Resolve a host once and reject if any returned address is not public."""
+    try:
+        addresses = [ipaddress.ip_address(host)]
+    except ValueError:
+        addresses = []
+        for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
+            address = ipaddress.ip_address(info[4][0])
+            if address not in addresses:
+                addresses.append(address)
+    if not addresses:
+        raise ValueError("Template URL host did not resolve")
+    if any(not address.is_global for address in addresses):
+        raise ValueError("Private or internal template URLs are not allowed")
+    return str(addresses[0])
+
+
+def _pinned_template_session(pinned_address: str):
+    """Build a requests session whose sockets connect only to one validated IP."""
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.connection import HTTPConnection, HTTPSConnection
+    from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+
+    class _PinnedConnectionMixin:
+        def __init__(self, *args, pinned_address: str, **kwargs):
+            self._pinned_address = pinned_address
+            super().__init__(*args, **kwargs)
+
+        def _new_conn(self):
+            host = self._dns_host
+            self._dns_host = self._pinned_address
+            try:
+                return super()._new_conn()
+            finally:
+                self._dns_host = host
+
+    class _PinnedHTTPConnection(_PinnedConnectionMixin, HTTPConnection):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, pinned_address=pinned_address, **kwargs)
+
+    class _PinnedHTTPSConnection(_PinnedConnectionMixin, HTTPSConnection):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, pinned_address=pinned_address, **kwargs)
+
+    class _PinnedHTTPConnectionPool(HTTPConnectionPool):
+        ConnectionCls = _PinnedHTTPConnection
+
+    class _PinnedHTTPSConnectionPool(HTTPSConnectionPool):
+        ConnectionCls = _PinnedHTTPSConnection
+
+    class _PinnedHTTPAdapter(HTTPAdapter):
+        def init_poolmanager(self, *args, **kwargs):
+            super().init_poolmanager(*args, **kwargs)
+            self.poolmanager.pool_classes_by_scheme = {
+                "http": _PinnedHTTPConnectionPool,
+                "https": _PinnedHTTPSConnectionPool,
+            }
+
+    session = requests.Session()
+    session.trust_env = False
+    adapter = _PinnedHTTPAdapter()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
 def fill_template(
     params: dict[str, Any], output_path: Path | None = None
 ) -> dict[str, Any]:
@@ -676,35 +745,25 @@ def fill_template(
             raise ValueError("template_string is required for 'string' source")
         template = env.from_string(template_string)
     elif template_source == "url":
-        import ipaddress
-        import requests
-        from urllib.parse import urlparse
-
         template_url = params.get("template_url")
         if not template_url:
             raise ValueError("template_url is required for 'url' source")
         parsed = urlparse(template_url)
         if parsed.scheme not in ("http", "https"):
             raise ValueError("Only http(s) template URLs are allowed")
-        try:
-            host = parsed.hostname
-            if not host:
-                raise ValueError("template_url host is required")
-            for resolved in socket.getaddrinfo(host, None):
-                ip = ipaddress.ip_address(resolved[4][0])
-                if (
-                    ip.is_private
-                    or ip.is_loopback
-                    or ip.is_link_local
-                    or ip.is_reserved
-                    or ip.is_multicast
-                    or ip.is_unspecified
-                ):
-                    raise ValueError("Private or internal template URLs are not allowed")
-        except ValueError:
-            raise
+        host = parsed.hostname
+        if not host:
+            raise ValueError("template_url host is required")
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        if port not in (80, 443):
+            raise ValueError("Template URL port must be 80 or 443")
+        pinned_address = _resolve_public_template_address(host, port)
         # 不跟随重定向：即使初始 host 是公网地址，重定向目标仍可能是内网。
-        resp = requests.get(template_url, timeout=30, allow_redirects=False)
+        session = _pinned_template_session(pinned_address)
+        try:
+            resp = session.get(template_url, timeout=30, allow_redirects=False)
+        finally:
+            session.close()
         if 300 <= resp.status_code < 400:
             raise ValueError("Template URL redirects are not allowed")
         resp.raise_for_status()
