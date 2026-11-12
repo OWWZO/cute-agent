@@ -110,11 +110,7 @@ public class ChatModelSchemaService {
         if (CollectionUtils.isEmpty(modelCodes)) {
             return List.of();
         }
-        List<ChatModelSchema> schemas = new ArrayList<>();
-        for (String modelCode : new LinkedHashSet<>(modelCodes)) {
-            schemas.addAll(listDistinctSchemas(modelCode));
-        }
-        return schemas.stream()
+        return chatModelMetadataRepository.listDistinctSchemas(modelCodes).stream()
                 .filter(schema -> schema.getDefaultRecall() == 1)
                 .collect(Collectors.toList());
     }

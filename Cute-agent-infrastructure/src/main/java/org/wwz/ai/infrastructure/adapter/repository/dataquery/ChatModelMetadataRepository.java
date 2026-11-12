@@ -16,9 +16,12 @@ import org.wwz.ai.infrastructure.dao.po.cute.chatmodel.ChatModelInfoPO;
 import org.wwz.ai.infrastructure.dao.po.cute.chatmodel.ChatModelSchemaPO;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 问数模型元数据仓储实现。
@@ -96,6 +99,68 @@ public class ChatModelMetadataRepository implements IChatModelMetadataRepository
                     modelCode, MAX_DISTINCT_SCHEMA_ROWS);
         }
         return distinctSchemas(schemaList);
+    }
+
+    @Override
+    public List<ChatModelSchema> listDistinctSchemas(Collection<String> modelCodes) {
+        Set<String> codes = normalizedCodes(modelCodes);
+        if (codes.isEmpty()) {
+            return List.of();
+        }
+        // 单条 IN SQL 的 LIMIT 是全局上限；一旦触顶，退回逐模型查询，避免多模型合计
+        // 超过 5000 行时丢掉原实现按模型截断后仍能返回的字段。
+        List<ChatModelSchemaPO> schemaList = chatModelSchemaMapper.selectList(
+                Wrappers.<ChatModelSchemaPO>lambdaQuery()
+                        .in(ChatModelSchemaPO::getModelCode, codes)
+                        .orderByDesc(ChatModelSchemaPO::getId)
+                        .last("LIMIT " + MAX_DISTINCT_SCHEMA_ROWS)
+        );
+        if (schemaList != null && schemaList.size() >= MAX_DISTINCT_SCHEMA_ROWS) {
+            log.warn("chatModelSchema.distinct_query reached batch limit={} modelCount={}；按模型回退查询",
+                    MAX_DISTINCT_SCHEMA_ROWS, codes.size());
+            return listDistinctSchemasInOrder(codes);
+        }
+        return inCodeOrder(distinctSchemas(schemaList), codes);
+    }
+
+    private Set<String> normalizedCodes(Collection<String> modelCodes) {
+        Set<String> codes = new LinkedHashSet<>();
+        if (modelCodes == null) {
+            return codes;
+        }
+        for (String modelCode : modelCodes) {
+            if (StringUtils.isNotBlank(modelCode)) {
+                codes.add(modelCode.trim());
+            }
+        }
+        return codes;
+    }
+
+    private List<ChatModelSchema> listDistinctSchemasInOrder(Collection<String> modelCodes) {
+        List<ChatModelSchema> schemas = new ArrayList<>();
+        for (String modelCode : modelCodes) {
+            schemas.addAll(listDistinctSchemas(modelCode));
+        }
+        return schemas;
+    }
+
+    private List<ChatModelSchema> inCodeOrder(List<ChatModelSchema> schemas, Collection<String> modelCodes) {
+        Map<String, List<ChatModelSchema>> byModelCode = new LinkedHashMap<>();
+        for (ChatModelSchema schema : schemas) {
+            byModelCode.computeIfAbsent(schema.getModelCode(), ignored -> new ArrayList<>()).add(schema);
+        }
+        List<ChatModelSchema> result = new ArrayList<>();
+        for (String modelCode : modelCodes) {
+            List<ChatModelSchema> group = byModelCode.remove(modelCode);
+            if (group != null) {
+                result.addAll(group);
+            }
+        }
+        // IN 查询不应返回 codes 之外的行；保留它们只是避免 SQL 排序规则差异造成结果凭空消失。
+        for (List<ChatModelSchema> group : byModelCode.values()) {
+            result.addAll(group);
+        }
+        return result;
     }
 
     private List<ChatModelSchema> distinctSchemas(List<ChatModelSchemaPO> schemaList) {
