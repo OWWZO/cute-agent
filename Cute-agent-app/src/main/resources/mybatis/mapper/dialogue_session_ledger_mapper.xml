@@ -9,6 +9,8 @@
         <result column="binding_id" property="bindingId"/>
         <result column="channel_chat_type" property="channelChatType"/>
         <result column="channel_target_id" property="channelTargetId"/>
+        <result column="channel_last_msg_id" property="channelLastMsgId"/>
+        <result column="channel_last_received_at" property="channelLastReceivedAt"/>
         <result column="session_kind" property="sessionKind"/>
         <result column="parent_session_id" property="parentSessionId"/>
         <result column="root_session_id" property="rootSessionId"/>
@@ -61,7 +63,7 @@
     </resultMap>
 
     <sql id="dialogueSessionColumns">
-        id, session_id, user_id, binding_id, channel_chat_type, channel_target_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+        id, session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
         latest_query_text, latest_summary_text, run_count, finished_run_count, failed_run_count,
         started_at, last_active_at, model, thinking, thinking_effort, deep_think,
         event_seq, create_time, update_time, deleted
@@ -103,13 +105,13 @@
          用户切换模型时要能更新。前三个用 COALESCE 实现「未传不清空」，deep_think 是 NOT NULL 布尔开关直接覆盖。 -->
     <insert id="upsertSession" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">
         INSERT INTO ai_agent_dialogue_session (
-            session_id, user_id, binding_id, channel_chat_type, channel_target_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+            session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
             latest_query_text, latest_summary_text,
             run_count, finished_run_count, failed_run_count, started_at, last_active_at,
             model, thinking, thinking_effort, deep_think,
             create_time, update_time, deleted
         ) VALUES (
-            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
+            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, #{channelLastMsgId}, #{channelLastReceivedAt}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
             #{title}, #{status}, #{latestRequestId}, #{latestQueryText}, #{latestSummaryText},
             #{runCount}, #{finishedRunCount}, #{failedRunCount}, #{startedAt}, #{lastActiveAt},
             #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{deepThink}, 0),
@@ -126,6 +128,8 @@
             END,
             channel_chat_type = COALESCE(VALUES(channel_chat_type), channel_chat_type),
             channel_target_id = COALESCE(VALUES(channel_target_id), channel_target_id),
+            channel_last_msg_id = VALUES(channel_last_msg_id),
+            channel_last_received_at = VALUES(channel_last_received_at),
             title = VALUES(title),
             status = VALUES(status),
             latest_request_id = VALUES(latest_request_id),
@@ -147,13 +151,13 @@
          冲突时只写回相同 session_id，保证 run_count / 身份列保持首次落库值。 -->
     <insert id="insertSessionIfAbsent" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">
         INSERT INTO ai_agent_dialogue_session (
-            session_id, user_id, binding_id, channel_chat_type, channel_target_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+            session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
             latest_query_text, latest_summary_text,
             run_count, finished_run_count, failed_run_count, started_at, last_active_at,
             model, thinking, thinking_effort, deep_think,
             create_time, update_time, deleted
         ) VALUES (
-            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
+            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, #{channelLastMsgId}, #{channelLastReceivedAt}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
             #{title}, #{status}, #{latestRequestId}, #{latestQueryText}, #{latestSummaryText},
             #{runCount}, #{finishedRunCount}, #{failedRunCount}, #{startedAt}, #{lastActiveAt},
             #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{deepThink}, 0),
@@ -166,13 +170,13 @@
          会话偏好四列同样走「未传不清空」：主链路每轮都会带上用户当前选择，未带时保留库里原值。 -->
     <insert id="upsertSessionOnRunStart" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">
         INSERT INTO ai_agent_dialogue_session (
-            session_id, user_id, binding_id, channel_chat_type, channel_target_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+            session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
             latest_query_text, latest_summary_text,
             run_count, finished_run_count, failed_run_count, started_at, last_active_at,
             model, thinking, thinking_effort, deep_think,
             create_time, update_time, deleted
         ) VALUES (
-            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
+            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, #{channelLastMsgId}, #{channelLastReceivedAt}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
             #{title}, #{status}, #{latestRequestId}, #{latestQueryText}, #{latestSummaryText},
             1, 0, 0, #{startedAt}, #{lastActiveAt},
             #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{deepThink}, 0),
@@ -189,6 +193,8 @@
             END,
             channel_chat_type = COALESCE(VALUES(channel_chat_type), channel_chat_type),
             channel_target_id = COALESCE(VALUES(channel_target_id), channel_target_id),
+            channel_last_msg_id = COALESCE(VALUES(channel_last_msg_id), channel_last_msg_id),
+            channel_last_received_at = COALESCE(VALUES(channel_last_received_at), channel_last_received_at),
             title = VALUES(title),
             status = VALUES(status),
             latest_request_id = VALUES(latest_request_id),

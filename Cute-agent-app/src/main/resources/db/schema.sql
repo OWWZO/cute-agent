@@ -235,6 +235,8 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_session (
     binding_id         BIGINT         NULL COMMENT '所属 IM 渠道绑定（NULL = Web UI 原生会话）',
     channel_chat_type  VARCHAR(16)    NULL COMMENT 'IM 出站会话形态：C2C/GROUP/GUILD/DM',
     channel_target_id  VARCHAR(128)   NULL COMMENT 'IM 出站目标 ID（openid/group_openid/channel_id）',
+    channel_last_msg_id VARCHAR(128)  NULL COMMENT 'IM 最近入站消息 ID，用于被动回复',
+    channel_last_received_at DATETIME(3) NULL COMMENT 'IM 最近入站时刻（UTC），用于被动回复窗口',
     session_kind       VARCHAR(32)    NOT NULL DEFAULT 'conversation' COMMENT '会话类型：conversation=用户会话；subagent=子智能体隐藏会话',
     parent_session_id  VARCHAR(128)   NULL COMMENT '父会话ID（仅审计与授权穿透；子会话不继承父工作记忆）',
     root_session_id    VARCHAR(128)   NULL COMMENT '根会话ID；根会话指向自己，子会话指向树根。用于一次查询取整棵会话树',

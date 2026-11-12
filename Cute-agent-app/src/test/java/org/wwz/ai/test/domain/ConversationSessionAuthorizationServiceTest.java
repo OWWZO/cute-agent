@@ -119,6 +119,8 @@ public class ConversationSessionAuthorizationServiceTest {
                 .bindingId(12L)
                 .channelChatType("GROUP")
                 .channelTargetId("group-001")
+                .channelLastMsgId("inbound-msg-1")
+                .channelLastReceivedAt(java.time.LocalDateTime.of(2026, 11, 12, 2, 0))
                 .sessionKind(SessionKind.SUBAGENT.code())
                 .parentSessionId("parent-001")
                 .rootSessionId("root-001")
@@ -151,6 +153,9 @@ public class ConversationSessionAuthorizationServiceTest {
         Assert.assertEquals(Long.valueOf(12L), record.getBindingId());
         Assert.assertEquals("GROUP", record.getChannelChatType());
         Assert.assertEquals("group-001", record.getChannelTargetId());
+        Assert.assertEquals("inbound-msg-1", record.getChannelLastMsgId());
+        Assert.assertEquals(java.time.LocalDateTime.of(2026, 11, 12, 2, 0),
+                record.getChannelLastReceivedAt());
         Assert.assertEquals(SessionKind.SUBAGENT.code(), record.getSessionKind());
         Assert.assertEquals("parent-001", record.getParentSessionId());
         Assert.assertEquals("root-001", record.getRootSessionId());

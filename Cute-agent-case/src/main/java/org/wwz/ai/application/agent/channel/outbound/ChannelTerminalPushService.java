@@ -18,6 +18,7 @@ import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,8 +107,21 @@ public class ChannelTerminalPushService {
                 return;
             }
             String body = withAttachments ? withAttachments(text, requestId) : text;
+            String lastMsgId = StringUtils.trimToNull(session.getChannelLastMsgId());
+            Instant receivedAt = session.getChannelLastReceivedAt() == null
+                    ? null
+                    : session.getChannelLastReceivedAt().toInstant(ZoneOffset.UTC);
+            String degradeReason = StringUtils.isBlank(lastMsgId)
+                    ? "no bound inbound msgId"
+                    : receivedAt == null ? "no bound inbound receivedAt" : null;
+            if (degradeReason != null) {
+                lastMsgId = null;
+                receivedAt = null;
+                log.warn("channel terminal push degrades to active message: reason={} "
+                        + "sessionId={} requestId={}", degradeReason, sessionId, requestId);
+            }
             ChannelTarget target = new ChannelTarget(
-                    adapter.platform(), session.getBindingId(), chatType, targetId, null, Instant.now());
+                    adapter.platform(), session.getBindingId(), chatType, targetId, lastMsgId, receivedAt);
             pushExecutor.execute(() -> {
                 try {
                     var result = adapter.pushText(target, body);

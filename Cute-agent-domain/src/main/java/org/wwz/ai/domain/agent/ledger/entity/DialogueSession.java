@@ -47,6 +47,12 @@ public class DialogueSession {
     /** IM 出站目标 ID（openid / group_openid / channel_id）；{@code null} 表示未记录。 */
     private String channelTargetId;
 
+    /** 最近入站消息 ID；终答据此走被动回复，{@code null} 表示未记录。 */
+    private String channelLastMsgId;
+
+    /** 最近入站时刻（UTC）；与 {@link #channelLastMsgId} 一起判断被动回复窗口。 */
+    private LocalDateTime channelLastReceivedAt;
+
     /**
      * 会话类型 code，见 {@link org.wwz.ai.domain.agent.ledger.model.SessionKind}。
      */

@@ -222,6 +222,8 @@ public class ConversationSessionAuthorizationService {
                 .bindingId(session.getBindingId())
                 .channelChatType(session.getChannelChatType())
                 .channelTargetId(session.getChannelTargetId())
+                .channelLastMsgId(session.getChannelLastMsgId())
+                .channelLastReceivedAt(session.getChannelLastReceivedAt())
                 .sessionKind(session.getSessionKind())
                 .parentSessionId(session.getParentSessionId())
                 .rootSessionId(session.getRootSessionId())

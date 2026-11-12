@@ -82,7 +82,9 @@ public class ChannelInboundDispatchService implements ChannelInboundPort {
                     binding.getId(),
                     identity.getUserId(),
                     event.chatType() == null ? null : event.chatType().name(),
-                    event.targetId());
+                    event.targetId(),
+                    event.messageId(),
+                    event.receivedAt());
             // 立刻放行：IM 侧没有「浏览器连上来才开始」的概念，不能等 launch gate 的 2 秒兜底。
             agentRunLaunchGate.launchBySession(sessionId);
             // 终答由 AgentSessionPrinter 直接推送 IM，不再挂出站观察者。
