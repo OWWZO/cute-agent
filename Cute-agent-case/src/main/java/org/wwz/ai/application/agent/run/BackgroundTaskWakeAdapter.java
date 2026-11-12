@@ -129,14 +129,14 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
         }
         boolean autoWakePaused = isAutoWakePaused(sid);
         if (autoWakePaused) {
-            completeStaleProjections(sid, stale);
+            StaleSessionProjections.complete(sid, stale, null, log);
             return;
         }
         if (hasWakeablePending(sid, autoWakePaused)) {
             scheduleWake(sid, autoWakePaused);
             return;
         }
-        completeStaleProjections(sid, stale);
+        StaleSessionProjections.complete(sid, stale, null, log);
     }
 
     @Override
@@ -196,7 +196,7 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
         }
         boolean autoWakePaused = isAutoWakePaused(sessionId);
         if (!hasWakeablePending(sessionId, autoWakePaused)) {
-            completeStaleProjections(sessionId, stale);
+            StaleSessionProjections.complete(sessionId, stale, null, log);
             return;
         }
         boolean userPending = hasPendingKind(sessionId, SessionInboxItem.KIND_USER_MESSAGE);
@@ -209,7 +209,7 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
                 requestId -> onRunSettled(sessionId, requestId));
         if (!dispatched) {
             // 通知仍留在 hub，等下一次用户交互或收口复查；先清掉无人接收的旧投影。
-            completeStaleProjections(sessionId, stale);
+            StaleSessionProjections.complete(sessionId, stale, null, log);
         }
     }
 
@@ -248,19 +248,6 @@ public class BackgroundTaskWakeAdapter implements BackgroundTaskWakePort {
         } catch (Exception e) {
             log.debug("session state check failed sessionId={}", sessionId, e);
             return false;
-        }
-    }
-
-    private void completeStaleProjections(String sessionId, List<AgentStreamProjection> projections) {
-        if (projections == null || projections.isEmpty()) {
-            return;
-        }
-        for (AgentStreamProjection projection : projections) {
-            try {
-                projection.complete();
-            } catch (Exception e) {
-                log.debug("complete stale projection failed sessionId={}", sessionId, e);
-            }
         }
     }
 
