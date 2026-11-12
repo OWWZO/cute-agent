@@ -10,6 +10,8 @@ import org.wwz.ai.domain.agent.memory.WorkingMemorySearchMessage;
 import org.wwz.ai.domain.agent.memory.ltm.SessionSearchRequest;
 import org.wwz.ai.domain.agent.memory.ltm.SessionSearchService;
 import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryMessageDao;
+import org.wwz.ai.infrastructure.dao.cute.WorkingMemoryTermScanHit;
+import org.wwz.ai.infrastructure.dao.cute.WorkingMemoryTermScanTerm;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,6 +42,8 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
     private static final int MAX_WINDOW = 20;
     private static final int FULL_CONTENT_RESULT_LIMIT = 3;
     private static final int MAX_FALLBACK_TOKENS = 3;
+    private static final int EXPANSION_TERM_GROUP = 0;
+    private static final int FALLBACK_TERM_GROUP = 1;
     private static final int SEARCH_SNIPPET_MAX_CHARS = 1_200;
     private static final int SEARCH_SNIPPET_CONTEXT_BEFORE = 300;
     private static final int MULTI_WINDOW_RESULT_LIMIT = 2;
@@ -172,39 +176,28 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
                 return error("failed to search message history: " + messageOf(scanError));
             }
         }
-        for (String expansionTerm : intentExpansionTerms(matchingTokens)) {
-            try {
-                raw.addAll("session".equals(normalizedScope)
-                        ? workingMemoryMessageDao.scanBySession(
-                                sessionScopeId, expansionTerm, scanLimit, roles)
-                        : searchByUserIdOrSession(
-                                userId, currentSessionId, expansionTerm, scanLimit, false, roles));
-            } catch (Exception scanError) {
-                log.warn("working-memory intent expansion failed term={}: {}",
-                        expansionTerm, scanError.toString());
-            }
+        List<String> expansionTerms = intentExpansionTerms(matchingTokens);
+        List<String> potentialFallbackTerms = fallbackTokens(matchingTokens);
+        int fallbackLimit = Math.min(scanLimit, Math.max(limit * 2, 10));
+        List<WorkingMemoryTermScanTerm> batchTerms = new ArrayList<>();
+        for (int index = 0; index < expansionTerms.size(); index++) {
+            batchTerms.add(new WorkingMemoryTermScanTerm(
+                    expansionTerms.get(index), EXPANSION_TERM_GROUP, scanLimit, index));
         }
-
+        for (int index = 0; index < potentialFallbackTerms.size(); index++) {
+            batchTerms.add(new WorkingMemoryTermScanTerm(
+                    potentialFallbackTerms.get(index), FALLBACK_TERM_GROUP, fallbackLimit,
+                    expansionTerms.size() + index));
+        }
+        DiscoveryTermHits termHits = scanDiscoveryTerms(
+                userId, currentSessionId, sessionScopeId, normalizedScope, batchTerms, roles);
+        raw.addAll(termHits.expansionHits());
         List<WorkingMemorySearchMessage> matched = rankCandidates(raw, query, matchingTokens);
         boolean fallback = matched.isEmpty();
         List<String> fallbackTerms = List.of();
         if (fallback) {
-            fallbackTerms = fallbackTokens(matchingTokens);
-            List<WorkingMemorySearchMessage> fallbackHits = new ArrayList<>();
-            int fallbackLimit = Math.min(scanLimit, Math.max(limit * 2, 10));
-            for (String term : fallbackTerms) {
-                try {
-                    fallbackHits.addAll("session".equals(normalizedScope)
-                            ? workingMemoryMessageDao.scanBySession(
-                                    sessionScopeId, term, fallbackLimit, roles)
-                            : searchByUserIdOrSession(
-                                    userId, currentSessionId, term, fallbackLimit, false, roles));
-                } catch (Exception scanError) {
-                    log.warn("working-memory token fallback failed term={}: {}",
-                            term, scanError.toString());
-                }
-            }
-            matched = rankCandidates(fallbackHits, query, matchingTokens);
+            fallbackTerms = potentialFallbackTerms;
+            matched = rankCandidates(termHits.fallbackHits(), query, matchingTokens);
             backend = "token-scan";
         }
         boolean excludeLiveCurrent = !"session".equals(normalizedScope);
@@ -282,6 +275,79 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
         return fullText
                 ? workingMemoryMessageDao.searchFullTextBySession(sessionId, query, limit, roles)
                 : workingMemoryMessageDao.scanBySession(sessionId, query, limit, roles);
+    }
+
+    private DiscoveryTermHits scanDiscoveryTerms(String userId,
+                                                 String currentSessionId,
+                                                 String sessionScopeId,
+                                                 String normalizedScope,
+                                                 List<WorkingMemoryTermScanTerm> terms,
+                                                 List<String> roles) {
+        List<WorkingMemorySearchMessage> expansionHits = new ArrayList<>();
+        List<WorkingMemorySearchMessage> fallbackHits = new ArrayList<>();
+        if (terms.isEmpty()) {
+            return new DiscoveryTermHits(expansionHits, fallbackHits);
+        }
+        try {
+            List<WorkingMemoryTermScanHit> batch = "session".equals(normalizedScope)
+                    ? workingMemoryMessageDao.scanTerms(null, sessionScopeId, terms, roles)
+                    : scanTermsByUserIdOrSession(userId, currentSessionId, terms, roles);
+            if (batch != null) {
+                for (WorkingMemoryTermScanHit hit : batch) {
+                    if (hit == null) {
+                        continue;
+                    }
+                    hit.setSearchScore(null);
+                    if (hit.getTermGroup() != null && hit.getTermGroup() == FALLBACK_TERM_GROUP) {
+                        fallbackHits.add(hit);
+                    } else {
+                        expansionHits.add(hit);
+                    }
+                }
+            }
+        } catch (Exception batchError) {
+            // Keep the original per-term isolation when the batched statement is unavailable.
+            log.warn("working-memory batched term scan failed: {}", batchError.toString());
+            for (WorkingMemoryTermScanTerm term : terms) {
+                try {
+                    List<WorkingMemorySearchMessage> rows = scanSingleTerm(
+                            userId, currentSessionId, sessionScopeId, normalizedScope,
+                            term.getQuery(), term.getTermLimit(), roles);
+                    List<WorkingMemorySearchMessage> target =
+                            term.getTermGroup() == FALLBACK_TERM_GROUP ? fallbackHits : expansionHits;
+                    target.addAll(safeList(rows));
+                } catch (Exception scanError) {
+                    log.warn("working-memory term scan failed term={}: {}",
+                            term.getQuery(), scanError.toString());
+                }
+            }
+        }
+        return new DiscoveryTermHits(expansionHits, fallbackHits);
+    }
+
+    private List<WorkingMemoryTermScanHit> scanTermsByUserIdOrSession(String userId,
+                                                                       String sessionId,
+                                                                       List<WorkingMemoryTermScanTerm> terms,
+                                                                       List<String> roles) {
+        if (StringUtils.isNotBlank(userId)) {
+            return workingMemoryMessageDao.scanTerms(userId.trim(), null, terms, roles);
+        }
+        if (StringUtils.isBlank(sessionId)) {
+            return List.of();
+        }
+        return workingMemoryMessageDao.scanTerms(null, sessionId, terms, roles);
+    }
+
+    private List<WorkingMemorySearchMessage> scanSingleTerm(String userId,
+                                                            String currentSessionId,
+                                                            String sessionScopeId,
+                                                            String normalizedScope,
+                                                            String query,
+                                                            int limit,
+                                                            List<String> roles) {
+        return "session".equals(normalizedScope)
+                ? workingMemoryMessageDao.scanBySession(sessionScopeId, query, limit, roles)
+                : searchByUserIdOrSession(userId, currentSessionId, query, limit, false, roles);
     }
 
     private List<WorkingMemorySearchMessage> deduplicate(List<WorkingMemorySearchMessage> raw,
@@ -1034,6 +1100,10 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
     private record RankedMessage(WorkingMemorySearchMessage message,
                                  boolean phraseMatch,
                                  double coverage) {
+    }
+
+    private record DiscoveryTermHits(List<WorkingMemorySearchMessage> expansionHits,
+                                     List<WorkingMemorySearchMessage> fallbackHits) {
     }
 
     private record LabelEvidence(String label, String sample, int position, double score) {

@@ -11,6 +11,8 @@ import org.wwz.ai.domain.agent.memory.WorkingMemoryCompactor;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.memory.ltm.SessionSearchRequest;
 import org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryMessageDao;
+import org.wwz.ai.infrastructure.dao.cute.WorkingMemoryTermScanHit;
+import org.wwz.ai.infrastructure.dao.cute.WorkingMemoryTermScanTerm;
 import org.wwz.ai.infrastructure.memory.WorkingMemorySessionSearchService;
 
 import java.util.List;
@@ -367,8 +369,8 @@ public class WorkingMemorySessionSearchServiceTest {
         String query = "Are there restrictions for my disposable card since it does not seem to be working?";
         when(dao.searchFullTextByUserId(eq("user-1"), eq(query), eq(4), anyList()))
                 .thenReturn(List.of(weak));
-        when(dao.scanByUserId(eq("user-1"), eq("rejected"), eq(4), anyList()))
-                .thenReturn(List.of(rejected));
+        when(dao.scanTerms(eq("user-1"), eq(null), anyList(), anyList()))
+                .thenReturn(List.of(termScanHit(rejected, 0)));
 
         JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
                 SessionSearchRequest.builder()
@@ -426,11 +428,8 @@ public class WorkingMemorySessionSearchServiceTest {
                 eq("Search Archival Memory Portbury Brand niece Valerie inheritance"),
                 eq(8),
                 anyList())).thenReturn(List.of());
-        when(dao.scanByUserId(
-                eq("user-1"),
-                eq("Portbury"),
-                eq(8),
-                anyList())).thenReturn(List.of(hit));
+        when(dao.scanTerms(eq("user-1"), eq(null), anyList(), anyList()))
+                .thenReturn(List.of(termScanHit(hit, 1)));
 
         JSONObject payload = JSON.parseObject(new WorkingMemorySessionSearchService(dao).search(
                 SessionSearchRequest.builder()
@@ -447,6 +446,7 @@ public class WorkingMemorySessionSearchServiceTest {
         Assert.assertEquals(
                 "session-1",
                 payload.getJSONArray("results").getJSONObject(0).getString("session_id"));
+        verify(dao, times(1)).scanTerms(eq("user-1"), eq(null), anyList(), anyList());
     }
 
     @Test
@@ -820,6 +820,22 @@ public class WorkingMemorySessionSearchServiceTest {
 
     private static Map<String, Object> ownedSummary() {
         return Map.of("userId", "user-1", "title", "Billing", "lastActiveAt", "2026-08-31T00:00");
+    }
+
+    private static WorkingMemoryTermScanHit termScanHit(WorkingMemorySearchMessage source, int termGroup) {
+        WorkingMemoryTermScanHit hit = new WorkingMemoryTermScanHit();
+        hit.setId(source.getId());
+        hit.setSessionId(source.getSessionId());
+        hit.setMemoryScope(source.getMemoryScope());
+        hit.setRequestId(source.getRequestId());
+        hit.setOriginMessageKey(source.getOriginMessageKey());
+        hit.setTurnSeq(source.getTurnSeq());
+        hit.setSeqNo(source.getSeqNo());
+        hit.setContent(source.getContent());
+        hit.setRole(source.getRole());
+        hit.setTurnStatus(source.getTurnStatus());
+        hit.setTermGroup(termGroup);
+        return hit;
     }
 
     private static WorkingMemorySearchMessage message(Long id,
