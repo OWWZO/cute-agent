@@ -43,6 +43,7 @@ from cute_tool.util.file_util import (
 )
 from cute_tool.util.log_util import timer
 from cute_tool.util.llm_util import ask_llm_sync_iter
+from cute_tool.util.path_safety import is_path_within_root
 from cute_tool.util.prompt_util import get_prompt
 from cute_tool.model.code import ActionOutput, CodeOuput
 
@@ -248,6 +249,14 @@ async def code_interpreter_agent(
             work_dir=work_dir,
             workspace_root=workspace_root,
         )
+        for import_file in import_files or []:
+            file_path = str(import_file.get("file_path") or "").strip()
+            if file_path and not is_path_within_root(file_path, workspace_root):
+                raise CodeExecutionPermissionError(
+                    "input_file_outside_workspace",
+                    f"输入文件不在工作区允许范围内：{import_file.get('file_name') or file_path}",
+                    detail=f"workspace root: {workspace_root}",
+                )
         permission_policy = build_permission_policy(
             profile=permission_profile,
             workspace_root=workspace_root,
