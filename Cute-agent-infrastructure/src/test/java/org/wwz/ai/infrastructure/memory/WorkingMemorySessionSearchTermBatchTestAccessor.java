@@ -7,8 +7,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Locale;
-import java.util.Set;
 
 /** Runs rankCandidates/deduplicate with the original per-term candidate order. */
 final class WorkingMemorySessionSearchTermBatchTestAccessor {
@@ -23,6 +21,7 @@ final class WorkingMemorySessionSearchTermBatchTestAccessor {
         Object service = newInstance(type);
         Method tokenize = type.getDeclaredMethod("tokenize", String.class);
         Method searchTokens = type.getDeclaredMethod("searchTokens", List.class);
+        Method fallbackTokens = type.getDeclaredMethod("fallbackTokens", List.class);
         Method rank = type.getDeclaredMethod("rankCandidates", List.class, String.class, List.class);
         Method deduplicate = type.getDeclaredMethod("deduplicate", List.class, int.class,
                 String.class, boolean.class);
@@ -32,6 +31,7 @@ final class WorkingMemorySessionSearchTermBatchTestAccessor {
                 String.class, List.class);
         tokenize.setAccessible(true);
         searchTokens.setAccessible(true);
+        fallbackTokens.setAccessible(true);
         rank.setAccessible(true);
         deduplicate.setAccessible(true);
         payload.setAccessible(true);
@@ -41,7 +41,9 @@ final class WorkingMemorySessionSearchTermBatchTestAccessor {
         List<String> matchingTokens = invoke(searchTokens, null, tokens);
         List<WorkingMemorySearchMessage> matched = invoke(rank, null, candidates, query, matchingTokens);
         boolean fallback = matched.isEmpty();
-        List<String> fallbackTerms = fallback ? filteredTokens(tokens) : List.of();
+        List<String> fallbackTerms = fallback
+                ? invoke(fallbackTokens, null, matchingTokens)
+                : List.of();
         if (fallback) {
             matched = invoke(rank, null, termHitsOnly(candidates, mainHitCount), query, matchingTokens);
         }
@@ -69,26 +71,6 @@ final class WorkingMemorySessionSearchTermBatchTestAccessor {
                 "org.wwz.ai.infrastructure.dao.cute.IWorkingMemoryMessageDao"));
         constructor.setAccessible(true);
         return constructor.newInstance(new Object[]{null});
-    }
-
-    private static List<String> filteredTokens(List<String> tokens) {
-        Set<String> stopWords = Set.of("a", "an", "and", "archival", "are", "as", "at", "be", "below",
-                "by", "complete", "context", "did", "do", "does", "for", "from", "had", "has", "have",
-                "how", "in", "is", "it", "memory", "of", "on", "or", "question", "search", "task",
-                "that", "the", "this", "to", "was", "were", "what", "when", "where", "which", "who",
-                "why", "with");
-        List<String> result = new ArrayList<>();
-        for (String token : tokens) {
-            String cleaned = token.replaceAll("^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$", "").trim();
-            if (cleaned.isEmpty() || stopWords.contains(cleaned.toLowerCase(Locale.ROOT))) {
-                continue;
-            }
-            if (!result.contains(cleaned)) {
-                result.add(cleaned);
-            }
-        }
-        return result.subList(0, Math.min(
-                WorkingMemorySessionSearchService.MAX_FALLBACK_TERM_COUNT, result.size()));
     }
 
     private static List<WorkingMemorySearchMessage> termHitsOnly(

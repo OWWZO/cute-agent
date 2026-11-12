@@ -44,7 +44,6 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
     private static final int MAX_FALLBACK_TOKENS = 3;
     private static final int EXPANSION_TERM_GROUP = 0;
     private static final int FALLBACK_TERM_GROUP = 1;
-    static final int MAX_FALLBACK_TERM_COUNT = MAX_FALLBACK_TOKENS;
     private static final int SEARCH_SNIPPET_MAX_CHARS = 1_200;
     private static final int SEARCH_SNIPPET_CONTEXT_BEFORE = 300;
     private static final int MULTI_WINDOW_RESULT_LIMIT = 2;
