@@ -900,7 +900,8 @@ def _report_benchmark(
             )
     print(f"report: {output_dir / 'report.html'}")
     blocked = summary["failed"] or summary["unstable"]
-    if require_official and summary["unverified"]:
+    require_unverified = require_official or getattr(args, "require_judge", False)
+    if require_unverified and summary["unverified"]:
         blocked = True
     return 1 if blocked else 0
 

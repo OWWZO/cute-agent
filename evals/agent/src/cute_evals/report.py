@@ -198,8 +198,11 @@ def _case_summary(case_id: str, attempts: list[CaseResult]) -> dict[str, Any]:
     )
     slo_pass_at_1 = first.slo_passed
     slo_pass_at_k = all(item.slo_passed for item in ordered)
+    hard_gate_failed = any(item.hard_gate_failed for item in ordered)
     any_unverified = any(item.unverified for item in ordered)
-    if any_unverified:
+    if hard_gate_failed:
+        status = "failed" if not passed_count else "unstable"
+    elif any_unverified:
         status = "unverified"
     elif pass_at_k:
         status = "passed"
@@ -208,7 +211,9 @@ def _case_summary(case_id: str, attempts: list[CaseResult]) -> dict[str, Any]:
     else:
         status = "failed"
     quality_status = (
-        "unverified"
+        "failed"
+        if hard_gate_failed and not quality_pass_at_k
+        else "unverified"
         if any_unverified
         else ("passed" if quality_pass_at_k else "failed")
     )
