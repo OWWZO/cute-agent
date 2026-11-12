@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPayloads;
-import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPendingHint;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.infrastructure.dao.cute.ISessionInboxDao;
 import org.wwz.ai.infrastructure.dao.cute.po.SessionInboxPO;
@@ -31,20 +30,6 @@ public class MyBatisSessionInboxPersistence implements SessionInboxPort {
 
     @Override
     public SessionInboxItem offer(SessionInboxItem item) {
-        SessionInboxPendingHint.WriteState write = SessionInboxPendingHint.beginWrite();
-        boolean wrotePending = false;
-        try {
-            SessionInboxItem stored = offerInternal(item);
-            wrotePending = stored != null
-                    && SessionInboxItem.STATE_PENDING.equals(stored.getState());
-            return stored;
-        } finally {
-            SessionInboxPendingHint.finishWrite(
-                    item == null ? null : item.getSessionId(), write, wrotePending);
-        }
-    }
-
-    private SessionInboxItem offerInternal(SessionInboxItem item) {
         if (item == null || StringUtils.isBlank(item.getSessionId())
                 || StringUtils.isBlank(item.getIdempotencyKey())
                 || StringUtils.isBlank(item.getKind())
@@ -120,16 +105,7 @@ public class MyBatisSessionInboxPersistence implements SessionInboxPort {
         if (StringUtils.isBlank(sessionId) || StringUtils.isBlank(runId)) {
             return 0;
         }
-        SessionInboxPendingHint.WriteState write = SessionInboxPendingHint.beginWrite();
-        boolean released = false;
-        try {
-            int count = sessionInboxDao.releaseClaims(
-                    StringUtils.trim(sessionId), StringUtils.trim(runId));
-            released = count > 0;
-            return count;
-        } finally {
-            SessionInboxPendingHint.finishWrite(sessionId, write, released);
-        }
+        return sessionInboxDao.releaseClaims(StringUtils.trim(sessionId), StringUtils.trim(runId));
     }
 
     @Override
@@ -137,12 +113,7 @@ public class MyBatisSessionInboxPersistence implements SessionInboxPort {
         if (StringUtils.isBlank(sessionId)) {
             return 0;
         }
-        SessionInboxPendingHint.WriteState write = SessionInboxPendingHint.beginWrite();
-        try {
-            return sessionInboxDao.holdPendingUserMessages(StringUtils.trim(sessionId));
-        } finally {
-            SessionInboxPendingHint.finishWrite(sessionId, write, false);
-        }
+        return sessionInboxDao.holdPendingUserMessages(StringUtils.trim(sessionId));
     }
 
     @Override
@@ -150,17 +121,9 @@ public class MyBatisSessionInboxPersistence implements SessionInboxPort {
         if (StringUtils.isBlank(sessionId)) {
             return 0;
         }
-        SessionInboxPendingHint.WriteState write = SessionInboxPendingHint.beginWrite();
-        boolean released = false;
-        try {
-            int count = sessionInboxDao.releaseHeldUserMessages(
-                    StringUtils.trim(sessionId),
-                    StringUtils.trimToNull(idempotencyKey));
-            released = count > 0;
-            return count;
-        } finally {
-            SessionInboxPendingHint.finishWrite(sessionId, write, released);
-        }
+        return sessionInboxDao.releaseHeldUserMessages(
+                StringUtils.trim(sessionId),
+                StringUtils.trimToNull(idempotencyKey));
     }
 
     @Override
