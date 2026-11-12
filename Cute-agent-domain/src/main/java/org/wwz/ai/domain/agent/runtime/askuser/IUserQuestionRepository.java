@@ -6,17 +6,17 @@ import java.util.Optional;
 
 /**
  * AskUserQuestion 交互附属状态仓储。
- * <p>「同一 session 同时只允许一个待回答的问题」由 {@link #insertIfAbsent} 在数据库侧判定：
- * 判重与写入发生在同一条条件插入语句里，不存在 {@code hasOpenBySessionId} + 无条件 {@code insert}
- * 的 check-then-act 窗口。占用 session 的判定条件是已存在 PENDING / RESUME_PENDING 记录；
- * RESUMING 表示该问题已被续跑认领，允许其 continuation 再提出下一个问题。</p>
+ * <p>「同一 session 同时只允许一条未删除、同状态的提问」由 {@link #insertIfAbsent} 对应的
+ * 数据库唯一索引 {@code uk_user_question_open (session_id, status, deleted)} 判定；第二条并发写入
+ * 会拿到 {@code DuplicateKeyException} 并被仓储层转成「该会话已有未关闭的提问」业务错误，
+ * 不存在 {@code hasOpenBySessionId} + 无条件 insert 的 check-then-act 窗口。</p>
  */
 public interface IUserQuestionRepository {
 
     /**
-     * 条件插入：仅当 session 没有待回答（PENDING / RESUME_PENDING）记录时写入。
+     * 插入提问：违反开放问题唯一索引时抛出业务错误。
      *
-     * @return true=已写入；false=session 已有待回答的问题，或 record 为空
+     * @return true=已写入；false=record 为空
      */
     boolean insertIfAbsent(UserQuestionRecord record);
 

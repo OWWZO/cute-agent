@@ -9,8 +9,8 @@ import java.util.List;
 @Mapper
 public interface IUserQuestionDao {
 
-    /** 当 session 没有开放问题时插入；返回 1 表示插入，0 表示已有开放问题。 */
-    int insertIfAbsent(UserQuestionPO row);
+    /** 插入提问；违反开放问题唯一索引时由 Spring 抛出 DuplicateKeyException。 */
+    int insert(UserQuestionPO row);
 
     /** 按 questionId 查询未删除记录；SQL 使用 LIMIT 1。 */
     UserQuestionPO selectByQuestionId(@Param("questionId") String questionId);

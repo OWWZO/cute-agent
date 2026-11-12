@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 import org.wwz.ai.domain.agent.runtime.askuser.IUserQuestionRepository;
 import org.wwz.ai.domain.agent.runtime.askuser.UserQuestionRecord;
@@ -36,7 +37,11 @@ public class UserQuestionRepository implements IUserQuestionRepository {
         if (record == null) {
             return false;
         }
-        return userQuestionDao.insertIfAbsent(toPo(record)) > 0;
+        try {
+            return userQuestionDao.insert(toPo(record)) > 0;
+        } catch (DuplicateKeyException e) {
+            throw new IllegalStateException("该会话已有未关闭的提问", e);
+        }
     }
 
     @Override
