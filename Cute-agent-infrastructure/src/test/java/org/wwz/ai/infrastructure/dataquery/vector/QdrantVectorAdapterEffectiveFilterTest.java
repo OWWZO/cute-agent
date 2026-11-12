@@ -42,13 +42,19 @@ public class QdrantVectorAdapterEffectiveFilterTest {
     }
 
     @Test
-    public void keepsEmptyFilterRejection() {
-        QdrantVectorAdapter adapter = new QdrantVectorAdapter(new QdrantProperties(), null);
+    public void keepsEmptyFilterRejection() throws Exception {
+        RecordingGrpcClient client = new RecordingGrpcClient();
+        QdrantVectorAdapter adapter = grpcAdapter(client);
+        VectorFilter emptyFilter = new VectorFilter(Map.of("tag", "x"));
+        Field mustField = VectorFilter.class.getDeclaredField("must");
+        mustField.setAccessible(true);
+        mustField.set(emptyFilter, Map.of());
 
         Assert.assertThrows(IllegalArgumentException.class,
                 () -> adapter.deleteByFilter("cute_model_schema", null));
         Assert.assertThrows(IllegalArgumentException.class,
-                () -> adapter.deleteByFilter("cute_model_schema", new VectorFilter(Map.of())));
+                () -> adapter.deleteByFilter("cute_model_schema", emptyFilter));
+        Assert.assertEquals(0, client.deleteCalls);
     }
 
     @Test
