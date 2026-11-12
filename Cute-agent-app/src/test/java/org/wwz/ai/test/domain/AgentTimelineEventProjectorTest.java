@@ -6,6 +6,7 @@ import org.mockito.Mockito;
 import org.wwz.ai.application.agent.stream.AgentSessionStreamFrame;
 import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
 import org.wwz.ai.domain.agent.ledger.timeline.ITimelineItemRepository;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemView;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 
 import java.util.LinkedHashMap;
@@ -29,11 +30,11 @@ public class AgentTimelineEventProjectorTest {
         AgentSessionStreamFrame completed = frame(3, "success", true, "你好");
 
         Set<String> writtenItems = ConcurrentHashMap.newKeySet();
-        projector.project(first, request, writtenItems);
-        projector.project(second, request, writtenItems);
+        enrichAndPersist(projector, first, request, writtenItems);
+        enrichAndPersist(projector, second, request, writtenItems);
         Mockito.verify(repository, Mockito.times(1)).upsert(Mockito.any());
 
-        projector.project(completed, request, writtenItems);
+        enrichAndPersist(projector, completed, request, writtenItems);
         Mockito.verify(repository, Mockito.times(2)).upsert(Mockito.any());
         Assert.assertEquals("llm:42", completed.getItemId());
         Assert.assertEquals("item.completed", completed.getEventType());
@@ -68,10 +69,18 @@ public class AgentTimelineEventProjectorTest {
                 .resultMap(resultMap)
                 .build();
 
-        projector.project(frame, request, ConcurrentHashMap.newKeySet());
+        enrichAndPersist(projector, frame, request, ConcurrentHashMap.newKeySet());
 
         Mockito.verifyNoInteractions(repository);
         Assert.assertNull(frame.getEventType());
+    }
+
+    private void enrichAndPersist(AgentTimelineEventProjector projector,
+                                  AgentSessionStreamFrame frame,
+                                  AgentExecutionCommand request,
+                                  Set<String> writtenItems) {
+        TimelineItemView item = projector.enrich(frame, request, writtenItems);
+        projector.persist(item, writtenItems);
     }
 
     private AgentSessionStreamFrame frame(long seq, String status, boolean finished, String text) {
