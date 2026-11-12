@@ -370,7 +370,13 @@ CREATE TABLE IF NOT EXISTS ai_agent_user_question (
     PRIMARY KEY (id),
     UNIQUE KEY uk_user_question_id (question_id, deleted),
     UNIQUE KEY uk_user_question_resume (resume_request_id, deleted),
-    UNIQUE KEY uk_user_question_open (session_id, status, deleted),
+    UNIQUE KEY uk_user_question_open_only ((
+        CASE
+            WHEN deleted = 0 AND status IN ('PENDING', 'RESUME_PENDING', 'RESUMING')
+            THEN session_id
+            ELSE NULL
+        END
+    )),
     KEY idx_user_question_session_status (session_id, status, deleted, create_time DESC),
     KEY idx_user_question_user (user_id, deleted, create_time DESC),
     KEY idx_user_question_source_request (source_request_id, deleted)
