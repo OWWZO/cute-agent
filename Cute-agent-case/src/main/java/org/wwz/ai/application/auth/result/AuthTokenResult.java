@@ -9,4 +9,12 @@ public record AuthTokenResult(String tokenType,
                               String accessToken,
                               long expiresIn,
                               AuthAccountResult user) {
+
+    @Override
+    public String toString() {
+        return "AuthTokenResult[tokenType=" + tokenType
+                + ", accessToken=<redacted>"
+                + ", expiresIn=" + expiresIn
+                + ", user=" + user + "]";
+    }
 }

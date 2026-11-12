@@ -8,6 +8,9 @@ import org.wwz.ai.application.agent.query.GptQueryCommand;
 import org.wwz.ai.application.auth.command.AuthChangePasswordCommand;
 import org.wwz.ai.application.auth.command.AuthLoginCommand;
 import org.wwz.ai.application.auth.command.AuthRegisterCommand;
+import org.wwz.ai.application.auth.result.AuthAccountResult;
+import org.wwz.ai.application.auth.result.AuthResult;
+import org.wwz.ai.application.auth.result.AuthTokenResult;
 import org.wwz.ai.application.auth.result.IssuedAuthToken;
 import org.wwz.ai.application.catalog.api.ApiConfigCommand;
 import org.wwz.ai.application.catalog.model.CatalogModelCreateCommand;
@@ -50,7 +53,38 @@ public class SensitiveValueToStringTest {
                 .toString(), secret);
     }
 
+    @Test
+    public void accessTokensAreRedactedWithoutHidingSafeTokenMetadata() {
+        String accessToken = "never-log-this-access-token";
+        String refreshToken = "never-log-this-refresh-token";
+        String issuedText = new IssuedAuthToken(
+                AuthResult.success(new AuthTokenResult(
+                        "Bearer", accessToken, 900,
+                        new AuthAccountResult("u1", "alice", "Alice", "USER"))),
+                refreshToken)
+                .toString();
+
+        assertRedacted("IssuedAuthToken.toString() 含 token", issuedText, accessToken);
+        assertRedacted("IssuedAuthToken.toString() 含 refresh token", issuedText, refreshToken);
+        assertContains("IssuedAuthToken.toString() 缺少非敏感字段 Bearer", issuedText, "Bearer");
+        assertContains("IssuedAuthToken.toString() 缺少非敏感字段 900", issuedText, "900");
+        assertContains("IssuedAuthToken.toString() 缺少非敏感字段 alice", issuedText, "alice");
+
+        String tokenText = new AuthTokenResult("Bearer", accessToken, 900, null).toString();
+        assertRedacted("AuthTokenResult.toString() 含 token", tokenText, accessToken);
+        assertContains("AuthTokenResult.toString() 缺少非敏感字段 Bearer", tokenText, "Bearer");
+        assertContains("AuthTokenResult.toString() 缺少非敏感字段 900", tokenText, "900");
+    }
+
     private static void assertRedacted(String text, String secret) {
         Assert.assertFalse(text, text.contains(secret));
+    }
+
+    private static void assertRedacted(String message, String text, String secret) {
+        Assert.assertFalse(message, text.contains(secret));
+    }
+
+    private static void assertContains(String message, String text, String expected) {
+        Assert.assertTrue(message, text.contains(expected));
     }
 }
