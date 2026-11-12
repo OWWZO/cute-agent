@@ -1,11 +1,9 @@
 package org.wwz.ai.domain.agent.runtime.command;
 
-import com.alibaba.fastjson.JSONObject;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
 
 import java.util.List;
 
@@ -57,23 +55,4 @@ public class AgentExecutionCommand {
     /** 触发来源（user / background_task / ...），仅观测用，不参与执行语义。 */
     private String triggerSource;
 
-    /**
-     * 预装载到 Agent memory 的结构化消息。
-     */
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class Message {
-        private String role;
-        private String content;
-        private String messageType;
-        private List<ToolCall> toolCalls;
-        private String toolCallId;
-        private List<JSONObject> artifactRefs;
-        private Boolean referenceOnly;
-        private String commandCode;
-        private List<AgentExecutionFile> uploadFile;
-        private List<AgentExecutionFile> files;
-    }
 }

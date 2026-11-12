@@ -103,15 +103,9 @@ public class SubAgentDefinitionRepositoryTest {
         }
 
         @Override
-        public List<SubAgentDefinitionPO> queryAll() {
+        public List<SubAgentDefinitionPO> queryPage(int offset, int limit) {
             return rows.stream()
                     .filter(r -> r.getDeleted() == null || r.getDeleted() == 0)
-                    .toList();
-        }
-
-        @Override
-        public List<SubAgentDefinitionPO> queryPage(int offset, int limit) {
-            return queryAll().stream()
                     .skip(Math.max(offset, 0))
                     .limit(limit)
                     .toList();

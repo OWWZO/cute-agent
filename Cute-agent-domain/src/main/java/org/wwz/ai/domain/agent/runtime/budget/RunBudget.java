@@ -107,11 +107,6 @@ public final class RunBudget {
             return denied(false, reason, softStopMessage());
         }
         int next = toolCalls.incrementAndGet();
-        if (maxToolCalls != null && next > maxToolCalls) {
-            toolCalls.decrementAndGet();
-            hardExceededReason.compareAndSet(null, "tool_calls");
-            return denied(true, "tool_calls", hardStopMessage());
-        }
         return new ToolDecision(true, next, false, null, null);
     }
 

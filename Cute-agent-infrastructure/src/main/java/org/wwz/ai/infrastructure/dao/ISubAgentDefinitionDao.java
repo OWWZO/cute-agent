@@ -15,9 +15,6 @@ public interface ISubAgentDefinitionDao {
     /** 查询启用且未软删的子 Agent。 */
     List<SubAgentDefinitionPO> queryEnabled();
 
-    /** 查询全部未软删的子 Agent。 */
-    List<SubAgentDefinitionPO> queryAll();
-
     /** 分页查询未软删的子 Agent。 */
     List<SubAgentDefinitionPO> queryPage(@Param("offset") int offset, @Param("limit") int limit);
 

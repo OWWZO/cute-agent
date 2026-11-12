@@ -1003,9 +1003,6 @@ public class WorkingMemorySessionSearchService implements SessionSearchService {
                 candidates.add(token);
             }
         }
-        if (candidates.isEmpty() && !tokens.isEmpty()) {
-            candidates.add(tokens.get(0));
-        }
         return List.copyOf(candidates.subList(0, Math.min(MAX_FALLBACK_TOKENS, candidates.size())));
     }
 

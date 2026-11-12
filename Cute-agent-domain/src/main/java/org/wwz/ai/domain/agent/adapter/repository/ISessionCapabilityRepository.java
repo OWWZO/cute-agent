@@ -12,8 +12,8 @@ public interface ISessionCapabilityRepository {
      * 读取会话的能力差集。
      *
      * @return kind → (refId → enabled)。没有覆盖时必须返回空 Map，<b>不得返回 null</b>；
-     *         返回的 Map（含嵌套 Map）是只读快照，调用方不得修改，实现也不得返回
-     *         会被后续写入改动的内部可变 Map
+     *         返回的 Map（含嵌套 Map）是调用方独占的独立快照，不得修改；实现也不得返回
+     *         会被后续写入改动的内部 Map
      */
     Map<String, Map<String, Boolean>> findOverrides(String sessionId);
 
