@@ -79,22 +79,24 @@ public class ChatModelMetadataRepositoryBatchQueryTest {
     }
 
     @Test
-    public void shouldFallBackToPerModelQueriesWhenGlobalLimitIsReached() {
+    public void shouldKeepOneGlobalLimitQueryWhenRowsReachLimit() {
         List<ChatModelSchemaPO> manyRows = new java.util.ArrayList<>();
         for (long id = 1; id <= LIMIT; id++) {
             manyRows.add(row(id, "sales", "column-" + id, 1));
         }
-        Mockito.doAnswer(invocation -> {
-                    Set<String> codes = inCodes(invocation.getArgument(0));
-                    return codes.size() > 1 ? manyRows : filterByCode(manyRows, codes);
-                })
-                .when(schemaMapper).selectList(Mockito.<Wrapper<ChatModelSchemaPO>>any());
+        Mockito.when(schemaMapper.selectList(Mockito.<Wrapper<ChatModelSchemaPO>>any()))
+                .thenReturn(manyRows);
 
-        List<ChatModelSchema> batch = repository.listDistinctSchemas(List.of("sales", "orders"));
+        List<String> modelCodes = List.of("sales", "orders");
+        List<ChatModelSchema> batch = repository.listDistinctSchemas(modelCodes);
 
         Assert.assertEquals(LIMIT, batch.size());
-        Mockito.verify(schemaMapper, Mockito.times(3))
+        Assert.assertEquals("sales", batch.get(0).getModelCode());
+        Mockito.verify(schemaMapper, Mockito.times(1))
                 .selectList(Mockito.<Wrapper<ChatModelSchemaPO>>any());
+        ArgumentCaptor<Wrapper<ChatModelSchemaPO>> wrapper = ArgumentCaptor.forClass(Wrapper.class);
+        Mockito.verify(schemaMapper).selectList(wrapper.capture());
+        Assert.assertTrue(wrapper.getValue().getSqlSegment().contains("LIMIT " + LIMIT));
     }
 
     private static List<ChatModelSchemaPO> filterByCode(List<ChatModelSchemaPO> rows, Set<String> codes) {

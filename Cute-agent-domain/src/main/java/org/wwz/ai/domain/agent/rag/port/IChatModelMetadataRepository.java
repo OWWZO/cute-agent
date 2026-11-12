@@ -49,8 +49,8 @@ public interface IChatModelMetadataRepository {
 
     /**
      * 按多个 {@code modelCode} 去重读取字段；重复行按 id 倒序取最新一条。
-     * <p>一次 {@code IN} 查询最多读取 {@link #MAX_DISTINCT_SCHEMA_ROWS} 行；命中全局上限时
-     * 实现退化为按模型查询，以保持逐个查询的截断语义与返回顺序。空白 / 空集合返回空列表且不发 SQL。</p>
+     * <p>一次 {@code IN} 查询最多读取 {@link #MAX_DISTINCT_SCHEMA_ROWS} 行；
+     * 空白 / 空集合返回空列表且不发 SQL。</p>
      */
     List<ChatModelSchema> listDistinctSchemas(Collection<String> modelCodes);
 

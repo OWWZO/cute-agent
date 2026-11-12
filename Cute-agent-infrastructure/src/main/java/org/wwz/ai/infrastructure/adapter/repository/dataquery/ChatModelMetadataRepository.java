@@ -107,8 +107,7 @@ public class ChatModelMetadataRepository implements IChatModelMetadataRepository
         if (codes.isEmpty()) {
             return List.of();
         }
-        // 单条 IN SQL 的 LIMIT 是全局上限；一旦触顶，退回逐模型查询，避免多模型合计
-        // 超过 5000 行时丢掉原实现按模型截断后仍能返回的字段。
+        // 单条 IN SQL 的 LIMIT 是全局上限；调用方需控制 codes 数量，避免多模型合计触顶。
         List<ChatModelSchemaPO> schemaList = chatModelSchemaMapper.selectList(
                 Wrappers.<ChatModelSchemaPO>lambdaQuery()
                         .in(ChatModelSchemaPO::getModelCode, codes)
@@ -116,9 +115,8 @@ public class ChatModelMetadataRepository implements IChatModelMetadataRepository
                         .last("LIMIT " + MAX_DISTINCT_SCHEMA_ROWS)
         );
         if (schemaList != null && schemaList.size() >= MAX_DISTINCT_SCHEMA_ROWS) {
-            log.warn("chatModelSchema.distinct_query reached batch limit={} modelCount={}；按模型回退查询",
+            log.warn("chatModelSchema.distinct_query reached batch limit={} modelCount={}",
                     MAX_DISTINCT_SCHEMA_ROWS, codes.size());
-            return listDistinctSchemasInOrder(codes);
         }
         return inCodeOrder(distinctSchemas(schemaList), codes);
     }
@@ -136,14 +134,6 @@ public class ChatModelMetadataRepository implements IChatModelMetadataRepository
         return codes;
     }
 
-    private List<ChatModelSchema> listDistinctSchemasInOrder(Collection<String> modelCodes) {
-        List<ChatModelSchema> schemas = new ArrayList<>();
-        for (String modelCode : modelCodes) {
-            schemas.addAll(listDistinctSchemas(modelCode));
-        }
-        return schemas;
-    }
-
     private List<ChatModelSchema> inCodeOrder(List<ChatModelSchema> schemas, Collection<String> modelCodes) {
         Map<String, List<ChatModelSchema>> byModelCode = new LinkedHashMap<>();
         for (ChatModelSchema schema : schemas) {
@@ -155,10 +145,6 @@ public class ChatModelMetadataRepository implements IChatModelMetadataRepository
             if (group != null) {
                 result.addAll(group);
             }
-        }
-        // IN 查询不应返回 codes 之外的行；保留它们只是避免 SQL 排序规则差异造成结果凭空消失。
-        for (List<ChatModelSchema> group : byModelCode.values()) {
-            result.addAll(group);
         }
         return result;
     }
