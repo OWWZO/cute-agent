@@ -122,6 +122,17 @@
         AND m.visibility &lt;&gt; 'MODEL_ONLY'
     </sql>
 
+    <sql id="termScanOrder">
+        <choose>
+            <when test="userId != null and userId != ''">
+                t.create_time DESC, t.turn_seq DESC, m.seq_no DESC, m.id DESC
+            </when>
+            <otherwise>
+                t.turn_seq DESC, m.seq_no DESC, m.id DESC
+            </otherwise>
+        </choose>
+    </sql>
+
     <!-- Search every non-deleted projection, including INVALID turns. INVALID means
          no longer used for the next prompt, not that the historical message vanished. -->
     <select id="searchFullTextBySession" resultMap="WorkingMemorySearchMessageMap">
@@ -208,7 +219,8 @@
                 SELECT * FROM (
                     SELECT <include refid="searchColumns"/>,
                        #{term.termGroup} AS term_group,
-                       #{term.termRank} AS term_rank
+                       #{term.termRank} AS term_rank,
+                       ROW_NUMBER() OVER (ORDER BY <include refid="termScanOrder"/>) AS term_row_number
                 FROM ai_agent_working_memory_message m
                 INNER JOIN ai_agent_working_memory_turn t ON m.turn_id = t.id
                 <if test="userId != null and userId != ''">
@@ -235,20 +247,12 @@
                            LIKE LOWER(CONVERT(CONCAT('%', #{term.query}, '%') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
                        OR LOWER(CONVERT(COALESCE(m.tool_calls_json, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci)
                            LIKE LOWER(CONVERT(CONCAT('%', #{term.query}, '%') USING utf8mb4) COLLATE utf8mb4_unicode_ci))
-                  ORDER BY
-                  <choose>
-                      <when test="userId != null and userId != ''">
-                          t.create_time DESC, t.turn_seq DESC, m.seq_no DESC, m.id DESC
-                      </when>
-                      <otherwise>
-                          t.turn_seq DESC, m.seq_no DESC, m.id DESC
-                      </otherwise>
-                  </choose>
+                  ORDER BY <include refid="termScanOrder"/>
                   LIMIT #{term.termLimit}
                 ) term_hits
             </foreach>
         ) ranked
-        ORDER BY ranked.term_rank ASC
+        ORDER BY ranked.term_rank ASC, ranked.term_row_number ASC
     </select>
 
     <select id="selectScrollAnchor" resultMap="WorkingMemorySearchMessageMap">
