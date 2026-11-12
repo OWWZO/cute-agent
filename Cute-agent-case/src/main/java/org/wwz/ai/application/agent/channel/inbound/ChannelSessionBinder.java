@@ -7,6 +7,9 @@ import org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+
 /**
  * 给 IM 渠道会话打上 {@code binding_id} 与出站目标（chatType / targetId），
  * 供 owner 查看权限和唤醒轮/主动推送恢复目标使用。
@@ -29,12 +32,15 @@ public class ChannelSessionBinder {
     }
 
     /**
-     * 幂等：已带 bindingId 且出站目标完整的会话不再写。任何异常都吞掉——打标记失败不该让用户收不到回复。
+     * 幂等：已带 bindingId、出站目标完整且最近入站消息相同的会话不再写。任何异常都吞掉——打标记失败不该让用户收不到回复。
      *
      * @param chatType 出站会话形态（C2C/GROUP/...），与 targetId 一起供后续主动推送恢复目标
      * @param targetId 出站目标 ID
+     * @param messageId 最近入站消息 ID，供终答走被动回复
+     * @param receivedAt 最近入站时刻，供适配器判断被动回复窗口
      */
-    public void bind(String sessionId, Long bindingId, String userId, String chatType, String targetId) {
+    public void bind(String sessionId, Long bindingId, String userId, String chatType, String targetId,
+                     String messageId, Instant receivedAt) {
         if (sessionId == null || sessionId.isBlank() || bindingId == null) {
             return;
         }
@@ -46,7 +52,12 @@ public class ChannelSessionBinder {
             boolean sameBinding = bindingId.equals(existing.getBindingId());
             boolean targetComplete = StringUtils.isNotBlank(existing.getChannelChatType())
                     && StringUtils.isNotBlank(existing.getChannelTargetId());
-            if (sameBinding && (targetComplete || StringUtils.isBlank(chatType) || StringUtils.isBlank(targetId))) {
+            boolean sameReply = StringUtils.equals(messageId, existing.getChannelLastMsgId())
+                    && (receivedAt == null ? existing.getChannelLastReceivedAt() == null
+                    : receivedAt.atOffset(ZoneOffset.UTC).toLocalDateTime()
+                    .equals(existing.getChannelLastReceivedAt()));
+            if (sameBinding && sameReply
+                    && (targetComplete || StringUtils.isBlank(chatType) || StringUtils.isBlank(targetId))) {
                 return;
             }
             // 用现有字段整体回写，避免把 upsert 当成「部分更新」用。
@@ -56,6 +67,10 @@ public class ChannelSessionBinder {
                     .bindingId(bindingId)
                     .channelChatType(StringUtils.defaultIfBlank(chatType, existing.getChannelChatType()))
                     .channelTargetId(StringUtils.defaultIfBlank(targetId, existing.getChannelTargetId()))
+                    .channelLastMsgId(messageId)
+                    .channelLastReceivedAt(receivedAt == null
+                            ? null
+                            : receivedAt.atOffset(ZoneOffset.UTC).toLocalDateTime())
                     .sessionKind(existing.getSessionKind())
                     .parentSessionId(existing.getParentSessionId())
                     .rootSessionId(existing.getRootSessionId())

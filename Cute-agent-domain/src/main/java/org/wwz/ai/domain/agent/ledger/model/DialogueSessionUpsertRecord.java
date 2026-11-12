@@ -31,6 +31,12 @@ public class DialogueSessionUpsertRecord {
     /** IM 出站目标 ID；null = 未记录，upsert 时保留库里已有值。 */
     private String channelTargetId;
 
+    /** 最近入站消息 ID；null = 未携带，整行写入时清空，run 启动路径保留库里已有值。 */
+    private String channelLastMsgId;
+
+    /** 最近入站时刻（UTC）；null = 未携带，整行写入时清空，run 启动路径保留库里已有值。 */
+    private LocalDateTime channelLastReceivedAt;
+
     /**
      * 会话类型（落库为 code），调用方应传
      * {@link org.wwz.ai.domain.agent.ledger.model.SessionKind#code()}。

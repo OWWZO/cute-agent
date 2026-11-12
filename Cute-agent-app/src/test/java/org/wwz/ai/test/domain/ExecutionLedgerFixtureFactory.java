@@ -641,6 +641,10 @@ public final class ExecutionLedgerFixtureFactory {
                         .sessionId(record.getSessionId())
                         // 身份列仅在建行时写入，与生产 SQL 的 ON DUPLICATE 语义一致
                         .bindingId(record.getBindingId())
+                        .channelChatType(record.getChannelChatType())
+                        .channelTargetId(record.getChannelTargetId())
+                        .channelLastMsgId(record.getChannelLastMsgId())
+                        .channelLastReceivedAt(record.getChannelLastReceivedAt())
                         .sessionKind(defaultSessionKind(record.getSessionKind()))
                         .parentSessionId(record.getParentSessionId())
                         .rootSessionId(record.getRootSessionId())
@@ -655,6 +659,13 @@ public final class ExecutionLedgerFixtureFactory {
             if (isBlank(session.getUserId())) {
                 session.setUserId(record.getUserId());
             }
+            session.setChannelChatType(record.getChannelChatType() == null
+                    ? session.getChannelChatType() : record.getChannelChatType());
+            session.setChannelTargetId(record.getChannelTargetId() == null
+                    ? session.getChannelTargetId() : record.getChannelTargetId());
+            // 整行写入按 VALUES 覆盖；run 启动的 COALESCE 语义在下面的单独方法里保留。
+            session.setChannelLastMsgId(record.getChannelLastMsgId());
+            session.setChannelLastReceivedAt(record.getChannelLastReceivedAt());
             session.setTitle(record.getTitle());
             session.setStatus(record.getStatus());
             session.setLatestRequestId(record.getLatestRequestId());
@@ -699,6 +710,10 @@ public final class ExecutionLedgerFixtureFactory {
                     .sessionId(record.getSessionId())
                     .userId(record.getUserId())
                     .bindingId(record.getBindingId())
+                    .channelChatType(record.getChannelChatType())
+                    .channelTargetId(record.getChannelTargetId())
+                    .channelLastMsgId(record.getChannelLastMsgId())
+                    .channelLastReceivedAt(record.getChannelLastReceivedAt())
                     .sessionKind(defaultSessionKind(record.getSessionKind()))
                     .parentSessionId(record.getParentSessionId())
                     .rootSessionId(record.getRootSessionId())
@@ -739,6 +754,10 @@ public final class ExecutionLedgerFixtureFactory {
                         .id(store.nextSessionId++)
                         .sessionId(record.getSessionId())
                         .bindingId(record.getBindingId())
+                        .channelChatType(record.getChannelChatType())
+                        .channelTargetId(record.getChannelTargetId())
+                        .channelLastMsgId(record.getChannelLastMsgId())
+                        .channelLastReceivedAt(record.getChannelLastReceivedAt())
                         .sessionKind(defaultSessionKind(record.getSessionKind()))
                         .parentSessionId(record.getParentSessionId())
                         .rootSessionId(record.getRootSessionId())
@@ -757,6 +776,16 @@ public final class ExecutionLedgerFixtureFactory {
             }
             if (isBlank(session.getUserId())) {
                 session.setUserId(record.getUserId());
+            }
+            session.setChannelChatType(record.getChannelChatType() == null
+                    ? session.getChannelChatType() : record.getChannelChatType());
+            session.setChannelTargetId(record.getChannelTargetId() == null
+                    ? session.getChannelTargetId() : record.getChannelTargetId());
+            if (record.getChannelLastMsgId() != null) {
+                session.setChannelLastMsgId(record.getChannelLastMsgId());
+            }
+            if (record.getChannelLastReceivedAt() != null) {
+                session.setChannelLastReceivedAt(record.getChannelLastReceivedAt());
             }
             session.setTitle(record.getTitle());
             session.setStatus(record.getStatus());
@@ -1616,6 +1645,10 @@ public final class ExecutionLedgerFixtureFactory {
                 .sessionId(session.getSessionId())
                 .userId(session.getUserId())
                 .bindingId(session.getBindingId())
+                .channelChatType(session.getChannelChatType())
+                .channelTargetId(session.getChannelTargetId())
+                .channelLastMsgId(session.getChannelLastMsgId())
+                .channelLastReceivedAt(session.getChannelLastReceivedAt())
                 .sessionKind(session.getSessionKind())
                 .parentSessionId(session.getParentSessionId())
                 .rootSessionId(session.getRootSessionId())
