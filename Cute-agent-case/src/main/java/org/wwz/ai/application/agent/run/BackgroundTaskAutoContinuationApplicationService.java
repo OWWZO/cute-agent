@@ -31,6 +31,7 @@ import org.wwz.ai.types.agent.exception.AgentExecutorBusyException;
 
 import javax.annotation.Resource;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -110,7 +111,8 @@ public class BackgroundTaskAutoContinuationApplicationService {
                         .bindRegistry(sessionProjectionRegistry);
         // 先发控制帧，前端据此建占位 chat 并重新订阅；再结束旧投影的观察流。
         publishWakeFrame(sessionId, request.getRequestId(), taskId, triggerSource, displayQuery);
-        completeStaleProjections(sessionId, projectingStream);
+        StaleSessionProjections.complete(
+                sessionId, sessionProjectionRegistry.listLive(sessionId), projectingStream, log);
 
         try {
             agentRunLaunchGate.defer(request.getRequestId(), sessionId, () -> {
@@ -176,8 +178,12 @@ public class BackgroundTaskAutoContinuationApplicationService {
         } finally {
             activeAgentRunRegistry.end(requestId);
         }
-        // 旧投影已经无人接收，一并收口，避免会话级投影永久滞留。
-        completeStaleProjections(sessionId, null);
+        List<AgentStreamProjection> stale = sessionProjectionRegistry.listLive(sessionId);
+        if (activeAgentRunRegistry.findBySessionId(sessionId).isPresent()) {
+            return;
+        }
+        // 只收口快照内的旧投影；检查期间新建的投影留给接班的 run。
+        StaleSessionProjections.complete(sessionId, stale, projectingStream, log);
     }
 
     private AgentExecutionCommand buildWakeRequest(DialogueSession session,
@@ -250,23 +256,6 @@ public class BackgroundTaskAutoContinuationApplicationService {
                 .errorMsg("后台续跑启动失败，请稍后重试")
                 .resultMap(resultMap)
                 .build());
-    }
-
-    /**
-     * 完成本会话里除 {@code keep} 之外的活投影。
-     * <p>唤醒接管后旧父 run 的投影不应再等待 stream_settle；新投影已注册，
-     * 因此 unregister 不会触发会话级 completeSession，前端连接得以保留。</p>
-     */
-    private void completeStaleProjections(String sessionId, AgentStreamProjection keep) {
-        for (AgentStreamProjection live : sessionProjectionRegistry.listLive(sessionId)) {
-            if (live != keep) {
-                try {
-                    live.complete();
-                } catch (Exception e) {
-                    log.debug("complete stale projection failed sessionId={}", sessionId, e);
-                }
-            }
-        }
     }
 
     private static String newRequestId() {
