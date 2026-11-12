@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 把 Case SSE 帧补齐成稳定时间线事件，并同步更新窄目录表。
+ * 把 Case SSE 帧补齐成稳定时间线事件，并分阶段更新窄目录表。
  *
  * <p>流式 delta 只在首次出现时写一次目录；后续 delta 只走 SSE，不逐帧写数据库。</p>
  */
@@ -37,25 +37,28 @@ public class AgentTimelineEventProjector {
                 : timelineItemRepositoryProvider.getIfAvailable();
     }
 
-    public void project(AgentSessionStreamFrame frame,
-                        AgentExecutionCommand request,
-                        Set<String> writtenItems) {
+    /**
+     * 只做内存增强；调用方必须在帧发布前、且按投影实例串行调用。
+     */
+    public TimelineItemView enrich(AgentSessionStreamFrame frame,
+                                   AgentExecutionCommand request,
+                                   Set<String> writtenItems) {
         if (frame == null || request == null) {
-            return;
+            return null;
         }
         Map<String, Object> eventData = resolveEventData(frame);
         String eventType = resolveControlEventType(frame, eventData);
         if (eventType != null) {
             applyControlEvent(frame, request, eventType);
-            return;
+            return null;
         }
 
         if (eventData.isEmpty()) {
-            return;
+            return null;
         }
         if (TimelineItemProjection.isNestedSubAgentDetail(eventData)) {
             // 子 Agent 明细只属于自己的 session timeline；父流仍保留旧 SSE 字段供右侧工作区消费。
-            return;
+            return null;
         }
         TimelineItemView item = TimelineItemProjection.projectEvent(
                 request.getRequestId(),
@@ -66,18 +69,14 @@ public class AgentTimelineEventProjector {
                 frame.isFinished()
         );
         applyItem(frame, item);
-        persistIfNeeded(item, writtenItems);
+        return canPersist(item, writtenItems) ? item : null;
     }
 
-    private void persistIfNeeded(TimelineItemView item, Set<String> writtenItems) {
-        if (timelineItemRepository == null
-                || item == null || StringUtils.isBlank(item.getItemId())
-                || StringUtils.isBlank(item.getSessionId())
-                || StringUtils.isBlank(item.getRunId())
-                || TimelineItemKind.SYSTEM_NOTICE.name().equals(item.getKind())) {
-            return;
-        }
-        if (writtenItems == null) {
+    /**
+     * 写入窄目录；调用方负责按投影实例串行调用，失败时保留重试机会。
+     */
+    public void persist(TimelineItemView item, Set<String> writtenItems) {
+        if (!canPersist(item, writtenItems)) {
             return;
         }
         boolean firstTouch = writtenItems.add(item.getItemId());
@@ -109,6 +108,20 @@ public class AgentTimelineEventProjector {
             log.warn("timeline directory update failed, runId={}, itemId={}",
                     item.getRunId(), item.getItemId(), e);
         }
+    }
+
+    private boolean canPersist(TimelineItemView item, Set<String> writtenItems) {
+        if (timelineItemRepository == null
+                || item == null || StringUtils.isBlank(item.getItemId())
+                || StringUtils.isBlank(item.getSessionId())
+                || StringUtils.isBlank(item.getRunId())
+                || TimelineItemKind.SYSTEM_NOTICE.name().equals(item.getKind())) {
+            return false;
+        }
+        if (writtenItems == null) {
+            return false;
+        }
+        return true;
     }
 
     private String resolveControlEventType(AgentSessionStreamFrame frame,
