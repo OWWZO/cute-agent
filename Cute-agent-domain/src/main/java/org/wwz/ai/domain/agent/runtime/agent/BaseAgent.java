@@ -25,6 +25,7 @@ import org.wwz.ai.domain.agent.runtime.llm.TokenCounter;
 import org.wwz.ai.domain.agent.runtime.llm.SessionPromptFreeze;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPayloads;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPendingHint;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanModePromptInjector;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
@@ -121,6 +122,10 @@ public abstract class BaseAgent {
 
     /** 本 run 是否已做过一次「notified=0 终态任务」补投扫描。 */
     private transient boolean backgroundNotificationBackfillDone = false;
+
+    /** 本 step 边界是否已向 DB 求证过；进程内 clean 提示不能跨 run / fork 继承。 */
+    private transient boolean inboxStepBoundaryChecked = false;
+    private transient SessionInboxPendingHint.WriteState inboxStepWriteState;
 
     /**
      * 子类定义单步执行逻辑。
@@ -301,6 +306,8 @@ public abstract class BaseAgent {
                 }
                 currentStep++;
                 if (context != null) {
+                    inboxStepBoundaryChecked = false;
+                    inboxStepWriteState = null;
                     // 步进边界 drain 控制面 inject（用户中途指导），再进入 think
                     drainPendingInjectsIntoMemory();
                     // 后台子 Agent 完成通知：同一轮 steer，或唤醒轮第一步补投
@@ -480,34 +487,54 @@ public abstract class BaseAgent {
     }
 
     private List<SessionInboxItem> claimInboxSafely(SessionInboxPort inbox, String kind) {
+        if (inboxStepBoundaryChecked
+                && !SessionInboxPendingHint.externalWritesPossible()
+                && !SessionInboxPendingHint.hasWriteSince(inboxStepWriteState)
+                && !SessionInboxPendingHint.mayHavePending(context.getSessionId())) {
+            return List.of();
+        }
+        SessionInboxPendingHint.WriteState writeState = inboxStepWriteState == null
+                ? SessionInboxPendingHint.snapshot() : inboxStepWriteState;
         try {
             List<SessionInboxItem> items = inbox.claimPending(
                     context.getSessionId(),
                     context.getRequestId(),
                     kind,
                     100);
-            if (items == null || items.isEmpty()) {
-                return List.of();
+            if (items != null && !items.isEmpty()) {
+                SessionInboxPendingHint.markPending(context.getSessionId());
+                return freshItems(items, kind);
             }
-            List<SessionInboxItem> fresh = new ArrayList<>(items.size());
-            for (SessionInboxItem item : items) {
-                if (item == null) {
-                    continue;
-                }
-                Long itemId = item.getId();
-                if (itemId == null || context.control().markInboxItemClaimed(itemId)) {
-                    fresh.add(item);
-                } else {
-                    log.warn("{} {} skipped duplicate inbox claim id={} kind={}",
-                            context.getRequestId(), getName(), itemId, kind);
-                }
+            if (inboxStepBoundaryChecked
+                    && !SessionInboxPendingHint.externalWritesPossible()) {
+                SessionInboxPendingHint.markCleanIfUnchanged(context.getSessionId(), writeState);
+            } else if (!inboxStepBoundaryChecked) {
+                inboxStepBoundaryChecked = true;
+                inboxStepWriteState = SessionInboxPendingHint.snapshot();
             }
-            return fresh;
+            return List.of();
         } catch (Exception e) {
             log.warn("{} {} session inbox claim failed kind={}",
                     context.getRequestId(), getName(), kind, e);
             return List.of();
         }
+    }
+
+    private List<SessionInboxItem> freshItems(List<SessionInboxItem> items, String kind) {
+        List<SessionInboxItem> fresh = new ArrayList<>(items.size());
+        for (SessionInboxItem item : items) {
+            if (item == null) {
+                continue;
+            }
+            Long itemId = item.getId();
+            if (itemId == null || context.control().markInboxItemClaimed(itemId)) {
+                fresh.add(item);
+            } else {
+                log.warn("{} {} skipped duplicate inbox claim id={} kind={}",
+                        context.getRequestId(), getName(), itemId, kind);
+            }
+        }
+        return fresh;
     }
 
     /**
