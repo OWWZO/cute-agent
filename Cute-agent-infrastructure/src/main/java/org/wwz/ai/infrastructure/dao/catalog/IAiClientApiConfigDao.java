@@ -33,11 +33,7 @@ public interface IAiClientApiConfigDao {
     /** 按业务键 apiId 查询；不存在时返回 null。 */
     AiClientApiPO queryByApiId(@Param("apiId") String apiId);
 
-    List<AiClientApiPO> queryEnabled();
-
     List<AiClientApiPO> queryEnabledLimit(@Param("limit") int limit);
-
-    List<AiClientApiPO> queryAll();
 
     List<AiClientApiPO> queryPage(@Param("offset") int offset, @Param("limit") int limit);
 }

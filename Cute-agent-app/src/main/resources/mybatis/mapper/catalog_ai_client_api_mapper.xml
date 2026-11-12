@@ -69,19 +69,6 @@
         WHERE api_id = #{apiId}
     </select>
 
-    <select id="queryEnabled" resultMap="CatalogAiClientApiMap">
-        SELECT <include refid="CatalogAiClientApiColumns"/>
-        FROM ai_client_api
-        WHERE status = 1
-        ORDER BY create_time DESC
-    </select>
-
-    <select id="queryAll" resultMap="CatalogAiClientApiMap">
-        SELECT <include refid="CatalogAiClientApiColumns"/>
-        FROM ai_client_api
-        ORDER BY create_time DESC
-    </select>
-
     <select id="queryEnabledLimit" resultMap="CatalogAiClientApiMap">
         SELECT <include refid="CatalogAiClientApiColumns"/>
         FROM ai_client_api

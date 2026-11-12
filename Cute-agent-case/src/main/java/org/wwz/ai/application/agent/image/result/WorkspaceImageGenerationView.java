@@ -5,13 +5,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.List;
 
 /**
  * 工作台生图生成用例输出。
- * <p>该对象会直接作为应用层结果返回；Lombok {@code @Data} 会把全部字段纳入生成的
- * {@code toString()}，其中 {@code rawResponse} 可能很大且含上游内部信息，禁止整对象打日志。</p>
+ * <p>该对象会直接作为应用层结果返回；Lombok {@code @Data} 会生成 {@code toString()}，
+ * 其中 {@code rawResponse} 已排除，避免把可能很大的上游内部信息写入日志。</p>
  */
 @Data
 @Builder
@@ -38,5 +39,6 @@ public class WorkspaceImageGenerationView {
      * 上游原始响应的诊断快照，可能包含模型、尺寸、备注和较大的内部数据。
      * <p>不属于稳定的终端展示契约，不应直接暴露给最终用户，也不应写入普通日志。</p>
      */
+    @ToString.Exclude
     private JSONObject rawResponse;
 }

@@ -6,7 +6,6 @@ import org.springframework.stereotype.Service;
 import org.wwz.ai.domain.agent.rag.model.query.SqlExecutionResult;
 import org.wwz.ai.infrastructure.dataquery.jdbc.connection.ConnectionWrapper;
 import org.wwz.ai.infrastructure.dataquery.jdbc.connection.JdbcConnectionFactory;
-import org.wwz.ai.infrastructure.dataquery.jdbc.JdbcBizException;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -98,21 +97,6 @@ public class JdbcDataProvider implements DataProvider<JdbcQueryRequest> {
 
             }
         }
-    }
-
-    @Override
-    public boolean queryForTest(JdbcQueryRequest request) {
-        // 连通性测试只申请并关闭连接，不执行用户 SQL，避免测试请求产生业务副作用。
-        boolean success = false;
-        request.getJdbcConnectionConfig().setMaxRetryTimes(1);
-        try (ConnectionWrapper wrapper = JdbcConnectionFactory.getConnection(request.getJdbcConnectionConfig());
-             Connection connection = wrapper.getConnection()) {
-            success = true;
-        } catch (Exception e) {
-            log.warn("An error occurred while querying for test: {}", e.getMessage(), e);
-            throw new JdbcBizException("数据库联通测试失败:" + e.getMessage());
-        }
-        return success;
     }
 
 }

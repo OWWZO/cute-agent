@@ -188,11 +188,6 @@ public class CuteRuntimeDependencies {
         return sessionInboxPort;
     }
 
-    /** 自动续跑开关；未装配配置时默认开启。 */
-    public boolean isBackgroundAutoContinuationEnabled() {
-        return cuteConfig == null || cuteConfig.isBackgroundAutoContinuation();
-    }
-
     public CuteConfig requireCuteConfig() {
         return Objects.requireNonNull(cuteConfig, "CuteConfig must not be null");
     }
