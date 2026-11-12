@@ -502,15 +502,30 @@ class CaseResult:
             if score.hard_gate
         )
 
+    @property
+    def hard_gate_failed(self) -> bool:
+        return not self.passed and any(
+            score.passed is False for score in self.scores if score.hard_gate
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "caseId": self.case.id,
             "suite": self.case.suite,
             "metadata": self.case.metadata,
             "attempt": self.attempt,
-            "status": "unverified" if self.unverified else ("passed" if self.passed else "failed"),
+            "passed": self.passed,
+            "status": (
+                "failed"
+                if self.hard_gate_failed
+                else "unverified"
+                if self.unverified
+                else ("passed" if self.passed else "failed")
+            ),
             "qualityStatus": (
-                "unverified"
+                "failed"
+                if self.hard_gate_failed
+                else "unverified"
                 if self.unverified
                 else ("passed" if self.quality_passed else "failed")
             ),
