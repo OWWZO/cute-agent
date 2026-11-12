@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, Loader2, Plus, RefreshCcw, Trash2 } from "lucide-react";
 import {
   Select,
@@ -23,7 +23,7 @@ import {
   type SubAgentDefinitionUpsertPayload,
 } from "@/services/subAgentDefinitionAdmin";
 import { toast } from "sonner";
-import { shouldSyncDraft } from "./draftSync";
+import { useSelectedDraftSync } from "./draftSyncEffect";
 
 type Draft = SubAgentDefinitionUpsertPayload & { isNew: boolean };
 
@@ -64,6 +64,8 @@ type SubAgentAdminProps = {
   embedded?: boolean;
 };
 
+const selectedDraftKey = (record: SubAgentDefinitionRecord) => record.agentKey;
+
 const SubAgentAdmin: CuteType.FC<SubAgentAdminProps> = ({ embedded }) => {
   const auth = useAuth();
   const readOnly = !isAdminUser(auth.user);
@@ -73,9 +75,6 @@ const SubAgentAdmin: CuteType.FC<SubAgentAdminProps> = ({ embedded }) => {
   const [saving, setSaving] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT());
-  const lastSelectedKeyRef = useRef<string | null>(null);
-  const lastSyncedDraftRef = useRef<Draft | null>(null);
-
   const refresh = useCallback(async () => {
     // 列表和工具目录并行加载；目录失败可降级为通配符，不阻断定义列表展示。
     setLoading(true);
@@ -134,26 +133,14 @@ const SubAgentAdmin: CuteType.FC<SubAgentAdminProps> = ({ embedded }) => {
     void refresh();
   }, [refresh]);
 
-  useEffect(() => {
-    if (!selectedKey) {
-      lastSelectedKeyRef.current = null;
-      lastSyncedDraftRef.current = null;
-      return;
-    }
-    const hit = items.find((item) => item.agentKey === selectedKey);
-    if (!hit) {
-      return;
-    }
-
-    const selectedKeyChanged = lastSelectedKeyRef.current !== selectedKey;
-    const nextDraft = recordToDraft(hit);
-    // 服务端刷新只在切换对象或本地草稿未改动时回填，避免覆盖用户正在编辑的内容。
-    if (shouldSyncDraft(draft, lastSyncedDraftRef.current, selectedKeyChanged)) {
-      lastSelectedKeyRef.current = selectedKey;
-      lastSyncedDraftRef.current = nextDraft;
-      setDraft(nextDraft);
-    }
-  }, [draft, items, selectedKey]);
+  useSelectedDraftSync(
+    selectedKey,
+    items,
+    selectedDraftKey,
+    recordToDraft,
+    draft,
+    setDraft,
+  );
 
   const onNew = () => {
     setSelectedKey(null);
