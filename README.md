@@ -407,9 +407,11 @@ flowchart LR
 ### 1. 获取代码
 
 ```bash
-git clone https://github.com/OWWZO/ai-agent.git
+git clone --recurse-submodules https://github.com/OWWZO/ai-agent.git
 cd ai-agent
 ```
+
+如果仓库此前已经 clone 但未携带子模块，执行 `git submodule update --init --recursive`。
 
 安装供 Java `host_cli` 调用的宿主 CLI：
 
@@ -547,6 +549,9 @@ pnpm dev
 ```bash
 cp cute-tool/.env_template cute-tool/.env
 # 编辑 cute-tool/.env，至少填写 MySQL 密码、OPENAI_BASE_URL 和 OPENAI_API_KEY
+
+# Dockerfile 会打包 Cute-BrowserStack/adapter-host，首次部署前先初始化子模块
+git submodule update --init --recursive
 
 docker compose --env-file cute-tool/.env build
 
