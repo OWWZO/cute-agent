@@ -546,7 +546,6 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
         </Tooltip>
       );
     }
-    return null;
   };
 
   return (
