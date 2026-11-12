@@ -134,5 +134,8 @@ export const radius = (value: unknown) => (typeof value === "string" ? RADIUS[va
 
 export const cx = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(" ") || undefined;
 
+export const isDefined = <T,>(value: T | null | undefined): value is T => value !== null && value !== undefined;
+export const isNil = (value: unknown): value is null | undefined => value === null || value === undefined;
+
 /** A short plain-text name for an element, from its rendered text, for action messages. */
 export const textOf = (element: HTMLElement | null) => (element?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
