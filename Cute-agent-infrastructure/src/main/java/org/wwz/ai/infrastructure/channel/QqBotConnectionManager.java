@@ -146,10 +146,13 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
                     event -> dispatchService.dispatch(event, binding, adapter),
                     () -> {
                         // 重连次数耗尽：标记 ERROR，等 owner 手动重试。
-                        connections.remove(bindingId);
-                        adapters.remove(bindingId);
-                        releaseAppIdLock(bindingId);
-                        markError(bindingId, "连接多次失败，请重试");
+                        // 与 doStart / stopConnection 共用绑定监视器，避免旧回调与 owner 重试交错。
+                        synchronized (monitorOf(bindingId)) {
+                            connections.remove(bindingId);
+                            adapters.remove(bindingId);
+                            releaseAppIdLock(bindingId);
+                            markError(bindingId, "连接多次失败，请重试");
+                        }
                     });
             connections.put(bindingId, client);
             client.start();
