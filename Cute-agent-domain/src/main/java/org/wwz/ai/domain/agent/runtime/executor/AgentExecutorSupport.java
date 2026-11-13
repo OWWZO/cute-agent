@@ -56,6 +56,9 @@ public final class AgentExecutorSupport {
             FutureTask<T> task = new FutureTask<>(() -> snapshot.call(supplier)) {
                 @Override
                 protected void done() {
+                    if (result.timeoutResultClaimed) {
+                        return;
+                    }
                     if (isCancelled()) {
                         result.cancel(false);
                         return;
@@ -92,8 +95,8 @@ public final class AgentExecutorSupport {
         if (future.isDone()) {
             return future;
         }
-        // 中断由 CancellableCompletableFuture.completeExceptionally 在发布完成事件之前完成，
-        // 确保依赖阶段看到的永远是「worker 已被要求停止」之后的状态。
+        // 超时结果由 CancellableCompletableFuture 先认领，再中断 worker；done() 看到认领标志后
+        // 不再写结果，依赖阶段最终只看到 TimeoutException，且不会被误判为用户取消。
         return future.orTimeout(timeout, unit);
     }
 
@@ -180,6 +183,7 @@ public final class AgentExecutorSupport {
      */
     private static final class CancellableCompletableFuture<T> extends CompletableFuture<T> {
         private volatile Future<?> delegate;
+        private volatile boolean timeoutResultClaimed;
 
         private void bind(Future<?> delegate) {
             this.delegate = delegate;
@@ -199,9 +203,10 @@ public final class AgentExecutorSupport {
 
         @Override
         public boolean completeExceptionally(Throwable ex) {
-            // 超时先中断底层 FutureTask，再发布完成事件：completion 回调/依赖阶段是同步执行的，
-            // 先发布会让任务自己的 finally 与超时回调并发写同一份结果。
+            // 先认领超时结果：delegate.cancel 同步触发的 done() 不能再调用 result.cancel/complete。
+            // 仍先中断底层 FutureTask、后发布完成事件，避免完成回调与任务 finally 并发写同一份结果。
             if (ex instanceof TimeoutException) {
+                timeoutResultClaimed = true;
                 cancelDelegate(true);
             }
             return super.completeExceptionally(ex);

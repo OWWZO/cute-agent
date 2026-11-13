@@ -301,9 +301,10 @@ public final class BackgroundSubAgentExecutor {
         if (parent == null || !parent.isTurnClosed() || !StreamSettlePolicy.deferBackgroundSettle()) {
             return false;
         }
-        // 还有通知排队：500ms 后要发 run_wake，连接不能先关。
+        // 没有唤醒端口时通知无法自动续跑，必须关流避免 SSE 永久挂住。
+        // 有唤醒端口且还有通知排队：500ms 后要发 run_wake，连接不能先关。
         String sessionKey = SessionBackgroundTaskHub.keyFor(parent.getSessionId(), parent.getRequestId());
-        if (SessionNotificationHub.hasPending(sessionKey)) {
+        if (backgroundWakePort(parent) != null && SessionNotificationHub.hasPending(sessionKey)) {
             return false;
         }
         if (SessionBackgroundTaskHub.hasRunning(sessionKey)) {

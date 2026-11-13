@@ -111,11 +111,8 @@ public final class WorkingMemoryCompactor {
             if (!keepFull.contains(i)) {
                 if (!CompactionBudget.CLEARED_TOOL_RESULT.equals(content)) {
                     changed = true;
-                    result.add(Message.builder()
-                            .role(RoleType.TOOL)
-                            .originMessageKey(m.getOriginMessageKey())
+                    result.add(Message.copyOf(m)
                             .content(CompactionBudget.CLEARED_TOOL_RESULT)
-                            .toolCallId(m.getToolCallId())
                             .base64Image(null)
                             .build());
                     continue;
@@ -125,11 +122,8 @@ public final class WorkingMemoryCompactor {
             }
             if (maxChars > 0 && content != null && content.length() > maxChars) {
                 changed = true;
-                result.add(Message.builder()
-                        .role(RoleType.TOOL)
-                        .originMessageKey(m.getOriginMessageKey())
+                result.add(Message.copyOf(m)
                         .content(content.substring(0, maxChars) + "\n...[truncated tool result]")
-                        .toolCallId(m.getToolCallId())
                         .base64Image(null)
                         .build());
             } else {
@@ -695,12 +689,8 @@ public final class WorkingMemoryCompactor {
                         + original + "\n\n"
                         + CompactionPrompt.MERGE_DELIMITER + "\n"
                         + summaryBlock;
-                result.set(i, Message.builder()
-                        .role(m.getRole())
-                        .originMessageKey(m.getOriginMessageKey())
+                result.set(i, Message.copyOf(m)
                         .content(merged)
-                        .toolCallId(m.getToolCallId())
-                        .toolCalls(m.getToolCalls())
                         .build());
                 return List.copyOf(result);
             }
@@ -837,12 +827,8 @@ public final class WorkingMemoryCompactor {
             if (StringUtils.isNotBlank(message.getBase64Image())) {
                 content = (content == null ? "" : content) + "\n[image]";
             }
-            prepared.add(Message.builder()
-                    .role(message.getRole())
-                    .originMessageKey(message.getOriginMessageKey())
+            prepared.add(Message.copyOf(message)
                     .content(content)
-                    .toolCallId(message.getToolCallId())
-                    .toolCalls(message.getToolCalls())
                     .build());
         }
         return prepared;
@@ -898,12 +884,7 @@ public final class WorkingMemoryCompactor {
                     }
                 }
                 if (kept.size() != m.getToolCalls().size()) {
-                    Message.MessageBuilder builder = Message.builder()
-                            .role(RoleType.ASSISTANT)
-                            .originMessageKey(m.getOriginMessageKey())
-                            .content(m.getContent())
-                            .reasoningContent(m.getReasoningContent())
-                            .base64Image(m.getBase64Image());
+                    Message.MessageBuilder builder = Message.copyOf(m);
                     if (!kept.isEmpty()) {
                         builder.toolCalls(kept);
                     } else if (StringUtils.isBlank(m.getContent())) {
