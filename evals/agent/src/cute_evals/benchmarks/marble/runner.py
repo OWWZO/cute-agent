@@ -3,10 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from ...judge_benchmarks.base import LicenseBlockedError
 from .adapter import MarbleAdapter
@@ -90,6 +94,20 @@ def _write_selection(path: Path, rows: list[dict[str, Any]]) -> None:
         "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
         encoding="utf-8",
     )
+
+
+def _config_task_id(path: Path) -> int:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    value = payload.get("task_id") if isinstance(payload, dict) else None
+    if value is None:
+        match = re.search(r"task_(\d+)", path.stem)
+        if match is None:
+            raise RuntimeError(f"MARBLE config has no task id: {path}")
+        value = match.group(1)
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"MARBLE config has invalid task id: {path}") from exc
 
 
 def _generate_config(
@@ -295,74 +313,119 @@ def run_marble(
     env.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     env.setdefault("HF_HUB_OFFLINE", "1")
     env.setdefault("TRANSFORMERS_OFFLINE", "1")
-    command = [
-        str(config.python_executable),
-        "-m",
-        "cute_evals.benchmarks.marble.bootstrap",
-        "--source-dir",
-        str(source_root),
-        "--config-path",
-        str(config_files[0]),
-    ]
-    if config.repair_evaluator_syntax:
-        command.append("--repair-evaluator-syntax")
-    if config.offline_tools:
-        command.append("--offline-tools")
-    timed_out = False
-    try:
-        completed = subprocess.run(
-            command,
-            cwd=source_root / "marble",
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=config.timeout_seconds,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
-        completed = subprocess.CompletedProcess(
-            command,
-            -1,
-            stdout=(
-                exc.stdout.decode(errors="replace")
-                if isinstance(exc.stdout, bytes)
-                else exc.stdout or ""
+    available_tasks = adapter.tasks("official-full")
+    task_reports: list[dict[str, Any]] = []
+    run_reports: list[dict[str, Any]] = []
+    log_parts: list[str] = []
+    numeric_scores: list[float] = []
+    for config_file in config_files:
+        official_task_id = _config_task_id(config_file)
+        selected_task = next(
+            (
+                item
+                for item in available_tasks
+                if item.domain == config.domain
+                and int(item.task_id) == official_task_id
+                and int(item.task_id) in set(config.task_ids)
             ),
-            stderr=(
-                exc.stderr.decode(errors="replace")
-                if isinstance(exc.stderr, bytes)
-                else exc.stderr or ""
-            )
-            + f"\nMARBLE run timed out after {config.timeout_seconds}s",
+            None,
         )
-    log_path.write_text(
-        completed.stdout + "\n" + completed.stderr,
-        encoding="utf-8",
-    )
-    run_output = _read_run_output(output_file)
-    task = adapter.tasks("official-full")
-    selected_task = next(
-        (
-            item
-            for item in task
-            if item.domain == config.domain
-            and int(item.task_id) in set(config.task_ids)
-        ),
-        None,
-    )
-    if selected_task is None:
-        raise RuntimeError("selected MARBLE task disappeared")
-    metrics = _result_metrics(run_output, selected_task.agent_count)
-    task_status = (
-        "verified"
-        if not timed_out
-        and completed.returncode == 0
-        and metrics["executionStatus"] == "completed"
-        else "unverified"
-        if run_output is not None
-        else "failed"
-    )
+        if selected_task is None:
+            raise RuntimeError(
+                f"selected MARBLE task disappeared: {official_task_id}"
+            )
+        command = [
+            str(config.python_executable),
+            "-m",
+            "cute_evals.benchmarks.marble.bootstrap",
+            "--source-dir",
+            str(source_root),
+            "--config-path",
+            str(config_file),
+        ]
+        if config.repair_evaluator_syntax:
+            command.append("--repair-evaluator-syntax")
+        if config.offline_tools:
+            command.append("--offline-tools")
+        task_output = output_dir / f"official-output-task-{official_task_id}.jsonl"
+        output_file.unlink(missing_ok=True)
+        task_output.unlink(missing_ok=True)
+        timed_out = False
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=source_root / "marble",
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=config.timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            completed = subprocess.CompletedProcess(
+                command,
+                -1,
+                stdout=(
+                    exc.stdout.decode(errors="replace")
+                    if isinstance(exc.stdout, bytes)
+                    else exc.stdout or ""
+                ),
+                stderr=(
+                    exc.stderr.decode(errors="replace")
+                    if isinstance(exc.stderr, bytes)
+                    else exc.stderr or ""
+                )
+                + f"\nMARBLE run timed out after {config.timeout_seconds}s",
+            )
+        log_parts.append(
+            f"=== {config_file.name} ===\n"
+            f"{completed.stdout}\n{completed.stderr}"
+        )
+        if output_file.exists():
+            shutil.copy2(output_file, task_output)
+        run_output = _read_run_output(output_file)
+        metrics = _result_metrics(run_output, selected_task.agent_count)
+        task_status = (
+            "verified"
+            if not timed_out
+            and completed.returncode == 0
+            and metrics["executionStatus"] == "completed"
+            else "unverified"
+            if run_output is not None
+            else "failed"
+        )
+        observed = metrics["observedTaskEvaluation"]
+        if isinstance(observed, dict):
+            numeric_scores.extend(
+                float(value)
+                for value in observed.values()
+                if isinstance(value, (int, float))
+                and not isinstance(value, bool)
+            )
+        task_reports.append(
+            {
+                "taskId": selected_task.id,
+                "domain": selected_task.domain,
+                "officialTaskId": selected_task.task_id,
+                "agentCount": selected_task.agent_count,
+                "status": task_status,
+                **metrics,
+            }
+        )
+        run_reports.append(
+            {
+                "officialTaskId": selected_task.task_id,
+                "config": str(config_file),
+                "officialOutput": (
+                    str(task_output) if task_output.exists() else str(output_file)
+                ),
+                "returnCode": completed.returncode,
+                "timedOut": timed_out,
+            }
+        )
+    log_path.write_text("\n".join(log_parts), encoding="utf-8")
+    all_verified = all(item["status"] == "verified" for item in task_reports)
     evaluator_sha = _sha256_file(evaluator_path)
     runtime_evaluator_sha = evaluator_sha
     if config.repair_evaluator_syntax and syntax_defect:
@@ -375,21 +438,11 @@ def run_marble(
             "sha256:" + hashlib.sha256(repaired.encode("utf-8")).hexdigest()
         )
 
-    observed = metrics["observedTaskEvaluation"]
-    numeric_scores = (
-        [
-            float(value)
-            for value in observed.values()
-            if isinstance(value, (int, float)) and not isinstance(value, bool)
-        ]
-        if isinstance(observed, dict)
-        else []
-    )
     score_label = (
         "compatibility-subset"
-        if task_status == "verified" and config.compatibility_local
+        if all_verified and config.compatibility_local
         else "official-subset"
-        if task_status == "verified"
+        if all_verified
         else "unverified"
     )
     limitations = [
@@ -401,14 +454,16 @@ def run_marble(
         limitations.append(
             "external research tools were disabled for an offline compatibility run"
         )
-    if metrics["executionStatus"] == "degraded":
+    if any(
+        item["executionStatus"] == "degraded" for item in task_reports
+    ):
         limitations.append(
             "one or more MARBLE agents failed before returning task results; "
             "observed evaluator output is unverified"
         )
-    if timed_out:
+    if any(item["timedOut"] for item in run_reports):
         limitations.append(
-            f"the MARBLE run timed out after {config.timeout_seconds} seconds"
+            f"one or more MARBLE runs timed out after {config.timeout_seconds} seconds"
         )
     report = {
         "schemaVersion": "1.0",
@@ -430,24 +485,21 @@ def run_marble(
             if config.compatibility_local
             else "official"
         ),
-        "tasks": [
-            {
-                "taskId": selected_task.id,
-                "domain": selected_task.domain,
-                "officialTaskId": selected_task.task_id,
-                "agentCount": selected_task.agent_count,
-                "status": task_status,
-                **metrics,
-            }
-        ],
+        "tasks": task_reports,
         "metrics": {
-            "taskCount": 1,
-            "verifiedTasks": 1 if task_status == "verified" else 0,
-            "unverifiedTasks": 1 if task_status == "unverified" else 0,
-            "failedTasks": 1 if task_status == "failed" else 0,
+            "taskCount": len(task_reports),
+            "verifiedTasks": sum(
+                1 for item in task_reports if item["status"] == "verified"
+            ),
+            "unverifiedTasks": sum(
+                1 for item in task_reports if item["status"] == "unverified"
+            ),
+            "failedTasks": sum(
+                1 for item in task_reports if item["status"] == "failed"
+            ),
             "verifiedOverallScore": (
                 _mean_numeric(numeric_scores)
-                if task_status == "verified"
+                if all_verified
                 else None
             ),
             "observedOverallScore": _mean_numeric(numeric_scores),
@@ -457,10 +509,15 @@ def run_marble(
             "upstreamCommit": adapter.manifest.get("upstreamCommit"),
             "python": str(config.python_executable),
             "config": str(config_files[0]),
+            "configs": [str(path) for path in config_files],
             "officialOutput": str(output_file),
+            "officialOutputs": [
+                str(item["officialOutput"]) for item in run_reports
+            ],
             "log": str(log_path),
-            "returnCode": completed.returncode,
-            "timedOut": timed_out,
+            "returnCode": run_reports[-1]["returnCode"],
+            "timedOut": any(item["timedOut"] for item in run_reports),
+            "runs": run_reports,
             "sourceDiagnostics": diagnostics,
             "patch": (
                 {
