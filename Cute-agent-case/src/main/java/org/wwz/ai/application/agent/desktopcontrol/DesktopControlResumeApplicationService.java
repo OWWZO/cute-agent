@@ -120,42 +120,65 @@ public class DesktopControlResumeApplicationService {
             throw e;
         }
 
-        AgentStreamProjection projectingStream =
-                new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus,
-                        sessionEventClock, agentTimelineEventProjector)
-                        .bindRegistry(sessionProjectionRegistry);
-        agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {
-            try {
-                AgentExecutorSupport.execute(dispatchExecutor, "desktopControlResume", agentRequest.getRequestId(),
-                        () -> dispatchContinuation(record, agentRequest, projectingStream));
-            } catch (AgentExecutorBusyException e) {
-                log.warn("{} deferred desktop-control resume busy", agentRequest.getRequestId(), e);
-                activeAgentRunRegistry.end(agentRequest.getRequestId());
+        AgentStreamProjection projectingStream = null;
+        try {
+            projectingStream =
+                    new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus,
+                            sessionEventClock, agentTimelineEventProjector)
+                            .bindRegistry(sessionProjectionRegistry);
+            AgentStreamProjection deferredStream = projectingStream;
+            agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {
                 try {
-                    desktopControlRepository.markStatus(record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
-                    projectingStream.completeWithError(e);
-                } finally {
-                    notifyRunSettled(agentRequest);
-                }
-            } catch (RuntimeException e) {
-                log.error("{} deferred desktop-control resume failed", agentRequest.getRequestId(), e);
-                activeAgentRunRegistry.end(agentRequest.getRequestId());
-                try {
+                    AgentExecutorSupport.execute(dispatchExecutor, "desktopControlResume", agentRequest.getRequestId(),
+                            () -> dispatchContinuation(record, agentRequest, deferredStream));
+                } catch (AgentExecutorBusyException e) {
+                    log.warn("{} deferred desktop-control resume busy", agentRequest.getRequestId(), e);
+                    activeAgentRunRegistry.end(agentRequest.getRequestId());
                     try {
                         desktopControlRepository.markStatus(
                                 record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
-                    } catch (RuntimeException resetError) {
-                        log.error("{} desktop-control resume status reset failed controlId={}",
-                                agentRequest.getRequestId(), record.getControlId(), resetError);
-                        e.addSuppressed(resetError);
+                        deferredStream.completeWithError(e);
+                    } finally {
+                        notifyRunSettled(agentRequest);
                     }
-                    projectingStream.completeWithError(e);
-                } finally {
-                    notifyRunSettled(agentRequest);
+                } catch (RuntimeException e) {
+                    log.error("{} deferred desktop-control resume failed", agentRequest.getRequestId(), e);
+                    activeAgentRunRegistry.end(agentRequest.getRequestId());
+                    try {
+                        try {
+                            desktopControlRepository.markStatus(
+                                    record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
+                        } catch (RuntimeException resetError) {
+                            log.error("{} desktop-control resume status reset failed controlId={}",
+                                    agentRequest.getRequestId(), record.getControlId(), resetError);
+                            e.addSuppressed(resetError);
+                        }
+                        deferredStream.completeWithError(e);
+                    } finally {
+                        notifyRunSettled(agentRequest);
+                    }
                 }
+            });
+            return accepted(record);
+        } catch (RuntimeException e) {
+            activeAgentRunRegistry.end(agentRequest.getRequestId());
+            try {
+                if (projectingStream != null) {
+                    projectingStream.completeWithError(e);
+                }
+            } finally {
+                try {
+                    desktopControlRepository.markStatus(
+                            record.getControlId(), DesktopControlStatuses.RESUME_PENDING);
+                } catch (RuntimeException resetError) {
+                    log.error("{} desktop-control resume status reset failed controlId={}",
+                            agentRequest.getRequestId(), record.getControlId(), resetError);
+                    e.addSuppressed(resetError);
+                }
+                notifyRunSettled(agentRequest);
             }
-        });
-        return accepted(record);
+            throw e;
+        }
     }
 
     private static AgentQuerySubmitResult accepted(DesktopControlRecord record) {
