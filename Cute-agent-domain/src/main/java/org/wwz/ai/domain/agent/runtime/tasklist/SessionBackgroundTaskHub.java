@@ -32,7 +32,13 @@ public final class SessionBackgroundTaskHub {
 
     public static RuntimeBackgroundTaskRegistry getOrCreate(String sessionId,
                                                              TasklistPersistencePort persistence) {
-        String key = keyFor(sessionId);
+        return getOrCreate(sessionId, null, persistence);
+    }
+
+    public static RuntimeBackgroundTaskRegistry getOrCreate(String sessionId,
+                                                             String requestId,
+                                                             TasklistPersistencePort persistence) {
+        String key = keyFor(sessionId, requestId);
         long threadId = Thread.currentThread().threadId();
         claim(threadId, key);
         RuntimeBackgroundTaskRegistry existing = BY_SESSION.get(key);
@@ -129,12 +135,11 @@ public final class SessionBackgroundTaskHub {
     }
 
     /**
-     * 与 {@link #getOrCreate(String, TasklistPersistencePort)} 使用同一 key。
-     * <p>以前这里在 sessionId 为空时回退到 requestId，导致创建（"default"）与查询
-     * （requestId）落在不同 registry，运行中的后台任务被误报为不存在。</p>
+     * 空白 sessionId 一律回退到 requestId，与 {@link #getOrCreate(String, String, TasklistPersistencePort)}
+     * 及 {@code AgentContext.requireBackgroundTasks()} 保持一致。
      */
     public static String keyFor(String sessionId, String requestId) {
-        return keyFor(sessionId);
+        return StringUtils.defaultIfBlank(sessionId, StringUtils.defaultIfBlank(requestId, "default")).trim();
     }
 
     /** 测试或会话清理用 */

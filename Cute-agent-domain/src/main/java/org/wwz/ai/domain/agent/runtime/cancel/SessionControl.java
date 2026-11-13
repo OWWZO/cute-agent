@@ -104,11 +104,18 @@ public final class SessionControl {
      * 子 Agent 共享父 registry 是类注释描述的刻意行为。</p>
      */
     public RuntimeBackgroundTaskRegistry requireBackgroundTasks(String sessionId, TasklistPersistencePort persistence) {
+        return requireBackgroundTasks(sessionId, null, persistence);
+    }
+
+    public RuntimeBackgroundTaskRegistry requireBackgroundTasks(String sessionId,
+                                                                String requestId,
+                                                                TasklistPersistencePort persistence) {
         RuntimeBackgroundTaskRegistry existing = backgroundTasks;
         if (existing != null) {
             return existing;
         }
-        RuntimeBackgroundTaskRegistry created = SessionBackgroundTaskHub.getOrCreate(sessionId, persistence);
+        RuntimeBackgroundTaskRegistry created =
+                SessionBackgroundTaskHub.getOrCreate(sessionId, requestId, persistence);
         synchronized (this) {
             if (backgroundTasks == null) {
                 backgroundTasks = created;

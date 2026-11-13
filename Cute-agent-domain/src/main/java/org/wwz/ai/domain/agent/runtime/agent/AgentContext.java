@@ -396,11 +396,7 @@ public class AgentContext {
 
     public RuntimeBackgroundTaskRegistry requireBackgroundTasks() {
         // 进程内按 session 共享 registry，保证跨轮 TaskOutput 能命中仍在跑的后台任务。
-        String sid = sessionId != null && !sessionId.isBlank() ? sessionId : requestId;
-        if (sid == null || sid.isBlank()) {
-            sid = "default";
-        }
-        return sessionControl().requireBackgroundTasks(sid, resolveTasklistPersistence());
+        return sessionControl().requireBackgroundTasks(sessionId, requestId, resolveTasklistPersistence());
     }
 
     private TasklistPersistencePort resolveTasklistPersistence() {
