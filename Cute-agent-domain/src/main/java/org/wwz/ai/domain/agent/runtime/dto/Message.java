@@ -101,6 +101,21 @@ public class Message {
     private List<ToolCall> toolCalls;
 
     /**
+     * 从已有消息重建时保留全部字段，避免新增字段在压缩/审计投影中静默丢失。
+     */
+    public static MessageBuilder copyOf(Message src) {
+        return Message.builder()
+                .role(src.getRole())
+                .originMessageKey(src.getOriginMessageKey())
+                .modelOnly(src.getModelOnly())
+                .content(src.getContent())
+                .reasoningContent(src.getReasoningContent())
+                .base64Image(src.getBase64Image())
+                .toolCallId(src.getToolCallId())
+                .toolCalls(src.getToolCalls());
+    }
+
+    /**
      * 静态工厂方法：创建用户消息（最常用）
      * @param content  用户输入的文本内容（必填）
      * @param base64Image  图片Base64编码（可选，无图片传null）

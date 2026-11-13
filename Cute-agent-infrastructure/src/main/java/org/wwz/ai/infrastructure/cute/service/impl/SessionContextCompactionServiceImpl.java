@@ -823,11 +823,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                 if (m == null) {
                     continue;
                 }
-                slim.add(Message.builder()
-                        .role(m.getRole())
-                        .content(m.getContent())
-                        .toolCallId(m.getToolCallId())
-                        .toolCalls(m.getToolCalls())
+                slim.add(Message.copyOf(m)
                         .base64Image(StringUtils.isNotBlank(m.getBase64Image()) ? "[image-omitted]" : null)
                         .build());
             }
