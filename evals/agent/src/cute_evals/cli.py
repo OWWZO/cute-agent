@@ -24,7 +24,6 @@ from .benchmarks.deepresearch import DeepResearchAdapter
 from .benchmarks.deepresearch.runner import run_deepsearch
 from .benchmarks.gaia import GAIAAdapter
 from .benchmarks.longmemeval import LongMemEvalAdapter
-from .benchmarks.memoryagentbench import MemoryAgentBenchAdapter
 from .benchmarks.marble import MarbleAdapter
 from .benchmarks.marble.runner import (
     MarbleRunBlocked,
@@ -1435,6 +1434,20 @@ def _run_longmemeval_benchmark(args: argparse.Namespace) -> int:
     )
 
 
+def _load_memory_agent_bench_adapter():
+    try:
+        from .benchmarks.memoryagentbench import MemoryAgentBenchAdapter
+    except ModuleNotFoundError as exc:
+        if exc.name == "rapidfuzz" or (exc.name or "").startswith("rapidfuzz."):
+            raise RuntimeError(
+                "MemoryAgentBench requires the optional 'rapidfuzz' dependency; "
+                "install it with `python -m pip install "
+                "'cute-evals[memoryagentbench]'`"
+            ) from exc
+        raise
+    return MemoryAgentBenchAdapter
+
+
 def _run_memoryagentbench_benchmark(args: argparse.Namespace) -> int:
     if args.profile == "pr":
         raise ValueError("MemoryAgentBench requires nightly or release")
@@ -1454,7 +1467,7 @@ def _run_memoryagentbench_benchmark(args: argparse.Namespace) -> int:
             "MemoryAgentBench official-full requires --judge-base-url "
             "and --judge-api-key"
         )
-    adapter = MemoryAgentBenchAdapter(
+    adapter = _load_memory_agent_bench_adapter()(
         Path(args.manifest).resolve()
         if args.manifest
         else Path(__file__).resolve().parent
