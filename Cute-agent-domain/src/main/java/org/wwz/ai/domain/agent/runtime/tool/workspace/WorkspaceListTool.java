@@ -76,6 +76,9 @@ public class WorkspaceListTool extends AbstractWorkspacePathTool {
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    if (attrs.isDirectory()) {
+                        return addEntry(file, "DIR", null);
+                    }
                     if (attrs.isSymbolicLink()) {
                         // 未跟随符号链接时沿用旧语义：类型与大小按目标判定。
                         Long bytes = Files.isRegularFile(file) ? Files.size(file) : null;
