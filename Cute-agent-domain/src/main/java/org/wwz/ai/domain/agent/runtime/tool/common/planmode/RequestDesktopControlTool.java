@@ -2,6 +2,7 @@ package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.memory.ltm.LtmOwner;
+import org.wwz.ai.domain.agent.memory.ltm.LtmOwnerType;
 import org.wwz.ai.domain.agent.memory.ltm.LtmOwnerResolver;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
@@ -106,7 +107,9 @@ public class RequestDesktopControlTool implements BaseTool {
         if (owner == null) {
             owner = LtmOwnerResolver.resolve(context.getUserId(), null, context.getSessionId());
         }
-        if (owner == null || LtmOwnerResolver.ANONYMOUS_OWNER_ID.equals(owner.getId())) {
+        if (owner == null
+                || LtmOwnerResolver.ANONYMOUS_OWNER_ID.equals(owner.getId())
+                || (owner.getType() != LtmOwnerType.USER && owner.getType() != LtmOwnerType.ERP)) {
             throw new IllegalStateException("无法识别当前用户，已拒绝打开共享桌面会话");
         }
         return owner.asOwnerKey();
