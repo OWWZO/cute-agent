@@ -101,6 +101,26 @@ export function isSessionControlPackage(packageType?: string): boolean {
   return SESSION_CONTROL_PACKAGES.has(String(packageType || ""));
 }
 
+/** wake_failed 只能操作事件所属会话的快照；找不到快照时直接丢弃事件。 */
+export function planWakeFailedSnapshot(input: {
+  conversationId: string;
+  requestId: string;
+  snapshots: Map<string, CHAT.ConversationHistory>;
+  currentConversation: CHAT.ConversationHistory;
+}): CHAT.ConversationHistory | undefined {
+  const snapshot =
+    input.snapshots.get(input.conversationId) ||
+    (input.currentConversation.id === input.conversationId
+      ? input.currentConversation
+      : undefined);
+  if (!snapshot) {
+    return undefined;
+  }
+  return (snapshot.chatList || []).some((item) => item.requestId === input.requestId)
+    ? snapshot
+    : undefined;
+}
+
 /**
  * 本轮是否派发过后台子 Agent（含已结算）。
  * 用于决定 root result 后是否继续保留观察流，等待可能的 run_wake。
@@ -1973,8 +1993,15 @@ export function useConversationStream(
       if (!requestId) {
         return;
       }
-      const snapshot =
-        conversationSnapshotsRef.current.get(conversationId) || conversationRef.current;
+      const snapshot = planWakeFailedSnapshot({
+        conversationId,
+        requestId,
+        snapshots: conversationSnapshotsRef.current,
+        currentConversation: conversationRef.current,
+      });
+      if (!snapshot) {
+        return;
+      }
       if (!(snapshot.chatList || []).some((item) => item.requestId === requestId)) {
         return;
       }
