@@ -268,18 +268,20 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
 
     private List<Message> applyLtmPreCompactHooks(String sessionId, String requestId, List<Message> current) {
         // 后台任务通知只服务模型上下文：不参与 LTM flush / insight 采集。
-        List<Message> working = new ArrayList<>(current == null ? 0 : current.size());
+        List<Message> context = new ArrayList<>(current == null ? 0 : current.size() + 1);
+        List<Message> ltmInput = new ArrayList<>(current == null ? 0 : current.size());
         if (current != null) {
+            context.addAll(current);
             for (Message message : current) {
                 if (message != null && !Boolean.TRUE.equals(message.getModelOnly())) {
-                    working.add(message);
+                    ltmInput.add(message);
                 }
             }
         }
         try {
             CuteRuntimeDependencies deps = runtimeDependencies();
             if (deps == null) {
-                return working;
+                return context;
             }
             LtmFlushParity parity = FLUSH_PARITY.get();
             // ① 独立 flush 小回合；优先运行时绑定
@@ -292,7 +294,7 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                         sessionId,
                         requestId,
                         parity == null ? null : parity.owner(),
-                        working,
+                        ltmInput,
                         parity == null ? null : parity.parentSystemPrompt(),
                         parity == null ? null : parity.parentTools());
                 if (flushResult.failed()) {
@@ -304,16 +306,17 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                             flushResult.written(), sessionId);
                 }
             } else {
-                int userTurns = MemoryFlushPolicy.countUserTurns(working);
+                int userTurns = MemoryFlushPolicy.countUserTurns(ltmInput);
                 if (MemoryFlushPolicy.shouldFlush(userTurns, deps.resolveLtmFlushMinTurns(), true)) {
-                    working = MemoryFlushPolicy.prependFlushNudge(working);
+                    context = MemoryFlushPolicy.prependFlushNudge(context);
+                    ltmInput = MemoryFlushPolicy.prependFlushNudge(ltmInput);
                 }
             }
             // ② Provider insight
             LtmManager ltmManager = deps.getOptionalLtmManager();
             if (ltmManager != null) {
                 List<Map<String, Object>> payload = new ArrayList<>();
-                for (Message message : working) {
+                for (Message message : ltmInput) {
                     if (message == null) {
                         continue;
                     }
@@ -324,17 +327,14 @@ public class SessionContextCompactionServiceImpl implements SessionContextCompac
                 }
                 String insight = ltmManager.onPreCompress(payload);
                 if (StringUtils.isNotBlank(insight)) {
-                    List<Message> withInsight = new ArrayList<>(working.size() + 1);
-                    withInsight.add(Message.userMessage(
+                    context.add(0, Message.userMessage(
                             "[memory-pre-compress] " + insight.trim(), null));
-                    withInsight.addAll(working);
-                    working = withInsight;
                 }
             }
         } catch (Exception e) {
             log.warn("LTM pre-compact hooks failed sessionId={}: {}", sessionId, e.toString());
         }
-        return working;
+        return context;
     }
 
     @Override
