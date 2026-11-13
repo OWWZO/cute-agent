@@ -87,27 +87,6 @@ async def summarize_chapter_stream(
 
 
 @timer()
-async def summarize_chapter(
-    query: str,
-    chapter_title: str,
-    chapter_content: str,
-    chapter_order: int,
-    search_content: str,
-) -> str:
-    """基于检索材料生成单章总结（拼接流式输出）。"""
-    content = ""
-    async for chunk in summarize_chapter_stream(
-        query=query,
-        chapter_title=chapter_title,
-        chapter_content=chapter_content,
-        chapter_order=chapter_order,
-        search_content=search_content,
-    ):
-        content += chunk
-    return strip_appended_refusal(content)
-
-
-@timer()
 async def update_chapter_summary(
     query: str,
     chapter_title: str,
