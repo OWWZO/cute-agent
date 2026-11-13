@@ -42,6 +42,7 @@ def _fixture_source(
     tmp_path: Path,
     *,
     evaluator_text: str = "def evaluator():\n    return 1\n",
+    task_ids: tuple[int, ...] = (1,),
 ) -> tuple[Path, Path]:
     source = tmp_path / "source"
     for domain in ("bargaining", "coding", "database", "minecraft", "research"):
@@ -50,11 +51,15 @@ def _fixture_source(
         rows = [
             {
                 "scenario": domain,
-                "task_id": 1,
+                "task_id": task_id,
                 "agents": [{"agent_id": "agent1"}, {"agent_id": "agent2"}],
             }
+            for task_id in task_ids
         ]
-        path.write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
+        path.write_text(
+            "".join(json.dumps(row) + "\n" for row in rows),
+            encoding="utf-8",
+        )
     scripts = {
         "entrypoint": (source / "marble" / "main.py", "print('main')\n"),
         "evaluator": (
@@ -257,6 +262,81 @@ def test_run_marble_writes_compatibility_report(
     assert report["tasks"][0]["status"] == "verified"
     assert report["metrics"]["observedOverallScore"] == 4.0
 
+    schema_path = (
+        Path(__file__).resolve().parents[1]
+        / "schemas"
+        / "agent_benchmark.schema.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    validate(report, schema)
+
+
+def test_run_marble_executes_every_selected_task(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source, manifest_path = _fixture_source(tmp_path, task_ids=(1, 2))
+    adapter = MarbleAdapter(source, manifest_path)
+    output_dir = tmp_path / "multi-task-out"
+    executed: list[int] = []
+
+    def fake_run(command, **kwargs):
+        if any("jsonl2yaml.py" in str(item) for item in command):
+            output_folder = Path(command[command.index("--output_folder") + 1])
+            output_folder.mkdir(parents=True, exist_ok=True)
+            for task_id in (1, 2):
+                (output_folder / f"task_{task_id}.yaml").write_text(
+                    f"task_id: {task_id}\n",
+                    encoding="utf-8",
+                )
+            return subprocess.CompletedProcess(command, 0, "converted", "")
+        config_path = Path(command[command.index("--config-path") + 1])
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        task_id = int(config["task_id"])
+        executed.append(task_id)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "official-output.jsonl").write_text(
+            json.dumps(
+                {
+                    "iterations": [
+                        {
+                            "task_results": [{"agent1": "a"}, {"agent2": "b"}],
+                            "communications": [],
+                        }
+                    ],
+                    "token_usage": task_id * 100,
+                    "task_evaluation": {"score": task_id},
+                    "planning_scores": [],
+                    "communication_scores": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, f"ran {task_id}", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    report = run_marble(
+        adapter,
+        MarbleRunConfig(
+            python_executable=Path(sys.executable),
+            domain="research",
+            task_ids=(1, 2),
+            llm_model="openai/group/deepseek",
+            output_dir=output_dir,
+            compatibility_local=True,
+        ),
+    )
+
+    assert executed == [1, 2]
+    assert [task["officialTaskId"] for task in report["tasks"]] == [1, 2]
+    assert [task["tokenUsage"] for task in report["tasks"]] == [100, 200]
+    assert report["metrics"]["taskCount"] == 2
+    assert report["metrics"]["observedOverallScore"] == 1.5
+    assert [run["officialTaskId"] for run in report["environment"]["runs"]] == [
+        1,
+        2,
+    ]
     schema_path = (
         Path(__file__).resolve().parents[1]
         / "schemas"

@@ -17,12 +17,18 @@ from cute_evals.models import RunTrace
 
 
 class FakeTaskServer:
-    def __init__(self) -> None:
+    def __init__(self, policy: str = "Test policy") -> None:
         self.reset_ids: list[str] = []
+        self.policy = policy
 
     def reset(self, task_id: str) -> dict:
         self.reset_ids.append(task_id)
-        return {"taskId": task_id}
+        return {
+            "taskId": task_id,
+            "domain": "airline",
+            "dbHash": "db-hash",
+            "policy": self.policy,
+        }
 
     def tools(self) -> list[dict]:
         return [{"name": "get_user_details", "parameters": {"type": "object"}}]
@@ -217,6 +223,33 @@ def test_tau2_prepare_resets_official_environment_before_every_task(
 
     assert server.reset_ids == ["0"]
     assert prepared.task.functions[0]["name"] == "get_user_details"
+
+
+def test_tau2_prepare_carries_environment_policy_into_case_prompt(
+    tmp_path: Path,
+) -> None:
+    adapter = Tau2Adapter()
+    task = BenchmarkTask(
+        id="airline:0",
+        category="airline",
+        question="Cancel reservation EHGLP3.",
+        functions=[],
+        ground_truth=None,
+        raw={},
+        metadata={
+            "domain": "airline",
+            "officialTaskId": "0",
+            "split": "official-subset",
+        },
+    )
+    policy = "Never reveal another passenger's reservation."
+    server = FakeTaskServer(policy=policy)
+
+    prepared = adapter.prepare(task, tmp_path / "workspace", server=server)
+    case = adapter.case_for_task(prepared.task)
+
+    assert prepared.metadata["taskEnvironment"]["dbHash"] == "db-hash"
+    assert case.answer_contract == {"instruction": policy}
 
 
 def test_tau2_rejects_cached_archive_with_wrong_hash(tmp_path: Path) -> None:

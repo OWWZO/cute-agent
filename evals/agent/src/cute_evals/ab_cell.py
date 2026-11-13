@@ -58,11 +58,12 @@ def _error_result(
     status: str,
     error: str,
 ) -> CellResult:
-    ownership = (
-        "environment"
-        if status == "infra_error"
-        else ("adapter" if status == "adapter_error" else "oracle")
-    )
+    ownership = {
+        "infra_error": "environment",
+        "adapter_error": "adapter",
+        "agent_error": "model",
+        "oracle_error": "oracle",
+    }.get(status, "oracle")
     return CellResult(
         cell_key=str(payload["cellKey"]),
         experiment_id=str(payload["experimentId"]),
@@ -75,7 +76,7 @@ def _error_result(
         status=status,
         task_score=0.0,
         hard_gate_passed=False,
-        in_accuracy_denominator=False,
+        in_accuracy_denominator=status == "agent_error",
         failure_ownership=ownership,
         metrics={
             "apiTurns": None,
@@ -210,7 +211,10 @@ def execute_cell(
             artifact_refs=list(trace.artifacts),
         )
     except EvalRunnerError as exc:
-        status = "infra_error" if exc.category == "timeout" else "adapter_error"
+        status = {
+            "timeout": "infra_error",
+            "agent": "agent_error",
+        }.get(exc.category, "adapter_error")
         result = _error_result(
             payload,
             started_at=started_at,

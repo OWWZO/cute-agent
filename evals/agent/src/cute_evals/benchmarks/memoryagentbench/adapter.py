@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 import os
@@ -357,12 +358,22 @@ class MemoryAgentBenchAdapter:
         selected: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
         for source_spec in self._source_specs(category, split):
             source = str(source_spec["source"])
+            category_rows = list(enumerate(self._load_category(category)))
             rows = [
                 (index, row)
-                for index, row in enumerate(self._load_category(category))
+                for index, row in category_rows
                 if str((row.get("metadata") or {}).get("source") or "")
                 == source
             ]
+            if not rows and any(char in source for char in "*?[]"):
+                rows = [
+                    (index, row)
+                    for index, row in category_rows
+                    if fnmatch.fnmatchcase(
+                        str((row.get("metadata") or {}).get("source") or ""),
+                        source,
+                    )
+                ]
             if not rows:
                 raise ValueError(
                     f"MemoryAgentBench source not found: {category}/{source}"

@@ -40,6 +40,7 @@
         "failed",
         "unverified",
         "model_error",
+        "agent_error",
         "infra_error",
         "adapter_error",
         "oracle_error",
