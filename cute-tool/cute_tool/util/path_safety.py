@@ -5,13 +5,23 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_SAFE_SEGMENT_RE = re.compile(r"^(?!\.)[\w .-]+$", re.UNICODE)
+_INVALID_SEGMENT_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
+_WINDOWS_RESERVED_NAME_RE = re.compile(
+    r"^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$",
+    re.IGNORECASE,
+)
 
 
 def safe_path_segment(value: object, *, label: str = "path segment") -> str:
     """Return a single safe path component or raise ``ValueError``."""
     text = str(value).strip() if value is not None else ""
-    if text in {"", ".", ".."} or not _SAFE_SEGMENT_RE.fullmatch(text):
+    reserved_stem = text.split(".", 1)[0].rstrip(" .")
+    if (
+        text in {"", ".", ".."}
+        or text.startswith(".")
+        or _INVALID_SEGMENT_CHARS_RE.search(text)
+        or _WINDOWS_RESERVED_NAME_RE.fullmatch(reserved_stem)
+    ):
         raise ValueError(f"{label} must be a single safe path segment")
     return text
 
