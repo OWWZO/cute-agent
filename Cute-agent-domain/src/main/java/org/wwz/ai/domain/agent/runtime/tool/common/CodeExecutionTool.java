@@ -113,8 +113,8 @@ public class CodeExecutionTool implements BaseTool {
             request.put("workspaceRoot", workspaceRoot.toString());
             request.put("permissionProfile", "workspace");
             if (source.isBlank()) {
-                // workspaceFile 模式下不伪造空源码；远端按文件执行。
-                request.remove("source");
+                // 远端 source 必填；workspaceFile 模式传不会被执行的合法占位源码。
+                request.put("source", "pass");
             } else {
                 request.put("source", source);
             }
