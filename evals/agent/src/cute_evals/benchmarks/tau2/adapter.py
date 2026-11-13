@@ -494,13 +494,21 @@ class Tau2Adapter:
         workspace.mkdir(parents=True, exist_ok=True)
         owned = server is None
         server = server or self.task_server(task).start()
-        server.reset(str(task.metadata["officialTaskId"]))
+        environment = server.reset(str(task.metadata["officialTaskId"]))
         tools = server.tools()
-        prepared_task = replace(task, functions=tools)
+        prepared_task = replace(
+            task,
+            functions=tools,
+            metadata={**task.metadata, "taskEnvironment": environment},
+        )
         return PreparedTask(
             task=prepared_task,
             workspace=workspace,
-            metadata={"taskServer": server, "ownedServer": owned},
+            metadata={
+                "taskServer": server,
+                "ownedServer": owned,
+                "taskEnvironment": environment,
+            },
         )
 
     def fixture_script(self, task: BenchmarkTask) -> dict[str, Any]:
@@ -514,6 +522,7 @@ class Tau2Adapter:
     def case_for_task(self, task: BenchmarkTask) -> EvalCase:
         budgets = self.manifest["budgets"]
         split = str(task.metadata.get("split") or "official-subset")
+        policy = (task.metadata.get("taskEnvironment") or {}).get("policy")
         return EvalCase(
             id=task.id,
             suite=f"tau2-{split}",
@@ -528,6 +537,17 @@ class Tau2Adapter:
             script=[{"type": "final", "content": "TAU2_FIXTURE_SMOKE"}],
             source_path=str(self.manifest_path),
             tools=task.functions,
+            answer_contract=(
+                {
+                    "instruction": (
+                        policy
+                        if isinstance(policy, str)
+                        else json.dumps(policy, ensure_ascii=False, sort_keys=True)
+                    )
+                }
+                if policy
+                else None
+            ),
         )
 
     def evaluate(self, server: Tau2TaskServer, trace: RunTrace) -> dict[str, Any]:
