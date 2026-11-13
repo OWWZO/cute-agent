@@ -302,7 +302,6 @@ public class SubAgentRunner {
                 new java.util.concurrent.atomic.AtomicInteger(ExecutionLedgerConstants.STATUS_FAILED);
         java.util.concurrent.atomic.AtomicReference<String> childRunSummary =
                 new java.util.concurrent.atomic.AtomicReference<>("");
-        boolean mailboxActivated = false;
         try {
             childContext.bindPendingInjectQueue(SessionAgentMailboxHub.queue(sessionKey, agentId));
 
@@ -355,7 +354,6 @@ public class SubAgentRunner {
             childTools.setAgentContext(childContext);
 
             SessionAgentMailboxHub.markActive(sessionKey, agentId, true);
-            mailboxActivated = true;
             agent = new ReactImplAgent(childContext);
             agent.setName("subagent:" + definition.getAgentType());
             agent.setDescription(StringUtils.defaultIfBlank(description, definition.getAgentType()));
@@ -476,11 +474,6 @@ public class SubAgentRunner {
                         childContext.isRunCancelled() ? "stopped" : resolveEndStatus(childRunStatus.get()),
                         resolveEndSummary(childRunStatus, childRunSummary));
                 closeIsolatedChildStream(parentContext, childSessionId, isolatedChildPrinter);
-            }
-            // 只有本次调用真正 markActive(true) 过才允许关闭邮箱：
-            // resume 早退时邮箱属于另一个仍在运行的实例，清掉会让 SendMessage 静默丢消息。
-            if (mailboxActivated) {
-                SessionAgentMailboxHub.markActive(sessionKey, agentId, false);
             }
             // mailbox 占位由 runUnlocked 的外层 finally 统一释放（异常路径也覆盖）。
         }
