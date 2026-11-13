@@ -345,6 +345,43 @@ def test_official_full_loads_all_pinned_sources(tmp_path: Path, monkeypatch) -> 
     assert adapter.report_metadata()["scoreLabel"] == "official-full"
 
 
+def test_source_pattern_expands_while_exact_source_still_wins(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    adapter = _adapter(tmp_path, monkeypatch)
+    category = "Accurate_Retrieval"
+    adapter._rows[category] = [
+        _row(category, "longmemeval_s_cleaned", "LME-A"),
+        _row(category, "longmemeval_s_alt", "LME-B"),
+        _row(category, "longmemeval_m_cleaned", "LME-C"),
+    ]
+    sources = adapter.manifest["selection"]["official-full"]["categories"][
+        category
+    ]["sources"]
+    sources.clear()
+    sources.append(
+        {
+            "source": "longmemeval_s*",
+            "scorer": "longmemeval_judge",
+            "metric": "llm_judge_accuracy",
+        }
+    )
+
+    matched = adapter._selected_contexts(category, "official-full")
+
+    assert [
+        row["metadata"]["source"] for _, row, _ in matched
+    ] == ["longmemeval_s_cleaned", "longmemeval_s_alt"]
+
+    sources[0]["source"] = "longmemeval_s_cleaned"
+    exact = adapter._selected_contexts(category, "official-full")
+
+    assert [row["metadata"]["source"] for _, row, _ in exact] == [
+        "longmemeval_s_cleaned"
+    ]
+
+
 def test_official_full_uses_compatibility_label_for_nonofficial_judge(
     tmp_path: Path,
     monkeypatch,
