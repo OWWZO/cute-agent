@@ -54,8 +54,14 @@ public class TodoWriteTool implements BaseTool {
         item.put("required", List.of("status"));
         // content 与 subject 至少一个存在；否则 replaceAll 会跳过该项并静默丢任务。
         item.put("anyOf", List.of(
-                Map.of("required", List.of("content")),
-                Map.of("required", List.of("subject"))));
+                Map.of(
+                        "type", "object",
+                        "properties", itemProps,
+                        "required", List.of("content")),
+                Map.of(
+                        "type", "object",
+                        "properties", itemProps,
+                        "required", List.of("subject"))));
 
         Map<String, Object> todos = new LinkedHashMap<>();
         todos.put("type", "array");
