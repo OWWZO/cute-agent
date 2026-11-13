@@ -333,9 +333,13 @@ public abstract class BaseAgent {
 
     /**
      * 步进边界：把控制面 inject 写入 Memory，供下一轮 think 看到。
+     * <p>LTM flush/review fork 复用父 sessionId，必须跳过，否则会抢走父会话的中途指导。</p>
      */
     protected void drainPendingInjectsIntoMemory() {
         if (context == null) {
+            return;
+        }
+        if (LtmMemoryGuard.isSideEffectsDisabled(context)) {
             return;
         }
         SessionInboxPort inbox = context.sessionInboxPort();
@@ -393,9 +397,13 @@ public abstract class BaseAgent {
      * 步进边界：把后台任务完成通知写入 Memory（仅模型可见）。
      * <p>首次 drain 时同时补投 {@code notified=0} 的终态任务，覆盖进程重启/崩溃窗口；
      * 已由队列投递的任务按 taskId 去重。成功收口后才由收口点统一 markNotified。</p>
+     * <p>LTM flush/review fork 复用父 sessionId，必须跳过，否则会抢走父会话的后台通知。</p>
      */
     protected void drainBackgroundTaskNotificationsIntoMemory() {
         if (context == null || memory == null) {
+            return;
+        }
+        if (LtmMemoryGuard.isSideEffectsDisabled(context)) {
             return;
         }
         if (context.getRuntimeDependencies() != null
