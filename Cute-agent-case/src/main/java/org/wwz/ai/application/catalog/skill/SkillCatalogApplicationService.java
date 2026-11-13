@@ -10,6 +10,7 @@ import org.wwz.ai.domain.agent.catalog.model.CatalogSkillPackageResult;
 import org.wwz.ai.domain.agent.catalog.port.ICatalogSkillPackagePort;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillCatalog;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillDescriptor;
+import org.wwz.ai.domain.agent.runtime.tool.skill.SkillLoadException;
 import org.wwz.ai.types.enums.ResponseCode;
 
 import java.util.List;
@@ -100,7 +101,8 @@ public class SkillCatalogApplicationService {
 
     private ApplicationResult<Map<String, Object>> failure(Exception exception, String fallback) {
         log.error(fallback, exception);
-        String message = exception instanceof IllegalArgumentException
+        String message = (exception instanceof IllegalArgumentException
+                || exception instanceof SkillLoadException)
                 && StringUtils.isNotBlank(exception.getMessage())
                 ? exception.getMessage()
                 : fallback;

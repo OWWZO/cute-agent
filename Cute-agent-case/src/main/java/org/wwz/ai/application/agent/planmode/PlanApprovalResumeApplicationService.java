@@ -123,23 +123,30 @@ public class PlanApprovalResumeApplicationService {
             throw e;
         }
 
-        AgentStreamProjection projectingStream =
-                new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus,
-                        sessionEventClock, agentTimelineEventProjector)
-                        .bindRegistry(sessionProjectionRegistry);
-        agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {
-            try {
-                AgentExecutorSupport.execute(dispatchExecutor, "planApprovalResume", agentRequest.getRequestId(),
-                        () -> dispatchContinuation(record, agentRequest, projectingStream));
-            } catch (AgentExecutorBusyException e) {
-                log.warn("{} deferred plan-approval resume busy", agentRequest.getRequestId(), e);
-                cleanupFailedResume(record, agentRequest, projectingStream, e);
-            } catch (RuntimeException e) {
-                log.error("{} deferred plan-approval resume failed", agentRequest.getRequestId(), e);
-                cleanupFailedResume(record, agentRequest, projectingStream, e);
-            }
-        });
-        return accepted(record);
+        AgentStreamProjection projectingStream = null;
+        try {
+            projectingStream =
+                    new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus,
+                            sessionEventClock, agentTimelineEventProjector)
+                            .bindRegistry(sessionProjectionRegistry);
+            AgentStreamProjection deferredStream = projectingStream;
+            agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {
+                try {
+                    AgentExecutorSupport.execute(dispatchExecutor, "planApprovalResume", agentRequest.getRequestId(),
+                            () -> dispatchContinuation(record, agentRequest, deferredStream));
+                } catch (AgentExecutorBusyException e) {
+                    log.warn("{} deferred plan-approval resume busy", agentRequest.getRequestId(), e);
+                    cleanupFailedResume(record, agentRequest, deferredStream, e);
+                } catch (RuntimeException e) {
+                    log.error("{} deferred plan-approval resume failed", agentRequest.getRequestId(), e);
+                    cleanupFailedResume(record, agentRequest, deferredStream, e);
+                }
+            });
+            return accepted(record);
+        } catch (RuntimeException e) {
+            cleanupFailedResume(record, agentRequest, projectingStream, e);
+            throw e;
+        }
     }
 
     private void cleanupFailedResume(PlanApprovalRecord record,
@@ -155,7 +162,9 @@ public class PlanApprovalResumeApplicationService {
                         agentRequest.getRequestId(), record.getApprovalId(), resetError);
                 error.addSuppressed(resetError);
             }
-            projectingStream.completeWithError(error);
+            if (projectingStream != null) {
+                projectingStream.completeWithError(error);
+            }
         } finally {
             notifyRunSettled(agentRequest);
         }
