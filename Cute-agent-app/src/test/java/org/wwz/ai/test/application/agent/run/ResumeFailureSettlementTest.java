@@ -184,6 +184,86 @@ public class ResumeFailureSettlementTest {
     }
 
     @Test
+    public void planApprovalDeferFailureSettlesBeforeSurfacingErrorAndNormalPathStillAccepts() {
+        PlanApprovalRecord record = PlanApprovalRecord.builder()
+                .approvalId("approval-defer-1")
+                .resumeRequestId("resume-plan-defer-1")
+                .sessionId("session-plan-defer-1")
+                .userId("user-1")
+                .status(PlanApprovalStatuses.RESUME_PENDING)
+                .resumeContextJson(PlanApprovalResumeContext.toJson(
+                        PlanApprovalResumeContext.builder()
+                                .agentType(AgentType.REACT.getValue())
+                                .build()))
+                .build();
+        IPlanApprovalRepository repository = Mockito.mock(IPlanApprovalRepository.class);
+        Mockito.when(repository.findByResumeRequestId("resume-plan-defer-1")).thenReturn(Optional.of(record));
+        Mockito.when(repository.casClaimResume("resume-plan-defer-1", "user-1")).thenAnswer(invocation -> {
+            record.setStatus(PlanApprovalStatuses.RESUMING);
+            return true;
+        });
+        Mockito.when(repository.markStatus("approval-defer-1", PlanApprovalStatuses.RESUME_PENDING))
+                .thenAnswer(invocation -> {
+                    record.setStatus(PlanApprovalStatuses.RESUME_PENDING);
+                    return true;
+                });
+
+        ActiveAgentRunRegistry activeRuns = new ActiveAgentRunRegistry();
+        SessionProjectionRegistry projections = new SessionProjectionRegistry();
+        AtomicReference<String> statusAtSettle = new AtomicReference<>();
+        BackgroundTaskWakePort wakePort = Mockito.mock(BackgroundTaskWakePort.class);
+        Mockito.doAnswer(invocation -> {
+            statusAtSettle.set(record.getStatus());
+            return null;
+        }).when(wakePort).onRunSettled("session-plan-defer-1", "resume-plan-defer-1");
+        AtomicBoolean failDefer = new AtomicBoolean(true);
+        AtomicReference<String> deferredRequestId = new AtomicReference<>();
+        AgentRunLaunchGate launchGate = new AgentRunLaunchGate(0) {
+            @Override
+            public void defer(String requestId, String sessionId, Runnable launch) {
+                if (failDefer.get()) {
+                    throw new IllegalStateException("plan launch scheduling failed");
+                }
+                deferredRequestId.set(requestId);
+            }
+        };
+        PlanApprovalResumeApplicationService service = new PlanApprovalResumeApplicationService(
+                repository,
+                null,
+                authorization(),
+                activeRuns,
+                (ignoredSessionId, ignoredFrame) -> {
+                },
+                launchGate,
+                null,
+                projections,
+                null);
+        ReflectionTestUtils.setField(service, "handlerMap", Collections.emptyMap());
+        ReflectionTestUtils.setField(service, "backgroundTaskWakePort", wakePort);
+        UserRequestContext.bind("user-1");
+
+        try {
+            try {
+                service.resume("resume-plan-defer-1");
+                Assert.fail("launch failure must surface to the HTTP failure boundary");
+            } catch (IllegalStateException expected) {
+                Assert.assertEquals("plan launch scheduling failed", expected.getMessage());
+            }
+
+            Assert.assertEquals(PlanApprovalStatuses.RESUME_PENDING, statusAtSettle.get());
+            Assert.assertTrue(activeRuns.findBySessionId("session-plan-defer-1").isEmpty());
+            Assert.assertTrue(projections.listLive("session-plan-defer-1").isEmpty());
+
+            failDefer.set(false);
+            Assert.assertTrue(service.resume("resume-plan-defer-1").isAccepted());
+            Assert.assertEquals("resume-plan-defer-1", deferredRequestId.get());
+            Assert.assertEquals(PlanApprovalStatuses.RESUMING, record.getStatus());
+        } finally {
+            launchGate.shutdown();
+        }
+    }
+
+    @Test
     public void planStatusResetFailureStillClosesProjectionWithError() {
         PlanApprovalRecord record = PlanApprovalRecord.builder()
                 .approvalId("approval-1")
