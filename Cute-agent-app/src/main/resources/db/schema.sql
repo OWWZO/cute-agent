@@ -605,7 +605,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_artifact (
 CREATE TABLE IF NOT EXISTS ai_agent_timeline_item (
     id                  BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     session_id          VARCHAR(128) NOT NULL COMMENT '所属会话ID',
-    request_id          VARCHAR(64)  NOT NULL COMMENT '所属 run requestId',
+    run_id              VARCHAR(64)  NOT NULL COMMENT '所属 requestId / runId',
     item_id             VARCHAR(192) NOT NULL COMMENT '稳定时间线项ID',
     parent_item_id      VARCHAR(192) NULL COMMENT '父时间线项ID',
     agent_id            VARCHAR(128) NULL COMMENT 'main 或子 Agent 运行时ID',
@@ -623,8 +623,8 @@ CREATE TABLE IF NOT EXISTS ai_agent_timeline_item (
     update_time         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     deleted             TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '软删除',
     PRIMARY KEY (id),
-    UNIQUE KEY uk_timeline_request_item (request_id, item_id),
-    KEY idx_timeline_request_order (request_id, deleted, order_key, sub_order, id),
+    UNIQUE KEY uk_timeline_session_item (session_id, item_id, deleted),
+    KEY idx_timeline_run_order (run_id, deleted, order_key, sub_order, id),
     KEY idx_timeline_session_order (session_id, deleted, order_key, sub_order, id),
     KEY idx_timeline_parent (session_id, parent_item_id, deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent 时间线目录（非完整事件账本）';

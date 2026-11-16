@@ -5,7 +5,7 @@
     <resultMap id="TimelineItemMap" type="org.wwz.ai.domain.agent.ledger.timeline.TimelineItem">
         <id column="id" property="id"/>
         <result column="session_id" property="sessionId"/>
-        <result column="request_id" property="runId"/>
+        <result column="run_id" property="runId"/>
         <result column="item_id" property="itemId"/>
         <result column="parent_item_id" property="parentItemId"/>
         <result column="agent_id" property="agentId"/>
@@ -25,14 +25,14 @@
     </resultMap>
 
     <sql id="timelineItemColumns">
-        id, session_id, request_id, item_id, parent_item_id, agent_id, kind, phase, status,
+        id, session_id, run_id, item_id, parent_item_id, agent_id, kind, phase, status,
         order_key, sub_order, updated_seq, source_type, llm_invocation_id,
         tool_invocation_id, artifact_id, create_time, update_time, deleted
     </sql>
 
     <insert id="upsert">
         INSERT INTO ai_agent_timeline_item (
-            session_id, request_id, item_id, parent_item_id, agent_id, kind, phase, status,
+            session_id, run_id, item_id, parent_item_id, agent_id, kind, phase, status,
             order_key, sub_order, updated_seq, source_type, llm_invocation_id,
             tool_invocation_id, artifact_id, create_time, update_time, deleted
         ) VALUES (
@@ -41,34 +41,34 @@
             #{toolInvocationId}, #{artifactId}, NOW(), NOW(), 0
         )
         ON DUPLICATE KEY UPDATE
-            parent_item_id = COALESCE(VALUES(parent_item_id), parent_item_id),
-            agent_id = COALESCE(VALUES(agent_id), agent_id),
+            parent_item_id = COALESCE(#{parentItemId}, parent_item_id),
+            agent_id = COALESCE(#{agentId}, agent_id),
             kind = kind,
             phase = CASE
-                WHEN phase = 'FINAL' OR VALUES(phase) = 'FINAL' THEN 'FINAL'
-                WHEN phase = 'SUMMARY' OR VALUES(phase) = 'SUMMARY' THEN 'SUMMARY'
-                ELSE VALUES(phase)
+                WHEN phase = 'FINAL' OR #{phase} = 'FINAL' THEN 'FINAL'
+                WHEN phase = 'SUMMARY' OR #{phase} = 'SUMMARY' THEN 'SUMMARY'
+                ELSE #{phase}
             END,
             status = CASE
                 WHEN status IN ('COMPLETED', 'CANCELLED', 'FAILED') THEN status
-                WHEN VALUES(status) IN ('COMPLETED', 'CANCELLED', 'FAILED') THEN VALUES(status)
-                WHEN VALUES(updated_seq) = 0 OR VALUES(updated_seq) >= updated_seq THEN VALUES(status)
+                WHEN #{status} IN ('COMPLETED', 'CANCELLED', 'FAILED') THEN #{status}
+                WHEN #{updatedSeq} = 0 OR #{updatedSeq} >= updated_seq THEN #{status}
                 ELSE status
             END,
-            order_key = CASE WHEN order_key = 0 THEN VALUES(order_key) ELSE order_key END,
-            sub_order = CASE WHEN sub_order = 0 THEN VALUES(sub_order) ELSE sub_order END,
-            updated_seq = GREATEST(updated_seq, VALUES(updated_seq)),
+            order_key = CASE WHEN order_key = 0 THEN #{orderKey} ELSE order_key END,
+            sub_order = CASE WHEN sub_order = 0 THEN #{subOrder} ELSE sub_order END,
+            updated_seq = GREATEST(updated_seq, #{updatedSeq}),
             source_type = source_type,
-            llm_invocation_id = COALESCE(VALUES(llm_invocation_id), llm_invocation_id),
-            tool_invocation_id = COALESCE(VALUES(tool_invocation_id), tool_invocation_id),
-            artifact_id = COALESCE(VALUES(artifact_id), artifact_id),
+            llm_invocation_id = COALESCE(#{llmInvocationId}, llm_invocation_id),
+            tool_invocation_id = COALESCE(#{toolInvocationId}, tool_invocation_id),
+            artifact_id = COALESCE(#{artifactId}, artifact_id),
             update_time = NOW(),
             deleted = 0
     </insert>
 
     <insert id="upsertBatch">
         INSERT INTO ai_agent_timeline_item (
-            session_id, request_id, item_id, parent_item_id, agent_id, kind, phase, status,
+            session_id, run_id, item_id, parent_item_id, agent_id, kind, phase, status,
             order_key, sub_order, updated_seq, source_type, llm_invocation_id,
             tool_invocation_id, artifact_id, create_time, update_time, deleted
         ) VALUES
@@ -81,6 +81,7 @@
                 NOW(), NOW(), 0
             )
         </foreach>
+        <!-- ON DUPLICATE is outside foreach; VALUES(col) refers to the current inserted row. -->
         ON DUPLICATE KEY UPDATE
             parent_item_id = COALESCE(VALUES(parent_item_id), parent_item_id),
             agent_id = COALESCE(VALUES(agent_id), agent_id),
@@ -111,11 +112,11 @@
         SELECT <include refid="timelineItemColumns"/>
         FROM ai_agent_timeline_item
         WHERE deleted = 0
-          AND request_id IN
+          AND run_id IN
         <foreach collection="runIds" item="runId" open="(" separator="," close=")">
             #{runId}
         </foreach>
-        ORDER BY request_id ASC,
+        ORDER BY run_id ASC,
                  CASE WHEN order_key = 0 THEN 1 ELSE 0 END ASC,
                  order_key ASC, sub_order ASC, id ASC
     </select>
