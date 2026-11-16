@@ -4,11 +4,12 @@
 下载 HTML → trafilatura/BeautifulSoup 抽正文 → 将完整内容返回给调用方。
 """
 
+import asyncio
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse, urlunparse
 
 import aiohttp
 import trafilatura
@@ -19,6 +20,75 @@ from cute_tool.model.protocal import WebFetchRequest
 
 DEFAULT_TIMEOUT_SECONDS = 30
 DEFAULT_USER_AGENT = "CuteToolWebFetch/1.0"
+DEFAULT_MAX_LINK_CANDIDATES = 20
+DEFAULT_MAX_RESPONSE_BYTES = 2_000_000
+MAX_REDIRECTS = 5
+_STATIC_RESOURCE_SUFFIXES = {
+    ".7z",
+    ".avi",
+    ".css",
+    ".csv",
+    ".doc",
+    ".docx",
+    ".gif",
+    ".gz",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".js",
+    ".json",
+    ".m4a",
+    ".mov",
+    ".mp3",
+    ".mp4",
+    ".pdf",
+    ".png",
+    ".ppt",
+    ".pptx",
+    ".rar",
+    ".svg",
+    ".tar",
+    ".webm",
+    ".webp",
+    ".woff",
+    ".woff2",
+    ".xls",
+    ".xlsx",
+    ".xml",
+    ".zip",
+}
+
+
+class WebFetchError(ValueError):
+    """带阶段、错误码和 HTTP 状态的可诊断抓取异常。"""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        error_code: str,
+        stage: str,
+        upstream_status: int | None = None,
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.error_code = error_code
+        self.stage = stage
+        self.upstream_status = upstream_status
+
+
+def _http_error_code(status_code: int) -> str:
+    return {
+        401: "HTTP_UNAUTHORIZED",
+        403: "HTTP_FORBIDDEN",
+        404: "HTTP_NOT_FOUND",
+        408: "HTTP_TIMEOUT",
+        429: "HTTP_RATE_LIMITED",
+    }.get(
+        status_code,
+        "UPSTREAM_HTTP_ERROR" if status_code >= 500 else "HTTP_ERROR",
+    )
 
 
 @dataclass
@@ -41,6 +111,27 @@ class ExtractedContent:
     content_format: str
     content_source: str
     metadata: dict[str, Any]
+    link_candidates: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class LinkCandidate:
+    """已抓页面中发现的一个可继续下钻链接。"""
+
+    url: str
+    title: str
+    anchor: str
+    parent_url: str
+    depth: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "url": self.url,
+            "title": self.title,
+            "anchor": self.anchor,
+            "parent_url": self.parent_url,
+            "depth": self.depth,
+        }
 
 
 @dataclass
@@ -56,6 +147,7 @@ class WebFetchResult:
     metadata: dict[str, Any]
     status_code: int
     status_text: str
+    link_candidates: list[LinkCandidate] = field(default_factory=list)
 
     def to_response_data(self) -> dict[str, Any]:
         """组装只包含网页内容的响应，避免把抓取结果落为文件产物。"""
@@ -69,22 +161,50 @@ class WebFetchResult:
             "metadata": self.metadata,
             "statusCode": self.status_code,
             "statusText": self.status_text,
+            "linkCandidates": [
+                candidate.to_dict() for candidate in self.link_candidates
+            ],
         }
 
 
 class WebFetcher:
     """抓取单个网页并提取正文。"""
 
-    def __init__(self):
+    def __init__(self, url_validator=None):
         self.proxy = os.getenv("PROXY", "").strip()
+        self.url_validator = url_validator
 
     async def fetch(self, request: WebFetchRequest) -> WebFetchResult:
         """抓取网页、提取正文，并生成统一返回结果。"""
         # Python 只负责抓取和提取；正文完整返回，由 Java 侧结合 prompt 分析。
-        page = await self._download_page(request.url, request.timeout_seconds)
+        try:
+            page = await self._download_page(
+                request.url, request.timeout_seconds
+            )
+        except WebFetchError:
+            raise
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            raise WebFetchError(
+                "网页下载超时",
+                status_code=504,
+                error_code="DOWNLOAD_TIMEOUT",
+                stage="download",
+            ) from exc
+        except aiohttp.ClientError as exc:
+            raise WebFetchError(
+                "网页下载失败",
+                status_code=502,
+                error_code="DOWNLOAD_FAILED",
+                stage="download",
+            ) from exc
         extracted = self._extract_content(page)
         if not extracted.content:
-            raise ValueError("网页正文提取失败")
+            raise WebFetchError(
+                "网页正文提取失败",
+                status_code=422,
+                error_code="CONTENT_EXTRACTION_FAILED",
+                stage="extract",
+            )
 
         normalized_title = extracted.title or self._build_title_from_url(page.final_url)
         return WebFetchResult(
@@ -97,10 +217,17 @@ class WebFetcher:
             metadata=extracted.metadata,
             status_code=page.status_code,
             status_text=page.status_text,
+            link_candidates=[
+                LinkCandidate(**item)
+                for item in extracted.link_candidates
+            ],
         )
 
     async def _download_page(self, url: str, timeout_seconds: int) -> DownloadedPage:
         """下载网页或文本内容，供后续按内容类型分流处理。"""
+        if self.url_validator is not None:
+            return await self._download_validated_page(url, timeout_seconds)
+
         # 下载阶段只负责状态码、内容类型和空响应校验，不在这里混入 HTML/Markdown 的正文提取规则。
         client_timeout = aiohttp.ClientTimeout(
             total=timeout_seconds or DEFAULT_TIMEOUT_SECONDS
@@ -113,13 +240,23 @@ class WebFetcher:
             if self.proxy:
                 request_kwargs["proxy"] = self.proxy
             async with session.get(url, **request_kwargs) as response:
-                response.raise_for_status()
+                self._raise_for_status(response)
                 content_type = (response.headers.get("Content-Type") or "").lower()
                 if not self._is_supported_content_type(content_type):
-                    raise ValueError("web_fetch 仅支持 HTML、Markdown 或纯文本内容")
-                raw_content = await response.text(errors="ignore")
+                    raise WebFetchError(
+                        "web_fetch 仅支持 HTML、Markdown 或纯文本内容",
+                        status_code=415,
+                        error_code="CONTENT_TYPE_UNSUPPORTED",
+                        stage="download",
+                    )
+                raw_content = await self._read_response_text(response)
                 if not raw_content.strip():
-                    raise ValueError("网页内容为空")
+                    raise WebFetchError(
+                        "网页内容为空",
+                        status_code=422,
+                        error_code="CONTENT_EMPTY",
+                        stage="download",
+                    )
                 return DownloadedPage(
                     final_url=str(response.url),
                     raw_content=raw_content,
@@ -127,6 +264,141 @@ class WebFetcher:
                     status_code=getattr(response, "status", 200),
                     status_text=str(getattr(response, "reason", "") or ""),
                 )
+
+    async def _download_validated_page(
+        self, url: str, timeout_seconds: int
+    ) -> DownloadedPage:
+        """逐跳校验重定向目标后下载，供 DeepSearch 的公开 URL 抓取使用。"""
+        client_timeout = aiohttp.ClientTimeout(
+            total=timeout_seconds or DEFAULT_TIMEOUT_SECONDS
+        )
+        headers = {"User-Agent": DEFAULT_USER_AGENT}
+        current_url = url
+        async with aiohttp.ClientSession(
+            timeout=client_timeout, headers=headers
+        ) as session:
+            for redirect_count in range(MAX_REDIRECTS + 1):
+                await self.url_validator.validate(current_url)
+                request_kwargs: dict[str, Any] = {"allow_redirects": False}
+                if self.proxy:
+                    request_kwargs["proxy"] = self.proxy
+                async with session.get(current_url, **request_kwargs) as response:
+                    status_code = int(getattr(response, "status", 200))
+                    if 300 <= status_code < 400:
+                        if redirect_count >= MAX_REDIRECTS:
+                            raise WebFetchError(
+                                "web_fetch 重定向次数超过限制",
+                                status_code=502,
+                                error_code="UPSTREAM_REDIRECT_LIMIT",
+                                stage="download",
+                                upstream_status=status_code,
+                            )
+                        location = (response.headers.get("Location") or "").strip()
+                        if not location:
+                            raise WebFetchError(
+                                "web_fetch 收到无 Location 的重定向",
+                                status_code=502,
+                                error_code="UPSTREAM_REDIRECT_INVALID",
+                                stage="download",
+                                upstream_status=status_code,
+                            )
+                        current_url = urljoin(current_url, location)
+                        continue
+
+                    self._raise_for_status(response)
+                    content_type = (
+                        response.headers.get("Content-Type") or ""
+                    ).lower()
+                    if not self._is_supported_content_type(content_type):
+                        raise WebFetchError(
+                            "web_fetch 仅支持 HTML、Markdown 或纯文本内容",
+                            status_code=415,
+                            error_code="CONTENT_TYPE_UNSUPPORTED",
+                            stage="download",
+                        )
+                    raw_content = await self._read_response_text(response)
+                    if not raw_content.strip():
+                        raise WebFetchError(
+                            "网页内容为空",
+                            status_code=422,
+                            error_code="CONTENT_EMPTY",
+                            stage="download",
+                        )
+                    return DownloadedPage(
+                        final_url=str(response.url),
+                        raw_content=raw_content,
+                        content_type=content_type,
+                        status_code=status_code,
+                        status_text=str(getattr(response, "reason", "") or ""),
+                    )
+        raise WebFetchError(
+            "web_fetch 重定向次数超过限制",
+            status_code=502,
+            error_code="UPSTREAM_REDIRECT_LIMIT",
+            stage="download",
+        )
+
+    def _raise_for_status(self, response) -> None:
+        """保留目标网站的 HTTP 状态，避免 403/404/429 被统一改写成 502。"""
+        try:
+            response.raise_for_status()
+        except aiohttp.ClientResponseError as exc:
+            status_code = int(
+                getattr(exc, "status", None)
+                or getattr(response, "status", 502)
+            )
+            reason = str(
+                getattr(exc, "message", "")
+                or getattr(response, "reason", "")
+                or ""
+            ).strip()
+            message = f"目标网页返回 HTTP {status_code}"
+            if reason:
+                message = f"{message} {reason}"
+            raise WebFetchError(
+                message,
+                status_code=status_code,
+                error_code=_http_error_code(status_code),
+                stage="download",
+                upstream_status=status_code,
+            ) from exc
+
+    async def _read_response_text(self, response) -> str:
+        """限制单页响应体大小，避免异常大页面占满内存和上下文。"""
+        max_bytes = max(
+            1,
+            int(
+                os.getenv(
+                    "WEB_FETCH_MAX_RESPONSE_BYTES",
+                    str(DEFAULT_MAX_RESPONSE_BYTES),
+                )
+            ),
+        )
+        content_length = (response.headers.get("Content-Length") or "").strip()
+        if content_length.isdigit() and int(content_length) > max_bytes:
+            raise WebFetchError(
+                "网页响应体超过大小限制",
+                status_code=413,
+                error_code="RESPONSE_TOO_LARGE",
+                stage="download",
+            )
+
+        content = getattr(response, "content", None)
+        if content is not None and hasattr(content, "read"):
+            raw_bytes = await content.read(max_bytes + 1)
+            if len(raw_bytes) > max_bytes:
+                raise WebFetchError(
+                    "网页响应体超过大小限制",
+                    status_code=413,
+                    error_code="RESPONSE_TOO_LARGE",
+                    stage="download",
+                )
+            encoding = getattr(response, "charset", None) or "utf-8"
+            try:
+                return raw_bytes.decode(encoding, errors="ignore")
+            except LookupError:
+                return raw_bytes.decode("utf-8", errors="ignore")
+        return await response.text(errors="ignore")
 
     def _extract_content(self, page: DownloadedPage) -> ExtractedContent:
         """按响应类型选择提取策略，HTML 走正文提取，文本直接复用原文。"""
@@ -152,6 +424,7 @@ class WebFetcher:
             include_links=True,
         )
         normalized_content = self._normalize_content(content)
+        link_candidates = self._extract_link_candidates(soup, final_url)
         if normalized_content:
             return ExtractedContent(
                 title=title,
@@ -159,6 +432,7 @@ class WebFetcher:
                 content_format="markdown",
                 content_source="trafilatura",
                 metadata=metadata,
+                link_candidates=link_candidates,
             )
 
         # trafilatura 没有提取到正文时再走 BeautifulSoup，保证简单页面仍可返回可读内容。
@@ -169,6 +443,7 @@ class WebFetcher:
             content_format="markdown",
             content_source="beautifulsoup",
             metadata=metadata,
+            link_candidates=link_candidates,
         )
 
     def _extract_text_content(
@@ -211,6 +486,71 @@ class WebFetcher:
             "description": self._extract_meta_content(soup, "name", "description"),
             "siteName": self._extract_meta_content(soup, "property", "og:site_name"),
         }
+
+    def _extract_link_candidates(
+        self, soup: BeautifulSoup, final_url: str
+    ) -> list[dict[str, Any]]:
+        """从 HTML 中提取少量去重链接，供 Reviewer 明确选择下钻目标。"""
+        limit = max(
+            0,
+            int(
+                os.getenv(
+                    "WEB_FETCH_MAX_LINK_CANDIDATES",
+                    str(DEFAULT_MAX_LINK_CANDIDATES),
+                )
+            ),
+        )
+        if limit == 0:
+            return []
+
+        candidates = []
+        seen = set()
+        for anchor_tag in soup.find_all("a", href=True):
+            absolute_url = self._normalize_link_candidate(
+                urljoin(final_url, anchor_tag["href"].strip())
+            )
+            if not absolute_url or absolute_url in seen:
+                continue
+            parsed = urlparse(absolute_url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                continue
+            path_suffix = os.path.splitext(parsed.path.lower())[1]
+            if path_suffix in _STATIC_RESOURCE_SUFFIXES:
+                continue
+            anchor = " ".join(anchor_tag.get_text(" ", strip=True).split())[:200]
+            title = (anchor_tag.get("title") or anchor or absolute_url).strip()[:200]
+            candidates.append(
+                LinkCandidate(
+                    url=absolute_url,
+                    title=title,
+                    anchor=anchor,
+                    parent_url=final_url,
+                    depth=1,
+                ).to_dict()
+            )
+            seen.add(absolute_url)
+            if len(candidates) >= limit:
+                break
+        return candidates
+
+    def _normalize_link_candidate(self, url: str) -> str:
+        """清除 fragment，并去掉纯锚点和非 http(s) 链接。"""
+        value = (url or "").strip()
+        if not value:
+            return ""
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            return ""
+        return urlunparse(
+            (
+                parsed.scheme.lower(),
+                parsed.netloc.lower(),
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                "",
+            )
+        )
 
     def _extract_meta_content(
         self, soup: BeautifulSoup, attr_name: str, attr_value: str

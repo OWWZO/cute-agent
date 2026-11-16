@@ -2,8 +2,15 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
+import aiohttp
+
 from cute_tool.model.protocal import WebFetchRequest
-from cute_tool.tool.web_fetcher import DownloadedPage, WebFetcher
+from cute_tool.tool.web_fetcher import (
+    DownloadedPage,
+    ExtractedContent,
+    WebFetchError,
+    WebFetcher,
+)
 
 
 class WebFetcherTest(unittest.IsolatedAsyncioTestCase):
@@ -58,6 +65,135 @@ class WebFetcherTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("cookies", captured["request"])
         self.assertEqual("https://www.reddit.com/post", captured["url"])
         self.assertEqual("text/html; charset=utf-8", page.content_type)
+
+    async def test_should_preserve_upstream_forbidden_status(self):
+        class FakeResponse:
+            url = "https://example.com/blocked"
+            status = 403
+            reason = "Forbidden"
+            headers = {"Content-Type": "text/html"}
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            def raise_for_status(self):
+                raise aiohttp.ClientResponseError(
+                    None,
+                    (),
+                    status=403,
+                    message="Forbidden",
+                )
+
+        class FakeSession:
+            def __init__(self, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            def get(self, url, **kwargs):
+                return FakeResponse()
+
+        with patch(
+            "cute_tool.tool.web_fetcher.aiohttp.ClientSession",
+            FakeSession,
+        ):
+            with self.assertRaises(WebFetchError) as raised:
+                await WebFetcher()._download_page(
+                    "https://example.com/blocked", 30
+                )
+
+        self.assertEqual(403, raised.exception.status_code)
+        self.assertEqual("HTTP_FORBIDDEN", raised.exception.error_code)
+        self.assertEqual("download", raised.exception.stage)
+        self.assertEqual(403, raised.exception.upstream_status)
+
+    async def test_should_report_unsupported_content_type(self):
+        class FakeResponse:
+            url = "https://example.com/file.pdf"
+            status = 200
+            reason = "OK"
+            headers = {"Content-Type": "application/pdf"}
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            def raise_for_status(self):
+                return None
+
+        class FakeSession:
+            def __init__(self, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            def get(self, url, **kwargs):
+                return FakeResponse()
+
+        with patch(
+            "cute_tool.tool.web_fetcher.aiohttp.ClientSession",
+            FakeSession,
+        ):
+            with self.assertRaises(WebFetchError) as raised:
+                await WebFetcher()._download_page(
+                    "https://example.com/file.pdf", 30
+                )
+
+        self.assertEqual(415, raised.exception.status_code)
+        self.assertEqual(
+            "CONTENT_TYPE_UNSUPPORTED",
+            raised.exception.error_code,
+        )
+
+    async def test_should_report_extraction_failure_separately(self):
+        fetcher = WebFetcher()
+        request = WebFetchRequest(
+            requestId="req-web-extract-failed",
+            url="https://example.com/script-only",
+        )
+        page = DownloadedPage(
+            final_url="https://example.com/script-only",
+            raw_content="<html><body></body></html>",
+            content_type="text/html",
+        )
+
+        with patch.object(
+            fetcher,
+            "_download_page",
+            new=AsyncMock(return_value=page),
+        ), patch.object(
+            fetcher,
+            "_extract_content",
+            return_value=ExtractedContent(
+                title="",
+                content="",
+                content_format="markdown",
+                content_source="trafilatura",
+                metadata={},
+            ),
+        ):
+            with self.assertRaises(WebFetchError) as raised:
+                await fetcher.fetch(request)
+
+        self.assertEqual(422, raised.exception.status_code)
+        self.assertEqual(
+            "CONTENT_EXTRACTION_FAILED",
+            raised.exception.error_code,
+        )
+        self.assertEqual("extract", raised.exception.stage)
 
     async def test_should_extract_markdown_content_with_trafilatura(self):
         fetcher = WebFetcher()
@@ -157,12 +293,140 @@ class WebFetcherTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("text", result.content_format)
         self.assertIn("Markdown 正文", result.content)
 
+    async def test_should_extract_deduplicated_link_candidates(self):
+        fetcher = WebFetcher()
+        request = WebFetchRequest(
+            requestId="req-web-links",
+            url="https://example.com/article",
+        )
+        page = DownloadedPage(
+            final_url="https://example.com/article",
+            raw_content="""
+            <html><body>
+              <article>
+                <a href="/official#notice">官方公告</a>
+                <a href="/official#duplicate">重复入口</a>
+                <a href="javascript:void(0)">脚本链接</a>
+                <a href="/static/chart.png">图片</a>
+                <a href="https://other.example/context">背景资料</a>
+              </article>
+            </body></html>
+            """,
+            content_type="text/html",
+        )
+
+        with patch.object(fetcher, "_download_page", new=AsyncMock(return_value=page)):
+            with patch(
+                "cute_tool.tool.web_fetcher.trafilatura.extract",
+                return_value="正文",
+            ):
+                result = await fetcher.fetch(request)
+
+        self.assertEqual(
+            [
+                "https://example.com/official",
+                "https://other.example/context",
+            ],
+            [candidate.url for candidate in result.link_candidates],
+        )
+        self.assertEqual(
+            ["官方公告", "背景资料"],
+            [candidate.anchor for candidate in result.link_candidates],
+        )
+
     def test_should_reject_binary_content_type(self):
         fetcher = WebFetcher()
 
         self.assertFalse(fetcher._is_supported_content_type("application/pdf"))
         self.assertFalse(fetcher._is_supported_content_type("image/png"))
         self.assertTrue(fetcher._is_supported_content_type("text/plain; charset=utf-8"))
+
+    async def test_validated_download_checks_each_redirect_target(self):
+        validated = []
+
+        class Validator:
+            async def validate(self, url):
+                validated.append(url)
+
+        class FakeResponse:
+            def __init__(self, url, status, headers, body=""):
+                self.url = url
+                self.status = status
+                self.headers = headers
+                self.reason = ""
+                self._body = body
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            def raise_for_status(self):
+                return None
+
+            async def text(self, errors="ignore"):
+                return self._body
+
+        responses = [
+            FakeResponse(
+                "https://example.com/start",
+                302,
+                {"Location": "https://example.com/final"},
+            ),
+            FakeResponse(
+                "https://example.com/final",
+                200,
+                {"Content-Type": "text/html; charset=utf-8"},
+                "<article>正文</article>",
+            ),
+        ]
+
+        class FakeSession:
+            def __init__(self, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            def get(self, url, **kwargs):
+                return responses.pop(0)
+
+        with patch(
+            "cute_tool.tool.web_fetcher.aiohttp.ClientSession", FakeSession
+        ):
+            page = await WebFetcher(url_validator=Validator())._download_page(
+                "https://example.com/start", 30
+            )
+
+        self.assertEqual(
+            [
+                "https://example.com/start",
+                "https://example.com/final",
+            ],
+            validated,
+        )
+        self.assertEqual("https://example.com/final", page.final_url)
+
+    async def test_should_reject_response_larger_than_limit(self):
+        class Body:
+            async def read(self, size):
+                return b"12345"[:size]
+
+        class Response:
+            headers = {}
+            charset = "utf-8"
+            content = Body()
+
+        with patch.dict(
+            "os.environ",
+            {"WEB_FETCH_MAX_RESPONSE_BYTES": "4"},
+        ):
+            with self.assertRaisesRegex(ValueError, "大小限制"):
+                await WebFetcher()._read_response_text(Response())
 
 
 if __name__ == "__main__":

@@ -1,9 +1,14 @@
 import os
 from unittest.mock import patch
 
+import pytest
+
 from cute_tool.util.llm_util import resolve_openai_compat_env
 from cute_tool.tool.search_component.query_process import (
+    apply_query_url_actions,
+    extract_query_urls,
     parse_report_structure,
+    query_decompose,
 )
 
 
@@ -56,3 +61,106 @@ def test_parse_report_structure_supports_legacy_query_list():
             "search_queries": ["市场格局"],
         },
     ]
+
+
+def test_parse_report_structure_supports_research_actions():
+    chapters = parse_report_structure(
+        '[{"title":"官方回应","content":"查看公告",'
+        '"actions":['
+        '{"type":"search","tool":"web_search","query":"公司 公告"},'
+        '{"type":"fetch_url","tool":"web_fetch",'
+        '"url":"https://example.com/notice"}]}]'
+    )
+
+    assert chapters[0]["search_queries"] == ["公司 公告"]
+    assert chapters[0]["actions"] == [
+        {
+            "type": "search",
+            "tool": "web_search",
+            "query": "公司 公告",
+            "url": "",
+            "reason": "",
+            "gap_ids": [],
+        },
+        {
+            "type": "fetch_url",
+            "tool": "web_fetch",
+            "query": "",
+            "url": "https://example.com/notice",
+            "reason": "",
+            "gap_ids": [],
+        },
+    ]
+
+
+def test_parse_report_structure_does_not_convert_invalid_fetch_to_search():
+    chapters = parse_report_structure(
+        '[{"title":"官方回应","content":"查看公告",'
+        '"actions":[{"type":"fetch_url","tool":"web_search",'
+        '"url":"https://example.com/notice"}]}]'
+    )
+
+    assert chapters[0]["actions"] == []
+    assert chapters[0]["search_queries"] == ["查看公告"]
+
+
+def test_extract_query_urls_removes_fragments_and_trailing_punctuation():
+    urls = extract_query_urls(
+        "请参考 https://example.com/a#part one 和 https://example.com/b。"
+    )
+
+    assert urls == ["https://example.com/a", "https://example.com/b"]
+
+
+def test_apply_query_url_actions_adds_missing_url_to_first_chapter():
+    chapters = [
+        {
+            "title": "章节一",
+            "content": "研究任务一",
+            "search_queries": ["关键词"],
+        },
+        {
+            "title": "章节二",
+            "content": "研究任务二",
+            "search_queries": ["关键词二"],
+        },
+    ]
+
+    result = apply_query_url_actions(
+        chapters,
+        query="请根据 https://example.com/source 继续研究",
+    )
+
+    actions = result[0]["actions"]
+    assert actions[0]["type"] == "search"
+    assert actions[1]["type"] == "fetch_url"
+    assert actions[1]["url"] == "https://example.com/source"
+    assert "actions" not in result[1]
+
+
+@pytest.mark.asyncio
+async def test_query_decompose_falls_back_when_model_omits_query_url():
+    async def fake_ask_llm(**kwargs):
+        yield (
+            '[{"title":"章节标题","content":"研究任务",'
+            '"search_queries":["研究任务"]}]'
+        )
+
+    with patch(
+        "cute_tool.tool.search_component.query_process.ask_llm",
+        fake_ask_llm,
+    ):
+        chapters = await query_decompose(
+            "请根据 https://example.com/source 继续研究"
+        )
+
+    actions = chapters[0]["actions"]
+    assert actions[0]["type"] == "search"
+    assert actions[1] == {
+        "type": "fetch_url",
+        "tool": "web_fetch",
+        "query": "",
+        "url": "https://example.com/source",
+        "reason": "用户 query 中明确提供的 URL",
+        "gap_ids": [],
+    }

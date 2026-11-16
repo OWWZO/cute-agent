@@ -131,6 +131,116 @@ public class WebFetchStructuredResultTest {
     }
 
     @Test
+    public void shouldNotOpenCircuitForForbiddenTargetPage() {
+        AtomicInteger calls = new AtomicInteger();
+        RemoteHttpPort httpPort = new RemoteHttpPort() {
+            @Override
+            public String execute(RemoteHttpRequest request) {
+                return "";
+            }
+
+            @Override
+            public RemoteHttpResponse executeDetailed(RemoteHttpRequest request) {
+                calls.incrementAndGet();
+                return RemoteHttpResponse.builder()
+                        .statusCode(403)
+                        .statusText("Forbidden")
+                        .headers(Map.of("Content-Type", "application/json"))
+                        .body("""
+                                {
+                                  "code": 403,
+                                  "message": "目标网页返回 HTTP 403 Forbidden",
+                                  "errorCode": "HTTP_FORBIDDEN",
+                                  "stage": "download",
+                                  "upstreamStatus": 403
+                                }
+                                """)
+                        .finalUrl(request.getUrl())
+                        .build();
+            }
+        };
+
+        CuteConfig config = new CuteConfig();
+        ReflectionTestUtils.setField(config, "webFetchUrl", "http://cute-tool:1601");
+        WebFetchTool tool = new WebFetchTool();
+        AgentContext context = AgentContext.builder()
+                .requestId("req-web-fetch-forbidden")
+                .sessionId("session-web-fetch-forbidden")
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .build();
+
+        ToolResultPayload first = (ToolResultPayload) tool.execute(Map.of(
+                "url", "https://example.com/a",
+                "prompt", "extract"
+        ), context);
+        ToolResultPayload second = (ToolResultPayload) tool.execute(Map.of(
+                "url", "https://example.com/b",
+                "prompt", "extract"
+        ), context);
+
+        Map<?, ?> firstDetail = (Map<?, ?>) first.getLlmData();
+        Map<?, ?> secondDetail = (Map<?, ?>) second.getLlmData();
+        Assert.assertEquals("access_forbidden", firstDetail.get("failureClass"));
+        Assert.assertEquals(Boolean.FALSE, firstDetail.get("retryable"));
+        Assert.assertEquals("HTTP_FORBIDDEN", firstDetail.get("errorCode"));
+        Assert.assertEquals("download", firstDetail.get("stage"));
+        Assert.assertEquals("access_forbidden", secondDetail.get("failureClass"));
+        Assert.assertEquals(2, calls.get());
+        Assert.assertEquals(0, context.getToolAccessPolicy().getConsecutiveNetworkFailures());
+        Assert.assertFalse(context.getToolAccessPolicy().isWebFetchCircuitOpen());
+    }
+
+    @Test
+    public void shouldClassifyContentExtractionFailureSeparately() {
+        RemoteHttpPort httpPort = new RemoteHttpPort() {
+            @Override
+            public String execute(RemoteHttpRequest request) {
+                return "";
+            }
+
+            @Override
+            public RemoteHttpResponse executeDetailed(RemoteHttpRequest request) {
+                return RemoteHttpResponse.builder()
+                        .statusCode(422)
+                        .statusText("Unprocessable Entity")
+                        .headers(Map.of("Content-Type", "application/json"))
+                        .body("""
+                                {
+                                  "code": 422,
+                                  "message": "网页正文提取失败",
+                                  "errorCode": "CONTENT_EXTRACTION_FAILED",
+                                  "stage": "extract"
+                                }
+                                """)
+                        .finalUrl(request.getUrl())
+                        .build();
+            }
+        };
+
+        CuteConfig config = new CuteConfig();
+        ReflectionTestUtils.setField(config, "webFetchUrl", "http://cute-tool:1601");
+        WebFetchTool tool = new WebFetchTool();
+        AgentContext context = AgentContext.builder()
+                .requestId("req-web-fetch-extract")
+                .sessionId("session-web-fetch-extract")
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .build();
+
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
+                "url", "https://example.com/script-only",
+                "prompt", "extract"
+        ), context);
+
+        Map<?, ?> detail = (Map<?, ?>) payload.getLlmData();
+        Assert.assertEquals("content_extraction_failed", detail.get("failureClass"));
+        Assert.assertEquals(Boolean.FALSE, detail.get("retryable"));
+        Assert.assertEquals("CONTENT_EXTRACTION_FAILED", detail.get("errorCode"));
+        Assert.assertEquals("extract", detail.get("stage"));
+        Assert.assertEquals(0, context.getToolAccessPolicy().getConsecutiveNetworkFailures());
+        Assert.assertFalse(context.getToolAccessPolicy().isWebFetchCircuitOpen());
+    }
+
+    @Test
     public void shouldOpenCircuitAfterRepeatedUpstreamFailures() {
         AtomicInteger calls = new AtomicInteger();
         RemoteHttpPort httpPort = new RemoteHttpPort() {

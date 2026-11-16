@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from cute_tool.api.tool import router
-from cute_tool.tool.web_fetcher import WebFetchResult
+from cute_tool.tool.web_fetcher import WebFetchError, WebFetchResult
 
 
 class WebFetchApiTest(unittest.TestCase):
@@ -75,6 +75,71 @@ class WebFetchApiTest(unittest.TestCase):
         self.assertEqual(
             "web_fetch 仅支持 HTML、Markdown 或纯文本内容", body["message"]
         )
+        self.assertEqual(
+            "INVALID_WEB_FETCH_REQUEST", body["errorCode"]
+        )
+
+    def test_should_preserve_upstream_http_status_and_error_code(self):
+        cases = (
+            (403, "HTTP_FORBIDDEN"),
+            (404, "HTTP_NOT_FOUND"),
+            (429, "HTTP_RATE_LIMITED"),
+        )
+        for status_code, error_code in cases:
+            with self.subTest(status_code=status_code):
+                with patch(
+                    "cute_tool.api.tool.WebFetcher.fetch",
+                    new=AsyncMock(
+                        side_effect=WebFetchError(
+                            f"目标网页返回 HTTP {status_code}",
+                            status_code=status_code,
+                            error_code=error_code,
+                            stage="download",
+                            upstream_status=status_code,
+                        )
+                    ),
+                ):
+                    response = self.client.post(
+                        "/v1/tool/web_fetch",
+                        json={
+                            "requestId": f"req-web-api-{status_code}",
+                            "url": "https://example.com/page",
+                        },
+                    )
+
+                self.assertEqual(status_code, response.status_code)
+                body = response.json()
+                self.assertEqual(status_code, body["code"])
+                self.assertEqual(error_code, body["errorCode"])
+                self.assertEqual("download", body["stage"])
+                self.assertEqual(
+                    status_code, body["upstreamStatus"]
+                )
+
+    def test_should_return_distinct_extraction_error(self):
+        with patch(
+            "cute_tool.api.tool.WebFetcher.fetch",
+            new=AsyncMock(
+                side_effect=WebFetchError(
+                    "网页正文提取失败",
+                    status_code=422,
+                    error_code="CONTENT_EXTRACTION_FAILED",
+                    stage="extract",
+                )
+            ),
+        ):
+            response = self.client.post(
+                "/v1/tool/web_fetch",
+                json={
+                    "requestId": "req-web-api-extract",
+                    "url": "https://example.com/script-only",
+                },
+            )
+
+        self.assertEqual(422, response.status_code)
+        body = response.json()
+        self.assertEqual("CONTENT_EXTRACTION_FAILED", body["errorCode"])
+        self.assertEqual("extract", body["stage"])
 
 
 if __name__ == "__main__":

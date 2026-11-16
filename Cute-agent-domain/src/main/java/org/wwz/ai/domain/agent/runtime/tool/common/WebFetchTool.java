@@ -158,13 +158,19 @@ public class WebFetchTool implements BaseTool {
             detail.put("status", e.statusCode);
             detail.put("statusText", StringUtils.defaultString(e.statusText));
             detail.put("responseBody", e.responseBody);
+            if (StringUtils.isNotBlank(e.errorCode)) {
+                detail.put("errorCode", e.errorCode);
+            }
+            if (StringUtils.isNotBlank(e.stage)) {
+                detail.put("stage", e.stage);
+            }
             addFailurePolicy(detail, failureKind);
             if (access != null) {
                 detail.put("attempt", access.attempt());
             }
             return ToolResultPayload.failureFrom("WebFetch 失败：" + e.getMessage(), detail);
         } catch (Exception e) {
-            log.error("{} WebFetch execute error, input={}", requestId(context), input, e);
+            log.error("{} WebFetch execute error, url={}", requestId(context), rawUrl, e);
             FetchFailureKind failureKind = classifyFailure(e);
             recordAccessFailure(context, failureKind);
             Map<String, Object> detail = failureDetails(rawUrl, prompt);
@@ -198,6 +204,17 @@ public class WebFetchTool implements BaseTool {
     }
 
     private static FetchFailureKind classifyFailure(int statusCode, String responseBody) {
+        String errorCode = parseErrorCode(responseBody);
+        if ("CONTENT_EXTRACTION_FAILED".equals(errorCode)
+                || "CONTENT_EMPTY".equals(errorCode)) {
+            return FetchFailureKind.contentExtractionFailed();
+        }
+        if ("CONTENT_TYPE_UNSUPPORTED".equals(errorCode)) {
+            return FetchFailureKind.contentTypeUnsupported();
+        }
+        if ("RESPONSE_TOO_LARGE".equals(errorCode)) {
+            return FetchFailureKind.responseTooLarge();
+        }
         if (statusCode == 403) {
             return FetchFailureKind.forbidden();
         }
@@ -231,6 +248,16 @@ public class WebFetchTool implements BaseTool {
             return FetchFailureKind.timeout();
         }
         return FetchFailureKind.other();
+    }
+
+    private static String parseErrorCode(String responseBody) {
+        try {
+            JSONObject error = JSON.parseObject(
+                    StringUtils.defaultString(responseBody));
+            return error == null ? null : error.getString("errorCode");
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static FetchFailureKind classifyFailure(Throwable error) {
@@ -472,6 +499,8 @@ public class WebFetchTool implements BaseTool {
         private final String url;
         private final String statusText;
         private final String responseBody;
+        private final String errorCode;
+        private final String stage;
 
         private FetchHttpException(int statusCode,
                                    String url,
@@ -482,6 +511,14 @@ public class WebFetchTool implements BaseTool {
             this.url = url;
             this.statusText = statusText;
             this.responseBody = responseBody;
+            JSONObject error = null;
+            try {
+                error = JSON.parseObject(responseBody);
+            } catch (Exception ignored) {
+                // 上游可能返回纯文本；保留原始 body，结构化字段仅在 JSON 时可用。
+            }
+            this.errorCode = error == null ? null : error.getString("errorCode");
+            this.stage = error == null ? null : error.getString("stage");
         }
     }
 
@@ -549,6 +586,33 @@ public class WebFetchTool implements BaseTool {
                     false,
                     true,
                     "目标站点限流。最多再尝试一次，并优先换信息源。"
+            );
+        }
+
+        private static FetchFailureKind contentExtractionFailed() {
+            return new FetchFailureKind(
+                    "content_extraction_failed",
+                    false,
+                    false,
+                    "目标页面已下载，但没有可提取的正文。不要重复抓同一地址，请换公开信息源。"
+            );
+        }
+
+        private static FetchFailureKind contentTypeUnsupported() {
+            return new FetchFailureKind(
+                    "content_type_unsupported",
+                    false,
+                    false,
+                    "目标地址不是可提取的 HTML/Markdown/纯文本。不要重复抓同一地址。"
+            );
+        }
+
+        private static FetchFailureKind responseTooLarge() {
+            return new FetchFailureKind(
+                    "response_too_large",
+                    false,
+                    false,
+                    "目标页面超过抓取大小限制。不要重复抓同一地址，请换更聚焦的信息源。"
             );
         }
 

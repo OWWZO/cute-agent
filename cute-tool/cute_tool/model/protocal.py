@@ -366,6 +366,12 @@ class BashSandboxResponse(BaseModel):
     produced_files: List[Dict[str, Any]] = Field(
         default_factory=list, alias="producedFiles"
     )
+    workspace_sync: Dict[str, Any] = Field(
+        default_factory=dict, alias="workspaceSync"
+    )
+    deleted_files: List[Dict[str, Any]] = Field(
+        default_factory=list, alias="deletedFiles"
+    )
     cwd: str = Field(default=".", description="对 Agent 只暴露相对语义")
 
 

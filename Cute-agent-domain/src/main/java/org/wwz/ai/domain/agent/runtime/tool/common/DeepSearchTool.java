@@ -40,7 +40,10 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 public class DeepSearchTool implements BaseTool {
 
-    private static final String DESCRIPTION = "这是一个搜索工具，可以搜索各种互联网知识";
+    private static final String DESCRIPTION =
+            "这是一个深度搜索和网页研究工具，可以围绕一个主题搜索互联网并生成研究报告。"
+                    + "query 可以直接包含用户提供的 http(s) URL；工具会精确抓取这些页面，"
+                    + "并继续结合关键词搜索和页面内链接完成研究。";
 
     /**
      * deep_search 保底超时时间，避免外部流式接口异常时导致 future.get() 长时间阻塞。
@@ -71,7 +74,9 @@ public class DeepSearchTool implements BaseTool {
     public Map<String, Object> toParams() {
         Map<String, Object> taskParam = new HashMap<>();
         taskParam.put("type", "string");
-        taskParam.put("description", "需要搜索的全部内容及描述");
+        taskParam.put(
+                "description",
+                "需要研究的完整主题、要求及描述；用户提供网页 URL 时直接写在此 query 中");
         Map<String, Object> reportFileNameParam = new HashMap<>();
         reportFileNameParam.put("type", "string");
         reportFileNameParam.put("maxLength", DeepSearchFileNamePolicy.MAX_REPORT_FILE_NAME_LENGTH);
