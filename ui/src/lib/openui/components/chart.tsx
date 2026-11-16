@@ -363,7 +363,7 @@ export function toSpec(props: z.infer<typeof chartProps>): Spec | null {
 export const Chart = defineComponent({
   name: "Chart",
   props: chartProps,
-  description: 'Data rows; every value MUST be a bare number (never "1,234", "45%" or "12.4万" — put units in the series name or pass format:"currency"/"percent" for display). x and series must copy the data keys character for character, or omit series to auto-use every number key (recommended). percent values are like 45; currency is a code like "EUR".',
+  description: 'Data rows; every object key MUST be wrapped in double quotes, especially keys containing Chinese, digits, spaces or punctuation, e.g. [{"年": 2016, "出生率(‰)": 12.95}]. Unquoted non-ASCII keys are silently discarded. Every value MUST be a bare number (never "1,234", "45%" or "12.4万" — put units in the series name or pass format:"currency"/"percent" for display). x and series must copy the data keys character for character, or omit series to auto-use every number key (recommended). percent values are like 45; currency is a code like "EUR".',
   component: function ChartView({ props }) {
     const [ref, width] = useWidth();
     const spec = toSpec(props);

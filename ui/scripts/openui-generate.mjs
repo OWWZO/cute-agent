@@ -55,7 +55,11 @@ root = Col([head])
 head = Title("Title", "xl")
 ]]>openui:end
 
-Everything inside the markers must be valid openui-lang: no markdown, no prose, one statement per line, \`root\` first. Everything outside the markers is normal markdown for the user. At most one marker block per reply, never inside a code fence.`;
+Everything inside the markers must be valid openui-lang: no markdown, no prose, one statement per line, \`root\` first. Everything outside the markers is normal markdown for the user. At most one marker block per reply, never inside a code fence.
+
+Double-quote every object key, especially Chinese keys: [{"年": 2016, "出生率": 12.95}].
+After input rows are known, compute shared derived values in one script pass and assert once. Discovery/fix iterations are allowed.
+Identifiers and $state names must be ASCII. Use row["字段"], never row.字段.`;
 
 function sha12(file) {
   return createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 12);

@@ -29,6 +29,13 @@ describe('isRenderableProgram', () => {
     expect(isRenderableProgram(INTERACTIVE_PROGRAM)).toBe(true);
   });
 
+  it('accepts a chart whose data is produced by an OpenUI function', () => {
+    const dynamicChart = `root = Chart("donut", @GroupBy(orders, "region", "amount"), "key", ["value"], "currency")
+orders = [{"region": "A", "amount": 10}, {"region": "B", "amount": 20}]`;
+
+    expect(isRenderableProgram(dynamicChart)).toBe(true);
+  });
+
   it('rejects an empty program', () => {
     expect(isRenderableProgram('   ')).toBe(false);
   });
@@ -98,6 +105,54 @@ b = Button("C", @//reset/($display))
 root = Col([t, b])`;
     expect(isRenderableProgram(broken)).toBe(false);
     expect(isRenderableProgram(normalizeOpenUiProgram(broken) as string)).toBe(true);
+  });
+
+  it('rescues chart data whose bare Chinese keys were discarded by the parser', () => {
+    const broken = `root = Chart("line", [{年: 2016, 出生率: 12.95, 结婚率: 8.3}, {年: 2017, 出生率: 12.43, 结婚率: 7.7}], "年", ["出生率", "结婚率"])`;
+
+    const diagnosis = diagnoseProgram(broken);
+    expect(diagnosis.renderable).toBe(false);
+    expect(diagnosis.errors.some((error) => error.code === 'chart-x-missing')).toBe(true);
+
+    const normalized = normalizeOpenUiProgram(broken);
+    expect(normalized).not.toBeNull();
+    expect(isRenderableProgram(normalized as string)).toBe(true);
+  });
+
+  it('rescues chart keys with units, spaces, or a leading digit', () => {
+    const broken = `root = Chart("line", [{2025年: 1, 营收（元）: 14800, 出生 人口: 954}], "2025年", ["营收（元）", "出生 人口"])`;
+
+    expect(isRenderableProgram(broken)).toBe(false);
+    const normalized = normalizeOpenUiProgram(broken);
+    expect(normalized).not.toBeNull();
+    expect(isRenderableProgram(normalized as string)).toBe(true);
+  });
+
+  it('rescues member access on function results with Chinese field names', () => {
+    const broken = `d = [{"年份": 2016, "出生率": 12.95, "出生人口": 1883}]
+first = @First(d)
+last = @Last(d)
+sel = @Find(d, "年份", 2016)
+root = Text(last.出生率 + "‰ " + sel.出生人口 + " " + first.年份, "lg", "ink", "semibold")`;
+
+    expect(isRenderableProgram(broken)).toBe(false);
+    const normalized = normalizeOpenUiProgram(broken);
+    expect(normalized).not.toBeNull();
+    expect(isRenderableProgram(normalized as string)).toBe(true);
+  });
+
+  it('rejects a chart whose selected series has no numeric values', () => {
+    const bad = `root = Chart("line", [{"年": 2016, "出生率": "-"}, {"年": 2017, "出生率": "待发布"}], "年", ["出生率"])`;
+    const diagnosis = diagnoseProgram(bad);
+
+    expect(diagnosis.renderable).toBe(false);
+    expect(diagnosis.errors.some((error) => error.code === 'chart-series-no-number')).toBe(true);
+  });
+
+  it('keeps formatted values that the Chart renderer already supports', () => {
+    const formatted = `root = Chart("bar", [{"月份": "1月", "营收": "1,234.5"}, {"月份": "2月", "营收": "45%"}], "月份", ["营收"])`;
+
+    expect(isRenderableProgram(formatted)).toBe(true);
   });
 });
 

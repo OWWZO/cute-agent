@@ -155,7 +155,7 @@
     },
     "Chart": {
       "signature": "Chart(type: \"bar\" | \"line\" | \"area\" | \"pie\" | \"donut\" | \"scatter\", data: Record<string, string | number>[], x?: string, series?: string[], format?: \"number\" | \"currency\" | \"percent\", currency?: string, stacked?: boolean, height?: number)",
-      "description": "Data rows; every value MUST be a bare number (never \"1,234\", \"45%\" or \"12.4万\" — put units in the series name or pass format:\"currency\"/\"percent\" for display). x and series must copy the data keys character for character, or omit series to auto-use every number key (recommended). percent values are like 45; currency is a code like \"EUR\"."
+      "description": "Data rows; every object key MUST be wrapped in double quotes, especially keys containing Chinese, digits, spaces or punctuation, e.g. [{\"年\": 2016, \"出生率(‰)\": 12.95}]. Unquoted non-ASCII keys are silently discarded. Every value MUST be a bare number (never \"1,234\", \"45%\" or \"12.4万\" — put units in the series name or pass format:\"currency\"/\"percent\" for display). x and series must copy the data keys character for character, or omit series to auto-use every number key (recommended). percent values are like 45; currency is a code like \"EUR\"."
     },
     "Map": {
       "signature": "Map(markers: MapMarker[], route?: boolean, selected?: $binding<string>, height?: number)",
@@ -420,7 +420,7 @@
     },
     "Allocate": {
       "signature": "Allocate(total: number, weights: number[], decimals?: number) → number[]",
-      "description": "Splits total in proportion to weights, rounded to decimals (default 2), so the parts add up to exactly total, e.g. @Allocate(100, [1, 1, 1]) is [33.34, 33.33, 33.33]"
+      "description": "Splits total in proportion to weights, rounded to decimals (default 2), so the parts add up to total rounded to that precision, e.g. @Allocate(100, [1, 1, 1]) is [33.34, 33.33, 33.33]"
     },
     "Payment": {
       "signature": "Payment(principal: number, rate: number, periods: number) → number",
@@ -2023,7 +2023,7 @@
           "data"
         ],
         "additionalProperties": false,
-        "description": "Data rows; every value MUST be a bare number (never \"1,234\", \"45%\" or \"12.4万\" — put units in the series name or pass format:\"currency\"/\"percent\" for display). x and series must copy the data keys character for character, or omit series to auto-use every number key (recommended). percent values are like 45; currency is a code like \"EUR\"."
+        "description": "Data rows; every object key MUST be wrapped in double quotes, especially keys containing Chinese, digits, spaces or punctuation, e.g. [{\"年\": 2016, \"出生率(‰)\": 12.95}]. Unquoted non-ASCII keys are silently discarded. Every value MUST be a bare number (never \"1,234\", \"45%\" or \"12.4万\" — put units in the series name or pass format:\"currency\"/\"percent\" for display). x and series must copy the data keys character for character, or omit series to auto-use every number key (recommended). percent values are like 45; currency is a code like \"EUR\"."
       },
       "Map": {
         "type": "object",
@@ -3078,7 +3078,7 @@
         }
       },
       "Allocate": {
-        "description": "Splits total in proportion to weights, rounded to decimals (default 2), so the parts add up to exactly total, e.g. @Allocate(100, [1, 1, 1]) is [33.34, 33.33, 33.33]",
+        "description": "Splits total in proportion to weights, rounded to decimals (default 2), so the parts add up to total rounded to that precision, e.g. @Allocate(100, [1, 1, 1]) is [33.34, 33.33, 33.33]",
         "params": {
           "type": "object",
           "properties": {

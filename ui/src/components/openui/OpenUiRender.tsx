@@ -3,6 +3,7 @@ import {
   BuiltinActionType,
   Renderer,
   type ActionEvent,
+  type ParseResult,
 } from '@openuidev/react-lang';
 
 import { runLibraryAction } from '@/lib/openui/actions';
@@ -19,6 +20,8 @@ export interface OpenUiRenderProps {
   onAction?: OpenUiActionHandler;
   /** Raw form state, so a caller can persist it for later hydration. */
   onStateUpdate?: (state: Record<string, unknown>) => void;
+  /** Lets the host remember the last program that actually produced a renderable tree. */
+  onParseResult?: (result: ParseResult | null) => void;
 }
 
 /**
@@ -28,7 +31,13 @@ export interface OpenUiRenderProps {
  * else — ContinueConversation, OpenUrl — is forwarded to `onAction` so the host
  * decides what a click means in its own chat model.
  */
-export function OpenUiRender({ text, streaming, onAction, onStateUpdate }: OpenUiRenderProps) {
+export function OpenUiRender({
+  text,
+  streaming,
+  onAction,
+  onStateUpdate,
+  onParseResult
+}: OpenUiRenderProps) {
   const handleAction = useCallback(
     (event: ActionEvent) => {
       const libraryAction = runLibraryAction(event);
@@ -47,6 +56,7 @@ export function OpenUiRender({ text, streaming, onAction, onStateUpdate }: OpenU
       isStreaming={!!streaming}
       onAction={handleAction}
       onStateUpdate={onStateUpdate}
+      onParseResult={onParseResult}
       // 关掉向 globalThis[Symbol.for("openui.observability")] 发事件：
       // 那是给 OpenUI Inspect 浏览器扩展读的，我们不需要，还省掉每次 settle 的 JSON.stringify。
       publishObservability={false}

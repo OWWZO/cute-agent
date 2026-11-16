@@ -20,6 +20,8 @@ export interface OpenUiFixResponse {
 
 const OPEN_UI_REPAIR_PATH = "/api/agent/openui/repair";
 const OPEN_UI_REPAIR_INTENTS_PATH = `${OPEN_UI_REPAIR_PATH}/intents`;
+const OPEN_UI_REPAIR_TIMEOUT_MS = 95_000;
+const OPEN_UI_INTENTS_TIMEOUT_MS = 5_000;
 
 function resolveBaseUrl() {
   const configured = typeof SERVICE_BASE_URL === "string" ? SERVICE_BASE_URL : "";
@@ -31,18 +33,37 @@ type OpenUiRequestFailure = {
   message: string;
 };
 
+function requestSignal(signal: AbortSignal | undefined, timeoutMs: number) {
+  const controller = new AbortController();
+  const abortFromCaller = () => controller.abort(signal?.reason);
+  if (signal?.aborted) {
+    abortFromCaller();
+  } else {
+    signal?.addEventListener("abort", abortFromCaller, { once: true });
+  }
+  const timer = setTimeout(() => controller.abort(new Error("timeout")), timeoutMs);
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abortFromCaller);
+    }
+  };
+}
+
 async function postOpenUiRepair<T>(
   body: unknown,
   signal?: AbortSignal
 ): Promise<T | OpenUiRequestFailure> {
   const headers = authHeaders();
+  const request = requestSignal(signal, OPEN_UI_REPAIR_TIMEOUT_MS);
   try {
     const response = await fetch(`${resolveBaseUrl()}${OPEN_UI_REPAIR_PATH}`, {
       method: "POST",
       credentials: "include",
       headers,
       body: JSON.stringify(body),
-      signal,
+      signal: request.signal,
     });
     if (!response.ok) {
       return {
@@ -54,8 +75,12 @@ async function postOpenUiRepair<T>(
   } catch (error) {
     return {
       status: "error",
-      message: error instanceof Error ? error.message : String(error)
+      message: request.signal.aborted && !signal?.aborted
+        ? "修复请求超时"
+        : error instanceof Error ? error.message : String(error)
     };
+  } finally {
+    request.cleanup();
   }
 }
 
@@ -169,8 +194,10 @@ export async function saveOpenUiRepairIntents(
 export async function fetchOpenUiRepairIntents(
   sessionId: string,
   messageId: string,
-  programHash: string
+  programHash: string,
+  signal?: AbortSignal
 ): Promise<(OpenUiIntentBlock & { intentIndex: number })[] | null> {
+  const request = requestSignal(signal, OPEN_UI_INTENTS_TIMEOUT_MS);
   try {
     const query = new URLSearchParams({
       sessionId,
@@ -181,12 +208,15 @@ export async function fetchOpenUiRepairIntents(
       method: "GET",
       credentials: "include",
       headers: authHeaders(),
+      signal: request.signal,
     });
     if (!response.ok) return null;
     const payload = (await response.json()) as { blocks?: (OpenUiIntentBlock & { intentIndex: number })[] };
     return payload.blocks ?? [];
   } catch {
     return null;
+  } finally {
+    request.cleanup();
   }
 }
 

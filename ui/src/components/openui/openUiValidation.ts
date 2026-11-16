@@ -30,6 +30,138 @@ export interface OpenUiDiagnostic {
   unresolved: string[];
 }
 
+type ParsedElement = {
+  type?: string;
+  typeName?: string;
+  props?: Record<string, unknown>;
+  statementId?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isNumericValue(value: unknown): boolean {
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  if (typeof value !== 'string' || value.trim() === '') {
+    return false;
+  }
+  const cleaned = value
+    .trim()
+    .replace(/[０-９．，％]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[,\s%]/g, '');
+  return /^-?\d+(?:\.\d+)?(?:万|亿)?(?:元|美元)?$/.test(cleaned);
+}
+
+function chartDiagnostics(element: ParsedElement): OpenUiDiagnosticError[] {
+  const props = element.props ?? {};
+  const statementId = element.statementId;
+  const errors: OpenUiDiagnosticError[] = [];
+  const push = (code: string, path: string, message: string) => {
+    errors.push({ code, path, message, statementId });
+  };
+
+  const data = props.data;
+  if (data === undefined || data === null) {
+    push('chart-data-empty', '/data', 'Chart data must contain at least one object row');
+    return errors;
+  }
+  // @GroupBy / @Pivot 等函数在解析阶段是动态节点，真实行要等运行时才产生。
+  if (!Array.isArray(data)) {
+    return errors;
+  }
+  if (data.length === 0 || !data.every(isRecord)) {
+    push('chart-data-empty', '/data', 'Chart data must contain at least one object row');
+    return errors;
+  }
+  if ((props.x !== undefined && props.x !== null && typeof props.x !== 'string')
+      || (props.series !== undefined && props.series !== null && !Array.isArray(props.series))) {
+    return errors;
+  }
+
+  const rows = data as Record<string, unknown>[];
+  const first = rows[0];
+  const keys = Object.keys(first);
+  if (keys.includes('?')) {
+    push(
+      'chart-keys-lost',
+      '/data',
+      'Chart object keys were discarded by the parser; quote every data key with double quotes'
+    );
+  }
+
+  const requestedX = typeof props.x === 'string' && props.x.trim() ? props.x : null;
+  const x = requestedX
+    ?? keys.find((key) => typeof first[key] === 'string')
+    ?? keys[0];
+  if (!x || (requestedX !== null && !hasOwn(first, requestedX))
+      || !rows.every((row) => hasOwn(row, x))) {
+    push('chart-x-missing', '/x', `Chart x key "${requestedX ?? x ?? ''}" is missing from data rows`);
+  }
+
+  const requestedSeries = Array.isArray(props.series)
+    ? props.series.filter((item): item is string => typeof item === 'string' && Boolean(item))
+    : [];
+  const series = requestedSeries.length
+    ? requestedSeries
+    : keys.filter((key) => key !== x && isNumericValue(first[key]));
+
+  if (series.length === 0) {
+    push('chart-series-empty', '/series', 'Chart has no numeric series to draw');
+    return errors;
+  }
+
+  const missingSeries = series.filter((key) => !rows.every((row) => hasOwn(row, key)));
+  if (missingSeries.length > 0) {
+    push(
+      'chart-series-missing',
+      '/series',
+      `Chart series ${missingSeries.map((key) => `"${key}"`).join(', ')} missing from data rows`
+    );
+  }
+
+  const emptySeries = series.filter((key) => !rows.some((row) => isNumericValue(row[key])));
+  if (emptySeries.length > 0) {
+    push(
+      'chart-series-no-number',
+      '/series',
+      `Chart series ${emptySeries.map((key) => `"${key}"`).join(', ')} has no numeric values`
+    );
+  }
+
+  return errors;
+}
+
+function collectChartDiagnostics(value: unknown): OpenUiDiagnosticError[] {
+  const errors: OpenUiDiagnosticError[] = [];
+
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (!isRecord(node)) {
+      return;
+    }
+    const element = node as ParsedElement;
+    if (element.type === 'element' && element.typeName === 'Chart') {
+      errors.push(...chartDiagnostics(element));
+    }
+    if (element.props) {
+      Object.values(element.props).forEach(visit);
+    }
+  };
+
+  visit(value);
+  return errors;
+}
+
 /**
  * 与 openui 的 isValid 同义：没有截断、没有未知组件/参数错误、没有悬空引用、root 存在。
  *
@@ -59,7 +191,7 @@ export function diagnoseProgram(text: string): OpenUiDiagnostic {
   try {
     const result = parser.parse(text);
     const meta = result.meta;
-    const errors: OpenUiDiagnosticError[] = (meta.errors ?? []).map((error) => {
+    const parserErrors: OpenUiDiagnosticError[] = (meta.errors ?? []).map((error) => {
       const raw = error as unknown as Record<string, unknown>;
       return {
         code: typeof raw.code === 'string' ? raw.code : undefined,
@@ -68,6 +200,10 @@ export function diagnoseProgram(text: string): OpenUiDiagnostic {
         path: typeof raw.path === 'string' ? raw.path : undefined,
       };
     });
+    const errors = [
+      ...parserErrors,
+      ...(result.root === null ? [] : collectChartDiagnostics(result.root))
+    ];
     const renderable =
       !meta.incomplete &&
       errors.length === 0 &&

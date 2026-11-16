@@ -18,6 +18,7 @@ public class OpenUiProtocolPromptTest {
         Assert.assertTrue(prompt.contains("]]>openui:content"));
         Assert.assertTrue(prompt.contains("## Syntax Rules"));
         Assert.assertTrue(prompt.contains("get_ui_components"));
+        Assert.assertTrue(prompt.contains("Double-quote every object key"));
         // 既有约定必须还在
         Assert.assertTrue(prompt.contains(PlanSolvePrompt.ORCHESTRATION_MARKER));
         Assert.assertTrue(prompt.contains(AgentPrompt.USER_FACING_REPLY_CONTRACT_MARKER));
@@ -45,6 +46,8 @@ public class OpenUiProtocolPromptTest {
         Assert.assertTrue(react.contains(AgentPrompt.OPENUI_PROTOCOL_MARKER));
         Assert.assertTrue(react.contains("]]>openui:content"));
         Assert.assertTrue(react.contains("## Syntax Rules"));
+        Assert.assertTrue(react.contains("After input rows are known"));
+        Assert.assertTrue(react.contains("Identifiers and $state names must be ASCII"));
         // REACT 底座本身不能被吃掉
         Assert.assertTrue(react.contains(AgentPrompt.REACT_SYSTEM_PROMPT.trim()));
     }

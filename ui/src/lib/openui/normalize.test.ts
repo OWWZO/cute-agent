@@ -129,3 +129,48 @@ describe("normalizeOpenUiProgram — builtin functions in slash form", () => {
     expect(normalizeOpenUiProgram(`x = @//fancything/(v)`)).toBeNull();
   });
 });
+
+describe("normalizeOpenUiProgram — bare object keys", () => {
+  it("quotes bare Chinese keys in chart data", () => {
+    const source =
+      'root = Chart("line", [{年: 2016, 出生率: 12.95, 结婚率: 8.3}, {年: 2017, 出生率: 12.43, 结婚率: 7.7}], "年", ["出生率", "结婚率"])';
+
+    expect(normalizeOpenUiProgram(source)).toBe(
+      'root = Chart("line", [{"年": 2016, "出生率": 12.95, "结婚率": 8.3}, {"年": 2017, "出生率": 12.43, "结婚率": 7.7}], "年", ["出生率", "结婚率"])'
+    );
+  });
+
+  it("leaves quoted keys and colon-like text inside strings alone", () => {
+    expect(
+      normalizeOpenUiProgram(
+        'root = Chart("line", [{"年": 2016, "出生率": 12.95}], "年", ["出生率"])'
+      )
+    ).toBeNull();
+    expect(normalizeOpenUiProgram('root = Text("说明, 年: 2025")')).toBeNull();
+  });
+
+  it("rewrites Chinese member access to bracket access", () => {
+    const source =
+      'root = Text(last.出生率 + "‰ " + sel.出生人口 + " 万", "lg", "ink", "semibold")';
+
+    expect(normalizeOpenUiProgram(source)).toBe(
+      'root = Text(last["出生率"] + "‰ " + sel["出生人口"] + " 万", "lg", "ink", "semibold")'
+    );
+  });
+
+  it("quotes Chinese keys that contain units, spaces, or a leading digit", () => {
+    const source =
+      'root = Chart("line", [{2025年: 1, 营收（元）: 14800, 出生 人口: 954}], "2025年", ["营收（元）", "出生 人口"])';
+
+    expect(normalizeOpenUiProgram(source)).toBe(
+      'root = Chart("line", [{"2025年": 1, "营收（元）": 14800, "出生 人口": 954}], "2025年", ["营收（元）", "出生 人口"])'
+    );
+  });
+
+  it("does not mistake a ternary value after a comma for an object key", () => {
+    const source =
+      'root = Chart("line", [{value: enabled ? 1 : 2}, {value: 3}], "value", ["value"])';
+
+    expect(normalizeOpenUiProgram(source)).toBeNull();
+  });
+});

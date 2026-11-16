@@ -12,6 +12,7 @@ describe('repairOpenUiProgram', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('posts the program to the repair endpoint and returns the fix', async () => {
@@ -50,5 +51,23 @@ describe('repairOpenUiProgram', () => {
 
     expect(result.status).toBe('error');
     expect(result.message).toContain('offline');
+  });
+
+  it('stops waiting and reports a timeout when the repair request hangs', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        })
+    );
+
+    const pending = repairOpenUiProgram('root = Col([])');
+    await vi.advanceTimersByTimeAsync(95_000);
+    const result = await pending;
+
+    expect(result).toEqual({ status: 'error', message: '修复请求超时' });
   });
 });

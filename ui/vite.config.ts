@@ -130,6 +130,11 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
         },
         '/tool': createToolProxyConfig(env.CUTE_TOOL_BASE_URL),
+        '/eval-api': {
+          target: env.CUTE_EVAL_API_BASE_URL || 'http://127.0.0.1:8765',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/eval-api/, ''),
+        },
       },
     },
     define: {

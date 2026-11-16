@@ -8,12 +8,16 @@
  * <p>动机是成本：纠偏命中就不需要打 Autofix（按次计费、不支持流式，且每次都要带上
  * 53KB 的组件库 config 块）。像 `@//set/(` 这种错误，一次字符串替换就够了。</p>
  *
- * <p>三条规则，都只做**往合法枚举里收**的替换，不做语义改写：</p>
+ * <p>五条规则，都只做**往合法枚举/写法里收**的替换，不做语义改写：</p>
  * <ol>
  *   <li>action 写成了路径形态 `@//set/(` → `@Set(`；</li>
  *   <li>内置函数写成了路径形态 `@//clamp/(` → `@Clamp(`（模型常把 `@Clamp` / `@Count`
  *       和 action 混成同一种路径记法——函数比 action 更常见，实战里两者会同时出现）；</li>
  *   <li>`Text` 用了只有 `Title` 才支持的字号 → 钳到 `Text` 的取值上界 `lg`。</li>
+ *   <li>对象字面量的中文键名没加引号 → 补双引号。解析器对此不报错，
+ *       但会静默丢掉字段，最终把一行解析成 `{"?": 最后一个值}`。</li>
+ *   <li>中文成员访问写成 `last.出生率` → `last["出生率"]`。解析器会把点号后的
+ *       中文字段解析成 `?`，进而把后续参数整体错位。</li>
  * </ol>
  *
  * <p>两者都是有损的（第 3 条会改小字号），所以调用方必须用「原文不可渲染 + 纠偏后可渲染」
@@ -73,6 +77,116 @@ const TEXT_OVERSIZED_SIZE = /(\bText\s*\((?:[^"(),]|"[^"]*"|\([^()]*\))*?,\s*)"(
 /** Text 的 size 取值上界。 */
 const TEXT_MAX_SIZE = "lg";
 
+const IDENTIFIER_START = /[\p{L}_$]/u;
+const IDENTIFIER_PART = /[\p{L}\p{N}_$]/u;
+const SIMPLE_OBJECT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const BARE_KEY_BOUNDARY = new Set([":", ",", "{", "}", '"', "'", "`", "\\", "\r", "\n", "?"]);
+const BARE_KEY_INVALID_START = new Set(["[", "]", "(", ")", "@", "$"]);
+const hasNonAscii = (value: string) =>
+  Array.from(value).some((char) => (char.codePointAt(0) ?? 0) > 0x7f);
+
+/**
+ * 修正中文对象键和中文成员访问的两种解析器歧义。
+ *
+ * <p>只扫描字符串外的 `{` / `,` 之后、`:` 之前的对象键，避免误改正文里的
+ * `Text("说明, 年份: 2025")`；同时把字符串外的 `对象.中文字段` 改成
+ * `对象["中文字段"]`。简单 ASCII 键保持原样，缩小纠偏范围。</p>
+ */
+function normalizeChineseObjectSyntax(text: string, markRewritten: () => void): string {
+  let out = "";
+  let quote: '"' | "'" | "`" | null = null;
+  let escaped = false;
+  let braceDepth = 0;
+
+  const readIdentifier = (start: number) => {
+    const keyStart = start;
+    if (keyStart >= text.length || !IDENTIFIER_START.test(text[keyStart])) return null;
+
+    let keyEnd = keyStart + 1;
+    while (keyEnd < text.length && IDENTIFIER_PART.test(text[keyEnd])) keyEnd++;
+    return { keyStart, keyEnd, key: text.slice(keyStart, keyEnd) };
+  };
+
+  const readKey = (start: number) => {
+    let offset = start;
+    while (offset < text.length && /\s/.test(text[offset])) offset++;
+    const keyStart = offset;
+    if (keyStart >= text.length || BARE_KEY_INVALID_START.has(text[keyStart])) return null;
+
+    let keyEnd = keyStart;
+    while (keyEnd < text.length) {
+      const char = text[keyEnd];
+      if (char === ":") {
+        const rawKey = text.slice(keyStart, keyEnd);
+        const key = rawKey.trimEnd();
+        return key && !SIMPLE_OBJECT_KEY.test(key) ? { keyStart, keyEnd, key } : null;
+      }
+      if (BARE_KEY_BOUNDARY.has(char)) return null;
+      keyEnd++;
+    }
+    return null;
+  };
+
+  for (let i = 0; i < text.length;) {
+    const char = text[i];
+
+    if (quote) {
+      out += char;
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      i++;
+      continue;
+    }
+
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      out += char;
+      i++;
+      continue;
+    }
+
+    if (char === ".") {
+      const member = readIdentifier(i + 1);
+      if (member && hasNonAscii(member.key)) {
+        out += `["${member.key}"]`;
+        i = member.keyEnd;
+        markRewritten();
+        continue;
+      }
+    }
+
+    if (char === "{") {
+      braceDepth++;
+      out += char;
+      i++;
+    } else if (char === "}") {
+      braceDepth = Math.max(0, braceDepth - 1);
+      out += char;
+      i++;
+    } else if (char === "," && braceDepth > 0) {
+      out += char;
+      i++;
+    } else {
+      out += char;
+      i++;
+      continue;
+    }
+
+    const key = readKey(i);
+    if (!key) continue;
+    out += text.slice(i, key.keyStart) + `"${key.key}"`;
+    i = key.keyEnd;
+    markRewritten();
+  }
+
+  return out;
+}
+
 /**
  * 把程序体里写歪的地方改回规范写法。
  *
@@ -84,8 +198,6 @@ const TEXT_MAX_SIZE = "lg";
  * 「纠偏后可渲染才采用」策略会把这种误伤挡回去。</p>
  */
 export function normalizeOpenUiProgram(text: string): string | null {
-  if (!text.includes("@//") && !/\bText\s*\(/.test(text)) return null;
-
   let rewritten = false;
 
   const withActions = text.replace(MALFORMED_ACTION, (whole, rawName: string) => {
@@ -96,9 +208,13 @@ export function normalizeOpenUiProgram(text: string): string | null {
     return `@${canonical}(`;
   });
 
-  const out = withActions.replace(TEXT_OVERSIZED_SIZE, (_whole, prefix: string) => {
+  const withText = withActions.replace(TEXT_OVERSIZED_SIZE, (_whole, prefix: string) => {
     rewritten = true;
     return `${prefix}"${TEXT_MAX_SIZE}"`;
+  });
+
+  const out = normalizeChineseObjectSyntax(withText, () => {
+    rewritten = true;
   });
 
   return rewritten ? out : null;
