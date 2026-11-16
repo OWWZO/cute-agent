@@ -1,11 +1,10 @@
 import { basenameOfPath, getTaskFiles, normalizeRelativePath } from "@/utils/taskArtifacts";
-import { buildFilePreviewUrlForBrowser } from "@/utils/fileUrl";
 import {
-  ARTIFACT_SECTION_DELIMITER,
+  extractArtifactSection,
+  normalizeArtifactKey,
+  splitArtifactKeys,
   stripArtifactSection,
 } from "@/utils/artifactContent";
-
-const ARTIFACT_KEY_SPLIT_PATTERN = /[、,\r\n，]+/;
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -45,10 +44,7 @@ export function resolveTaskSummaryText(task?: CHAT.Task) {
 
 function parseArtifactKeys(value: unknown): string[] {
   if (typeof value === "string") {
-    return value
-      .split(ARTIFACT_KEY_SPLIT_PATTERN)
-      .map((item) => normalizeArtifactKey(item))
-      .filter(Boolean);
+    return splitArtifactKeys(value);
   }
   if (!Array.isArray(value)) {
     return [];
@@ -70,35 +66,8 @@ function readStoredArtifactKeys(task?: CHAT.Task): string[] {
   return parseArtifactKeys(taskRecord.artifactKeys);
 }
 
-function normalizeArtifactKey(raw: string) {
-  let text = raw.trim();
-  if (!text) {
-    return "";
-  }
-  // 模型偶尔把分隔符重复输出（`正文$$$\n$$$ file.md`），残留的 $$$ 不是文件键，
-  // 不清掉会合成出一张名为 "$$$" 的假文件卡。
-  text = text.replaceAll(ARTIFACT_SECTION_DELIMITER, " ").trim();
-  text = text.replace(/^[-*+]\s+/, "").replace(/^\d+[.)]\s+/, "").trim();
-  text = text.replace(/^[*`]+|[`*]+$/g, "").trim();
-  const markdownLink = text.match(/^\[[^\]]*]\(([^)]+)\)$/);
-  if (markdownLink?.[1]) {
-    text = markdownLink[1].trim();
-  }
-  text = text.replace(/^['"]+|['"]+$/g, "").trim();
-  return text.replace(/[。.;]+$/g, "").trim();
-}
-
 function parseProtocolArtifactKeys(text: string): string[] {
-  const delimiterIndex = text.indexOf(ARTIFACT_SECTION_DELIMITER);
-  if (delimiterIndex < 0) {
-    return [];
-  }
-  return text
-    .slice(delimiterIndex + ARTIFACT_SECTION_DELIMITER.length)
-    .trim()
-    .split(ARTIFACT_KEY_SPLIT_PATTERN)
-    .map((item) => normalizeArtifactKey(item))
-    .filter(Boolean);
+  return extractArtifactSection(text)?.artifactKeys ?? [];
 }
 
 export function resolveTaskSummaryArtifactKeys(task?: CHAT.Task): string[] {
@@ -138,34 +107,6 @@ function pickFileByWorkspacePath(files: CHAT.TFile[], key: string, used: Set<num
   return matches.length === 1 ? matches[0].index : -1;
 }
 
-function resolveSessionId(task?: CHAT.Task): string {
-  const { taskRecord, resultMapRecord } = resolveSummaryRecords(task);
-  return (
-    asText(resultMapRecord.sessionId) ||
-    asText(taskRecord.sessionId) ||
-    asText(resultMapRecord.requestId) ||
-    asText(taskRecord.requestId)
-  );
-}
-
-function fileFromArtifactKey(key: string, sessionId?: string): CHAT.TFile | null {
-  const path = normalizeRelativePath(key);
-  if (!path) {
-    return null;
-  }
-  const name = basenameOfPath(path) || path;
-  const previewUrl = buildFilePreviewUrlForBrowser(sessionId, path);
-  return {
-    name,
-    url: previewUrl,
-    type: name.includes(".") ? name.split(".").pop() || "" : "",
-    size: 0,
-    downloadUrl: previewUrl || undefined,
-    relativePath: path,
-    originFileName: path,
-  };
-}
-
 export function isSameDeliveryFile(left: CHAT.TFile, right: CHAT.TFile) {
   const leftKey = String(left.resourceKey || "").toLowerCase();
   const rightKey = String(right.resourceKey || "").toLowerCase();
@@ -194,19 +135,7 @@ export function isSameDeliveryFile(left: CHAT.TFile, right: CHAT.TFile) {
   return false;
 }
 
-function hasBasenameInPool(files: CHAT.TFile[], key: string) {
-  const base = basenameOfPath(normalizeRelativePath(key)).toLowerCase();
-  if (!base) {
-    return false;
-  }
-  return files.some((file) => basenameOfPath(workspacePathOf(file)) === base);
-}
-
-function pickFilesByArtifactKeys(
-  files: CHAT.TFile[],
-  keys: string[],
-  sessionId?: string
-) {
+function pickFilesByArtifactKeys(files: CHAT.TFile[], keys: string[]) {
   const used = new Set<number>();
   const featured: CHAT.TFile[] = [];
   for (const key of keys) {
@@ -214,14 +143,6 @@ function pickFilesByArtifactKeys(
     if (index >= 0) {
       used.add(index);
       featured.push(files[index]);
-      continue;
-    }
-    if (hasBasenameInPool(files, key)) {
-      continue;
-    }
-    const synthesized = fileFromArtifactKey(key, sessionId);
-    if (synthesized) {
-      featured.push(synthesized);
     }
   }
   return featured;
@@ -239,18 +160,13 @@ function mergeDeliveryFiles(task?: CHAT.Task, sessionFiles?: CHAT.TFile[]) {
 
 export function pickFeaturedDeliveryFiles(
   task?: CHAT.Task,
-  sessionFiles?: CHAT.TFile[],
-  sessionId?: string
+  sessionFiles?: CHAT.TFile[]
 ): CHAT.TFile[] {
   const keys = resolveTaskSummaryArtifactKeys(task);
   if (!keys.length) {
     return [];
   }
-  return pickFilesByArtifactKeys(
-    mergeDeliveryFiles(task, sessionFiles),
-    keys,
-    sessionId || resolveSessionId(task)
-  );
+  return pickFilesByArtifactKeys(mergeDeliveryFiles(task, sessionFiles), keys);
 }
 
 export function shouldShowWorkspaceFilesEntry(

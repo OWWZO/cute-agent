@@ -47,6 +47,7 @@ public class GptQueryRequestMapper {
                 .resourceKey(file.getResourceKey())
                 .mimeType(file.getMimeType())
                 .originFileName(file.getOriginFileName())
+                .relativePath(file.getRelativePath())
                 .originFileUrl(file.getOriginFileUrl())
                 .originOssUrl(file.getOriginOssUrl())
                 .originDomainUrl(file.getOriginDomainUrl())

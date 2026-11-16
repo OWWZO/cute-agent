@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -18,6 +19,16 @@ public final class TaskSummaryArtifactProtocol {
 
     private static final Pattern ARTIFACT_SPLIT_PATTERN =
             Pattern.compile(ToolArtifactFormatter.ARTIFACT_KEY_SEPARATOR_REGEX);
+    private static final Pattern DELIMITER_RUN_PATTERN =
+            Pattern.compile("\\$\\$\\$(?:[ \\t]*\\R[ \\t]*\\$\\$\\$)*");
+    private static final Pattern TRAILING_DELIMITER_PATTERN =
+            Pattern.compile("(?:\\R[ \\t]*\\$\\$\\$[ \\t]*)+\\s*$");
+    private static final Pattern MARKDOWN_LINK_PATTERN =
+            Pattern.compile("^\\[[^\\]]*]\\(([^)]+)\\)$");
+    private static final Pattern INVALID_PATH_CHAR_PATTERN =
+            Pattern.compile("[\\s*`?#<>|\"'，,。；;：:！？!]");
+    private static final Pattern ARTIFACT_BASENAME_PATTERN =
+            Pattern.compile("(?:[^/\\\\]+\\.[A-Za-z0-9][A-Za-z0-9._-]{0,15}|[A-Za-z0-9_.-]+)");
 
     private TaskSummaryArtifactProtocol() {
     }
@@ -36,11 +47,9 @@ public final class TaskSummaryArtifactProtocol {
         if (raw.isEmpty()) {
             return TaskSummaryResult.builder().taskSummary("").build();
         }
-        String[] parts = raw.split(Pattern.quote(ToolArtifactFormatter.ARTIFACT_DELIMITER), 2);
-        List<String> requestedKeys = parts.length < 2 ? List.of() : splitArtifactKeys(parts[1].trim());
         return TaskSummaryResult.builder()
                 .taskSummary(raw)
-                .artifactKeys(requestedKeys)
+                .artifactKeys(extractArtifactKeys(raw))
                 .build();
     }
 
@@ -84,11 +93,90 @@ public final class TaskSummaryArtifactProtocol {
         String[] parts = ARTIFACT_SPLIT_PATTERN.split(artifactKeys);
         List<String> result = new ArrayList<>(parts.length);
         for (String part : parts) {
-            String trimmed = part.trim();
-            if (StringUtils.isNotBlank(trimmed)) {
-                result.add(trimmed);
+            String normalized = normalizeArtifactKey(part);
+            if (StringUtils.isNotBlank(normalized)) {
+                result.add(normalized);
             }
         }
         return result;
+    }
+
+    /**
+     * 从终答中找最后一个合法的交付文件段。
+     *
+     * 正文中可能只是提到 {@code $$$}，因此不能见到分隔符就切；
+     * 分隔符后面的内容必须整体像文件路径列表。
+     */
+    public static List<String> extractArtifactKeys(String llmResponse) {
+        String raw = StringUtils.trimToEmpty(llmResponse);
+        List<int[]> candidates = new ArrayList<>();
+        Matcher matcher = DELIMITER_RUN_PATTERN.matcher(raw);
+        while (matcher.find()) {
+            candidates.add(new int[]{matcher.start(), matcher.end()});
+        }
+
+        for (int index = candidates.size() - 1; index >= 0; index--) {
+            int[] candidate = candidates.get(index);
+            String suffix = raw.substring(candidate[1]).trim();
+            suffix = TRAILING_DELIMITER_PATTERN.matcher(suffix).replaceFirst("").trim();
+            if (suffix.isEmpty()) {
+                String marker = raw.substring(candidate[0], candidate[1]);
+                if (!marker.contains("\n") && !isDelimiterLine(raw, candidate[0], candidate[1])) {
+                    continue;
+                }
+                if (index > 0) {
+                    continue;
+                }
+                return List.of();
+            }
+
+            List<String> artifactKeys = splitArtifactKeys(suffix);
+            if (!artifactKeys.isEmpty() && artifactKeys.stream().allMatch(TaskSummaryArtifactProtocol::isPlausibleArtifactKey)) {
+                return artifactKeys;
+            }
+        }
+        return List.of();
+    }
+
+    private static boolean isDelimiterLine(String raw, int start, int end) {
+        int lineStart = raw.lastIndexOf('\n', start - 1) + 1;
+        int lineEnd = raw.indexOf('\n', end);
+        return raw.substring(lineStart, start).isBlank()
+                && raw.substring(end, lineEnd >= 0 ? lineEnd : raw.length()).isBlank();
+    }
+
+    private static String normalizeArtifactKey(String raw) {
+        String text = StringUtils.trimToEmpty(raw);
+        if (text.isEmpty()) {
+            return "";
+        }
+        text = text.replace(ToolArtifactFormatter.ARTIFACT_DELIMITER, " ").trim();
+        text = text.replaceFirst("^[-*+]\\s+", "")
+                .replaceFirst("^\\d+[.)]\\s+", "")
+                .trim();
+        text = text.replaceFirst("^[*`]+", "")
+                .replaceFirst("[`*]+$", "")
+                .trim();
+        Matcher markdownLink = MARKDOWN_LINK_PATTERN.matcher(text);
+        if (markdownLink.matches()) {
+            text = markdownLink.group(1).trim();
+        }
+        text = text.replaceFirst("^['\"]+", "")
+                .replaceFirst("['\"]+$", "")
+                .trim();
+        return text.replaceFirst("[。.;]+$", "").trim();
+    }
+
+    private static boolean isPlausibleArtifactKey(String key) {
+        if (StringUtils.isBlank(key)
+                || key.length() > 512
+                || key.contains(ToolArtifactFormatter.ARTIFACT_DELIMITER)
+                || key.matches(".*[/\\\\]$")
+                || INVALID_PATH_CHAR_PATTERN.matcher(key).find()) {
+            return false;
+        }
+        int separator = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
+        String basename = separator >= 0 ? key.substring(separator + 1) : key;
+        return ARTIFACT_BASENAME_PATTERN.matcher(basename).matches();
     }
 }

@@ -11,7 +11,7 @@ import {
   AGENT_TYPE_DEEP_THINK,
   AGENT_TYPE_PLAN_SOLVE,
 } from "@/utils/agentMode";
-import { ARTIFACT_SECTION_DELIMITER } from "@/utils/artifactContent";
+import { extractArtifactSection } from "@/utils/artifactContent";
 import {
   hasRenderableTimelineItems,
   isRunReplay,
@@ -440,8 +440,8 @@ function buildFallbackConclusionEventData(
 
 function resolveFallbackSummary(rawSummaryText?: string | null) {
   const normalized = String(rawSummaryText || "");
-  const delimiterIndex = normalized.indexOf(ARTIFACT_SECTION_DELIMITER);
-  if (delimiterIndex === -1) {
+  const section = extractArtifactSection(normalized);
+  if (!section) {
     return {
       summaryText: normalized,
       fileList: [] as MESSAGE.FileInfo[],
@@ -450,17 +450,10 @@ function resolveFallbackSummary(rawSummaryText?: string | null) {
     };
   }
 
-  const artifactKeys = normalized
-    .slice(delimiterIndex + ARTIFACT_SECTION_DELIMITER.length)
-    .trim()
-    .split(/[、,\r\n，]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-
   return {
     summaryText: normalized,
     fileList: [] as MESSAGE.FileInfo[],
     artifactRefs: [] as MESSAGE.ArtifactReference[],
-    artifactKeys,
+    artifactKeys: section.artifactKeys,
   };
 }

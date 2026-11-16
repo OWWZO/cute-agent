@@ -231,7 +231,7 @@ const MARKDOWN_LINK_OR_IMAGE_PATTERN =
   /(!?\[[^\]]*]\()([^)\s]+)(\))/g;
 
 const PROTECTED_MARKDOWN_SEGMENT_PATTERN =
-  /(\[[^\]]*]\([^)]+\)|`[^`]+`|https?:\/\/[^\s)]+)/g;
+  /(\[[^\]]*]\([^)]+\)|`[^`]+`|https?:\/\/[^\s)]+|<\/?[A-Za-z][^>]*>)/g;
 
 function embedBareWorkspaceRef(needle: string, url: string) {
   const kind = resolveMarkdownMediaKind(needle);
@@ -372,6 +372,7 @@ function rewriteBareWorkspaceFileRefs(
         !part ||
         part.startsWith("[") ||
         part.startsWith("`") ||
+        part.startsWith("<") ||
         /^https?:\/\//i.test(part)
       ) {
         return part;

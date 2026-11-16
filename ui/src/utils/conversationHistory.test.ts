@@ -909,7 +909,7 @@ describe("conversationHistory hydrate", () => {
       pickFeaturedDeliveryFiles(history.chatList[0].conclusion).map(
         (item) => item.relativePath
       )
-    ).toEqual(["final-report.html", "checklist.md"]);
+    ).toEqual([]);
   });
 
   it("maps history $$$ names onto replayed workspace files", () => {

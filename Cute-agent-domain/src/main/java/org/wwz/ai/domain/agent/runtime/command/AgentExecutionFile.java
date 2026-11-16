@@ -31,6 +31,8 @@ public class AgentExecutionFile {
     private String resourceKey;
     private String mimeType;
     private String originFileName;
+    /** 工作区内的逻辑相对路径；与展示用 fileName 分离。 */
+    private String relativePath;
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private String originFileUrl;

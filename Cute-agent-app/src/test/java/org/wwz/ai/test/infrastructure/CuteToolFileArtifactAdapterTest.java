@@ -13,8 +13,10 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class CuteToolFileArtifactAdapterTest {
 
@@ -25,9 +27,10 @@ public class CuteToolFileArtifactAdapterTest {
         byte[] responseBody = ("{\"downloadUrl\":\"https://example.test/file\","
                 + "\"fileName\":\"" + expectedFileName + "\"}")
                 .getBytes(gbk);
+        AtomicReference<String> multipartBody = new AtomicReference<>("");
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/v1/file_tool/upload_file_data", exchange -> {
-            exchange.getRequestBody().readAllBytes();
+            multipartBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             exchange.getResponseHeaders().set("Content-Type", "application/json; charset=GBK");
             exchange.sendResponseHeaders(200, responseBody.length);
             exchange.getResponseBody().write(responseBody);
@@ -45,12 +48,15 @@ public class CuteToolFileArtifactAdapterTest {
                     "http://127.0.0.1:" + server.getAddress().getPort(),
                     FileRequest.builder()
                             .requestId("req-1")
-                            .fileName("upload.txt")
+                            .fileName("test-page/screens/desktop.png")
                             .localPath(localFile.toString())
                             .build());
 
             Assert.assertNotNull(response);
             Assert.assertEquals(expectedFileName, response.getFileName());
+            Assert.assertTrue(multipartBody.get().contains("name=\"relativePath\""));
+            Assert.assertTrue(multipartBody.get().contains("test-page/screens/desktop.png"));
+            Assert.assertTrue(multipartBody.get().contains("filename=\"desktop.png\""));
         } finally {
             server.stop(0);
             Files.deleteIfExists(localFile);

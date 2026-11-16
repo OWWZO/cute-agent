@@ -209,12 +209,11 @@ describe("contentHelpers delivery files", () => {
     ]);
   });
 
-  it("keeps a clickable card when $$$ names a file missing from the pool", () => {
+  it("does not synthesize a card when $$$ names a missing file", () => {
     const task = conclusionTask("请打开附件。$$$ simple-showcase.html", []);
 
-    expect(pickFeaturedDeliveryFiles(task).map((item) => item.relativePath)).toEqual([
-      "simple-showcase.html",
-    ]);
+    expect(resolveTaskSummaryArtifactKeys(task)).toEqual(["simple-showcase.html"]);
+    expect(pickFeaturedDeliveryFiles(task)).toEqual([]);
   });
 
   it("ignores a closing $$$ delimiter instead of treating it as a file", () => {
@@ -236,6 +235,62 @@ describe("contentHelpers delivery files", () => {
 
     expect(resolveTaskSummaryArtifactKeys(task)).toEqual([]);
     expect(pickFeaturedDeliveryFiles(task, [html])).toEqual([]);
+  });
+
+  it("keeps inline $$$ prose and uses the trailing artifact section", () => {
+    const html = file("index.html", { relativePath: "test-page/index.html" });
+    const readme = file("README.md", { relativePath: "test-page/README.md" });
+    const summary = [
+      "你之前看不到 `screens/` 的原因：上一轮会话结束时工作区被重置。",
+      "我上一条 `$$$` 里写的 `test-page/screens/*.png` 在当时已失效。",
+      "",
+      "**当前真实结构**：",
+      "test-page/",
+      "├── index.html          33 KB   交付物，单文件自包含",
+      "",
+      "$$$",
+      "test-page/index.html",
+      "test-page/README.md",
+    ].join("\n");
+    const task = conclusionTask(summary, [html, readme]);
+
+    expect(resolveTaskSummaryText(task)).toContain(
+      "我上一条 `$$$` 里写的 `test-page/screens/*.png` 在当时已失效"
+    );
+    expect(resolveTaskSummaryArtifactKeys(task)).toEqual([
+      "test-page/index.html",
+      "test-page/README.md",
+    ]);
+    expect(pickFeaturedDeliveryFiles(task).map((item) => item.name)).toEqual([
+      "index.html",
+      "README.md",
+    ]);
+  });
+
+  it("does not treat a prose-only $$$ mention as an artifact section", () => {
+    const summary = [
+      "我上一条 `$$$` 里写的 `test-page/screens/*.png` 在当时已失效，",
+      "这是我未在交付前重新核对路径造成的，抱歉。",
+      "",
+      "**当前真实结构**：",
+      "test-page/",
+      "├── index.html          33 KB   交付物，单文件自包含",
+      "└── screens/",
+      "    └── desktop.png     271 KB",
+    ].join("\n");
+    const task = conclusionTask(summary, []);
+
+    expect(resolveTaskSummaryText(task)).toBe(summary);
+    expect(resolveTaskSummaryArtifactKeys(task)).toEqual([]);
+    expect(pickFeaturedDeliveryFiles(task)).toEqual([]);
+  });
+
+  it("does not strip an inline delimiter at the end of prose", () => {
+    const summary = "文件清单分隔符写作 $$$";
+    const task = conclusionTask(summary, []);
+
+    expect(resolveTaskSummaryText(task)).toBe(summary);
+    expect(resolveTaskSummaryArtifactKeys(task)).toEqual([]);
   });
 
   it("strips list markers and trailing punctuation from $$$ keys", () => {

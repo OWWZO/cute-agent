@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.nio.file.Path;
 
 /**
  * React / PlanSolve 两个 Prepare 节点的装配语义。
@@ -179,6 +180,30 @@ public class PrepareAgentContextAssemblyTest {
         Assert.assertEquals("req-plan-asm-4", planRegistry.boundRequestId);
     }
 
+    @Test
+    public void shouldResolveWorkspaceRootFromSessionLineageWhenRequestDoesNotOverrideIt() throws Exception {
+        Path lineageRoot = Path.of(System.getProperty("java.io.tmpdir"), "cute-lineage-workspace")
+                .toAbsolutePath()
+                .normalize();
+        WorkspaceService workspaceService = Mockito.mock(WorkspaceService.class);
+        Mockito.when(workspaceService.isEnabled()).thenReturn(true);
+        Mockito.when(workspaceService.resolveSessionWorkspaceRoot("sub-lineage"))
+                .thenReturn(lineageRoot);
+
+        org.wwz.ai.domain.agent.service.execute.react.step.PrepareAgentContextNode node =
+                newReactNode(DisabledSets.empty(), null, null, workspaceService);
+        DefaultReactAgentExecuteStrategyFactory.DynamicContext ctx =
+                DefaultReactAgentExecuteStrategyFactory.DynamicContext.builder()
+                        .printer(noopPrinter())
+                        .build();
+
+        node.apply(request("req-lineage", "sub-lineage"), ctx);
+
+        Assert.assertEquals(lineageRoot.toString(), ctx.getAgentContext().getWorkspaceRoot());
+        Mockito.verify(workspaceService).resolveSessionWorkspaceRoot("sub-lineage");
+        Mockito.verify(workspaceService, Mockito.never()).resolveAndEnsureRoot(Mockito.anyString());
+    }
+
     // ---------- fixtures ----------
 
     private static AgentExecutionCommand request(String requestId, String sessionId) {
@@ -241,9 +266,15 @@ public class PrepareAgentContextAssemblyTest {
     private org.wwz.ai.domain.agent.service.execute.react.step.PrepareAgentContextNode newReactNode(
             DisabledSets disabled, StubPlanApprovalRepository approvals,
             RecordingActiveAgentRunRegistry registry) {
+        return newReactNode(disabled, approvals, registry, disabledWorkspaceService());
+    }
+
+    private org.wwz.ai.domain.agent.service.execute.react.step.PrepareAgentContextNode newReactNode(
+            DisabledSets disabled, StubPlanApprovalRepository approvals,
+            RecordingActiveAgentRunRegistry registry, WorkspaceService workspaceService) {
         org.wwz.ai.domain.agent.service.execute.react.step.PrepareAgentContextNode node =
                 new org.wwz.ai.domain.agent.service.execute.react.step.PrepareAgentContextNode();
-        set(node, "prepareAgentContextAssembly", assembly(disabled, approvals, registry));
+        set(node, "prepareAgentContextAssembly", assembly(disabled, approvals, registry, workspaceService));
         set(node, "runReactLoopNode", Mockito.mock(
                 org.wwz.ai.domain.agent.service.execute.react.step.RunReactLoopNode.class));
         return node;
@@ -283,6 +314,13 @@ public class PrepareAgentContextAssemblyTest {
     private PrepareAgentContextAssembly assembly(DisabledSets disabled,
                                                  StubPlanApprovalRepository approvals,
                                                  RecordingActiveAgentRunRegistry registry) {
+        return assembly(disabled, approvals, registry, disabledWorkspaceService());
+    }
+
+    private PrepareAgentContextAssembly assembly(DisabledSets disabled,
+                                                 StubPlanApprovalRepository approvals,
+                                                 RecordingActiveAgentRunRegistry registry,
+                                                 WorkspaceService workspaceService) {
         PrepareAgentContextAssembly assembly = new PrepareAgentContextAssembly();
         set(assembly, "agentExecutionRecorder", recorder);
         set(assembly, "sessionCapabilityService", stubCapability(disabled));
@@ -290,7 +328,7 @@ public class PrepareAgentContextAssemblyTest {
         set(assembly, "cuteRuntimeDependencies", runtimeDependencies());
         set(assembly, "activeAgentRunRegistry", registry != null ? registry : new RecordingActiveAgentRunRegistry());
         set(assembly, "planApprovalRepository", approvals);
-        set(assembly, "workspaceService", disabledWorkspaceService());
+        set(assembly, "workspaceService", workspaceService);
         set(assembly, "workspaceSessionFileMaterializer", Mockito.mock(WorkspaceSessionFileMaterializer.class));
         set(assembly, "workspaceReadStateStore", Mockito.mock(WorkspaceReadStateStore.class));
         return assembly;

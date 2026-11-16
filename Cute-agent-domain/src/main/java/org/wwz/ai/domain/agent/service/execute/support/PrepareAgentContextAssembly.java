@@ -235,7 +235,9 @@ public class PrepareAgentContextAssembly {
             return null;
         }
         try {
-            return workspaceService.resolveAndEnsureRoot(sessionId).toString();
+            // 子 Agent 直聊时没有父 context 可继承，必须沿 parent_session_id 上溯，
+            // 否则装配阶段会先把 root 填成子会话自己的新目录，工具层再也不会触发血缘解析。
+            return workspaceService.resolveSessionWorkspaceRoot(sessionId).toString();
         } catch (Exception e) {
             log.warn("resolve workspace root failed, sessionId={}", sessionId, e);
             return null;

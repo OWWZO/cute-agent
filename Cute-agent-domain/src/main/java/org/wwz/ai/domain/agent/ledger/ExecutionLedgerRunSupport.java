@@ -242,6 +242,9 @@ public final class ExecutionLedgerRunSupport {
         if (StringUtils.isNotBlank(sessionFile.getOriginFileName())) {
             metadata.put("originFileName", sessionFile.getOriginFileName());
         }
+        if (StringUtils.isNotBlank(sessionFile.getRelativePath())) {
+            metadata.put("relativePath", sessionFile.getRelativePath());
+        }
         if (StringUtils.isNotBlank(sessionFile.getOriginFileUrl())) {
             metadata.put("originFileUrl", sessionFile.getOriginFileUrl());
         }

@@ -2,10 +2,8 @@ package org.wwz.ai.domain.agent.ledger.replay;
 
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.artifact.TaskSummaryArtifactProtocol;
-import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactFormatter;
 
 import java.util.List;
-import java.util.regex.Pattern;
 
 /**
  * 历史回放里的总结结果解析器。
@@ -19,10 +17,7 @@ public final class SummaryReplayResultResolver {
 
     public static ResolvedSummary resolve(String rawSummaryText) {
         String raw = StringUtils.defaultString(rawSummaryText);
-        String[] parts = raw.split(Pattern.quote(ToolArtifactFormatter.ARTIFACT_DELIMITER), 2);
-        List<String> requestedKeys = parts.length < 2
-                ? List.of()
-                : TaskSummaryArtifactProtocol.splitArtifactKeys(parts[1]);
+        List<String> requestedKeys = TaskSummaryArtifactProtocol.extractArtifactKeys(raw);
         return new ResolvedSummary(raw, requestedKeys);
     }
 

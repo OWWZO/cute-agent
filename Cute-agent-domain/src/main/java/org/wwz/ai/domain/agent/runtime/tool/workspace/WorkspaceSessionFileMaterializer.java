@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import org.wwz.ai.domain.agent.adapter.port.FileArtifactPort;
+import org.wwz.ai.domain.agent.runtime.artifact.WorkspaceRelativePath;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionFile;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 
@@ -54,13 +55,13 @@ public class WorkspaceSessionFileMaterializer {
             return written;
         }
 
-        Set<String> usedNames = new HashSet<>();
+        Set<String> usedPaths = new HashSet<>();
         for (AgentExecutionFile sessionFile : sessionFiles) {
             if (sessionFile == null) {
                 continue;
             }
-            String fileName = resolveSafeFileName(sessionFile, usedNames);
-            if (fileName == null) {
+            String relativePath = resolveSafeRelativePath(agentContext, sessionFile, usedPaths);
+            if (relativePath == null) {
                 continue;
             }
             String sourceUrl = firstNonBlank(
@@ -71,69 +72,127 @@ public class WorkspaceSessionFileMaterializer {
                     sessionFile.getOriginFileUrl()
             );
             if (StringUtils.isBlank(sourceUrl)) {
-                log.info("{} skip materialize without url, fileName={}", agentContext.getRequestId(), fileName);
+                log.info("{} skip materialize without url, relativePath={}",
+                        agentContext.getRequestId(), relativePath);
                 continue;
             }
             try {
                 // 始终二进制下载，避免 xlsx/pdf/png 被当文本 UTF-8 转码损坏
-                // 文件名先经过 basename、字符清洗和去重，再交给 workspace guard 做根目录校验。
+                // relativePath 是逻辑身份；目录层级必须保留，否则 HTML/CSS 相对引用会失效。
                 byte[] bytes = fileArtifactPort.readBytes(sourceUrl, READ_TIMEOUT_SECONDS, MAX_FILE_BYTES);
                 if (bytes == null || bytes.length == 0) {
-                    log.warn("{} materialize empty content, fileName={}, url={}",
-                            agentContext.getRequestId(), fileName, sourceUrl);
+                    log.warn("{} materialize empty content, relativePath={}",
+                            agentContext.getRequestId(), relativePath);
                     continue;
                 }
                 if (bytes.length > MAX_FILE_BYTES) {
-                    log.warn("{} materialize skip oversized file, fileName={}, size={}",
-                            agentContext.getRequestId(), fileName, bytes.length);
+                    log.warn("{} materialize skip oversized file, relativePath={}, size={}",
+                            agentContext.getRequestId(), relativePath, bytes.length);
                     continue;
                 }
-                Path target = workspaceService.resolveAllowedPath(workspaceRoot, fileName);
+                Path target = workspaceRoot.resolve(relativePath).normalize();
+                if (!target.startsWith(workspaceRoot)) {
+                    log.warn("{} reject materialize path outside workspace, relativePath={}",
+                            agentContext.getRequestId(), relativePath);
+                    continue;
+                }
                 Path parent = target.getParent();
                 if (parent != null) {
                     Files.createDirectories(parent);
                 }
                 try {
                     Files.write(target, bytes);
-                    written.add(fileName);
-                    usedNames.add(fileName.toLowerCase(Locale.ROOT));
-                    log.info("{} materialize session file ok, fileName={}, bytes={}, magic={}",
-                            agentContext.getRequestId(), fileName, bytes.length, magicHint(bytes));
+                    written.add(relativePath);
+                    usedPaths.add(relativePath.toLowerCase(Locale.ROOT));
+                    log.info("{} materialize session file ok, relativePath={}, bytes={}, magic={}",
+                            agentContext.getRequestId(), relativePath, bytes.length, magicHint(bytes));
                 } catch (Exception writeFailure) {
                     Files.deleteIfExists(target);
                     throw writeFailure;
                 }
             } catch (Exception e) {
-                log.warn("{} materialize session file failed, fileName={}, url={}",
-                        agentContext.getRequestId(), fileName, sourceUrl, e);
+                log.warn("{} materialize session file failed, relativePath={}",
+                        agentContext.getRequestId(), relativePath, e);
             }
         }
 
         return written;
     }
 
-    private String resolveSafeFileName(AgentExecutionFile sessionFile, Set<String> usedNames) {
-        String raw = firstNonBlank(sessionFile.getFileName(), sessionFile.getOriginFileName(), "session-file.txt");
-        if (StringUtils.isBlank(raw)) {
+    private String resolveSafeRelativePath(AgentContext agentContext,
+                                           AgentExecutionFile sessionFile,
+                                           Set<String> usedPaths) {
+        String explicitRelativePath = StringUtils.trimToNull(sessionFile.getRelativePath());
+        if (explicitRelativePath != null) {
+            String normalized = normalizeRelativePath(explicitRelativePath);
+            if (normalized == null) {
+                log.warn("{} reject invalid relativePath={}",
+                        agentContext.getRequestId(), explicitRelativePath);
+                return null;
+            }
+            return claimMaterializePath(agentContext, normalized, usedPaths);
+        }
+
+        // 兼容旧数据：originFileName 只有含目录时才优先于展示用 fileName。
+        String originPath = StringUtils.trimToNull(sessionFile.getOriginFileName());
+        if (originPath != null && hasDirectory(originPath)) {
+            String normalized = normalizeRelativePath(originPath);
+            if (normalized != null) {
+                return claimMaterializePath(agentContext, normalized, usedPaths);
+            }
+            // originFileName 是旧协议里的展示元数据，可能含浏览器伪路径；非法时只降级，
+            // 不能让一个仅用于展示的字段阻断 fileName 的兼容物化。
+            log.warn("{} ignore invalid legacy originFileName path={}",
+                    agentContext.getRequestId(), originPath);
+        }
+
+        String fallback = firstNonBlank(sessionFile.getFileName(), originPath, "session-file.txt");
+        String normalized = normalizeRelativePath(fallback);
+        if (normalized == null) {
+            log.warn("{} reject invalid fallback file path={}",
+                    agentContext.getRequestId(), fallback);
             return null;
         }
-        String baseName = Path.of(raw.replace('\\', '/')).getFileName().toString().trim();
-        if (baseName.isEmpty() || ".".equals(baseName) || "..".equals(baseName)) {
-            baseName = "session-file.txt";
+        if (!hasDirectory(normalized)) {
+            log.warn("{} materialize legacy basename without relativePath, fileName={}",
+                    agentContext.getRequestId(), normalized);
         }
-        baseName = baseName.replaceAll("[\\\\/:*?\"<>|]", "_");
-        String candidate = baseName;
-        int index = 1;
-        while (usedNames.contains(candidate.toLowerCase(Locale.ROOT))) {
-            int dot = baseName.lastIndexOf('.');
-            if (dot > 0) {
-                candidate = baseName.substring(0, dot) + "-" + index + baseName.substring(dot);
-            } else {
-                candidate = baseName + "-" + index;
+        return claimMaterializePath(agentContext, normalized, usedPaths);
+    }
+
+    private String claimMaterializePath(AgentContext agentContext,
+                                        String relativePath,
+                                        Set<String> usedPaths) {
+        String identity = relativePath.toLowerCase(Locale.ROOT);
+        if (usedPaths.contains(identity)) {
+            log.warn("{} duplicate relativePath in one materialize batch, relativePath={}",
+                    agentContext.getRequestId(), relativePath);
+            return null;
+        }
+        return relativePath;
+    }
+
+    private String normalizeRelativePath(String raw) {
+        String safe = WorkspaceRelativePath.sanitize(raw);
+        if (StringUtils.isBlank(safe)) {
+            return null;
+        }
+        List<String> segments = new ArrayList<>();
+        for (String part : safe.split("/")) {
+            String segment = part.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
+            if (segment.isEmpty() || ".".equals(segment)) {
+                continue;
             }
-            index++;
+            if ("..".equals(segment)) {
+                return null;
+            }
+            segments.add(segment);
         }
-        return candidate;
+        return segments.isEmpty() ? null : String.join("/", segments);
+    }
+
+    private boolean hasDirectory(String path) {
+        return path.indexOf('/') >= 0 || path.indexOf('\\') >= 0;
     }
 
     private String firstNonBlank(String... values) {

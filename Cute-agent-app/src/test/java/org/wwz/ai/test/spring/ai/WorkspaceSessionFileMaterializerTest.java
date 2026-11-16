@@ -93,4 +93,89 @@ public class WorkspaceSessionFileMaterializerTest {
         Assert.assertTrue(written.isEmpty());
         Assert.assertFalse(Files.exists(workspaceRoot.resolve("secret.txt")));
     }
+
+    @Test
+    public void shouldPreserveNestedRelativePathAcrossMaterialization() throws Exception {
+        byte[] pngBytes = new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47};
+        Mockito.when(fileArtifactPort.readBytes(
+                        "https://file.example.com/desktop.png", 60L, 32L * 1024 * 1024))
+                .thenReturn(pngBytes);
+
+        List<String> written = materializer.materialize(agentContext, List.of(
+                AgentExecutionFile.builder()
+                        .fileName("desktop.png")
+                        .originFileName("test-page/screens/desktop.png")
+                        .ossUrl("https://file.example.com/desktop.png")
+                        .build()
+        ));
+
+        Assert.assertEquals(List.of("test-page/screens/desktop.png"), written);
+        Assert.assertTrue(Files.isRegularFile(workspaceRoot.resolve("test-page/screens/desktop.png")));
+        Assert.assertFalse(Files.exists(workspaceRoot.resolve("desktop.png")));
+    }
+
+    @Test
+    public void shouldKeepSameNamedFilesInDifferentDirectories() throws Exception {
+        Mockito.when(fileArtifactPort.readBytes(
+                        "https://file.example.com/root-index", 60L, 32L * 1024 * 1024))
+                .thenReturn("<html>root</html>".getBytes(StandardCharsets.UTF_8));
+        Mockito.when(fileArtifactPort.readBytes(
+                        "https://file.example.com/cover-index", 60L, 32L * 1024 * 1024))
+                .thenReturn("<html>cover</html>".getBytes(StandardCharsets.UTF_8));
+
+        List<String> written = materializer.materialize(agentContext, List.of(
+                AgentExecutionFile.builder()
+                        .fileName("index.html")
+                        .relativePath("index.html")
+                        .ossUrl("https://file.example.com/root-index")
+                        .build(),
+                AgentExecutionFile.builder()
+                        .fileName("index.html")
+                        .relativePath("cover/index.html")
+                        .ossUrl("https://file.example.com/cover-index")
+                        .build()
+        ));
+
+        Assert.assertEquals(List.of("index.html", "cover/index.html"), written);
+        Assert.assertEquals("<html>root</html>",
+                Files.readString(workspaceRoot.resolve("index.html"), StandardCharsets.UTF_8));
+        Assert.assertEquals("<html>cover</html>",
+                Files.readString(workspaceRoot.resolve("cover/index.html"), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void shouldRejectTraversalFromRelativePathEvenWhenDisplayNameIsSafe() throws Exception {
+        Mockito.when(fileArtifactPort.readBytes(
+                        "https://file.example.com/secret", 60L, 32L * 1024 * 1024))
+                .thenReturn("secret".getBytes(StandardCharsets.UTF_8));
+
+        List<String> written = materializer.materialize(agentContext, List.of(
+                AgentExecutionFile.builder()
+                        .fileName("secret.txt")
+                        .relativePath("../secret.txt")
+                        .ossUrl("https://file.example.com/secret")
+                        .build()
+        ));
+
+        Assert.assertTrue(written.isEmpty());
+        Assert.assertFalse(Files.exists(workspaceRoot.resolve("secret.txt")));
+    }
+
+    @Test
+    public void shouldIgnoreInvalidLegacyOriginPathAndUseSafeDisplayName() throws Exception {
+        Mockito.when(fileArtifactPort.readBytes(
+                        "https://file.example.com/legacy", 60L, 32L * 1024 * 1024))
+                .thenReturn("legacy".getBytes(StandardCharsets.UTF_8));
+
+        List<String> written = materializer.materialize(agentContext, List.of(
+                AgentExecutionFile.builder()
+                        .fileName("safe.txt")
+                        .originFileName("C:\\fakepath\\safe.txt")
+                        .ossUrl("https://file.example.com/legacy")
+                        .build()
+        ));
+
+        Assert.assertEquals(List.of("safe.txt"), written);
+        Assert.assertTrue(Files.isRegularFile(workspaceRoot.resolve("safe.txt")));
+    }
 }

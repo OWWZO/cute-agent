@@ -18,6 +18,7 @@ describe("agentRequest", () => {
         resourceKey: "session-1:source-image.png:hash",
         mimeType: "image/png",
         originFileName: "原图.png",
+        relativePath: "source/source-image.png",
       },
     ];
 
@@ -31,6 +32,7 @@ describe("agentRequest", () => {
         resourceKey: "session-1:source-image.png:hash",
         mimeType: "image/png",
         originFileName: "原图.png",
+        relativePath: "source/source-image.png",
       },
     ]);
   });

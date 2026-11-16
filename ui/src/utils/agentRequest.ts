@@ -15,6 +15,7 @@ export type AgentSessionFile = {
   resourceKey?: string
   mimeType?: string | null
   originFileName?: string
+  relativePath?: string
 }
 
 type BuildAgentStreamRequestInput = {
@@ -57,6 +58,7 @@ export const mapSessionFiles = (files?: CHAT.TFile[]): AgentSessionFile[] => {
       resourceKey: file.resourceKey,
       mimeType: file.mimeType,
       originFileName: file.originFileName,
+      relativePath: file.relativePath,
     }))
 }
 

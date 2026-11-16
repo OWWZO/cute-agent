@@ -237,6 +237,20 @@ describe("markdownArtifacts", () => {
     expect(rewritten).toContain("```txt\nnotes-competitor-canvas.html\n```");
   });
 
+  it("does not rewrite relative paths inside raw HTML image tags", () => {
+    const files = [
+      sampleFile(
+        "test-agent/index.html",
+        "http://127.0.0.1:1601/v1/file_tool/preview/s1/test-agent/index.html",
+        { relativePath: "test-agent/index.html" }
+      ),
+    ];
+
+    const source = '<img src="test-agent/index.html" />';
+
+    expect(rewriteMarkdownArtifactRefs(source, files)).toBe(source);
+  });
+
   it("embeds bare images and videos instead of turning them into preview links", () => {
     const files = [
       sampleFile(

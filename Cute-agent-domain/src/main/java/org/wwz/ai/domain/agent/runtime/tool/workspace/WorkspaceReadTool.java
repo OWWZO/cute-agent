@@ -43,10 +43,10 @@ public class WorkspaceReadTool extends AbstractWorkspacePathTool {
     public String getDescription() {
         return withWorkspaceHint(
                 "读取会话工作区内的文件。path 可为绝对路径或相对工作区根的相对路径。"
+                        + "需要查看截图/图片内容时，必须调用 workspace_read 读取图片路径；不要用 shell 代替。"
                         + "文本：默认从第 1 行起读取，可用 start_line/line_count 截取；"
                         + "若文件自上次同范围读取后未变化（含跨轮），将返回 unchanged stub，请复用更早的读取结果。"
                         + "图片（png/jpg/gif/webp 等）：返回短元数据，图片本体作为多模态内容供模型阅读。"
-                        + "不要用 shell cat/head 代替本工具。"
         );
     }
 

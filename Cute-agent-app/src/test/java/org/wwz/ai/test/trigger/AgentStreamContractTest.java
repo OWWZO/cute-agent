@@ -20,6 +20,7 @@ public class AgentStreamContractTest {
                 .query("hello")
                 .sessionFiles(List.of(GptQueryRequestVO.FileReferenceVO.builder()
                         .fileName("input.txt")
+                        .relativePath("nested/input.txt")
                         .resourceKey("resource-1")
                         .build()))
                 .build();
@@ -29,6 +30,7 @@ public class AgentStreamContractTest {
         Assert.assertEquals("req-1", command.getRequestId());
         Assert.assertEquals("hello", command.getQuery());
         Assert.assertEquals("resource-1", command.getSessionFiles().get(0).getResourceKey());
+        Assert.assertEquals("nested/input.txt", command.getSessionFiles().get(0).getRelativePath());
         Assert.assertEquals("org.wwz.ai.application.agent.query.GptQueryCommand",
                 command.getClass().getName());
     }

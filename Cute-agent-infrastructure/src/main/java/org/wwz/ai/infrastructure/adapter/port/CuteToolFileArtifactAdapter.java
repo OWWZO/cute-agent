@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import org.wwz.ai.domain.agent.adapter.port.FileArtifactPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpPort;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpRequest;
+import org.wwz.ai.domain.agent.runtime.artifact.WorkspaceRelativePath;
 import org.wwz.ai.domain.agent.runtime.dto.FileRequest;
 import org.wwz.ai.domain.agent.runtime.dto.FileResponse;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspacePaths;
@@ -134,13 +135,18 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
         if (size > MAX_UPLOAD_BYTES) {
             throw new IOException("local file exceeds upload limit, size=" + size + ", limit=" + MAX_UPLOAD_BYTES);
         }
-        String fileName = sanitizeUploadFileName(normalizedRequest.getFileName(), localPath);
+        String relativePath = WorkspaceRelativePath.sanitize(normalizedRequest.getFileName());
+        if (StringUtils.isBlank(relativePath)) {
+            throw new IOException("relativePath must stay inside workspace");
+        }
+        String fileName = sanitizeUploadFileName(relativePath, localPath);
         MediaType mediaType = MediaType.parse(StringUtils.defaultIfBlank(
                 probeContentType(localPath), "application/octet-stream"));
         // 流式 multipart：文件正文从磁盘边读边写，不整体读入内存，也不转成 Base64 JSON。
         MultipartBody body = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("requestId", StringUtils.defaultString(normalizedRequest.getRequestId()))
+                .addFormDataPart("relativePath", relativePath)
                 .addFormDataPart("file", fileName, new StreamingFileRequestBody(localPath, mediaType, size))
                 .build();
         OkHttpClient client = sharedClient.newBuilder()

@@ -43,6 +43,7 @@ public class GptQueryRequestVO {
         private String resourceKey;
         private String mimeType;
         private String originFileName;
+        private String relativePath;
         private String originFileUrl;
         private String originOssUrl;
         private String originDomainUrl;

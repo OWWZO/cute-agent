@@ -90,4 +90,60 @@ public class TaskSummaryArtifactProtocolTest {
         Assert.assertEquals(List.of("site/index.html", "site/css/style.css"), named.getArtifactKeys());
         Assert.assertTrue(named.getFiles() == null || named.getFiles().isEmpty());
     }
+
+    @Test
+    public void shouldIgnoreInlineDelimiterMentionAndUseTrailingArtifactSection() {
+        String response = """
+                你之前看不到 `screens/` 的原因：上一轮会话结束时工作区被重置。
+                我上一条 `$$$` 里写的 `test-page/screens/*.png` 在当时已失效。
+
+                当前真实结构：
+
+                $$$
+                test-page/index.html
+                test-page/screens/desktop.png
+                test-page/screens/mobile.png
+                test-page/README.md
+                """;
+
+        TaskSummaryResult result = TaskSummaryArtifactProtocol.parse(response);
+
+        Assert.assertEquals(response.stripTrailing(), result.getTaskSummary());
+        Assert.assertEquals(
+                List.of(
+                        "test-page/index.html",
+                        "test-page/screens/desktop.png",
+                        "test-page/screens/mobile.png",
+                        "test-page/README.md"
+                ),
+                result.getArtifactKeys()
+        );
+    }
+
+    @Test
+    public void shouldNotTreatProseDelimiterMentionAsArtifactSection() {
+        String response = """
+                我上一条 `$$$` 里写的 `test-page/screens/*.png` 在当时已失效，
+                这是我未在交付前重新核对路径造成的，抱歉。
+
+                **当前真实结构**：
+                test-page/
+                ├── index.html          33 KB   交付物，单文件自包含
+                └── screens/
+                    └── desktop.png     271 KB
+                """;
+
+        TaskSummaryResult result = TaskSummaryArtifactProtocol.parse(response);
+
+        Assert.assertEquals(response.stripTrailing(), result.getTaskSummary());
+        Assert.assertTrue(result.getArtifactKeys() == null || result.getArtifactKeys().isEmpty());
+    }
+
+    @Test
+    public void shouldNotTreatTrailingInlineDelimiterAsArtifactSection() {
+        TaskSummaryResult result = TaskSummaryArtifactProtocol.parse("文件清单分隔符写作 $$$");
+
+        Assert.assertEquals("文件清单分隔符写作 $$$", result.getTaskSummary());
+        Assert.assertTrue(result.getArtifactKeys() == null || result.getArtifactKeys().isEmpty());
+    }
 }
