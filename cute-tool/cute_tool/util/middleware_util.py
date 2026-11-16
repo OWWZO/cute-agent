@@ -12,11 +12,11 @@
 """
 
 import time
-import traceback
 import uuid
 from typing import Callable
 
 from fastapi.routing import APIRoute
+from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -27,19 +27,29 @@ from cute_tool.util.log_util import AsyncTimer
 
 
 class UnknownException(BaseHTTPMiddleware):
-    """兜底异常中间件：打印堆栈并返回 500 文本。"""
+    """兜底异常中间件：打印堆栈并返回统一 JSON 500。"""
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         try:
             return await call_next(request)
-        except Exception as e:
-            # 异常统一在 HTTP 边界转成响应，避免内部堆栈直接泄露给调用方；request_id 保留排障关联线索。
-            logger.error(
-                f"{RequestIdCtx.request_id} {request.method} {request.url.path} error={traceback.format_exc()}"
+        except Exception:
+            # 完整堆栈只进日志；HTTP 响应保持统一 JSON，避免泄露实现细节。
+            logger.exception(
+                "{} {} {} failed",
+                RequestIdCtx.request_id,
+                request.method,
+                request.url.path,
             )
-            return Response(content=f"Unexpected error: {e}", status_code=500)
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "code": 500,
+                    "message": "Internal server error",
+                    "requestId": RequestIdCtx.request_id,
+                },
+            )
 
 
 class RequestHandlerRoute(APIRoute):

@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from loguru import logger
 
+from cute_tool.model.context import RequestIdCtx
 from cute_tool.model.protocal import (
     BashSandboxRequest,
     CodeExecutionRequest,
@@ -18,18 +19,65 @@ from cute_tool.util.middleware_util import RequestHandlerRoute
 router = APIRouter(route_class=RequestHandlerRoute)
 
 
-def _error_response(status_code: int, message: str) -> JSONResponse:
-    return JSONResponse(
-        status_code=status_code, content={"code": status_code, "message": message}
-    )
+def _error_response(
+    status_code: int,
+    message: str,
+    *,
+    error_code: str | None = None,
+    request_id: str | None = None,
+) -> JSONResponse:
+    content = {"code": status_code, "message": message}
+    if error_code:
+        content["errorCode"] = error_code
+    if request_id:
+        content["requestId"] = request_id
+    return JSONResponse(status_code=status_code, content=content)
 
 
 @router.post("/code_execution")
 async def post_code_execution(body: CodeExecutionRequest):
     """Run caller-supplied Python and return stdout, errors, and fileInfo."""
-    from cute_tool.tool.direct_code_execution import execute_code
+    from cute_tool.tool.direct_code_execution import (
+        CodeExecutionRequestError,
+        execute_code,
+    )
 
-    return await execute_code(body)
+    RequestIdCtx.request_id = body.request_id
+    try:
+        return await execute_code(body)
+    except CodeExecutionRequestError as exc:
+        logger.warning(
+            "[code_execution] request_id={} error_code={} failed: {}",
+            body.request_id,
+            exc.error_code,
+            exc,
+        )
+        return _error_response(
+            exc.status_code,
+            str(exc),
+            error_code=exc.error_code,
+            request_id=body.request_id,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "[code_execution] request_id={} invalid request: {}",
+            body.request_id,
+            exc,
+        )
+        return _error_response(
+            400,
+            str(exc),
+            error_code="INVALID_CODE_EXECUTION_REQUEST",
+            request_id=body.request_id,
+        )
+    except Exception:
+        logger.exception("[code_execution] request_id={} failed", body.request_id)
+        return _error_response(
+            500,
+            "code_execution failed",
+            error_code="CODE_EXECUTION_FAILED",
+            request_id=body.request_id,
+        )
 
 
 @router.post("/bash")

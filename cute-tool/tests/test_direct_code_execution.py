@@ -6,7 +6,12 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from cute_tool.model.protocal import CodeExecutionRequest
-from cute_tool.tool.direct_code_execution import execute_code
+from cute_tool.tool.direct_code_execution import (
+    WorkspaceRootNotAllowedError,
+    _workspace_path,
+    execute_code,
+)
+from cute_tool.tool.user_sandbox_manager import SessionBusyError
 
 
 class DirectCodeExecutionTest(unittest.IsolatedAsyncioTestCase):
@@ -124,6 +129,81 @@ class DirectCodeExecutionTest(unittest.IsolatedAsyncioTestCase):
             ["partial.txt"], [item["name"] for item in result["producedFiles"]]
         )
 
+    async def test_should_keep_execution_result_when_upload_fails(self):
+        with (
+            tempfile.TemporaryDirectory() as workspace,
+            patch.dict(
+                os.environ,
+                {
+                    "CODE_EXECUTION_WORKSPACE_ROOT": workspace,
+                    "CODE_SANDBOX_BACKEND": "local",
+                },
+                clear=False,
+            ),
+            patch(
+                "cute_tool.tool.direct_code_execution.upload_file_by_path",
+                new=AsyncMock(
+                    side_effect=TimeoutError(
+                        "binary file upload timed out after 60s"
+                    )
+                ),
+            ),
+        ):
+            result = await execute_code(
+                CodeExecutionRequest(
+                    requestId="session-upload-timeout",
+                    source=(
+                        "from pathlib import Path\n"
+                        "Path('partial.txt').write_text('x', encoding='utf-8')\n"
+                        "print('execution-ok')\n"
+                    ),
+                )
+            )
+
+        self.assertEqual("ok", result["status"])
+        self.assertIn("execution-ok", result["stdout"])
+        self.assertEqual([], result["fileInfo"])
+        self.assertIn("产物上传失败: partial.txt", result["stderr"])
+        self.assertIn(
+            "binary file upload timed out after 60s",
+            result["stderr"],
+        )
+        self.assertTrue(result["warnings"])
+
+    async def test_should_return_session_busy_as_execution_error(self):
+        class BusyExecutor:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def execute(self, *args, **kwargs):
+                raise SessionBusyError("同会话正在执行，请稍后重试")
+
+            def produced_files(self):
+                return []
+
+            def close(self):
+                pass
+
+        with (
+            tempfile.TemporaryDirectory() as workspace,
+            patch.dict(
+                os.environ, {"CODE_EXECUTION_WORKSPACE_ROOT": workspace}, clear=False
+            ),
+            patch(
+                "cute_tool.tool.direct_code_execution.PythonSandboxExecutor",
+                BusyExecutor,
+            ),
+        ):
+            result = await execute_code(
+                CodeExecutionRequest(
+                    requestId="session-busy",
+                    source="print('never runs')",
+                )
+            )
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("同会话正在执行", result["error"])
+
     async def test_should_upload_relative_cwd_file_and_workspace_root_file(self):
         uploads = AsyncMock(
             side_effect=[
@@ -169,6 +249,49 @@ class DirectCodeExecutionTest(unittest.IsolatedAsyncioTestCase):
             {item["name"] for item in result["producedFiles"]},
         )
         self.assertEqual(2, uploads.await_count)
+
+    async def test_should_upload_nested_produced_file_with_relative_path(self):
+        upload = AsyncMock(
+            return_value={
+                "fileName": "desktop.png",
+                "relativePath": "test-page/screens/desktop.png",
+                "ossUrl": "d/desktop.png",
+                "domainUrl": "p/desktop.png",
+                "fileSize": 3,
+            }
+        )
+        with (
+            tempfile.TemporaryDirectory() as workspace,
+            patch.dict(
+                "os.environ", {"CODE_EXECUTION_WORKSPACE_ROOT": workspace}, clear=False
+            ),
+            patch(
+                "cute_tool.tool.direct_code_execution.upload_file_by_path",
+                new=upload,
+            ),
+        ):
+            result = await execute_code(
+                CodeExecutionRequest(
+                    requestId="session-nested-produced",
+                    permissionProfile="workspace",
+                    source=(
+                        "from pathlib import Path\n"
+                        "target = Path('test-page/screens/desktop.png')\n"
+                        "target.parent.mkdir(parents=True, exist_ok=True)\n"
+                        "target.write_bytes(b'png')\n"
+                    ),
+                )
+            )
+
+        self.assertEqual("ok", result["status"])
+        self.assertEqual(
+            "test-page/screens/desktop.png",
+            upload.await_args.kwargs["relative_path"],
+        )
+        self.assertEqual(
+            "test-page/screens/desktop.png",
+            result["fileInfo"][0]["relativePath"],
+        )
 
     async def test_should_use_skilloutput_session_workspace_by_default(self):
         with tempfile.TemporaryDirectory() as skill_output:
@@ -297,7 +420,7 @@ class DirectCodeExecutionTest(unittest.IsolatedAsyncioTestCase):
                 FakeExecutor,
             ),
         ):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(WorkspaceRootNotAllowedError) as raised:
                 await execute_code(
                     CodeExecutionRequest(
                         requestId="unsafe-root",
@@ -305,6 +428,11 @@ class DirectCodeExecutionTest(unittest.IsolatedAsyncioTestCase):
                         source="answer = 1",
                     )
                 )
+            self.assertEqual(403, raised.exception.status_code)
+            self.assertEqual(
+                "WORKSPACE_ROOT_NOT_ALLOWED",
+                raised.exception.error_code,
+            )
             self.assertNotIn("initialized", captured)
             self.assertFalse((Path(outside_root) / "input").exists())
 
@@ -400,6 +528,26 @@ class DirectCodeExecutionTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual("ok", result["status"])
             self.assertTrue((session_root / "a.txt").is_file())
+
+    async def test_should_accept_workspace_from_multi_root_config(self):
+        with (
+            tempfile.TemporaryDirectory() as allowed_root,
+            patch.dict(
+                "os.environ",
+                {"CODE_EXECUTION_WORKSPACE_ROOTS": allowed_root},
+                clear=False,
+            ),
+        ):
+            session_root = Path(allowed_root) / "case-1"
+            selected = _workspace_path(
+                CodeExecutionRequest(
+                    requestId="multi-root",
+                    workspaceRoot=str(session_root),
+                    source="answer = 1",
+                )
+            )
+
+            self.assertEqual(session_root.resolve(), selected)
 
 
 if __name__ == "__main__":

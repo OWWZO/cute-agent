@@ -25,6 +25,7 @@ class PythonSandboxExecutionResult:
     stdout_truncated: bool = False
     stderr_truncated: bool = False
     returncode: int = 0
+    workspace_sync: dict[str, Any] = field(default_factory=dict)
 
 
 class PythonSandboxExecutionError(RuntimeError):
@@ -35,6 +36,7 @@ class PythonSandboxExecutionError(RuntimeError):
         self.result = response.get("result")
         self.duration_ms = int(response.get("duration_ms") or 0)
         self.returncode = int(response.get("returncode") or 1)
+        self.workspace_sync = dict(response.get("workspace_sync") or {})
         super().__init__(
             "\n".join(filter(None, [response.get("error"), self.stderr]))
             or "Python sandbox execution failed"
@@ -93,6 +95,22 @@ class PythonSandboxExecutor:
         assert self._local is not None
         return self._local.produced_files()
 
+    def workspace_sync(self) -> dict[str, Any]:
+        if self._impl is not None:
+            return self._impl.workspace_sync()
+        return {
+            "backend": "local",
+            "status": "ok",
+            "uploaded": [],
+            "downloaded": [],
+            "deletedLocal": [],
+            "deletedRemote": [],
+            "ignoredDeletes": [],
+            "conflicts": [],
+            "stateVersion": 0,
+            "deletionSyncEnabled": True,
+        }
+
     def close(self) -> None:
         if self._impl is not None:
             self._impl.close()
@@ -144,6 +162,7 @@ class _LocalPythonSandboxExecutor:
                 stdout_truncated=bool(response.get("stdout_truncated")),
                 stderr_truncated=bool(response.get("stderr_truncated")),
                 returncode=int(response.get("returncode") or 0),
+                workspace_sync={},
             )
 
     def produced_files(self) -> list[dict[str, Any]]:

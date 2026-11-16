@@ -6,6 +6,7 @@
 # =====================
 """从 cute_tool.prompt 包加载 YAML 提示词模板。"""
 import importlib
+import importlib.resources
 
 import yaml
 

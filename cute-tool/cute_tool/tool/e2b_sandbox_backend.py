@@ -6,7 +6,6 @@ run_code (persistent kernel) → download produced files → release the lease.
 
 from __future__ import annotations
 
-import base64
 import json
 import mimetypes
 import os
@@ -17,12 +16,11 @@ from typing import Any
 
 from cute_tool.tool.code_interpreter_policy import CodeInterpreterPermissionPolicy
 from cute_tool.tool.e2b_session_sync import (
-    download_changed_files,
+    SessionWorkspaceMirror,
+    SyncResult,
+    WorkspaceSyncError,
     mkdir_remote,
-    push_workspace,
-    record_uploaded,
     session_remote_root,
-    snapshot_remote_files,
 )
 from cute_tool.tool.python_sandbox_executor import (
     PythonSandboxExecutionError,
@@ -36,6 +34,15 @@ from cute_tool.tool.user_sandbox_manager import (
     UserSandboxManager,
     get_user_sandbox_manager,
 )
+from cute_tool.util.log_util import stage_timer
+
+
+def _workspace_sync_failure(exc: Exception) -> dict[str, str]:
+    return {
+        "path": "",
+        "code": "WORKSPACE_SYNC_FAILED",
+        "message": str(exc),
+    }
 
 
 class E2BPythonSandboxExecutor:
@@ -77,15 +84,51 @@ class E2BPythonSandboxExecutor:
         self._produced_by_path: dict[str, dict[str, Any]] = {}
         self._sandbox_id = ""
         self._generation = 0
+        self._mirror: SessionWorkspaceMirror | None = None
+        self._last_sync_result: SyncResult = SyncResult()
 
     def execute(
         self, code: str, source_file: str | None = None
     ) -> PythonSandboxExecutionResult:
-        self._ensure_started()
-        assert self._sandbox is not None
         with self._manager.session_gate(self._owner_key, self._session_id):
-            self._sync_workspace_to_remote()
-            before = self._snapshot_remote_files()
+            self._ensure_started()
+            assert self._sandbox is not None
+            self._mirror = SessionWorkspaceMirror(
+                self._sandbox,
+                self._local_workspace,
+                self._session_id,
+                owner_key=self._owner_key,
+                sandbox_id=self._sandbox_id,
+                generation=self._generation,
+            )
+            with stage_timer(
+                "code_execution", "reconcile", self._session_id
+            ):
+                try:
+                    reconcile_result = self._mirror.reconcile()
+                except WorkspaceSyncError as exc:
+                    self._last_sync_result = exc.result
+                    raise
+                except Exception as exc:
+                    failure = SyncResult(conflicts=[_workspace_sync_failure(exc)])
+                    self._last_sync_result = failure
+                    raise WorkspaceSyncError(
+                        "WORKSPACE_SYNC_FAILED",
+                        f"workspace reconcile failed: {exc}",
+                        failure,
+                    ) from exc
+            self._last_sync_result = reconcile_result
+            try:
+                before = self._mirror.snapshot_remote()
+            except Exception as exc:
+                failure = SyncResult(conflicts=[_workspace_sync_failure(exc)])
+                failure.merge(reconcile_result)
+                self._last_sync_result = failure
+                raise WorkspaceSyncError(
+                    "WORKSPACE_SYNC_FAILED",
+                    f"workspace snapshot failed: {exc}",
+                    failure,
+                ) from exc
             started_at = time.monotonic()
             wrapped = self._wrap_user_code(
                 code,
@@ -93,30 +136,65 @@ class E2BPythonSandboxExecutor:
                 source_file=source_file,
             )
             self._bootstrapped = True
+            run_error: Exception | None = None
             try:
-                execution = self._sandbox.run_code(
-                    wrapped,
-                    timeout=max(1, int(self._timeout_seconds)),
-                )
+                with stage_timer(
+                    "code_execution", "run_code", self._session_id
+                ):
+                    execution = self._sandbox.run_code(
+                        wrapped,
+                        timeout=max(1, int(self._timeout_seconds)),
+                    )
             except Exception as exc:
                 # Surface timeout-like failures consistently for callers.
                 message = str(exc).lower()
                 if "timeout" in message or "timed out" in message:
-                    raise TimeoutError(
+                    run_error = TimeoutError(
                         f"Python sandbox exceeded {self._timeout_seconds:.0f}s"
+                    )
+                else:
+                    run_error = exc
+                execution = None
+
+            sync_result = SyncResult()
+            sync_result.merge(reconcile_result)
+            with stage_timer(
+                "code_execution", "apply_remote_changes", self._session_id
+            ):
+                try:
+                    applied = self._mirror.apply_remote_changes(
+                        before, produced_paths=None
+                    )
+                    sync_result.merge(applied)
+                except WorkspaceSyncError as exc:
+                    sync_result.merge(exc.result)
+                    self._last_sync_result = sync_result
+                    raise
+                except Exception as exc:
+                    failure = SyncResult(conflicts=[_workspace_sync_failure(exc)])
+                    sync_result.merge(failure)
+                    self._last_sync_result = sync_result
+                    raise WorkspaceSyncError(
+                        "WORKSPACE_SYNC_FAILED",
+                        f"workspace apply failed: {exc}",
+                        sync_result,
                     ) from exc
-                raise
+            self._last_sync_result = sync_result
+            if sync_result.conflicts:
+                raise WorkspaceSyncError(
+                    sync_result.error_code(),
+                    "workspace synchronization found conflicts",
+                    sync_result,
+                )
+            if run_error is not None:
+                raise run_error
 
             duration_ms = int((time.monotonic() - started_at) * 1000)
             stdout, stderr = _extract_logs(execution)
             error_obj = getattr(execution, "error", None)
             result_value = _extract_text_result(execution)
-            chart_files = self._materialize_chart_results(execution)
 
-            produced = self._download_produced_files(before)
-            for item in chart_files:
-                produced.append(item)
-                self._produced_by_path[item["file_path"]] = item
+            produced = self._produced_from_downloaded(sync_result.downloaded)
             for item in produced:
                 path = str(item.get("file_path") or "")
                 if path:
@@ -137,6 +215,7 @@ class E2BPythonSandboxExecutor:
                         "result": result_value,
                         "duration_ms": duration_ms,
                         "returncode": 1,
+                        "workspace_sync": sync_result.to_workspace_sync(),
                     }
                 )
 
@@ -149,10 +228,14 @@ class E2BPythonSandboxExecutor:
                 stdout_truncated=False,
                 stderr_truncated=False,
                 returncode=0,
+                workspace_sync=sync_result.to_workspace_sync(),
             )
 
     def produced_files(self) -> list[dict[str, Any]]:
         return list(self._produced_by_path.values())
+
+    def workspace_sync(self) -> dict[str, Any]:
+        return self._last_sync_result.to_workspace_sync()
 
     def close(self) -> None:
         lease = self._lease
@@ -162,6 +245,8 @@ class E2BPythonSandboxExecutor:
         self._bootstrapped = False
         self._sandbox_id = ""
         self._generation = 0
+        self._mirror = None
+        self._last_sync_result = SyncResult()
         if lease is None:
             return
         self._manager.release(self._owner_key)
@@ -171,11 +256,15 @@ class E2BPythonSandboxExecutor:
             return
         if self._sandbox_factory is None and not self._manager_injected:
             require_e2b_api_key()
-        lease = self._manager.acquire(
-            self._owner_key, max(1, int(self._timeout_seconds))
-        )
+        with stage_timer("code_execution", "acquire", self._session_id):
+            lease = self._manager.acquire(
+                self._owner_key, max(1, int(self._timeout_seconds))
+            )
         try:
-            ensure_e2b_code_interpreter_ready(lease.sandbox)
+            with stage_timer(
+                "code_execution", "jupyter_ready", self._session_id
+            ):
+                ensure_e2b_code_interpreter_ready(lease.sandbox)
         except Exception:
             self._manager.release(self._owner_key)
             raise
@@ -186,7 +275,6 @@ class E2BPythonSandboxExecutor:
         self._remote_workspace = session_remote_root(self._session_id)
         self._started = True
         self._prepare_remote_layout()
-        self._sync_workspace_to_remote()
 
     def _prepare_remote_layout(self) -> None:
         assert self._sandbox is not None
@@ -224,53 +312,12 @@ class E2BPythonSandboxExecutor:
         remote = f"{self._remote_workspace}/{relative.as_posix()}".rstrip("/")
         return remote if remote else self._remote_workspace
 
-    def _sync_workspace_to_remote(self) -> None:
-        assert self._sandbox is not None
-        push_workspace(
-            self._sandbox,
-            self._local_workspace,
-            self._session_id,
-            owner_key=self._owner_key,
-            sandbox_id=self._sandbox_id,
-            generation=self._generation,
-        )
-
-    def _snapshot_remote_files(self) -> dict[str, tuple[int, int]]:
-        assert self._sandbox is not None
-        return snapshot_remote_files(
-            self._sandbox,
-            self._remote_workspace,
-            skip_top=("input",),
-        )
-
-    def _download_produced_files(
-        self,
-        before: dict[str, tuple[int, int]],
-    ) -> list[dict[str, Any]]:
-        assert self._sandbox is not None
-        downloaded: list[Path] = []
-        download_changed_files(
-            self._sandbox,
-            self._remote_workspace,
-            self._local_workspace,
-            before,
-            produced_paths=downloaded,
-            skip_top=("input", "skills"),
-        )
+    def _produced_from_downloaded(self, changed: list[str]) -> list[dict[str, Any]]:
         produced: list[dict[str, Any]] = []
-        for local_path in downloaded:
-            try:
-                rel = local_path.resolve().relative_to(self._local_workspace).as_posix()
-            except ValueError:
+        for rel in changed:
+            local_path = (self._local_workspace / rel).resolve()
+            if not local_path.is_file():
                 continue
-            record_uploaded(
-                self._local_workspace,
-                rel,
-                local_path,
-                owner_key=self._owner_key,
-                sandbox_id=self._sandbox_id,
-                generation=self._generation,
-            )
             mime_type, _ = mimetypes.guess_type(local_path.name)
             produced.append(
                 {
@@ -281,32 +328,6 @@ class E2BPythonSandboxExecutor:
                     "mime_type": mime_type or "application/octet-stream",
                 }
             )
-        return produced
-
-    def _materialize_chart_results(self, execution: Any) -> list[dict[str, Any]]:
-        results = list(getattr(execution, "results", None) or [])
-        produced: list[dict[str, Any]] = []
-        chart_index = 0
-        self._local_output.mkdir(parents=True, exist_ok=True)
-        for item in results:
-            png = getattr(item, "png", None)
-            if not png:
-                continue
-            name = f"e2b_chart_{chart_index}.png"
-            local_path = self._local_output / name
-            local_path.write_bytes(base64.b64decode(png))
-            produced.append(
-                {
-                    "file_path": str(local_path),
-                    "relative_path": local_path.relative_to(
-                        self._local_workspace
-                    ).as_posix(),
-                    "name": name,
-                    "size": local_path.stat().st_size,
-                    "mime_type": "image/png",
-                }
-            )
-            chart_index += 1
         return produced
 
     def _wrap_user_code(

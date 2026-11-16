@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -107,7 +109,11 @@ class GetE2BProxyTest(unittest.TestCase):
         self.assertIn("127.0.0.1:49999/health", calls[0][0])
         self.assertIn("systemctl daemon-reload", calls[1][0])
         self.assertIn("systemctl start jupyter", calls[1][0])
-        self.assertGreaterEqual(calls[1][1], 20)
+        self.assertIn("/run/e2b-jupyter/server.sock", calls[1][0])
+        self.assertIn("127.0.0.1:8888/api/status", calls[1][0])
+        self.assertIn("systemctl restart code-interpreter", calls[1][0])
+        self.assertIn("127.0.0.1:49999/health", calls[1][0])
+        self.assertGreaterEqual(calls[1][1], 60)
 
     def test_ensure_code_interpreter_rejects_unhealthy_jupyter(self):
         calls = []
@@ -130,6 +136,29 @@ class GetE2BProxyTest(unittest.TestCase):
         sandbox = type("Sandbox", (), {"run_code": lambda *_args, **_kwargs: None})()
         with self.assertRaisesRegex(RuntimeError, "commands.run"):
             ensure_e2b_code_interpreter_ready(sandbox)
+
+    def test_ensure_code_interpreter_has_independent_timeout(self):
+        release = threading.Event()
+
+        class Commands:
+            def run(self, command, timeout=None, user=None):
+                release.wait(0.5)
+                return type(
+                    "Result", (), {"exit_code": 0, "stdout": "", "stderr": ""}
+                )()
+
+        sandbox = type("Sandbox", (), {"commands": Commands()})()
+        started_at = time.monotonic()
+        try:
+            with self.assertRaisesRegex(
+                TimeoutError,
+                "Jupyter readiness timed out",
+            ):
+                ensure_e2b_code_interpreter_ready(sandbox, timeout_sec=0.05)
+            elapsed = time.monotonic() - started_at
+            self.assertLess(elapsed, 0.2)
+        finally:
+            release.set()
 
     def test_ensure_desktop_chromium_runs_independent_launcher(self):
         calls = []

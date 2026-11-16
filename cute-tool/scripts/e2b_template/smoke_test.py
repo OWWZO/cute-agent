@@ -16,7 +16,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from cute_tool.tool.bash_sandbox import _exec_e2b  # noqa: E402
-from cute_tool.tool.sandbox_backend_config import connect_e2b_sandbox  # noqa: E402
+from cute_tool.tool.sandbox_backend_config import (  # noqa: E402
+    connect_e2b_sandbox,
+    ensure_e2b_code_interpreter_ready,
+)
 from cute_tool.tool.user_sandbox_manager import (  # noqa: E402
     UserSandboxManager,
     reset_user_sandbox_manager,
@@ -49,6 +52,32 @@ def _assert_jupyter_inactive(sandbox) -> None:
         "echo jupyter_inactive desktop_ready",
         "jupyter_inactive desktop_ready",
     )
+
+
+def _assert_run_code(sandbox, marker: str) -> None:
+    execution = sandbox.run_code(f"print({marker!r})", timeout=120)
+    if execution.error is not None:
+        raise RuntimeError(f"run_code failed: {execution.error}")
+    stdout = "\n".join(execution.logs.stdout)
+    if marker not in stdout:
+        raise RuntimeError(
+            f"run_code did not produce {marker!r}: "
+            f"stdout={stdout!r} stderr={execution.logs.stderr!r}"
+        )
+
+
+def _boot_id(sandbox) -> str:
+    result = sandbox.commands.run(
+        "cat /proc/sys/kernel/random/boot_id",
+        timeout=30,
+    )
+    stdout = str(result.stdout or "").strip()
+    if result.exit_code != 0 or not stdout:
+        raise RuntimeError(
+            f"boot_id check failed: exit={result.exit_code} "
+            f"stdout={stdout!r} stderr={result.stderr!r}"
+        )
+    return stdout
 
 
 def _desktop_browser_check_command() -> str:
@@ -139,6 +168,7 @@ def main() -> int:
 
         _assert_jupyter_inactive(sandbox)
         print(f"sandbox={sandbox.sandbox_id}")
+        initial_boot_id = _boot_id(sandbox)
 
         manager = UserSandboxManager(
             db_path=str(workspace / "sandbox.sqlite"),
@@ -231,6 +261,8 @@ def main() -> int:
         sandbox = sandbox_ref[0]
 
         _assert_jupyter_inactive(sandbox)
+        if _boot_id(sandbox) != initial_boot_id:
+            raise RuntimeError("Full-memory resume rebooted the sandbox")
         resumed_bash = _exec_e2b(
             session_id,
             "printf 'bash_after_resume' > bash-after-resume.txt",
@@ -291,6 +323,8 @@ def main() -> int:
             timeout_sec=SMOKE_TIMEOUT_SECONDS,
         )
         sandbox = sandbox_ref[0]
+        if _boot_id(sandbox) == initial_boot_id:
+            raise RuntimeError("Filesystem-only resume kept the original boot")
         filesystem_resumed = _exec_e2b(
             session_id,
             "printf 'bash_after_filesystem_resume' > bash-after-filesystem-resume.txt",
@@ -319,11 +353,6 @@ def main() -> int:
             for line in filesystem_browser.splitlines()
             if line.startswith("desktop_browser_pid=")
         )
-        if filesystem_browser_pid == initial_browser_pid:
-            raise RuntimeError(
-                "Filesystem-only resume kept the pre-pause Chromium process: "
-                f"pid={filesystem_browser_pid}"
-            )
         print(f"filesystem_resume_browser={filesystem_browser}")
         filesystem_opencli = _exec_e2b(
             session_id,
@@ -344,6 +373,10 @@ def main() -> int:
                 "Filesystem-only resume OpenCLI check failed: "
                 f"stdout={filesystem_opencli[1]!r} stderr={filesystem_opencli[2]!r}"
             )
+
+        ensure_e2b_code_interpreter_ready(sandbox)
+        _assert_run_code(sandbox, "jupyter_run_code=passed")
+        print("jupyter_run_code=passed")
 
     print("smoke_test=passed")
     return 0

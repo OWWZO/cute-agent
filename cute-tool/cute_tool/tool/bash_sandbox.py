@@ -23,22 +23,26 @@ from cute_tool.util.file_util import upload_file_by_path
 from cute_tool.tool.sandbox_backend_config import get_sandbox_backend
 from cute_tool.tool.e2b_session_sync import (
     SKILLS_DIR,
-    download_changed_files,
+    SessionWorkspaceMirror,
+    SyncResult,
+    WorkspaceSyncError,
     e2b_path_component_ok as _e2b_path_component_ok,
     e2b_remote_path_ok as _e2b_remote_path_ok,
     file_sha256 as _file_sha256,
     file_sig as _file_sig,
     mkdir_remote,
-    push_workspace,
     record_uploaded,
     run_remote_python,
     session_remote_root,
     should_skip_rel as _should_skip_rel,
-    snapshot_remote_files,
     utf8_len as _utf8_len,
     write_files as _sync_write_files,
 )
-from cute_tool.tool.user_sandbox_manager import get_user_sandbox_manager
+from cute_tool.tool.user_sandbox_manager import (
+    SessionBusyError,
+    get_user_sandbox_manager,
+)
+from cute_tool.util.log_util import stage_timer
 
 # 增量推送时跳过的顶层/任意段目录名（对齐常见构建产物，避免拖垮 sync）
 _SKIP_DIR_NAMES = frozenset(
@@ -120,6 +124,14 @@ async def run_bash_sandbox(body: BashSandboxRequest) -> BashSandboxResponse:
     produced_paths: List[Path] = []
     backend = get_sandbox_backend()
     before_local = _snapshot_local_workspace(workspace) if backend != "e2b" else None
+    workspace_sync = SyncResult(
+        backend=backend, state_version=0 if backend == "local" else 2
+    )
+    exit_code: Optional[int] = None
+    stdout = ""
+    stderr = ""
+    truncated = False
+    timed_out = False
 
     try:
         if backend == "e2b":
@@ -147,6 +159,7 @@ async def run_bash_sandbox(body: BashSandboxRequest) -> BashSandboxResponse:
                 int(body.max_output_chars),
                 produced_paths,
                 owner_key,
+                sync_result_out=workspace_sync,
             )
         else:
             if lib_root is not None and lib_root.is_dir():
@@ -160,18 +173,74 @@ async def run_bash_sandbox(body: BashSandboxRequest) -> BashSandboxResponse:
             produced_paths = _changed_local_workspace_files(
                 workspace, before_local or {}
             )
+            after_local = _snapshot_local_workspace(workspace)
+            workspace_sync.deleted_local = sorted(
+                set(before_local or {}) - set(after_local)
+            )
             # junction/symlink 指向库目录时，新建 skill 已落在 lib；扫一遍上报名称即可
             if lib_root is not None and lib_root.is_dir():
                 synced = _detect_new_or_changed_skills(lib_root, skill_names)
+    except SessionBusyError as exc:
+        workspace_sync.warnings.append(str(exc))
+        exit_code = 1
+        stderr = str(exc)
+    except WorkspaceSyncError as exc:
+        workspace_sync.merge(exc.result)
+        exit_code = 1
+        stderr = f"workspace sync failed: {exc.code}"
     finally:
         if backend != "e2b":
             _unlink_local_skills_view(workspace)
 
+    if workspace_sync.conflicts:
+        if exit_code == 0:
+            exit_code = 1
+        sync_error = (
+            f"workspace sync failed: {workspace_sync.error_code()}"
+        )
+        stderr = f"{stderr}\n{sync_error}".strip()
+    deleted_files = [
+        {
+            "relativePath": path,
+            "source": "remote_sandbox" if backend == "e2b" else "local",
+            "status": "synced",
+        }
+        for path in workspace_sync.deleted_local
+    ]
+
     produced_files = []
     file_info = []
-    for path in produced_paths:
-        item = await upload_file_by_path(str(path), body.request_id)
-        if item:
+    upload_warnings: List[str] = []
+    with stage_timer("bash", "upload", body.request_id):
+        for path in produced_paths:
+            relative_path = _relative_workspace_path(path, workspace)
+            try:
+                item = await upload_file_by_path(
+                    str(path), body.request_id, relative_path=relative_path
+                )
+            except Exception as exc:
+                warning = (
+                    f"产物上传失败: {relative_path}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                upload_warnings.append(warning)
+                logger.warning(
+                    "[bash] request_id={} artifact upload failed path={} error={}: {}",
+                    body.request_id,
+                    relative_path,
+                    type(exc).__name__,
+                    exc,
+                )
+                continue
+            if not item:
+                warning = f"产物上传失败: {relative_path}: 文件不存在或登记返回空结果"
+                upload_warnings.append(warning)
+                logger.warning(
+                    "[bash] request_id={} artifact upload returned empty path={}",
+                    body.request_id,
+                    relative_path,
+                )
+                continue
             file_info.append(item)
             produced_files.append(
                 {
@@ -180,9 +249,16 @@ async def run_bash_sandbox(body: BashSandboxRequest) -> BashSandboxResponse:
                     or item.get("ossUrl")
                     or item.get("downloadUrl"),
                     "file_size": item.get("fileSize"),
-                    "relative_path": _relative_workspace_path(path, workspace),
+                    "relative_path": relative_path,
                 }
             )
+    if upload_warnings:
+        workspace_sync.warnings.extend(upload_warnings)
+        stderr = "\n".join(
+            [stderr, *(f"warning: {item}" for item in upload_warnings)]
+        ).strip()
+
+    workspace_sync_payload = workspace_sync.to_workspace_sync()
 
     return BashSandboxResponse(
         requestId=body.request_id,
@@ -197,6 +273,8 @@ async def run_bash_sandbox(body: BashSandboxRequest) -> BashSandboxResponse:
         fileInfo=file_info,
         producedFiles=produced_files,
         cwd=".",
+        workspaceSync=workspace_sync_payload,
+        deletedFiles=deleted_files,
     )
 
 
@@ -432,31 +510,53 @@ def _exec_e2b(
     max_output_chars: int,
     produced_paths: Optional[List[Path]] = None,
     owner_key: str | None = None,
+    *,
+    sync_result_out: Optional[SyncResult] = None,
 ) -> Tuple[Optional[int], str, str, bool, bool, List[str]]:
     """复用 owner 沙箱，在会话目录内增量同步并执行命令。"""
     owner = (owner_key or "").strip() or "visitor:anonymous"
     sid = (session_id or "").strip() or "anonymous"
     manager = get_user_sandbox_manager()
-    lease = manager.acquire(owner, timeout_sec=timeout_sec)
+    with stage_timer("bash", "acquire", sid):
+        lease = manager.acquire(owner, timeout_sec=timeout_sec)
     try:
         with manager.session_gate(owner, sid):
             sandbox = lease.sandbox
             remote_root = session_remote_root(sid)
             mkdir_remote(sandbox, remote_root)
-            _, _, _, manifest = push_workspace(
+            mirror = SessionWorkspaceMirror(
                 sandbox,
                 workspace,
                 sid,
                 owner_key=owner,
                 sandbox_id=lease.sandbox_id,
                 generation=lease.generation,
-                extra_files={},
             )
+            with stage_timer("bash", "reconcile", sid):
+                try:
+                    sync_result = mirror.reconcile()
+                except WorkspaceSyncError:
+                    raise
+                except Exception as exc:
+                    raise WorkspaceSyncError(
+                        "WORKSPACE_SYNC_FAILED",
+                        f"workspace reconcile failed: {exc}",
+                        SyncResult(
+                            conflicts=[
+                                _workspace_sync_failure(
+                                    "reconcile", exc, code="WORKSPACE_SYNC_FAILED"
+                                )
+                            ]
+                        ),
+                    ) from exc
+            if sync_result_out is not None:
+                sync_result_out.merge(sync_result)
             uploaded = {
-                f"{remote_root}/{rel}": (item.size, item.mtime_ns)
-                for rel, item in manifest.files.items()
+                f"{remote_root}/{rel}": (fingerprint.size, fingerprint.mtime_ns)
+                for rel, fingerprint in mirror.local_state().items()
             }
 
+            only_names: set[str] = set()
             if lib_root is not None and lib_root.is_dir():
                 only_names = set(_resolve_skills_to_push(command, lib_root, disabled))
                 _e2b_push_skills_incremental(
@@ -467,6 +567,58 @@ def _exec_e2b(
                     uploaded,
                     only_names=only_names,
                 )
+
+            try:
+                before = mirror.snapshot_remote()
+            except Exception as exc:
+                raise WorkspaceSyncError(
+                    "WORKSPACE_SYNC_FAILED",
+                    f"workspace snapshot failed: {exc}",
+                    SyncResult(
+                        conflicts=[
+                            _workspace_sync_failure(
+                                "snapshot", exc, code="WORKSPACE_SYNC_FAILED"
+                            )
+                        ]
+                    ),
+                ) from exc
+            with stage_timer("bash", "commands.run", sid):
+                exit_code, stdout, stderr, timed_out = _e2b_run_command(
+                    sandbox, command, remote_root, timeout_sec
+                )
+            with stage_timer("bash", "apply_remote_changes", sid):
+                try:
+                    applied = mirror.apply_remote_changes(
+                        before, produced_paths=produced_paths
+                    )
+                    if sync_result_out is not None:
+                        sync_result_out.merge(applied)
+                    if applied.conflicts:
+                        exit_code = 1 if exit_code == 0 else exit_code
+                        stderr = (
+                            f"{stderr}\nworkspace sync failed: {applied.error_code()}"
+                        ).strip()
+                except WorkspaceSyncError as exc:
+                    if sync_result_out is not None:
+                        sync_result_out.merge(exc.result)
+                    exit_code = 1 if exit_code == 0 else exit_code
+                    stderr = (
+                        f"{stderr}\nworkspace sync failed: {exc.code}"
+                    ).strip()
+                except Exception as exc:
+                    raise WorkspaceSyncError(
+                        "WORKSPACE_SYNC_FAILED",
+                        f"workspace apply failed: {exc}",
+                        SyncResult(
+                            conflicts=[
+                                _workspace_sync_failure(
+                                    "apply", exc, code="WORKSPACE_SYNC_FAILED"
+                                )
+                            ]
+                        ),
+                    ) from exc
+
+            if lib_root is not None:
                 for skill_name in only_names:
                     skill_dir = lib_root / skill_name
                     if not skill_dir.is_dir():
@@ -480,32 +632,6 @@ def _exec_e2b(
                             sandbox_id=lease.sandbox_id,
                             generation=lease.generation,
                         )
-
-            before = snapshot_remote_files(
-                sandbox, remote_root, skip_top=("input", "skills")
-            )
-            exit_code, stdout, stderr, timed_out = _e2b_run_command(
-                sandbox, command, remote_root, timeout_sec
-            )
-            changed = download_changed_files(
-                sandbox,
-                remote_root,
-                workspace,
-                before,
-                produced_paths,
-                skip_top=("input", "skills"),
-            )
-            for rel in changed:
-                local_path = workspace / rel
-                if local_path.is_file():
-                    record_uploaded(
-                        workspace,
-                        rel,
-                        local_path,
-                        owner_key=owner,
-                        sandbox_id=lease.sandbox_id,
-                        generation=lease.generation,
-                    )
 
             synced: List[str] = []
             if lib_root is not None:
@@ -525,6 +651,16 @@ def _exec_e2b(
             )
     finally:
         manager.release(owner)
+
+
+def _workspace_sync_failure(
+    stage: str, exc: Exception, *, code: str
+) -> Dict[str, str]:
+    return {
+        "path": "",
+        "code": code,
+        "message": f"{stage} failed: {exc}",
+    }
 
 
 def _snapshot_local_workspace(workspace: Path) -> Dict[str, Tuple[int, int]]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import threading
 from pathlib import Path
 from typing import Any, Literal
 
@@ -16,6 +17,7 @@ _DEFAULT_BACKEND: SandboxBackendName = "local"
 _DEFAULT_FULL_PAUSE_DEBOUNCE_SEC = 3
 _DEFAULT_FS_ONLY_IDLE_SEC = 1200
 _DEFAULT_USER_OPERATING_HOLD_SEC = 600
+_DEFAULT_JUPYTER_READY_TIMEOUT_SEC = 90
 _E2B_DESKTOP_CHROMIUM_COMMAND = "/usr/local/bin/ensure_desktop_chromium.sh"
 _E2B_DESKTOP_CHROMIUM_STAGING_PATH = "/tmp/cute-ensure-desktop-chromium.sh"
 _E2B_DESKTOP_CHROMIUM_HEALTH_CHECK = (
@@ -180,8 +182,40 @@ def set_e2b_sandbox_timeout(sandbox: Any, timeout_sec: int) -> None:
         setter(timeout_sec)
 
 
-def ensure_e2b_code_interpreter_ready(sandbox: Any) -> None:
+def ensure_e2b_code_interpreter_ready(
+    sandbox: Any, *, timeout_sec: float = _DEFAULT_JUPYTER_READY_TIMEOUT_SEC
+) -> None:
     """Restart Jupyter when a resumed E2B sandbox leaves its service stopped."""
+    completed = threading.Event()
+    outcome: dict[str, BaseException] = {}
+
+    def probe() -> None:
+        try:
+            _probe_e2b_code_interpreter(sandbox)
+        except BaseException as exc:
+            outcome["error"] = exc
+        finally:
+            completed.set()
+
+    worker = threading.Thread(
+        target=probe,
+        name="e2b-jupyter-readiness",
+        daemon=True,
+    )
+    worker.start()
+    if not completed.wait(timeout=max(0.01, float(timeout_sec))):
+        raise TimeoutError(
+            f"E2B Jupyter readiness timed out after {float(timeout_sec):.0f}s"
+        )
+    error = outcome.get("error")
+    if error is not None:
+        if isinstance(error, Exception):
+            raise error
+        raise RuntimeError(f"E2B Jupyter readiness failed: {error}")
+
+
+def _probe_e2b_code_interpreter(sandbox: Any) -> None:
+    """Start Jupyter, then restart its Code Interpreter gateway outside the caller's wait loop."""
     commands = getattr(sandbox, "commands", None)
     run = getattr(commands, "run", None) if commands is not None else None
     if not callable(run):
@@ -200,15 +234,27 @@ def ensure_e2b_code_interpreter_ready(sandbox: Any) -> None:
         pass
 
     command = (
-        "sudo systemctl daemon-reload && sudo systemctl start jupyter && "
-        "for attempt in $(seq 1 15); do "
+        "set -u; "
+        "sudo systemctl daemon-reload && sudo systemctl start jupyter || exit 1; "
+        "for attempt in $(seq 1 30); do "
+        "if sudo curl --unix-socket /run/e2b-jupyter/server.sock -fsS --max-time 1 "
+        "http://localhost/api/status >/dev/null 2>&1 || "
+        "curl -fsS --max-time 1 http://127.0.0.1:8888/api/status >/dev/null; "
+        "then break; fi; sleep 1; done; "
+        "if ! (sudo curl --unix-socket /run/e2b-jupyter/server.sock -fsS --max-time 1 "
+        "http://localhost/api/status >/dev/null 2>&1 || "
+        "curl -fsS --max-time 1 http://127.0.0.1:8888/api/status >/dev/null); "
+        "then echo 'Jupyter server did not become healthy' >&2; exit 1; fi; "
+        "sudo systemctl reset-failed code-interpreter >/dev/null 2>&1 || true; "
+        "sudo systemctl restart code-interpreter || exit 1; "
+        "for attempt in $(seq 1 30); do "
         "if curl -fsS --max-time 1 http://127.0.0.1:49999/health >/dev/null; "
         "then exit 0; fi; sleep 1; done; "
-        "echo 'Code Interpreter Jupyter service failed to start on port 49999' >&2; "
+        "echo 'Code Interpreter service failed to start on port 49999' >&2; "
         "exit 1"
     )
     try:
-        result = run(command, timeout=35)
+        result = run(command, timeout=100)
     except Exception as exc:
         raise RuntimeError(
             f"Code Interpreter Jupyter service failed to start: {exc}"

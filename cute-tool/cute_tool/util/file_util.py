@@ -9,6 +9,7 @@
 支持本地路径 / HTTP 文件服务两种源；上传可走 HTTP 端点或本地存储根目录。
 """
 
+import asyncio
 import hashlib
 import secrets
 import string
@@ -25,6 +26,20 @@ from loguru import logger
 from cute_tool.util.file_name import normalize_stored_file_name
 from cute_tool.util.log_util import timer
 from cute_tool.model.document import Doc
+
+
+_FILE_UPLOAD_TIMEOUT_SECONDS = 60
+_FILE_REGISTER_TIMEOUT_SECONDS = 30
+_FILE_UPLOAD_TIMEOUT = aiohttp.ClientTimeout(
+    total=_FILE_UPLOAD_TIMEOUT_SECONDS,
+    connect=10,
+    sock_read=30,
+)
+_FILE_REGISTER_TIMEOUT = aiohttp.ClientTimeout(
+    total=_FILE_REGISTER_TIMEOUT_SECONDS,
+    connect=10,
+    sock_read=20,
+)
 
 
 @timer()
@@ -123,17 +138,37 @@ async def upload_file(
 async def upload_file_by_path(
     file_path: str,
     request_id: str,
+    relative_path: str | None = None,
 ):
-    """按本地路径上传二进制产物（multipart 或拷贝到本地存储根）。"""
+    """按本地路径登记共享文件，或在非共享存储下上传/拷贝二进制产物。"""
     if not os.path.exists(file_path):
         return None
     file_name = normalize_stored_file_name(os.path.basename(file_path))
+    logical_name = relative_path or file_name
     file_size = os.path.getsize(file_path)
     storage_target = _get_file_storage_target()
     if _is_http_endpoint(storage_target):
-        # 二进制产物必须走 multipart；文件服务负责登记元数据并返回前端可消费的地址。
+        if _is_shared_local_file(file_path):
+            # 工作区和文件服务共享同一存储根时只登记元数据，避免把文件再次上传到自身。
+            result = await _register_shared_file(
+                storage_target=storage_target,
+                file_path=file_path,
+                request_id=request_id,
+                relative_path=logical_name,
+            )
+            return {
+                "fileName": file_name,
+                "relativePath": logical_name,
+                "ossUrl": result["ossUrl"],
+                "domainUrl": result["domainUrl"],
+                "downloadUrl": result["downloadUrl"],
+                "fileSize": file_size,
+            }
+
+        # 非共享存储仍走 multipart，由文件服务接收内容并返回前端可消费的地址。
         data = aiohttp.FormData()
         data.add_field("requestId", request_id)
+        data.add_field("relativePath", logical_name)
         with open(file_path, "rb") as file_handle:
             data.add_field(
                 "file",
@@ -141,15 +176,24 @@ async def upload_file_by_path(
                 filename=file_name,
                 content_type="application/octet-stream",
             )
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{storage_target}/upload_file_data", data=data, timeout=99999
-                ) as response:
-                    result = await _parse_upload_response(
-                        response, "binary file upload"
-                    )
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{storage_target}/upload_file_data",
+                        data=data,
+                        timeout=_FILE_UPLOAD_TIMEOUT,
+                    ) as response:
+                        result = await _parse_upload_response(
+                            response, "binary file upload"
+                        )
+            except asyncio.TimeoutError as exc:
+                raise TimeoutError(
+                    f"binary file upload timed out after "
+                    f"{_FILE_UPLOAD_TIMEOUT_SECONDS}s"
+                ) from exc
         return {
             "fileName": file_name,
+            "relativePath": result.get("relativePath") or logical_name,
             "ossUrl": result["downloadUrl"],
             "domainUrl": result["domainUrl"],
             "downloadUrl": result["downloadUrl"],
@@ -165,6 +209,7 @@ async def upload_file_by_path(
     local_reference = str(target_file)
     return {
         "fileName": file_name,
+        "relativePath": logical_name,
         "ossUrl": local_reference,
         "domainUrl": local_reference,
         "downloadUrl": local_reference,
@@ -285,6 +330,73 @@ def _is_http_endpoint(storage_target: str) -> bool:
     """判断当前文件存储目标是否为 HTTP 文件服务。"""
     lowered = storage_target.lower()
     return lowered.startswith("http://") or lowered.startswith("https://")
+
+
+def _is_shared_local_file(file_path: str) -> bool:
+    """判断文件是否位于文件服务也能直接访问的共享存储根。"""
+    try:
+        resolved_file = Path(file_path).expanduser().resolve()
+    except OSError:
+        return False
+    for root in _local_file_storage_roots():
+        try:
+            resolved_file.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _local_file_storage_roots() -> list[Path]:
+    """返回与文件服务 register_file 对齐的本地允许根。"""
+    candidates: list[Path] = []
+    raw_save_path = (os.getenv("FILE_SAVE_PATH") or "").strip()
+    if raw_save_path:
+        candidates.append(Path(raw_save_path).expanduser())
+    candidates.append(Path.cwd() / "skilloutput")
+    # start-split 以 cute-tool 为工作目录时，这两个路径实际相同；保留代码根路径兼容直接启动。
+    candidates.append(Path(__file__).resolve().parents[2] / "skilloutput")
+
+    roots: list[Path] = []
+    for candidate in candidates:
+        try:
+            root = candidate.resolve()
+        except OSError:
+            continue
+        if root.is_dir() and root not in roots:
+            roots.append(root)
+    return roots
+
+
+async def _register_shared_file(
+    *,
+    storage_target: str,
+    file_path: str,
+    request_id: str,
+    relative_path: str,
+) -> Dict[str, Any]:
+    """调用文件服务登记共享卷中的已有文件，不传输文件内容。"""
+    body = {
+        "requestId": request_id,
+        "fileName": relative_path,
+        "localPath": str(Path(file_path).expanduser().resolve()),
+        "description": f"workspace:{relative_path}",
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{storage_target}/register_file",
+                json=body,
+                timeout=_FILE_REGISTER_TIMEOUT,
+            ) as response:
+                return await _parse_upload_response(
+                    response, "binary file registration"
+                )
+    except asyncio.TimeoutError as exc:
+        raise TimeoutError(
+            f"binary file registration timed out after "
+            f"{_FILE_REGISTER_TIMEOUT_SECONDS}s"
+        ) from exc
 
 
 def _is_local_file_reference(file_name: str) -> bool:

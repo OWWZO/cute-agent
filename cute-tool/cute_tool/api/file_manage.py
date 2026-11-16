@@ -155,15 +155,21 @@ async def upload_file(body: FileUploadRequest):
 
 @router.post("/upload_file_data")
 async def upload_file_data(
-    file: UploadFile = File(...), request_id: str = Form(alias="requestId")
+    file: UploadFile = File(...),
+    request_id: str = Form(alias="requestId"),
+    relative_path: str | None = Form(default=None, alias="relativePath"),
 ):
     """multipart 二进制上传（工具产物、用户附件等）。"""
     # URL 解码后再清洗文件名，避免客户端编码差异导致落盘名和 file_id 不一致。
     file.filename = unquote(file.filename)
     file.filename = normalize_stored_file_name(file.filename)
-    file_id = get_file_id(request_id, file.filename)
+    logical_name = normalize_stored_relative_path(relative_path or file.filename)
+    file_id = get_file_id(request_id, logical_name)
     file_info = await FileInfoOp.add_by_file(
-        file=file, file_id=file_id, request_id=request_id
+        file=file,
+        file_id=file_id,
+        request_id=request_id,
+        relative_path=logical_name,
     )
     preview_url = get_file_preview_url(
         file_id=file_info.request_id, file_name=file_info.filename
@@ -176,6 +182,8 @@ async def upload_file_data(
             "downloadUrl": download_url,
             "domainUrl": preview_url,
             "fileSize": file_info.file_size,
+            "fileName": file_info.filename,
+            "relativePath": file_info.filename,
         }
     )
 
@@ -262,12 +270,12 @@ async def preview_file(file_id: str, file_name: str):
     if not file_info or not os.path.exists(file_info.file_path):
         return Response(content="File not found", status_code=404)
 
-    # HTML 是主动内容，必须强制下载；未知类型也改为附件，避免浏览器把任意二进制当页面执行。
+    # HTML 允许在 iframe 中内联预览；CSP sandbox 仍然隔离同源权限。
+    # 未知类型继续走附件，避免浏览器把任意二进制当页面执行。
     disposition = "inline"
     lower_name = file_name.lower()
     if lower_name.endswith((".html", ".htm")):
         content_type = "text/html"
-        disposition = "attachment"
     elif lower_name.endswith(".md"):
         content_type = "text/markdown"
     elif lower_name.endswith(".glb"):
@@ -289,7 +297,9 @@ async def preview_file(file_id: str, file_name: str):
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
     }
     if lower_name.endswith((".html", ".htm")):
-        common_headers["Content-Security-Policy"] = "sandbox"
+        common_headers["Content-Security-Policy"] = (
+            "sandbox allow-scripts allow-forms allow-popups"
+        )
     injected_content = _build_html_preview_content(file_info.file_path, file_name)
     if injected_content is not None:
         return Response(

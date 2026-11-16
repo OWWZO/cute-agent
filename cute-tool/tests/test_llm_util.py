@@ -12,6 +12,7 @@ from cute_tool.util.llm_util import (
     _prepare_litellm_params,
     _raw_openai_like_request,
     ask_llm,
+    structured_output_max_tokens,
 )
 
 
@@ -61,6 +62,18 @@ class LlmUtilRoutingTest(unittest.TestCase):
 
         self.assertEqual("application/json", headers["Accept"])
         self.assertEqual(OPENAI_COMPAT_DEFAULT_USER_AGENT, headers["User-Agent"])
+
+    def test_structured_output_budget_floor_is_16000(self):
+        short_budget = structured_output_max_tokens(
+            [{"role": "user", "content": "短任务"}], "group/deepseek"
+        )
+        long_budget = structured_output_max_tokens(
+            [{"role": "user", "content": "长任务" * 20000}], "group/deepseek"
+        )
+
+        self.assertEqual(16000, short_budget)
+        self.assertGreater(long_budget, short_budget)
+        self.assertLessEqual(long_budget, 32000)
 
 
 class LlmUtilAsyncHeaderTest(unittest.IsolatedAsyncioTestCase):

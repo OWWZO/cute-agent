@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import hashlib
+import json
 import os
+import re
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +12,9 @@ from unittest.mock import patch
 from cute_tool.model.protocal import BashSandboxRequest
 from cute_tool.tool import bash_sandbox
 from cute_tool.tool.bash_sandbox import run_bash_sandbox
+from cute_tool.tool.e2b_session_sync import SyncResult, WorkspaceSyncError
 from cute_tool.tool.user_sandbox_manager import (
+    SessionBusyError,
     UserSandboxManager,
     reset_user_sandbox_manager,
 )
@@ -40,14 +44,33 @@ class _FakeFiles:
 
 
 class _FakeCommands:
-    def __init__(self):
+    def __init__(self, sandbox):
+        self.sandbox = sandbox
         self.calls: list[tuple[str, str | None, int | None, dict | None]] = []
 
     def run(self, command, cwd=None, timeout=None, envs=None, user=None):
         self.calls.append((command, cwd, timeout, envs))
         stdout = "ok\n"
         if "__SESSION_SNAPSHOT__" in command:
-            stdout = "__SESSION_SNAPSHOT__{}\n"
+            match = re.search(
+                r"(/home/user/workspace/sessions/[A-Za-z0-9._-]+)", command
+            )
+            root = match.group(1).rstrip("/") if match else ""
+            files = {}
+            for path, data in self.sandbox.files.data.items():
+                prefix = f"{root}/"
+                if not root or not path.startswith(prefix):
+                    continue
+                rel = path[len(prefix) :]
+                if (
+                    not rel
+                    or rel.startswith("input/")
+                    or rel.startswith("skills/")
+                    or any(part.startswith(".") for part in rel.split("/"))
+                ):
+                    continue
+                files[rel] = [len(data), 1_000_000 + len(data)]
+            stdout = "__SESSION_SNAPSHOT__" + json.dumps(files) + "\n"
         elif "__SKILLS_META__" in command:
             stdout = "__SKILLS_META__[]\n"
         return SimpleNamespace(exit_code=0, stdout=stdout, stderr="")
@@ -57,7 +80,7 @@ class _FakeSandbox:
     def __init__(self, sandbox_id="sandbox-1"):
         self.sandbox_id = sandbox_id
         self.files = _FakeFiles()
-        self.commands = _FakeCommands()
+        self.commands = _FakeCommands(self)
         self.run_code_calls = 0
         self.pause_calls: list[bool] = []
         self.kill_calls = 0
@@ -139,10 +162,13 @@ def test_local_bash_uploads_changed_workspace_files():
     workspace.mkdir()
     uploaded: list[str] = []
 
-    async def fake_upload(file_path: str, request_id: str):
-        uploaded.append(file_path)
+    async def fake_upload(
+        file_path: str, request_id: str, relative_path: str | None = None
+    ):
+        uploaded.append((file_path, relative_path))
         return {
             "fileName": Path(file_path).name,
+            "relativePath": relative_path,
             "domainUrl": f"https://files.test/{Path(file_path).name}",
             "fileSize": Path(file_path).stat().st_size,
         }
@@ -170,9 +196,111 @@ def test_local_bash_uploads_changed_workspace_files():
             os.environ["CODE_SANDBOX_BACKEND"] = previous_backend
 
     assert result.exit_code == 0
-    assert uploaded == [str(workspace / "output.txt")]
+    assert uploaded == [(str(workspace / "output.txt"), "output.txt")]
     assert result.file_info[0]["domainUrl"] == "https://files.test/output.txt"
     assert result.produced_files[0]["file_name"] == "output.txt"
+    assert result.produced_files[0]["relative_path"] == "output.txt"
+
+
+def test_local_bash_keeps_command_result_when_upload_fails():
+    tmp = Path(tempfile.mkdtemp())
+    workspace = tmp / "session_ws"
+    workspace.mkdir()
+
+    async def failing_upload(*_args, **_kwargs):
+        raise TimeoutError("binary file upload timed out after 60s")
+
+    previous_upload = bash_sandbox.upload_file_by_path
+    previous_backend = os.environ.get("CODE_SANDBOX_BACKEND")
+    bash_sandbox.upload_file_by_path = failing_upload  # type: ignore[assignment]
+    os.environ["CODE_SANDBOX_BACKEND"] = "local"
+    try:
+        result = asyncio.run(
+            run_bash_sandbox(
+                BashSandboxRequest(
+                    requestId="sess-upload-failure",
+                    command="echo command-still-ok > output.txt && echo result-ok",
+                    workspaceRoot=str(workspace),
+                    timeoutSeconds=30,
+                )
+            )
+        )
+    finally:
+        bash_sandbox.upload_file_by_path = previous_upload  # type: ignore[assignment]
+        if previous_backend is None:
+            os.environ.pop("CODE_SANDBOX_BACKEND", None)
+        else:
+            os.environ["CODE_SANDBOX_BACKEND"] = previous_backend
+
+    assert result.exit_code == 0
+    assert "result-ok" in result.stdout
+    assert result.file_info == []
+    assert "产物上传失败: output.txt" in result.stderr
+    assert "binary file upload timed out after 60s" in result.stderr
+    assert any("产物上传失败" in item for item in result.workspace_sync["warnings"])
+
+
+def test_session_busy_error_returns_clear_command_result(monkeypatch):
+    workspace = Path(tempfile.mkdtemp())
+    monkeypatch.setenv("CODE_SANDBOX_BACKEND", "e2b")
+
+    def busy_exec(*_args, **_kwargs):
+        raise SessionBusyError("同会话正在执行，请稍后重试")
+
+    monkeypatch.setattr(bash_sandbox, "_exec_e2b", busy_exec)
+    result = asyncio.run(
+        run_bash_sandbox(
+            BashSandboxRequest(
+                requestId="sess-busy",
+                command="echo ok",
+                workspaceRoot=str(workspace),
+                timeoutSeconds=30,
+            )
+        )
+    )
+
+    assert result.exit_code == 1
+    assert "同会话正在执行" in result.stderr
+    assert result.workspace_sync["warnings"]
+
+
+def test_e2b_sync_error_returns_structured_failure(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("CODE_SANDBOX_BACKEND", "e2b")
+
+    def fail_sync(*args, **kwargs):
+        raise WorkspaceSyncError(
+            "WORKSPACE_SYNC_FAILED",
+            "snapshot unavailable",
+            SyncResult(
+                conflicts=[
+                    {
+                        "path": "",
+                        "code": "WORKSPACE_SYNC_FAILED",
+                        "message": "snapshot unavailable",
+                    }
+                ]
+            ),
+        )
+
+    monkeypatch.setattr(bash_sandbox, "_exec_e2b", fail_sync)
+
+    result = asyncio.run(
+        run_bash_sandbox(
+            BashSandboxRequest(
+                requestId="sess-sync-failure",
+                command="echo ok",
+                workspaceRoot=str(workspace),
+                timeoutSeconds=30,
+            )
+        )
+    )
+
+    assert result.exit_code == 1
+    assert result.workspace_sync["status"] == "conflict"
+    assert result.workspace_sync["errorCode"] == "WORKSPACE_SYNC_FAILED"
+    assert "WORKSPACE_SYNC_FAILED" in result.stderr
 
 
 def test_incremental_write_skill_file_skips_same_content():

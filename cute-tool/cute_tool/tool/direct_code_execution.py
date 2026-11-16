@@ -8,19 +8,38 @@ import base64
 import ast
 from pathlib import Path
 
+from loguru import logger
+
 from cute_tool.model.protocal import CodeExecutionRequest
 from cute_tool.tool.code_interpreter_policy import build_permission_policy
 from cute_tool.tool.python_sandbox_executor import (
     PythonSandboxExecutionError,
     PythonSandboxExecutor,
 )
+from cute_tool.tool.sandbox_backend_config import get_sandbox_backend
+from cute_tool.tool.e2b_session_sync import SyncResult, snapshot_local_files
 from cute_tool.util.blocking_executor import run_blocking
 from cute_tool.util.file_util import download_all_files_in_path, upload_file_by_path
+from cute_tool.util.log_util import stage_timer
 from cute_tool.util.path_safety import is_path_within_root
 
 # cute-tool 包根：.../cute-tool/cute_tool/tool/this.py → parents[2] = cute-tool
 _CUTE_TOOL_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_SKILL_OUTPUT = _CUTE_TOOL_ROOT / "skilloutput"
+
+
+class CodeExecutionRequestError(ValueError):
+    """调用方请求不满足 code_execution 契约。"""
+
+    status_code = 400
+    error_code = "INVALID_CODE_EXECUTION_REQUEST"
+
+
+class WorkspaceRootNotAllowedError(CodeExecutionRequestError):
+    """workspaceRoot 不在部署配置允许的目录内。"""
+
+    status_code = 403
+    error_code = "WORKSPACE_ROOT_NOT_ALLOWED"
 
 
 async def execute_code(request: CodeExecutionRequest) -> dict:
@@ -59,11 +78,14 @@ async def execute_code(request: CodeExecutionRequest) -> dict:
             ],
         )
     # 裸文件名优先落会话工作区；URL 才下载到 input/。code_interpreter 仍用登记表；code_execution 直接读工作区。
-    imported_files = await download_all_files_in_path(
-        request.file_names,
-        str(input_dir),
-        workspace_root=str(workspace),
-    )
+    with stage_timer(
+        "code_execution", "prepare_inputs", request.request_id
+    ):
+        imported_files = await download_all_files_in_path(
+            request.file_names,
+            str(input_dir),
+            workspace_root=str(workspace),
+        )
     imported_files = [
         item
         for item in imported_files
@@ -86,6 +108,13 @@ async def execute_code(request: CodeExecutionRequest) -> dict:
     )
     execution_result = None
     execution_error = None
+    backend = get_sandbox_backend()
+    before_local = (
+        snapshot_local_files(workspace, skip_top={"input", "skills"})
+        if backend == "local"
+        else {}
+    )
+    workspace_sync: dict = {}
     try:
         # 注入 __file__/__name__：优先 workspaceFile 真实路径，否则 __last_source__.py。
         logical_source = source_file
@@ -93,9 +122,12 @@ async def execute_code(request: CodeExecutionRequest) -> dict:
             candidate = (workspace / request.workspace_file).resolve()
             if workspace in candidate.parents and candidate.is_file():
                 logical_source = candidate
-        execution_result = await run_blocking(
-            executor.execute, source, source_file=str(logical_source)
-        )
+        with stage_timer(
+            "code_execution", "execute", request.request_id
+        ):
+            execution_result = await run_blocking(
+                executor.execute, source, source_file=str(logical_source)
+            )
         status, error, stdout, stderr = (
             "ok",
             None,
@@ -114,14 +146,79 @@ async def execute_code(request: CodeExecutionRequest) -> dict:
     finally:
         # 即使超时或执行器抛出异常，也要先快照产物再关闭进程/资源，保证结果可回传。
         produced_files = executor.produced_files()
+        sync_reader = getattr(executor, "workspace_sync", None)
+        workspace_sync = sync_reader() if callable(sync_reader) else {}
         await run_blocking(executor.close)
-    file_info = []
-    for produced in produced_files:
-        uploaded = await upload_file_by_path(
-            str(produced.get("file_path") or ""), request.request_id
+        if backend == "local":
+            after_local = snapshot_local_files(
+                workspace, skip_top={"input", "skills"}
+            )
+            local_sync = SyncResult(backend="local", state_version=0)
+            local_sync.deleted_local = sorted(set(before_local) - set(after_local))
+            workspace_sync = local_sync.to_workspace_sync()
+    if workspace_sync and workspace_sync.get("status") != "ok":
+        status = "error"
+        sync_error = (
+            f"workspace sync failed: {workspace_sync.get('errorCode') or 'unknown'}"
         )
-        if uploaded:
+        error = f"{error}\n{sync_error}" if error else sync_error
+    deleted_files = [
+        {
+            "relativePath": path,
+            "source": "remote_sandbox"
+            if workspace_sync.get("backend") == "e2b"
+            else "local",
+            "status": "synced",
+        }
+        for path in workspace_sync.get("deletedLocal") or []
+    ]
+    file_info = []
+    upload_warnings = []
+    with stage_timer("code_execution", "upload", request.request_id):
+        for produced in produced_files:
+            relative_path = str(
+                produced.get("relative_path") or produced.get("name") or ""
+            ).strip()
+            try:
+                uploaded = await upload_file_by_path(
+                    str(produced.get("file_path") or ""),
+                    request.request_id,
+                    relative_path=relative_path or None,
+                )
+            except Exception as exc:
+                warning = (
+                    f"产物上传失败: {relative_path or '<unknown>'}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                upload_warnings.append(warning)
+                logger.warning(
+                    "[code_execution] request_id={} artifact upload failed "
+                    "path={} error={}: {}",
+                    request.request_id,
+                    relative_path or "<unknown>",
+                    type(exc).__name__,
+                    exc,
+                )
+                continue
+            if not uploaded:
+                warning = (
+                    f"产物上传失败: {relative_path or '<unknown>'}: "
+                    "文件不存在或登记返回空结果"
+                )
+                upload_warnings.append(warning)
+                logger.warning(
+                    "[code_execution] request_id={} artifact upload returned "
+                    "empty path={}",
+                    request.request_id,
+                    relative_path or "<unknown>",
+                )
+                continue
+            uploaded.setdefault("relativePath", relative_path)
             file_info.append(uploaded)
+    if upload_warnings:
+        stderr = "\n".join(
+            [stderr, *(f"warning: {item}" for item in upload_warnings)]
+        ).strip()
     return _envelope(
         request,
         status,
@@ -138,6 +235,9 @@ async def execute_code(request: CodeExecutionRequest) -> dict:
         stdout_truncated=getattr(execution_result, "stdout_truncated", False),
         stderr_truncated=getattr(execution_result, "stderr_truncated", False),
         source_file=str(source_file),
+        workspaceSync=workspace_sync,
+        deletedFiles=deleted_files,
+        warnings=upload_warnings,
     )
 
 
@@ -150,7 +250,9 @@ def _workspace_path(request: CodeExecutionRequest) -> Path:
             is_path_within_root(candidate, root)
             for root in _allowed_workspace_roots()
         ):
-            raise ValueError("workspaceRoot is outside allowed workspace roots")
+            raise WorkspaceRootNotAllowedError(
+                "workspaceRoot is outside allowed workspace roots"
+            )
         return candidate
 
     safe_id = _safe_session_id(request.request_id)
@@ -170,6 +272,13 @@ def _workspace_path(request: CodeExecutionRequest) -> Path:
 
 def _allowed_workspace_roots() -> tuple[Path, ...]:
     roots = [_DEFAULT_SKILL_OUTPUT]
+    multi_root = (os.getenv("CODE_EXECUTION_WORKSPACE_ROOTS") or "").strip()
+    if multi_root:
+        roots.extend(
+            Path(item).expanduser().resolve()
+            for item in multi_root.split(os.pathsep)
+            if item.strip()
+        )
     for env_name in (
         "CODE_EXECUTION_WORKSPACE_ROOT",
         "SKILL_OUTPUT_ROOT",

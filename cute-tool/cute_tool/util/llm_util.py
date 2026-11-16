@@ -190,6 +190,35 @@ def _safe_int(value: Any) -> Optional[int]:
         return None
 
 
+# group/deepseek 的强制思考会占用输出预算：16000 是实测能稳定留下正式 JSON 的保底值。
+def structured_output_max_tokens(
+    messages: List[Any],
+    model: str,
+    *,
+    minimum: int = 16000,
+    maximum: int = 32000,
+) -> int:
+    """按输入长度给结构化输出留足 token，同时受模型容量约束。"""
+    input_chars = sum(
+        len(content)
+        if isinstance((content := message.get("content")), str)
+        else len(json.dumps(content, ensure_ascii=False))
+        for message in messages
+        if isinstance(message, dict)
+    )
+    input_tokens = max(1, input_chars // 2)
+    desired = max(minimum, int(input_tokens * 0.75))
+    model_limit = min(
+        maximum,
+        int(LLMModelInfoFactory.get_max_output(model, default=maximum)),
+    )
+    context_length = int(
+        LLMModelInfoFactory.get_context_length(model, default=128000)
+    )
+    context_budget = max(1, context_length - input_tokens - 1024)
+    return max(1, min(desired, model_limit, context_budget))
+
+
 def _extract_http_status_code(error: BaseException) -> Optional[int]:
     """兼容 httpx / LiteLLM 异常上的状态码字段。"""
     response = getattr(error, "response", None)

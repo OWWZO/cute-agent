@@ -14,6 +14,7 @@ from starlette.datastructures import UploadFile
 
 from cute_tool.api.file_manage import router
 from cute_tool.db.file_table_op import FileDB, FileInfoOp
+from cute_tool.model.protocal import get_file_id
 
 
 class FileManageApiTest(unittest.TestCase):
@@ -95,9 +96,12 @@ class FileManageApiTest(unittest.TestCase):
             self.assertEqual(200, response.status_code)
             self.assertTrue(response.headers["content-type"].startswith("text/html"))
             self.assertTrue(
-                response.headers["content-disposition"].startswith("attachment")
+                response.headers["content-disposition"].startswith("inline")
             )
-            self.assertEqual("sandbox", response.headers["content-security-policy"])
+            self.assertEqual(
+                "sandbox allow-scripts allow-forms allow-popups",
+                response.headers["content-security-policy"],
+            )
             self.assertIn(
                 "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js",
                 response.text,
@@ -190,6 +194,104 @@ class FileManageApiTest(unittest.TestCase):
                 self.assertTrue(saved_path.exists())
                 self.assertEqual("session-1779798194080-9667", saved_path.parent.name)
                 self.assertEqual("poster.png", saved_path.name)
+            finally:
+                FileDB._work_dir = original_work_dir
+
+    def test_should_keep_logical_relative_path_for_binary_upload(self):
+        with tempfile.TemporaryDirectory(prefix="file-manage-relative-") as temp_dir:
+            original_work_dir = FileDB._work_dir
+            FileDB._work_dir = temp_dir
+            upload_file = UploadFile(
+                filename="desktop.png", file=io.BytesIO(b"fake-image-bytes")
+            )
+
+            try:
+                with patch.object(
+                    FileInfoOp,
+                    "add",
+                    new=AsyncMock(side_effect=lambda file_info: file_info),
+                ):
+                    file_info = asyncio.run(
+                        FileInfoOp.add_by_file(
+                            file=upload_file,
+                            file_id="file-id-nested",
+                            request_id="session-nested",
+                            relative_path="test-page/screens/desktop.png",
+                        )
+                    )
+
+                self.assertEqual("test-page/screens/desktop.png", file_info.filename)
+                self.assertTrue(
+                    Path(file_info.file_path).is_relative_to(
+                        Path(temp_dir) / "session-nested"
+                    )
+                )
+                self.assertEqual("desktop.png", Path(file_info.file_path).name)
+            finally:
+                FileDB._work_dir = original_work_dir
+
+    def test_should_accept_relative_path_form_field_for_binary_upload(self):
+        file_info = SimpleNamespace(
+            request_id="session-form-relative",
+            filename="test-page/screens/desktop.png",
+            file_size=3,
+        )
+        with patch(
+            "cute_tool.api.file_manage.FileInfoOp.add_by_file",
+            new=AsyncMock(return_value=file_info),
+        ) as add_by_file:
+            response = self.client.post(
+                "/v1/file_tool/upload_file_data",
+                data={
+                    "requestId": "session-form-relative",
+                    "relativePath": "test-page/screens/desktop.png",
+                },
+                files={"file": ("desktop.png", b"png", "image/png")},
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(
+            "test-page/screens/desktop.png",
+            add_by_file.await_args.kwargs["relative_path"],
+        )
+
+    def test_should_keep_same_named_uploads_in_separate_directories(self):
+        with tempfile.TemporaryDirectory(prefix="file-manage-same-name-") as temp_dir:
+            original_work_dir = FileDB._work_dir
+            FileDB._work_dir = temp_dir
+            try:
+                with patch.object(
+                    FileInfoOp,
+                    "add",
+                    new=AsyncMock(side_effect=lambda file_info: file_info),
+                ):
+                    first = asyncio.run(
+                        FileInfoOp.add_by_file(
+                            file=UploadFile(
+                                filename="index.html",
+                                file=io.BytesIO(b"<html>root</html>"),
+                            ),
+                            file_id=get_file_id("session-same-name", "a/index.html"),
+                            request_id="session-same-name",
+                            relative_path="a/index.html",
+                        )
+                    )
+                    second = asyncio.run(
+                        FileInfoOp.add_by_file(
+                            file=UploadFile(
+                                filename="index.html",
+                                file=io.BytesIO(b"<html>cover</html>"),
+                            ),
+                            file_id=get_file_id("session-same-name", "b/index.html"),
+                            request_id="session-same-name",
+                            relative_path="b/index.html",
+                        )
+                    )
+
+                self.assertNotEqual(first.file_id, second.file_id)
+                self.assertNotEqual(first.file_path, second.file_path)
+                self.assertEqual("a/index.html", first.filename)
+                self.assertEqual("b/index.html", second.filename)
             finally:
                 FileDB._work_dir = original_work_dir
 

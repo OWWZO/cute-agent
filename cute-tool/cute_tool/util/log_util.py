@@ -11,6 +11,7 @@ import functools
 import inspect
 import time
 import traceback
+from contextlib import contextmanager
 from loguru import logger
 
 from cute_tool.model.context import RequestIdCtx
@@ -71,6 +72,41 @@ class AsyncTimer(object):
             f"{RequestIdCtx.request_id} {self.key} error={traceback.format_exc()}"
         )
         return False
+
+
+@contextmanager
+def stage_timer(scope: str, stage: str, request_id: str):
+    """记录单个执行阶段的开始、结束和异常，便于定位无响应卡点。"""
+    started_at = time.monotonic()
+    logger.info(
+        "[{}] request_id={} stage={} status=start",
+        scope,
+        request_id or "-",
+        stage,
+    )
+    try:
+        yield
+    except BaseException as exc:
+        elapsed_ms = int((time.monotonic() - started_at) * 1000)
+        logger.warning(
+            "[{}] request_id={} stage={} status=error elapsed_ms={} error={}: {}",
+            scope,
+            request_id or "-",
+            stage,
+            elapsed_ms,
+            type(exc).__name__,
+            exc,
+        )
+        raise
+    else:
+        elapsed_ms = int((time.monotonic() - started_at) * 1000)
+        logger.info(
+            "[{}] request_id={} stage={} status=ok elapsed_ms={}",
+            scope,
+            request_id or "-",
+            stage,
+            elapsed_ms,
+        )
 
 
 def timer(key: str = "", level: str = "debug"):

@@ -7,6 +7,7 @@
 """
 
 import os
+from pathlib import Path
 from typing import List
 
 from fastapi import UploadFile
@@ -42,10 +43,15 @@ class _FileDB(object):
             f.write(content)
         return str(file_path)
 
-    async def save_by_data(self, file: UploadFile, scope: str = None) -> str:
+    async def save_by_data(
+        self,
+        file: UploadFile,
+        scope: str = None,
+        relative_name: str = None,
+    ) -> str:
         """将 UploadFile 二进制写入本地，返回落盘路径。"""
         # 上传流可能已被上游读取，先尝试回到开头；只有确认仍为空才走底层 file 对象的同步兜底读取。
-        file_name = normalize_stored_file_name(file.filename)
+        file_name = normalize_stored_relative_path(relative_name or file.filename)
         # 必须二进制读取；await file.read() 兼容已消费/未 seek 的 stream
         try:
             await file.seek(0)
@@ -68,6 +74,7 @@ class _FileDB(object):
         save_path = resolve_within_root(
             save_directory, file_name, label="file path"
         )
+        save_path.parent.mkdir(parents=True, exist_ok=True)
         with open(save_path, "wb") as f:
             f.write(file_data)
         return str(save_path)
@@ -124,11 +131,18 @@ def _is_path_under_allowed_root(path: str) -> bool:
 
 
 def normalize_stored_relative_path(file_name: str) -> str:
-    """保留目录结构的相对路径归一化；拒绝 .. 逃逸。"""
+    """保留目录结构的相对路径归一化；拒绝绝对路径、盘符、UNC 与 .. 逃逸。"""
     raw = (file_name or "").strip().replace("\\", "/")
     while raw.startswith("./"):
         raw = raw[2:]
-    raw = raw.lstrip("/")
+    if (
+        not raw
+        or "\x00" in raw
+        or raw.startswith("/")
+        or raw.startswith("~")
+        or (len(raw) >= 2 and raw[1] == ":")
+    ):
+        raise ValueError("file_name must be a workspace-relative path")
     parts = [part for part in raw.split("/") if part and part != "."]
     if not parts:
         raise ValueError("file_name is empty")
@@ -168,15 +182,24 @@ class FileInfoOp(object):
     @staticmethod
     @timer()
     async def add_by_file(
-        file: UploadFile, file_id: str, request_id: str = None
+        file: UploadFile,
+        file_id: str,
+        request_id: str = None,
+        relative_path: str = None,
     ) -> FileInfo:
         """multipart 上传流落盘 + 写元数据。"""
-        file.filename = normalize_stored_file_name(file.filename)
-        file_path = await FileDB.save_by_data(file, scope=request_id)
+        relative_name = normalize_stored_relative_path(
+            relative_path or file.filename
+        )
+        # 传输文件名仍用 basename；逻辑身份和物理目录由 relative_name 保留。
+        file.filename = Path(relative_name).name
+        file_path = await FileDB.save_by_data(
+            file, scope=request_id, relative_name=relative_name
+        )
 
         file_info = FileInfo(
             file_id=file_id,
-            filename=file.filename,
+            filename=relative_name,
             file_path=file_path,
             description="",
             file_size=os.path.getsize(file_path),

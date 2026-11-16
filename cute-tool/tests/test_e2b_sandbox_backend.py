@@ -1,4 +1,5 @@
 import ast
+import base64
 import contextlib
 import io
 import json
@@ -59,6 +60,7 @@ class _FakeSandbox:
         self.commands = _FakeCommands(self)
         self.killed = False
         self.pauses: list[bool] = []
+        self.run_results: list[SimpleNamespace] = []
         self._remote_root = _REMOTE_ROOT
         self._kernel: dict[str, object] = {"__remote_writes__": {}}
 
@@ -102,6 +104,7 @@ class _FakeSandbox:
         orig_write_bytes = PathCls.write_bytes
         orig_read_text = PathCls.read_text
         orig_read_bytes = PathCls.read_bytes
+        orig_unlink = PathCls.unlink
 
         def _norm_remote(path_obj: Path) -> str:
             text = str(path_obj).replace("\\", "/")
@@ -121,6 +124,8 @@ class _FakeSandbox:
                 return text[len(marker) :]
             if text.startswith(self._remote_root.rstrip("/")):
                 return text[len(self._remote_root.rstrip("/")) :].lstrip("/")
+            if not Path(text).is_absolute():
+                return text.replace("\\", "/").lstrip("/")
             return Path(text).name
 
         def _write_text(self, data, encoding="utf-8", errors="strict", newline=None):
@@ -158,10 +163,20 @@ class _FakeSandbox:
                 raise FileNotFoundError(remote)
             return data
 
+        def _unlink(path_self, missing_ok=False):
+            remote = f"{self._remote_root.rstrip('/')}/{_rel(path_self)}"
+            existed = remote in store
+            store.pop(remote, None)
+            local_ns["__remote_writes__"].pop(_rel(path_self), None)
+            if not existed and not missing_ok:
+                raise FileNotFoundError(remote)
+            return None
+
         PathCls.write_text = _write_text  # type: ignore[method-assign]
         PathCls.write_bytes = _write_bytes  # type: ignore[method-assign]
         PathCls.read_text = _read_text  # type: ignore[method-assign]
         PathCls.read_bytes = _read_bytes  # type: ignore[method-assign]
+        PathCls.unlink = _unlink  # type: ignore[method-assign]
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
         try:
@@ -178,7 +193,7 @@ class _FakeSandbox:
                     stdout=[stdout_buf.getvalue()], stderr=[stderr_buf.getvalue()]
                 ),
                 error=None,
-                results=[],
+                results=self.run_results,
                 text=None,
             )
         except Exception as exc:
@@ -198,6 +213,7 @@ class _FakeSandbox:
             PathCls.write_bytes = orig_write_bytes  # type: ignore[method-assign]
             PathCls.read_text = orig_read_text  # type: ignore[method-assign]
             PathCls.read_bytes = orig_read_bytes  # type: ignore[method-assign]
+            PathCls.unlink = orig_unlink  # type: ignore[method-assign]
 
     def kill(self):
         self.killed = True
@@ -395,6 +411,76 @@ class E2BSandboxBackendTest(unittest.TestCase):
                 )
             finally:
                 self._close_test_executor(executor)
+
+    def test_jupyter_png_result_is_not_materialized_as_artifact(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            workspace_root = Path(workspace)
+            output_dir = workspace_root / "output"
+            output_dir.mkdir()
+            policy = build_permission_policy(
+                profile="workspace",
+                workspace_root=str(workspace_root),
+                output_dir=str(output_dir),
+                input_files=[],
+            )
+            fake = _FakeSandbox()
+            fake.run_results = [
+                SimpleNamespace(
+                    png=base64.b64encode(b"jupyter-chart-preview").decode("ascii")
+                )
+            ]
+            executor = E2BPythonSandboxExecutor(
+                policy,
+                timeout_seconds=15,
+                sandbox_factory=lambda **kwargs: fake,
+            )
+            try:
+                result = executor.execute("print('chart preview only')")
+                self.assertEqual([], result.produced_files)
+                self.assertFalse((output_dir / "e2b_chart_0.png").exists())
+            finally:
+                self._close_test_executor(executor)
+
+    def test_e2b_remote_delete_is_synchronized_back_to_workspace(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            workspace_root = Path(workspace)
+            output_dir = workspace_root / "output"
+            output_dir.mkdir()
+            target_dir = workspace_root / "tmp"
+            target_dir.mkdir()
+            (target_dir / "remove-me.txt").write_text(
+                "remove", encoding="utf-8"
+            )
+            keep = target_dir / "keep-me.txt"
+            keep.write_text("keep this file", encoding="utf-8")
+            policy = build_permission_policy(
+                profile="workspace",
+                workspace_root=str(workspace_root),
+                output_dir=str(output_dir),
+                input_files=[],
+            )
+            fake = _FakeSandbox()
+            executor = E2BPythonSandboxExecutor(
+                policy,
+                timeout_seconds=15,
+                sandbox_factory=lambda **kwargs: fake,
+            )
+            try:
+                result = executor.execute(
+                    "from pathlib import Path\n"
+                    "Path('tmp/remove-me.txt').unlink()\n"
+                )
+            finally:
+                self._close_test_executor(executor)
+
+            self.assertFalse((target_dir / "remove-me.txt").exists())
+            self.assertEqual(
+                "keep this file", keep.read_text(encoding="utf-8")
+            )
+            self.assertIn(
+                "tmp/remove-me.txt",
+                result.workspace_sync["deletedLocal"],
+            )
 
     def test_e2b_raises_execution_error(self):
         with tempfile.TemporaryDirectory() as workspace:

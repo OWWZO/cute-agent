@@ -52,8 +52,20 @@ def log_setting():
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     # 重载/多 worker 时先清理默认 sink，避免同一条日志重复写入控制台和文件。
     logger.remove()
-    logger.add(sys.stderr, level=log_level)
-    logger.add(log_path, format=log_format, level=log_level, rotation="200 MB")
+    logger.add(
+        sys.stderr,
+        level=log_level,
+        backtrace=True,
+        diagnose=False,
+    )
+    logger.add(
+        log_path,
+        format=log_format,
+        level=log_level,
+        rotation="200 MB",
+        backtrace=True,
+        diagnose=False,
+    )
 
 
 def create_app() -> FastAPI:

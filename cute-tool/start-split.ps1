@@ -1,3 +1,7 @@
+param(
+    [string[]]$WorkspaceRoots = @()
+)
+
 $ErrorActionPreference = "Stop"
 
 # 拆分启动：sandbox(1602, workers=1) + api(1601, 多 worker)
@@ -24,6 +28,8 @@ Assert-PortFree $apiPort
 Assert-PortFree $sandboxPort
 
 Push-Location $projectRoot
+$sandboxProcess = $null
+$apiProcess = $null
 try {
     Remove-Item Env:VIRTUAL_ENV -ErrorAction SilentlyContinue
     $env:ENV = "prod"
@@ -37,22 +43,48 @@ try {
         $env:FILE_SERVER_URL = "http://127.0.0.1:$apiPort/v1/file_tool"
     }
 
+    if ($WorkspaceRoots.Count -gt 0) {
+        $resolvedWorkspaceRoots = @(
+            foreach ($root in $WorkspaceRoots) {
+                if (-not [string]::IsNullOrWhiteSpace($root)) {
+                    [IO.Path]::GetFullPath($root)
+                }
+            }
+        )
+        if ($resolvedWorkspaceRoots.Count -eq 0) {
+            throw "WorkspaceRoots must contain at least one non-empty path."
+        }
+        $env:CODE_EXECUTION_WORKSPACE_ROOTS = $resolvedWorkspaceRoots -join [IO.Path]::PathSeparator
+        Write-Host "Allowed code execution workspaces: $($env:CODE_EXECUTION_WORKSPACE_ROOTS)"
+    }
+
     $env:CUTE_SANDBOX_URL = "http://127.0.0.1:$sandboxPort"
 
     Write-Host "Starting sandbox on :$sandboxPort (workers=1) ..."
     $sandboxEnv = $env:CUTE_TOOL_ROLE
     $env:CUTE_TOOL_ROLE = "sandbox"
-    Start-Process -FilePath $pythonExe -ArgumentList @(
+    $sandboxProcess = Start-Process -FilePath $pythonExe -ArgumentList @(
         "server.py", "--host", "127.0.0.1", "--port", "$sandboxPort", "--workers", "1", "--role", "sandbox"
-    ) -WorkingDirectory $projectRoot -WindowStyle Normal
+    ) -WorkingDirectory $projectRoot -NoNewWindow -PassThru
 
     Start-Sleep -Seconds 2
 
     Write-Host "Starting api on :$apiPort (workers=$apiWorkersText) ..."
     $env:CUTE_TOOL_ROLE = "api"
-    & $pythonExe "server.py" "--host" "0.0.0.0" "--port" "$apiPort" "--workers" $apiWorkersText "--role" "api"
+    $apiProcess = Start-Process -FilePath $pythonExe -ArgumentList @(
+        "server.py", "--host", "0.0.0.0", "--port", "$apiPort", "--workers", $apiWorkersText, "--role", "api"
+    ) -WorkingDirectory $projectRoot -NoNewWindow -PassThru
+    Wait-Process -Id $apiProcess.Id
 }
 finally {
+    if ($apiProcess -and -not $apiProcess.HasExited) {
+        Write-Host "Stopping api process tree (PID $($apiProcess.Id)) ..."
+        & taskkill.exe /PID $apiProcess.Id /T /F 2>$null | Out-Null
+    }
+    if ($sandboxProcess -and -not $sandboxProcess.HasExited) {
+        Write-Host "Stopping sandbox process tree (PID $($sandboxProcess.Id)) ..."
+        & taskkill.exe /PID $sandboxProcess.Id /T /F 2>$null | Out-Null
+    }
     if ($null -ne $sandboxEnv) { $env:CUTE_TOOL_ROLE = $sandboxEnv } else { Remove-Item Env:CUTE_TOOL_ROLE -ErrorAction SilentlyContinue }
     Pop-Location
 }

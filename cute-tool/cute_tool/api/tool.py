@@ -30,6 +30,7 @@ from loguru import logger
 from sse_starlette import ServerSentEvent, EventSourceResponse
 
 from cute_tool.model.code import ActionOutput, CodeOuput
+from cute_tool.model.context import RequestIdCtx
 from cute_tool.model.protocal import (
     TableRAGRequest,
     AutoAnalysisRequest,
@@ -51,7 +52,7 @@ from cute_tool.tool.mrag.storage.store_factory import (
     get_mrag_session_store,
     get_mrag_turn_store,
 )
-from cute_tool.tool.web_fetcher import WebFetcher
+from cute_tool.tool.web_fetcher import WebFetchError, WebFetcher
 from cute_tool.tool.code_interpreter_policy import CodeExecutionPermissionError
 from cute_tool.util.file_name import normalize_report_file_name
 from cute_tool.util.file_util import upload_file
@@ -313,6 +314,7 @@ async def post_deepsearch(
 @router.post("/web_fetch")
 async def post_web_fetch(body: WebFetchRequest):
     """单网页抓取端点，只返回提取后的完整正文。"""
+    RequestIdCtx.request_id = body.request_id
     try:
         result = await WebFetcher().fetch(body)
         return {
@@ -320,23 +322,53 @@ async def post_web_fetch(body: WebFetchRequest):
             "data": result.to_response_data(),
             "requestId": body.request_id,
         }
+    except WebFetchError as exc:
+        logger.warning(
+            "web_fetch request failed request_id={} status={} error_code={} stage={}: {}",
+            body.request_id,
+            exc.status_code,
+            exc.error_code,
+            exc.stage,
+            exc,
+        )
+        error = {
+            "code": exc.status_code,
+            "message": str(exc),
+            "errorCode": exc.error_code,
+            "stage": exc.stage,
+            "requestId": body.request_id,
+        }
+        if exc.upstream_status is not None:
+            error["upstreamStatus"] = exc.upstream_status
+        return JSONResponse(status_code=exc.status_code, content=error)
     except ValueError as exc:
-        logger.warning("web_fetch request failed: {}", exc)
+        logger.warning(
+            "web_fetch request_id={} invalid request: {}",
+            body.request_id,
+            exc,
+        )
         return JSONResponse(
             status_code=400,
             content={
                 "code": 400,
                 "message": str(exc),
+                "errorCode": "INVALID_WEB_FETCH_REQUEST",
+                "stage": "request",
                 "requestId": body.request_id,
             },
         )
-    except Exception as exc:
-        logger.exception("web_fetch request failed unexpectedly")
+    except Exception:
+        logger.exception(
+            "web_fetch request failed unexpectedly request_id={}",
+            body.request_id,
+        )
         return JSONResponse(
             status_code=502,
             content={
                 "code": 502,
-                "message": str(exc),
+                "message": "web_fetch 服务异常",
+                "errorCode": "WEB_FETCH_INTERNAL_ERROR",
+                "stage": "service",
                 "requestId": body.request_id,
             },
         )

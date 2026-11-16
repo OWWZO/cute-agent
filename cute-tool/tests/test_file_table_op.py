@@ -66,6 +66,12 @@ class FileNameSafetyTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_stored_relative_path("../secret.txt")
 
+    def test_should_reject_absolute_and_unc_relative_paths(self):
+        for value in ("/tmp/secret.txt", "C:/secret.txt", "//server/share/secret.txt"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    normalize_stored_relative_path(value)
+
     def test_should_reject_parent_directory_as_storage_scope(self):
         with tempfile.TemporaryDirectory(prefix="file-scope-safety-") as temp_dir:
             with patch.object(FileDB, "_work_dir", temp_dir):

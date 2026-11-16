@@ -5,7 +5,13 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from cute_tool.tool.user_sandbox_manager import UserSandboxManager, _sync_disk
+import pytest
+
+from cute_tool.tool.user_sandbox_manager import (
+    SessionBusyError,
+    UserSandboxManager,
+    _sync_disk,
+)
 
 
 class _RunTracker:
@@ -410,6 +416,29 @@ def test_hold_suppresses_debounce_until_deadline(tmp_path):
         assert not row[0]
         assert row[1] is None
         assert row[2] == "FULL_PAUSED"
+    finally:
+        manager.shutdown()
+
+
+def test_session_gate_times_out_instead_of_waiting_forever(tmp_path):
+    clock = [100.0]
+    sandbox = _FakeSandbox()
+    manager = _make_manager(tmp_path / "sandbox.db", sandbox, clock)
+    try:
+        with manager.session_gate("user:one", "same"):
+            with pytest.raises(SessionBusyError, match="同会话正在执行"):
+                with manager.session_gate(
+                    "user:one",
+                    "same",
+                    wait_timeout_sec=0.01,
+                ):
+                    pass
+        with manager.session_gate(
+            "user:one",
+            "same",
+            wait_timeout_sec=0.01,
+        ):
+            pass
     finally:
         manager.shutdown()
 

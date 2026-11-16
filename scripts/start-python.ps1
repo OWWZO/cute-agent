@@ -4,8 +4,8 @@
     启动 Python 工具运行时（:1601 api / :1602 sandbox）。
 
 .DESCRIPTION
-    包装已有的 cute-tool\start-split.ps1，而不是修改它：
-    那个脚本在端口被占用时会直接报错退出，所以这里先释放端口以获得「重启」语义。
+    包装 cute-tool\start-split.ps1：启动前清理端口及其残留子进程，
+    脚本退出时再清理一次，避免多 worker 的子进程成为孤儿。
 
     没有构建步骤：server.py 直接跑源码。依赖有变动时先手动执行 uv sync。
 #>
@@ -22,28 +22,91 @@ $Ports = @(1601, 1602)
 function Write-Step([string]$Text) { Write-Host $Text -ForegroundColor Cyan }
 function Write-Ok([string]$Text) { Write-Host "      $Text" -ForegroundColor DarkGray }
 
+function Get-ProcessTreeIds([int]$RootId) {
+    $allProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $processIds = [System.Collections.Generic.HashSet[int]]::new()
+    [void]$processIds.Add($RootId)
+
+    do {
+        $added = $false
+        foreach ($process in $allProcesses) {
+            if ($processIds.Contains([int]$process.ParentProcessId) -and
+                $processIds.Add([int]$process.ProcessId)) {
+                $added = $true
+            }
+        }
+    } while ($added)
+
+    return @($processIds)
+}
+
+function Stop-PortProcessTree([int]$Port) {
+    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    if ($listeners.Count -eq 0) {
+        return $false
+    }
+
+    $processIds = [System.Collections.Generic.HashSet[int]]::new()
+    foreach ($listener in $listeners) {
+        foreach ($processId in Get-ProcessTreeIds ([int]$listener.OwningProcess)) {
+            [void]$processIds.Add([int]$processId)
+        }
+    }
+
+    foreach ($processId in $processIds) {
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+    }
+    return $true
+}
+
+function Assert-PortsFree([int[]]$PortsToCheck) {
+    $deadline = (Get-Date).AddSeconds(10)
+    do {
+        $busy = @(
+            foreach ($port in $PortsToCheck) {
+                Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+            }
+        )
+        if ($busy.Count -eq 0) {
+            return
+        }
+        Start-Sleep -Milliseconds 300
+    } while ((Get-Date) -lt $deadline)
+
+    $details = $busy |
+        Select-Object LocalPort, OwningProcess |
+        Format-Table -AutoSize |
+        Out-String
+    throw "Ports did not release after cleanup:`n$details"
+}
+
 Write-Step "[1/2] 停止占用端口 $($Ports -join ' / ') 的进程 ..."
 $found = $false
 foreach ($p in $Ports) {
-    $listener = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if ($listener) {
-        Write-Ok "端口 $p 被 PID $($listener.OwningProcess) 占用，正在结束 ..."
-        Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue
+    $listeners = @(Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue)
+    if ($listeners.Count -gt 0) {
+        $owners = $listeners.OwningProcess | Sort-Object -Unique
+        Write-Ok "端口 $p 被 PID $($owners -join ', ') 占用，正在结束进程树 ..."
+        [void](Stop-PortProcessTree $p)
         $found = $true
     }
 }
 if (-not $found) { Write-Ok '端口空闲，继续。' }
 
-# 等待端口真正释放：被结束的进程可能短暂留在 TIME_WAIT，
-# 而 start-split.ps1 遇到占用端口会直接抛错。
-for ($i = 0; $i -lt 20; $i++) {
-    $busy = $Ports | Where-Object {
-        Get-NetTCPConnection -LocalPort $_ -State Listen -ErrorAction SilentlyContinue
-    }
-    if (-not $busy) { break }
-    Start-Sleep -Milliseconds 500
-}
+Assert-PortsFree $Ports
 
 Write-Step '[2/2] 启动 cute-tool ...'
-& pwsh -NoProfile -File (Join-Path $Root 'cute-tool\start-split.ps1')
+try {
+    & pwsh -NoProfile -File (Join-Path $Root 'cute-tool\start-split.ps1')
+}
+finally {
+    $cleaned = $false
+    foreach ($port in $Ports) {
+        if (Stop-PortProcessTree $port) {
+            $cleaned = $true
+        }
+    }
+    if ($cleaned) {
+        Write-Ok '已清理 cute-tool 残留进程。'
+    }
+}

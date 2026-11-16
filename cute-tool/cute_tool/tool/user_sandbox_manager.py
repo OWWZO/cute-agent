@@ -32,6 +32,7 @@ STATE_FULL_PAUSED = "FULL_PAUSED"
 STATE_COMPACTING = "COMPACTING"
 STATE_FS_ONLY_PAUSED = "FS_ONLY_PAUSED"
 HOLD_MODE_USER_OPERATING = "user_operating"
+DEFAULT_SESSION_GATE_WAIT_SECONDS = 5.0
 
 CreateFn = Callable[..., Any]
 ConnectFn = Callable[..., Any]
@@ -45,6 +46,12 @@ class SandboxLease:
     sandbox: Any
     sandbox_id: str
     generation: int
+
+
+class SessionBusyError(RuntimeError):
+    """同一会话已有命令正在执行。"""
+
+    error_code = "SANDBOX_SESSION_BUSY"
 
 
 _manager_guard = threading.Lock()
@@ -250,14 +257,36 @@ class UserSandboxManager:
             self._pending_pause_at[owner] = now + self._debounce_sec
 
     @contextmanager
-    def session_gate(self, owner_key: str, session_id: str) -> Iterator[None]:
+    def session_gate(
+        self,
+        owner_key: str,
+        session_id: str,
+        wait_timeout_sec: float = DEFAULT_SESSION_GATE_WAIT_SECONDS,
+    ) -> Iterator[None]:
         key = (_normalize_owner(owner_key), (session_id or "").strip() or "anonymous")
         with self._meta_lock:
             lock = self._session_locks.get(key)
             if lock is None:
                 lock = threading.Lock()
                 self._session_locks[key] = lock
-        lock.acquire()
+        wait_started_at = self._time()
+        acquired = lock.acquire(timeout=max(0.0, float(wait_timeout_sec)))
+        if not acquired:
+            logger.warning(
+                "[user_sandbox] session busy owner={} session={} waited_sec={:.3f}",
+                key[0],
+                key[1],
+                max(0.0, self._time() - wait_started_at),
+            )
+            raise SessionBusyError("同会话正在执行，请稍后重试")
+        waited_sec = max(0.0, self._time() - wait_started_at)
+        if waited_sec >= 0.1:
+            logger.info(
+                "[user_sandbox] session gate acquired owner={} session={} waited_ms={}",
+                key[0],
+                key[1],
+                int(waited_sec * 1000),
+            )
         try:
             yield
         finally:
