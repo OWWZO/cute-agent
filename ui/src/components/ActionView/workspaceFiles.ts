@@ -54,7 +54,8 @@ export type WorkspaceTab =
   | WorkspaceSourceTab
   | WorkspaceAgentTab
   | WorkspaceAgentDirectoryTab
-  | WorkspaceTaskTab;
+  | WorkspaceTaskTab
+  | WorkspaceDesktopTab;
 
 /**
  * 所有 tab 共有的元数据。
@@ -110,6 +111,14 @@ export type WorkspaceTaskTab = WorkspaceTabMeta & {
   fallbackTask: CHAT.Task;
 };
 
+/** 桌面控制实时预览 tab。 */
+export type WorkspaceDesktopTab = WorkspaceTabMeta & {
+  kind: "desktop";
+  key: string;
+  title: string;
+  streamUrl: string;
+};
+
 export const AGENT_DIRECTORY_TAB_KEY = "agent-directory";
 
 /** 子智能体详情 tab 的身份键：同一 toolCallId 只会有一个 tab */
@@ -120,6 +129,11 @@ export function agentTabKey(toolCallId: string): string {
 /** 任务预览 tab 的身份键：同一任务只会有一个 tab */
 export function taskTabKey(taskKey: string): string {
   return `task:${taskKey}`;
+}
+
+/** 桌面控制预览 tab 的身份键 */
+export function desktopTabKey(taskKey: string): string {
+  return `desktop:${taskKey}`;
 }
 
 /** tab 打开时刻（ms epoch）：标签页列表的相对时间用；缺失时列表不渲染这一段 */
@@ -137,6 +151,7 @@ export function workspaceTabKey(tab: WorkspaceTab): string {
         | WorkspaceAgentTab
         | WorkspaceAgentDirectoryTab
         | WorkspaceTaskTab
+        | WorkspaceDesktopTab
     ).key;
   }
   return workspaceFileKey(tab as WorkspaceFileItem);
@@ -158,6 +173,10 @@ export function isAgentDirectoryTab(
 
 export function isTaskTab(tab: WorkspaceTab): tab is WorkspaceTaskTab {
   return (tab as WorkspaceTaskTab).kind === "task";
+}
+
+export function isDesktopTab(tab: WorkspaceTab): tab is WorkspaceDesktopTab {
+  return (tab as WorkspaceDesktopTab).kind === "desktop";
 }
 
 /**
@@ -186,7 +205,12 @@ export function tabPreviewFileKey(tab: WorkspaceTab): string {
   if (isTaskTab(tab)) {
     return taskTabPrimaryFileKey(tab);
   }
-  if (isSourceTab(tab) || isAgentTab(tab) || isAgentDirectoryTab(tab)) {
+  if (
+    isSourceTab(tab) ||
+    isAgentTab(tab) ||
+    isAgentDirectoryTab(tab) ||
+    isDesktopTab(tab)
+  ) {
     return "";
   }
   return workspaceFileKey(tab as WorkspaceFileItem);
@@ -259,7 +283,7 @@ export function upsertWorkspaceTab(
  */
 export function resolveWorkspacePaneMode(
   tab?: WorkspaceTab
-): "empty" | "source" | "file" | "agent" | "agent-directory" | "task" {
+): "empty" | "source" | "file" | "agent" | "agent-directory" | "task" | "desktop" {
   if (!tab) {
     return "empty";
   }
@@ -271,6 +295,9 @@ export function resolveWorkspacePaneMode(
   }
   if (isTaskTab(tab)) {
     return "task";
+  }
+  if (isDesktopTab(tab)) {
+    return "desktop";
   }
   if (isSourceTab(tab)) {
     return "source";
@@ -423,6 +450,15 @@ export function collectChatFileTasks(chat?: CHAT.ChatItem | null): PanelItemType
   }
   if (chat.conclusion) {
     collected.push(...flattenTasksWithFiles([chat.conclusion]));
+  }
+  if (chat.generatedFiles?.length) {
+    const generatedTask = buildSessionFileManifestTask(
+      chat.generatedFiles,
+      chat.startedAt || chat.requestId
+    );
+    if (generatedTask) {
+      collected.push(generatedTask);
+    }
   }
   return collected;
 }

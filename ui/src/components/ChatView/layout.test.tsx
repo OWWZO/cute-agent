@@ -45,6 +45,7 @@ vi.mock("@/components/ActionView", () => ({
           openAgentTab: vi.fn(),
           openAgentDirectoryTab: vi.fn(),
           openTaskTab: vi.fn(),
+          openDesktopTab: vi.fn(),
           closeWorkspaceTab: vi.fn(),
         },
       }),
@@ -101,9 +102,12 @@ vi.mock("lucide-react", () => ({
   TriangleAlert: () => <span>warn</span>,
   FolderOpen: () => <span>folder</span>,
   Monitor: () => <span>monitor</span>,
+  MonitorIcon: () => <span>monitor-icon</span>,
+  CircleHelpIcon: () => <span>help-icon</span>,
   PanelLeftClose: () => <span>left</span>,
   PanelRightClose: () => <span>right</span>,
   PanelRightOpen: () => <span>right-open</span>,
+  ClipboardCheck: () => <span>review</span>,
 }));
 
 vi.mock("./useConversationStream", () => ({
@@ -422,7 +426,7 @@ describe("ChatView layout", () => {
     }
   });
 
-  it("keeps desktop actions in chat and places the live preview in the workspace", () => {
+  it("keeps desktop actions in chat and leaves the live preview to the workspace tab model", () => {
     const desktopUrl = "https://desktop.test/vnc.html?autoconnect=1";
     const conversation = {
       id: "conversation-desktop-control",
@@ -473,20 +477,15 @@ describe("ChatView layout", () => {
     );
 
     const actionsIndex = html.indexOf('data-testid="hitl-dock-desktop"');
-    const previewIndex = html.indexOf('data-testid="desktop-preview-panel"');
-    const iframeIndex = html.indexOf('title="E2B 桌面实时预览"');
 
     expect(actionsIndex).toBeGreaterThanOrEqual(0);
-    expect(previewIndex).toBeGreaterThan(actionsIndex);
-    expect(iframeIndex).toBeGreaterThan(previewIndex);
     expect(html).toContain("在工作区查看");
     expect(html).toContain("我已完成");
-    expect(html).toContain(`src="${desktopUrl}"`);
-
-    // 回归：Panel 的尺寸 prop 必须是百分比字符串。库里裸数字 = 像素，
-    // 曾经传 24/56 导致对话区被压成 56px、工作区吃掉整屏。
-    expect(html).toContain("flex-basis:50%");
-    expect(html).not.toMatch(/flex-basis:\d+px/);
+    // 桌面预览不再由 ChatView 以绝对定位 iframe 覆盖 ActionView；
+    // 真正的预览由 ActionView 的 desktop tab 承载。
+    expect(html).not.toContain('data-testid="desktop-preview-panel"');
+    expect(html).not.toContain('title="E2B 桌面实时预览"');
+    expect(html).not.toContain(`src="${desktopUrl}"`);
   });
 
   it("read-only chat view hides the input while keeping the transcript shell", () => {

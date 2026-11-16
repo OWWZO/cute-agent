@@ -303,7 +303,7 @@ export function VirtualizedTurnList<T>({
         </div>
       ) : (
         items.map((item) => (
-          <div key={getItemKey(item)} data-virtualized-fallback="true">
+          <div key={getScopedItemKey(item)} data-virtualized-fallback="true">
             {renderItem(item)}
           </div>
         ))

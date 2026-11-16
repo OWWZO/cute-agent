@@ -12,6 +12,7 @@ import { sourceTabMeta, type CodeViewerSource } from "@/lib/codeViewerSource";
 import {
   isAgentDirectoryTab,
   isAgentTab,
+  isDesktopTab,
   isSourceTab,
   isTaskTab,
   workspaceTabKey,
@@ -32,7 +33,7 @@ import {
 /** 图标规格：文件类型角标，或 lucide 字形 */
 export type WorkspaceTabIconSpec =
   | { kind: "badge"; badge: string }
-  | { kind: "glyph"; glyph: "bot" | "list-tree" | "activity" };
+  | { kind: "glyph"; glyph: "bot" | "list-tree" | "activity" | "monitor" };
 
 export type WorkspaceTabDisplay = {
   key: string;
@@ -80,6 +81,19 @@ export function resolveWorkspaceTabDisplay(tab: WorkspaceTab): WorkspaceTabDispl
       },
       hint: tab.subagentType,
       typeHint: "子智能体",
+      diffBadge: "",
+    };
+  }
+
+  if (isDesktopTab(tab)) {
+    return {
+      key,
+      title: tab.title || "桌面预览",
+      icon: {
+        kind: "glyph",
+        glyph: "monitor",
+      },
+      typeHint: "桌面",
       diffBadge: "",
     };
   }

@@ -271,6 +271,10 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     useState<FeaturedConversationFormState>(EMPTY_FEATURED_FORM);
   const [conversationBootstrapLoading, setConversationBootstrapLoading] =
     useState(false);
+  /** 目标会话没有本地快照时，先用实色占位盖住旧会话，避免旧智能 UI 露帧。 */
+  const [sessionSwitchPending, setSessionSwitchPending] = useState<string | null>(
+    null
+  );
   const [historyPageLoading, setHistoryPageLoading] = useState(false);
   /** 当前打开会话所属的渠道绑定；非空时启动 QQ 侧新轮次监听。 */
   const [activeChannelSession, setActiveChannelSession] = useState<{
@@ -646,6 +650,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       // 已存在的 session 元数据，默认路径始终生成新的 sessionId。
       const nextSessionId = override?.sessionId || createSessionId();
       const nextProductType = override?.productType || product.type;
+      setSessionSwitchPending(null);
       setActiveView("chat");
       setActiveChannelSession(null);
       const nextConversation = createConversation({
@@ -696,10 +701,17 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
         localRecentConversationsRef.current,
         session.sessionId
       );
+      if (localSelection.localConversation) {
+        // 本地已有完整快照就先同步换过去；远端刷新只做增量校正。
+        setCurrentConversation(localSelection.localConversation);
+        setSessionSwitchPending(null);
+        resetInput();
+      } else {
+        // 没有目标快照时，必须在这一帧用实色占位盖住旧会话。
+        setSessionSwitchPending(session.sessionId);
+      }
       if (!localSelection.shouldLoadRemote && localSelection.localConversation) {
         // 新建但尚未发送过消息的会话只存在前端，不能向后端请求不存在的详情。
-        setCurrentConversation(localSelection.localConversation);
-        resetInput();
         return;
       }
 
@@ -724,6 +736,14 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           if (!detail || isHistoryDetailEmpty(detail)) {
             if (localSelection.localConversation) {
               setCurrentConversation(localSelection.localConversation);
+            } else {
+              setCurrentConversation(
+                createConversation({
+                  sessionId: session.sessionId,
+                  title: session.title,
+                  chatTitle: session.title,
+                })
+              );
             }
             return;
           }
@@ -754,8 +774,10 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           // 工具卡稍后浮现，而不是整页冻结等 N 个 RTT。
           // 这一步只合 HITL、不补回放，所以卡片会落在摘要壳上；
           // 回放到达后整块替换 chat，再由下面那次 HITL 合并把卡片补回。
-          setCurrentConversation(hydrateConversationFromSummaryPage(detail));
-          resetInput();
+          if (!localSelection.localConversation) {
+            setCurrentConversation(hydrateConversationFromSummaryPage(detail));
+            resetInput();
+          }
 
           const withReplay = await hydrateSessionWithRunningReplay(
             detail,
@@ -777,7 +799,19 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
               setCurrentConversation(localSelection.localConversation);
               return;
             }
+            setCurrentConversation(
+              createConversation({
+                sessionId: session.sessionId,
+                title: session.title,
+                chatTitle: session.title,
+              })
+            );
             console.error("加载历史会话详情失败", error);
+          }
+        })
+        .finally(() => {
+          if (selectionVersion === sessionSelectionVersionRef.current) {
+            setSessionSwitchPending(null);
           }
         });
     },
@@ -1223,6 +1257,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
         return;
       }
       sessionSelectionVersionRef.current += 1;
+      setSessionSwitchPending(null);
       if (view === "featured") {
         setFeaturedEntryId("");
       }
@@ -1452,6 +1487,15 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
                       }}
                       onFocusModeChange={setWorkspaceImmersive}
                     />
+                    {sessionSwitchPending ? (
+                      <Loading
+                        loading
+                        branded
+                        className="absolute inset-0 z-30 h-full bg-[var(--color-bg)]"
+                      >
+                        正在切换会话…
+                      </Loading>
+                    ) : null}
                   </motion.div>
                 ) : (
                   <motion.div

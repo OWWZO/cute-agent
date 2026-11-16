@@ -16,6 +16,9 @@ describe("AttachmentList workspace entry", () => {
       <AttachmentList files={[htmlFile]} preview />
     );
     expect(html).toContain("notes-competitor-canvas.html");
+    expect(html).toContain("打开");
+    expect(html).toContain("rounded-2xl");
+    expect(html).toContain("shadow-[var(--shadow-sm)]");
     expect(html).not.toContain("全部文件");
   });
 

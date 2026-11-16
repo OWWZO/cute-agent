@@ -5,11 +5,14 @@ import {
   agentTabKey,
   buildSessionFileManifestTask,
   buildWorkspaceTree,
+  collectChatFileTasks,
   collectSessionFileTasks,
   collectWorkspaceFiles,
+  desktopTabKey,
   flattenTasksWithFiles,
   isAgentDirectoryTab,
   isAgentTab,
+  isDesktopTab,
   isSourceTab,
   isTaskTab,
   resolveWorkspacePaneMode,
@@ -21,6 +24,7 @@ import {
   type WorkspaceSourceTab,
   type WorkspaceTab,
 } from "./workspaceFiles";
+import { pickFeaturedDeliveryFiles } from "@/components/Dialogue/contentHelpers";
 import { isFileListOnlyTask, normalizeSessionArtifactFiles } from "@/utils/taskArtifacts";
 
 describe("workspaceFiles session aggregation", () => {
@@ -166,6 +170,36 @@ describe("workspaceFiles session aggregation", () => {
     const files = collectWorkspaceFiles(sessionTasks);
     expect(files.map((file) => file.name)).toEqual(["photo.png"]);
     expect(files[0]?.url).toBe("http://x/preview/s/photo.png");
+  });
+
+  it("keeps a generated conclusion attachment in the workspace catalog", () => {
+    const chat = {
+      requestId: "request-1",
+      files: [],
+      tasks: [],
+      multiAgent: { tasks: [] },
+      conclusion: {
+        resultMap: {
+          artifactKeys: ["data.csv"],
+        },
+      },
+      generatedFiles: [
+        {
+          name: "data.csv",
+          url: "http://x/preview/s/data.csv",
+          downloadUrl: "http://x/download/s/data.csv",
+          type: "csv",
+          size: 128,
+        },
+      ],
+    } as unknown as CHAT.ChatItem;
+
+    const featured = pickFeaturedDeliveryFiles(chat.conclusion, chat.generatedFiles);
+    const catalog = collectWorkspaceFiles(collectChatFileTasks(chat));
+
+    expect(featured.map((file) => file.name)).toEqual(["data.csv"]);
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0]?.name).toBe("data.csv");
   });
 
   it("builds a directory tree for same-name files in different folders", () => {
@@ -405,7 +439,7 @@ describe("resolveWorkspacePaneMode", () => {
     expect(resolveWorkspacePaneMode(undefined)).toBe("empty");
   });
 
-  it("按选中 tab 的类型分派：source / file / task / agent / agent-directory", () => {
+  it("按选中 tab 的类型分派：source / file / task / desktop / agent / agent-directory", () => {
     const source = {
       kind: "source",
       key: "patch:src/a.ts:h1",
@@ -427,6 +461,12 @@ describe("resolveWorkspacePaneMode", () => {
       title: "任务",
       fallbackTask: {},
     } as unknown as WorkspaceTab;
+    const desktop = {
+      kind: "desktop",
+      key: desktopTabKey("tc-desktop"),
+      title: "桌面预览",
+      streamUrl: "https://desktop.test/live",
+    } as unknown as WorkspaceTab;
     const agent = {
       kind: "agent",
       key: agentTabKey("tc-1"),
@@ -443,6 +483,7 @@ describe("resolveWorkspacePaneMode", () => {
     expect(resolveWorkspacePaneMode(source)).toBe("source");
     expect(resolveWorkspacePaneMode(file)).toBe("file");
     expect(resolveWorkspacePaneMode(task)).toBe("task");
+    expect(resolveWorkspacePaneMode(desktop)).toBe("desktop");
     expect(resolveWorkspacePaneMode(agent)).toBe("agent");
     expect(resolveWorkspacePaneMode(directory)).toBe("agent-directory");
   });
@@ -526,6 +567,36 @@ describe("任务预览 tab 身份（原「动态」跟随）", () => {
     expect(isTaskTab(fileTab)).toBe(false);
     expect(isTaskTab(sourceTab)).toBe(false);
     expect(isTaskTab(agentTab)).toBe(false);
+  });
+});
+
+describe("桌面控制预览 tab 身份", () => {
+  const desktopTab = (taskKey: string): WorkspaceTab =>
+    ({
+      kind: "desktop",
+      key: desktopTabKey(taskKey),
+      title: "桌面预览",
+      streamUrl: "https://desktop.test/live",
+    }) as WorkspaceTab;
+
+  it("desktopTabKey 按任务稳定身份幂等", () => {
+    expect(desktopTabKey("tc-1")).toBe(desktopTabKey("tc-1"));
+    expect(desktopTabKey("tc-1")).not.toBe(desktopTabKey("tc-2"));
+    expect(isDesktopTab(desktopTab("tc-1"))).toBe(true);
+    expect(workspaceTabKey(desktopTab("tc-1"))).toBe("desktop:tc-1");
+    expect(tabPreviewFileKey(desktopTab("tc-1"))).toBe("");
+  });
+
+  it("桌面 tab 与文件 / source / agent / task / 目录 tab 互不撞键", () => {
+    const keys = [
+      "workspace/a.ts",
+      "patch:src/a.ts:h1",
+      agentTabKey("tc-1"),
+      taskTabKey("tc-1"),
+      desktopTabKey("tc-1"),
+      AGENT_DIRECTORY_TAB_KEY,
+    ];
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });
 

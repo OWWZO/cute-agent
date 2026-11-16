@@ -1,4 +1,4 @@
-import { ImageIcon, X } from "lucide-react";
+import { ChevronRight, ImageIcon, X } from "lucide-react";
 import { isImageFileLike } from "@/utils/taskArtifacts";
 import { cn } from "@/lib/utils";
 import {
@@ -228,7 +228,7 @@ const AttachmentList: CuteType.FC<Props> = (props) => {
           <>
             <button
               type="button"
-              className="group flex w-full items-center gap-3 rounded-xl border border-card-border bg-surface px-3.5 py-3 text-left transition-colors hover:bg-surface-hover"
+              className="group flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3.5 text-left shadow-[var(--shadow-sm)] transition-[background-color,box-shadow] duration-200 ease-out hover:bg-surface-hover hover:shadow-[var(--shadow-md)] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--color-accent-soft)] active:scale-[0.995] motion-reduce:transition-none motion-reduce:active:scale-100"
               onClick={() => review?.(primary)}
             >
               <FileThumb
@@ -244,8 +244,9 @@ const AttachmentList: CuteType.FC<Props> = (props) => {
                 titleClassName="text-ui-base font-medium text-foreground"
                 subtitleClassName="mt-0.5 text-ui-sm text-foreground-subtle"
               />
-              <span className="inline-flex h-8 shrink-0 items-center rounded-lg border border-card-border bg-card px-3.5 text-ui-sm font-medium text-foreground transition-colors group-hover:bg-hover">
-                打开文件
+              <span className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-hover px-3 text-ui-sm font-medium text-foreground transition-colors group-hover:bg-selected group-hover:text-[var(--chat-accent)]">
+                打开
+                <ChevronRight className="size-3.5" strokeWidth={2} />
               </span>
             </button>
 

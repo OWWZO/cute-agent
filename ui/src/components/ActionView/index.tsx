@@ -4,6 +4,7 @@ export { ActionView };
 export type {
   ActionViewRef,
   OpenAgentTabPayload,
+  OpenDesktopTabPayload,
   OpenTaskTabPayload,
 } from "./ActionView";
 

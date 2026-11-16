@@ -57,6 +57,15 @@ function taskTab(): WorkspaceTab {
   } as unknown as WorkspaceTab;
 }
 
+function desktopTab(): WorkspaceTab {
+  return {
+    kind: "desktop",
+    key: "desktop:tc-1",
+    title: "桌面预览",
+    streamUrl: "https://desktop.test/live",
+  } as unknown as WorkspaceTab;
+}
+
 describe("resolveWorkspaceTabDisplay", () => {
   it("文件 tab：标题取文件名，图标是类型角标，类型词是扩展名", () => {
     const display = resolveWorkspaceTabDisplay(fileTab());
@@ -133,6 +142,17 @@ describe("resolveWorkspaceTabDisplay", () => {
     expect(display.typeHint).toBe("任务");
   });
 
+  it("桌面预览 tab：monitor 图标 + 类型词「桌面」", () => {
+    const display = resolveWorkspaceTabDisplay(desktopTab());
+    expect(display.title).toBe("桌面预览");
+    expect(display.icon).toEqual({
+      kind: "glyph",
+      glyph: "monitor"
+    });
+    expect(display.typeHint).toBe("桌面");
+    expect(display.diffBadge).toBe("");
+  });
+
   it("key 与 workspaceTabKey 一致 —— 条上与浮层用同一个身份", () => {
     for (const tab of [
       fileTab(),
@@ -140,6 +160,7 @@ describe("resolveWorkspaceTabDisplay", () => {
       agentTab(),
       directoryTab(),
       taskTab(),
+      desktopTab(),
     ]) {
       expect(resolveWorkspaceTabDisplay(tab).key).toBe(workspaceTabKey(tab));
     }

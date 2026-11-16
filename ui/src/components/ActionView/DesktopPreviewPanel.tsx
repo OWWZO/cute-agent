@@ -1,4 +1,4 @@
-import { ExternalLink, Monitor, PanelRightClose } from "lucide-react";
+import { ExternalLink, Monitor, X } from "lucide-react";
 import { resolveDesktopPreviewUrl } from "./desktopPreviewUrl";
 
 type DesktopPreviewPanelProps = {
@@ -50,7 +50,7 @@ const DesktopPreviewPanel: CuteType.FC<DesktopPreviewPanelProps> = ({
             title="关闭桌面预览"
             aria-label="关闭桌面预览"
           >
-            <PanelRightClose className="h-4 w-4" aria-hidden="true" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </header>

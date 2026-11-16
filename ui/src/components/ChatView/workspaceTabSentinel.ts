@@ -25,7 +25,7 @@ export function decideWorkspaceTabCountChange(params: {
   hadTabs: boolean;
   /** ActionView 上报的当前 tab 数 */
   count: number;
-  /** 此刻是否还有 pending 打开意图（待开文件 / source / 子智能体 / 目录 / 任务 tab，或覆盖层） */
+  /** 此刻是否还有 pending 打开意图（待开文件 / source / 子智能体 / 目录 / 任务 / 桌面 tab） */
   hasPendingOpenIntent: boolean;
 }): WorkspaceTabCountDecision {
   const { hadTabs, count, hasPendingOpenIntent } = params;
@@ -56,6 +56,27 @@ export function decideWorkspaceTabCountChange(params: {
     hadTabs: false,
     collapse: true
   };
+}
+
+/**
+ * 工作区是否可以安全占位。
+ *
+ * `workspaceOpenRequested` 不能丢：用户点击文件后，父级会先清掉 pending，
+ * ActionView 随后才异步上报 `openTabs > 0`。这中间必须继续挂载工作区，
+ * 否则 ActionView 会被卸载，刚消费掉的文件 tab 也一起消失。
+ */
+export function hasWorkspaceSurface(params: {
+  workspaceHasTabs: boolean;
+  hasPendingOpenIntent: boolean;
+  workspaceOpenRequested: boolean;
+  hasOpenRequestedPlan: boolean;
+}): boolean {
+  return (
+    params.workspaceHasTabs ||
+    params.hasPendingOpenIntent ||
+    params.workspaceOpenRequested ||
+    params.hasOpenRequestedPlan
+  );
 }
 
 /**

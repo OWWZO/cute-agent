@@ -35,9 +35,11 @@ import {
   AGENT_DIRECTORY_TAB_KEY,
   agentTabKey,
   collectWorkspaceFiles,
+  desktopTabKey,
   findWorkspaceFileByPath,
   isAgentDirectoryTab,
   isAgentTab,
+  isDesktopTab,
   isSourceTab,
   isTaskTab,
   resolveWorkspacePaneMode,
@@ -47,6 +49,7 @@ import {
   workspaceTabKey,
   workspaceTabOpenedAt,
   type WorkspaceAgentTab,
+  type WorkspaceDesktopTab,
   type WorkspaceTaskTab,
   type WorkspaceFileItem,
   type WorkspaceSourceTab,
@@ -60,6 +63,7 @@ import {
 import { ToolPreviewPanel } from "../Dialogue/ToolPreviewPanel";
 import { FilePreviewHeaderSlotContext } from "../ActionPanel/filePreviewHeaderSlot";
 import { SubAgentDirectoryPanel } from "../Dialogue/SubAgentDirectoryPanel";
+import DesktopPreviewPanel from "./DesktopPreviewPanel";
 import { WorkspaceTabOverview } from "./WorkspaceTabOverview";
 import { WorkspaceTabIcon } from "./WorkspaceTabIcon";
 import { TabTitleTooltip } from "./TabTitleTooltip";
@@ -81,6 +85,11 @@ import {
   resolveFileKind,
 } from "@/utils/fileKind";
 import { isTextCopyableFileLike } from "@/utils/taskArtifacts";
+import {
+  readWorkspaceTabState,
+  rememberWorkspaceTabState,
+  type WorkspaceTabViewMode,
+} from "./workspaceTabStateCache";
 
 // ZCode PreviewPane.tsx:1596-1605 —— 头部操作一律 ghost 图标按钮：rounded-lg、
 // 三级前景、hover 才升到主前景；不用实心底色，保持头部安静。
@@ -146,6 +155,8 @@ export type ActionViewRef = PlanViewAction & {
   openAgentDirectoryTab: () => void;
   /** 打开（或激活）一个任务预览 tab（原「动态」跟随） */
   openTaskTab: (payload: OpenTaskTabPayload) => void;
+  /** 打开（或激活）桌面控制实时预览 tab */
+  openDesktopTab: (payload: OpenDesktopTabPayload) => void;
   /** 按身份键关闭一个 tab（子智能体详情面板自己的关闭按钮走这条） */
   closeWorkspaceTab: (key: string) => void;
 };
@@ -160,6 +171,12 @@ export type OpenTaskTabPayload = {
   taskKey: string;
   title: string;
   task: CHAT.Task;
+};
+
+export type OpenDesktopTabPayload = {
+  taskKey: string;
+  title: string;
+  streamUrl: string;
 };
 
 const useActionView = () => {
@@ -192,6 +209,11 @@ type ActionViewProps = {
   /** 父级待打开的任务预览 tab（点工具卡推来，代替旧的「动态」跟随） */
   pendingTaskTab?: OpenTaskTabPayload | null;
   onPendingTaskTabConsumed?: () => void;
+  /** 父级待打开的桌面控制预览 tab */
+  pendingDesktopTab?: OpenDesktopTabPayload | null;
+  onPendingDesktopTabConsumed?: () => void;
+  /** 会话级 key：工作区收起后重新展开时恢复已打开的 tab。 */
+  workspaceStateKey?: string;
   /** 子智能体名册：目录 tab 的数据源（与右上角面板同源） */
   agentRoster?: SubAgentRosterItem[];
   /** 目录行点击：由宿主解析并打开对应子智能体 tab */
@@ -237,6 +259,9 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     onPendingAgentDirectoryTabConsumed,
     pendingTaskTab,
     onPendingTaskTabConsumed,
+    pendingDesktopTab,
+    onPendingDesktopTabConsumed,
+    workspaceStateKey,
     agentRoster,
     onOpenAgent,
     renderAgentTab,
@@ -246,10 +271,16 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
 
   const planRef = useRef<PlanViewAction>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
-  const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
-  const [selectedKey, setSelectedKey] = useState<string>("");
+  const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>(
+    () => readWorkspaceTabState(workspaceStateKey).tabs
+  );
+  const [selectedKey, setSelectedKey] = useState<string>(
+    () => readWorkspaceTabState(workspaceStateKey).selectedKey
+  );
   const [refreshToken, setRefreshToken] = useState(0);
-  const [viewMode, setViewMode] = useState<"preview" | "source">("preview");
+  const [viewMode, setViewMode] = useState<WorkspaceTabViewMode>(
+    () => readWorkspaceTabState(workspaceStateKey).viewMode
+  );
   /**
    * tab 条左右是否还有可滚动内容 —— 决定边缘渐隐遮罩挂哪一侧。
    * 对齐 ZCode `AnimatedSidePanePanel.tsx:968-984` 的 `tabsScrollMaskEdges`。
@@ -285,13 +316,14 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
   const files = useMemo(() => {
     // tab 优先保留用户刚点击时的 URL/文件信息，catalog 只补充任务等元数据；
     // 这是应对流式产物后续补全、但同一资源 key 已在预览中的合并边界。
-    // source / agent / task / directory tab 不参与 catalog 合并（它们没有产物身份），原样透传。
+    // source / agent / task / desktop / directory tab 不参与 catalog 合并（它们没有产物身份），原样透传。
     return openTabs.map((tab) => {
       if (
         isSourceTab(tab) ||
         isAgentTab(tab) ||
         isAgentDirectoryTab(tab) ||
-        isTaskTab(tab)
+        isTaskTab(tab) ||
+        isDesktopTab(tab)
       ) {
         return tab;
       }
@@ -421,6 +453,31 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
         openedAt: openedAtFor(prev, key),
       };
       return upsertWorkspaceTab(prev, next);
+    });
+    setSelectedKey(key);
+  });
+
+  /** 打开 / 激活桌面控制预览 tab。同一个任务只保留一个桌面 tab。 */
+  const openDesktopInTab = useMemoizedFn((payload: OpenDesktopTabPayload) => {
+    if (!payload.taskKey) {
+      return;
+    }
+    const key = desktopTabKey(payload.taskKey);
+    setOpenTabs((prev) => {
+      const existing = prev.findIndex((item) => workspaceTabKey(item) === key);
+      const next: WorkspaceDesktopTab = {
+        kind: "desktop",
+        key,
+        title: payload.title || "桌面预览",
+        streamUrl: payload.streamUrl,
+        openedAt: openedAtFor(prev, key),
+      };
+      if (existing >= 0) {
+        const copy = [...prev];
+        copy[existing] = next;
+        return copy;
+      }
+      return [...prev, next];
     });
     setSelectedKey(key);
   });
@@ -561,6 +618,12 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     onPendingTaskTabConsumed?.();
   }, [pendingTaskTab, openTaskInTab, onPendingTaskTabConsumed]);
 
+  useEffect(() => {
+    if (!pendingDesktopTab) return;
+    openDesktopInTab(pendingDesktopTab);
+    onPendingDesktopTabConsumed?.();
+  }, [pendingDesktopTab, openDesktopInTab, onPendingDesktopTabConsumed]);
+
   // tab 数量上报宿主：最后一个 tab 被关掉时由宿主收起整个工作区。
   //
   // 宿主可能每轮渲染都传新的回调，所以用 ref 固定住，让这个 effect 只在
@@ -573,18 +636,29 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     onTabsChangeRef.current?.(openTabs.length);
   }, [openTabs.length]);
 
+  useEffect(() => {
+    rememberWorkspaceTabState(workspaceStateKey, {
+      tabs: openTabs,
+      selectedKey,
+      viewMode,
+    });
+  }, [openTabs, selectedKey, viewMode, workspaceStateKey]);
+
   // 没有任务产物时认为会话工作区已清空，关闭旧**文件** tab；有产物时保留用户已打开
   // 的 tab，避免每次流式 taskList 更新都重置预览位置。
   //
-  // 子智能体 tab / 目录 tab / 任务预览 tab 不受这条规则影响：它们的生命周期跟会话与
-  // 用户操作走，跟「这轮有没有产物文件」无关（否则纯子 Agent 任务一结束、或某个
-  // 无产物的工具任务关掉产物列表，tab 就被清掉）。
+  // 子智能体 tab / 目录 tab / 任务预览 tab / 桌面预览 tab 不受这条规则影响：
+  // 它们的生命周期跟会话与用户操作走，跟「这轮有没有产物文件」无关。
   useEffect(() => {
     if (taskList?.length || catalog.length) {
       return;
     }
     const kept = openTabs.filter(
-      (tab) => isAgentTab(tab) || isAgentDirectoryTab(tab) || isTaskTab(tab)
+      (tab) =>
+        isAgentTab(tab) ||
+        isAgentDirectoryTab(tab) ||
+        isTaskTab(tab) ||
+        isDesktopTab(tab)
     );
     if (kept.length === openTabs.length) {
       return;
@@ -685,6 +759,9 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       openTaskTab: (payload) => {
         openTaskInTab(payload);
       },
+      openDesktopTab: (payload) => {
+        openDesktopInTab(payload);
+      },
       closeWorkspaceTab: (key) => {
         closeTab(key);
       },
@@ -698,9 +775,14 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     return files.find((f) => workspaceTabKey(f) === selectedKey) || files[files.length - 1];
   }, [files, selectedKey]);
 
-  // 五种 tab 分流：产物文件 / 工具 source / 任务预览 / 子智能体详情 / 子智能体目录。
+  // 六种 tab 分流：产物文件 / 工具 source / 任务预览 / 桌面预览 / 子智能体详情 / 子智能体目录。
   const isFileTabSelected = Boolean(
-    selectedTab && !isSourceTab(selectedTab) && !isTaskTab(selectedTab) && !isAgentTab(selectedTab) && !isAgentDirectoryTab(selectedTab)
+    selectedTab &&
+      !isSourceTab(selectedTab) &&
+      !isTaskTab(selectedTab) &&
+      !isDesktopTab(selectedTab) &&
+      !isAgentTab(selectedTab) &&
+      !isAgentDirectoryTab(selectedTab)
   );
   const selectedFile: WorkspaceFileItem | undefined = isFileTabSelected
     ? (selectedTab as WorkspaceFileItem)
@@ -709,6 +791,8 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     selectedTab && isSourceTab(selectedTab) ? selectedTab : undefined;
   const selectedTask: WorkspaceTaskTab | undefined =
     selectedTab && isTaskTab(selectedTab) ? selectedTab : undefined;
+  const selectedDesktop: WorkspaceDesktopTab | undefined =
+    selectedTab && isDesktopTab(selectedTab) ? selectedTab : undefined;
   const selectedAgent: WorkspaceAgentTab | undefined =
     selectedTab && isAgentTab(selectedTab) ? selectedTab : undefined;
 
@@ -984,7 +1068,8 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
               type="button"
               onClick={onClose}
               className={iconBtnClass}
-              title="关闭文件"
+              title="关闭工作区"
+              aria-label="关闭工作区"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -1011,6 +1096,13 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
           // 必须按稳定身份回找最新任务，不能把打开瞬间的快照存进 tab。
           <div className="min-h-0 flex-1 overflow-hidden">
             {renderTaskTab?.(selectedTask)}
+          </div>
+        ) : paneMode === "desktop" && selectedDesktop ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <DesktopPreviewPanel
+              streamUrl={selectedDesktop.streamUrl}
+              onClose={() => closeTab(selectedDesktop.key)}
+            />
           </div>
         ) : paneMode === "source" && selectedSource ? (
           // source tab（patch / text / image）：直接复用工具预览面板，渲染契约与

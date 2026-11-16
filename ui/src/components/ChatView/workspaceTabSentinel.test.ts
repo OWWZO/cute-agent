@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   decideWorkspaceTabCountChange,
+  hasWorkspaceSurface,
   resolveAutoFollowTabKind,
   shouldAutoFollowWorkspaceTask,
 } from "./workspaceTabSentinel";
@@ -79,6 +80,46 @@ describe("decideWorkspaceTabCountChange", () => {
         count: 0,
         hasPendingOpenIntent: false,
       }).collapse
+    ).toBe(true);
+  });
+});
+
+describe("hasWorkspaceSurface", () => {
+  it("collapses when there is neither a tab nor an open request", () => {
+    expect(
+      hasWorkspaceSurface({
+        workspaceHasTabs: false,
+        hasPendingOpenIntent: false,
+        workspaceOpenRequested: false,
+        hasOpenRequestedPlan: false,
+      })
+    ).toBe(false);
+  });
+
+  it("keeps the workspace for restored tabs, a pending tab, or an open request", () => {
+    expect(
+      hasWorkspaceSurface({
+        workspaceHasTabs: true,
+        hasPendingOpenIntent: false,
+        workspaceOpenRequested: false,
+        hasOpenRequestedPlan: false,
+      })
+    ).toBe(true);
+    expect(
+      hasWorkspaceSurface({
+        workspaceHasTabs: false,
+        hasPendingOpenIntent: true,
+        workspaceOpenRequested: false,
+        hasOpenRequestedPlan: false,
+      })
+    ).toBe(true);
+    expect(
+      hasWorkspaceSurface({
+        workspaceHasTabs: false,
+        hasPendingOpenIntent: false,
+        workspaceOpenRequested: true,
+        hasOpenRequestedPlan: false,
+      })
     ).toBe(true);
   });
 });
