@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/task-review.schema.json",
+  "title": "Cute Agent On-Demand Task Review Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "jobId",
+    "subject",
+    "execution",
+    "completion",
+    "findings",
+    "metrics",
+    "runs",
+    "artifacts",
+    "quality",
+    "usagePolicy"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "string"},
+    "jobId": {"type": "string"},
+    "subject": {
+      "type": "object",
+      "required": ["requestIds", "runCount"],
+      "properties": {
+        "sessionId": {"type": ["string", "null"]},
+        "requestIds": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "runCount": {"type": "integer", "minimum": 1},
+        "criteria": {"type": ["string", "null"]},
+        "title": {"type": ["string", "null"]},
+        "model": {"type": ["string", "null"]}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["status", "durationMs", "totalTokens", "toolCount"],
+      "properties": {
+        "status": {"type": "string"},
+        "durationMs": {"type": "integer", "minimum": 0},
+        "totalTokens": {"type": "integer", "minimum": 0},
+        "toolCount": {"type": "integer", "minimum": 0},
+        "failedToolCount": {"type": "integer", "minimum": 0},
+        "artifactCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "completion": {
+      "type": "object",
+      "required": ["conclusion", "basis", "advisory", "summary"],
+      "properties": {
+        "conclusion": {
+          "enum": ["completed", "partial", "incomplete", "unknown"]
+        },
+        "basis": {
+          "enum": ["execution", "oracle", "explicit", "inferred", "none"]
+        },
+        "advisory": {"type": "boolean"},
+        "summary": {"type": "string"}
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "metrics": {"type": "object"},
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "object"}
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "quality": {
+      "type": "object",
+      "required": ["status", "advisory"],
+      "properties": {
+        "status": {
+          "enum": ["pending", "running", "verified", "unverified", "failed"]
+        },
+        "advisory": {"const": true},
+        "summary": {"type": "string"},
+        "dimensions": {"type": "array", "items": {"type": "object"}},
+        "findings": {"type": "array", "items": {"type": "object"}},
+        "suggestions": {"type": "array", "items": {"type": "object"}},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "error": {"type": ["object", "null"]}
+      }
+    },
+    "limitations": {"type": "array", "items": {"type": "string"}},
+    "usagePolicy": {
+      "type": "object",
+      "required": ["officialScore", "gateEligible", "publicationAllowed", "advisory"],
+      "properties": {
+        "officialScore": {"const": false},
+        "gateEligible": {"const": false},
+        "publicationAllowed": {"const": false},
+        "advisory": {"const": true}
+      }
+    }
+  }
+}

@@ -19,6 +19,7 @@ import {
   LogOut,
   Wrench,
   ChevronRight,
+  ClipboardCheck,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ConversationSessionItem } from "@/services/agentConversation";
@@ -420,6 +421,13 @@ const ConversationSidebar = memo(function ConversationSidebar(
                 </button>
               );
             })}
+            <Link
+              to={ROUTES.TASK_REVIEW}
+              className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui-base font-medium text-[var(--chat-text)] transition-colors hover:bg-black/[0.04]"
+            >
+              <ClipboardCheck className="h-[18px] w-[18px] shrink-0" />
+              <span>任务复盘</span>
+            </Link>
           </div>
 
           {/* 最近会话 */}

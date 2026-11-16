@@ -15,7 +15,8 @@ export const ConclusionSection: FC<{
   changeFile?: CHAT.OpenFileHandler;
   sessionArtifactFiles?: CHAT.TFile[];
   onOpenWorkspaceFiles?: () => void;
-}> = ({ chat, changeFile, sessionArtifactFiles, onOpenWorkspaceFiles }) => {
+  onReview?: () => void;
+}> = ({ chat, changeFile, sessionArtifactFiles, onOpenWorkspaceFiles, onReview }) => {
   const summaryText = resolveTaskSummaryText(chat.conclusion);
   const summary = summaryText || "任务已完成";
   const summaryStreaming =
@@ -24,10 +25,9 @@ export const ConclusionSection: FC<{
     () =>
       pickFeaturedDeliveryFiles(
         chat.conclusion,
-        sessionArtifactFiles,
-        chat.sessionId
+        sessionArtifactFiles
       ),
-    [chat.conclusion, chat.sessionId, sessionArtifactFiles]
+    [chat.conclusion, sessionArtifactFiles]
   );
   const showWorkspaceFilesEntry = useMemo(
     () =>
@@ -68,8 +68,12 @@ export const ConclusionSection: FC<{
             messageId={chat.requestId}
           />
         </MessageContent>
-        {!summaryStreaming && summaryText ? (
-          <MessageToolbar response={summaryText} alwaysVisible />
+        {!summaryStreaming && (summaryText || onReview) ? (
+          <MessageToolbar
+            response={summaryText}
+            alwaysVisible
+            onReview={onReview}
+          />
         ) : null}
       </Message>
       {/* 终答仍在流式输出时先不露出工作区入口：$$$ 点名边流边解析，

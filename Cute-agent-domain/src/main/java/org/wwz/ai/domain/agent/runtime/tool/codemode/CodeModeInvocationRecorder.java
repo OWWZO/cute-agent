@@ -66,6 +66,8 @@ public final class CodeModeInvocationRecorder {
                 .requestId(ExecutionLedgerRunSupport.ledgerRequestId(agentContext))
                 .sessionId(agentContext.getSessionId())
                 .llmInvocationId(llmInvocationId)
+                .agentName(agentContext.getAgentRunState().getCurrentAgentName())
+                .stepNo(agentContext.getAgentRunState().getCurrentStepNo())
                 .items(List.of(ToolInvocationBatchStartRecord.Item.builder()
                         .toolCallId(callId)
                         .parentToolCallId(parentToolCallId)

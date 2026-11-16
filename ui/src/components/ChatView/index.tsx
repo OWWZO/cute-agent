@@ -22,9 +22,9 @@ import DataDialogue from "@/components/Dialogue/DataDialogue";
 import GeneralInput from "@/components/GeneralInput";
 import ActionView, {
   type OpenAgentTabPayload,
+  type OpenDesktopTabPayload,
   type OpenTaskTabPayload,
 } from "@/components/ActionView";
-import { ThinkingPanel } from "@/components/Dialogue/ThinkingPanel";
 import { AgentDetailPanel } from "@/components/Dialogue/AgentDetailPanel";
 import {
   buildToolPreviewSource,
@@ -51,7 +51,6 @@ import {
 import PlanComposerBar from "./PlanComposerBar";
 import AskUserQuestionCard from "@/components/Dialogue/AskUserQuestionCard";
 import DesktopControlCard from "@/components/Dialogue/DesktopControlCard";
-import DesktopPreviewPanel from "@/components/ActionView/DesktopPreviewPanel";
 import { readDesktopStreamUrl } from "@/components/Dialogue/DesktopControlCard";
 import { DESKTOP_CONTROL_PREVIEW_EVENT } from "@/services/desktopControl";
 import {
@@ -79,6 +78,7 @@ import {
 import ConversationTurnNavigator from "@/components/Dialogue/ConversationTurnNavigator";
 import type { StickToBottomContext } from "use-stick-to-bottom";
 import {
+  ClipboardCheck,
   ChevronUp,
   FolderOpen,
   LoaderCircle,
@@ -99,6 +99,7 @@ import {
 import { useWorkspacePanels } from "./useWorkspacePanels";
 import {
   decideWorkspaceTabCountChange,
+  hasWorkspaceSurface,
   resolveAutoFollowTabKind,
   shouldAutoFollowWorkspaceTask,
 } from "./workspaceTabSentinel";
@@ -108,6 +109,7 @@ import {
   collectSessionFileTasks,
   collectWorkspaceFiles,
   buildSessionFileManifestTask,
+  findWorkspaceFileByPath,
   flattenTasksWithFiles,
 } from "@/components/ActionView/workspaceFiles";
 import { collectSessionArtifactFiles } from "@/utils/markdownArtifacts";
@@ -420,8 +422,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
    * 待挂载的子智能体 tab（时间线工具卡 / 右上角「智能体」面板 / 目录推来）。
    *
    * 与 `pendingPreviewFile` / `pendingSourceTab` 同一套挂载机制：ActionView 可能
-   * 还没挂载（工作区收起、正显示 thinking / diff 独占面板），先把要开的 tab
-   * 暂存在父级，ActionView 挂载后消费一次再清空。
+   * 还没挂载（工作区收起），先把要开的 tab 暂存在父级，挂载后消费一次再清空。
    */
   const [pendingAgentTab, setPendingAgentTab] =
     useState<OpenAgentTabPayload | null>(null);
@@ -431,6 +432,9 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const [pendingTaskTab, setPendingTaskTab] = useState<OpenTaskTabPayload | null>(
     null
   );
+  /** 待挂载的桌面控制预览 tab（与文件 / 任务 tab 同一套挂载机制） */
+  const [pendingDesktopTab, setPendingDesktopTab] =
+    useState<OpenDesktopTabPayload | null>(null);
   /**
    * 工作区「最后一个真实 tab 被关掉」的哨兵。
    *
@@ -455,13 +459,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
    * 又拉开一个面板）；新一轮开始时复位。
    */
   const userClosedWorkspaceRef = useRef(false);
-  /**
-   * 右侧**覆盖层** detail：thinking | desktop-preview。
-   *
-   * 只剩这两种：工具 diff / 子智能体详情都已改走 ActionView 的 tab（与文件预览同一套
-   * 挂载机制），不再是独占面板 —— 所以它们不再需要「返回上一屏」的回退路径。
-   */
-  const [thinkingDetail, setThinkingDetail] = useState<string | null>(null);
   /** 头部「智能体」面板形态：默认收起为胶囊，避免常驻面板遮挡消息；输入框徽标可强制展开 */
   const [agentsPanelVariant, setAgentsPanelVariant] =
     useState<AgentsPanelVariant>("mini");
@@ -506,6 +503,18 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const chatTurns = useMemo(
     () => groupChatsIntoTurns(deferredChatList).map(buildChatTurnView),
     [deferredChatList]
+  );
+  const openTaskReview = useMemoizedFn(
+    (sessionId: string, requestIds: string[]) => {
+      if (!sessionId || !requestIds.length) return;
+      const params = new URLSearchParams({
+        sessionId,
+        requestIds: requestIds.join(","),
+      });
+      if (typeof window !== "undefined") {
+        window.location.assign(`/task-review?${params.toString()}`);
+      }
+    }
   );
   /**
    * 轮次导航按 turn 出刻度：它的活跃项靠 DOM 锚点（`data-request-id`）测量，
@@ -552,10 +561,10 @@ const ChatView: CuteType.FC<Props> = (props) => {
       // 旧的「工作区恢复自动跟随」已随「动态」伪模式删除 —— 现在只有用户点工具卡
       // 才会开任务预览 tab，新一轮不会再自动抢工作区焦点。
       setPendingPreviewFile(undefined);
-      setThinkingDetail(null);
       setPendingAgentTab(null);
       setPendingAgentDirectory(false);
       setPendingTaskTab(null);
+      setPendingDesktopTab(null);
       // 新一轮开始，「用户已关闭工作区」的记忆与自动跟随的去重键都归零 ——
       // 自动跟随按轮生效，上一轮的手动关闭不该管住下一轮。
       userClosedWorkspaceRef.current = false;
@@ -615,10 +624,10 @@ const ChatView: CuteType.FC<Props> = (props) => {
     setDataLoading(false);
     setWorkspaceOpenRequested(false);
     setIsRightCollapsed(false);
-    setThinkingDetail(null);
     setPendingAgentTab(null);
     setPendingAgentDirectory(false);
     setPendingTaskTab(null);
+    setPendingDesktopTab(null);
     // 「待打开」意图都是**瞬时**的，不跨会话 —— 流式自动跟随会写 pendingPreviewFile，
     // 不清掉的话切会话时可能把上一个会话的文件带过来。
     setPendingPreviewFile(undefined);
@@ -719,14 +728,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     setPendingAgentTab(null);
     setPendingAgentDirectory(false);
     setPendingTaskTab(null);
-  });
-
-  const syncThinkingPanel = useMemoizedFn((text: string) => {
-    setThinkingDetail((prev) => (prev == null ? prev : text));
-  });
-
-  const closeThinkingPanel = useMemoizedFn(() => {
-    setThinkingDetail(null);
+    setPendingDesktopTab(null);
   });
 
   /**
@@ -741,12 +743,23 @@ const ChatView: CuteType.FC<Props> = (props) => {
       const request = buildToolPreviewSource(task, fileIndex);
       if (!request) return;
 
-      setThinkingDetail(null);
       resetPendingOpenIntents();
       setActiveRunState({
         status: chat?.metrics?.status,
         finishedAt: chat?.finishedAt,
       });
+
+      // 工具卡上的文件只要能映射到真实会话产物，就打开完整文件 tab。
+      // 子 Agent 的源码 tab 没有独立的工作区挂载上下文，曾经表现为点文件后
+      // 仍停在子 Agent 预览；统一走文件 tab 后，主/子 Agent 行为一致。
+      const artifact =
+        request.source.type === "text" || request.source.type === "file"
+          ? findWorkspaceFileByPath(sessionArtifactFiles, request.path)
+          : undefined;
+      if (artifact && !artifact.missing) {
+        changeFile(artifact, chat);
+        return;
+      }
 
       // `source` 是 file 且能映射到会话产物时，ActionView 会把它并进同 key 的文件
       // tab；否则作为独立 source tab 打开。
@@ -778,7 +791,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
         tool: task,
         chat,
       });
-      setThinkingDetail(null);
       openRightWorkspace();
       setActiveRunState({
         status: chat.metrics?.status,
@@ -789,30 +801,10 @@ const ChatView: CuteType.FC<Props> = (props) => {
 
   /** 打开子智能体目录 tab（右上角「智能体」面板页脚 / 徽标入口） */
   const openSubAgentDirectory = useMemoizedFn(() => {
-    setThinkingDetail(null);
     resetPendingOpenIntents();
     openRightWorkspace();
     setPendingAgentDirectory(true);
   });
-
-  const closeExclusiveDetail = useMemoizedFn(() => {
-    if (thinkingDetail != null) {
-      closeThinkingPanel();
-      return true;
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (closeExclusiveDetail()) {
-        event.preventDefault();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeExclusiveDetail]);
 
   /**
    * 点工具卡 → 开一个「任务预览 tab」（原「动态」跟随）。
@@ -829,7 +821,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
     if (!taskKey) {
       return;
     }
-    setThinkingDetail(null);
     resetPendingOpenIntents();
     setPendingTaskTab({
       taskKey,
@@ -850,7 +841,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
 
   const changeFile = useMemoizedFn((file: CHAT.TFile, chat?: CHAT.ChatItem) => {
     // 只打开右侧预览 tab；左侧文件管理仅由「查看当前会话的文件」入口进入
-    setThinkingDetail(null);
     openRightWorkspace();
     setActiveRunState({
       status: chat?.metrics?.status,
@@ -899,7 +889,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
   }, [changeFile, onRegisterApi]);
 
   const changePlan = useMemoizedFn(() => {
-    setThinkingDetail(null);
     openRightWorkspace();
     actionViewRef.current?.openPlanView();
   });
@@ -918,12 +907,12 @@ const ChatView: CuteType.FC<Props> = (props) => {
   });
 
   const closeMobileWorkspace = useMemoizedFn(() => {
-    setThinkingDetail(null);
     setPendingAgentTab(null);
     setPendingAgentDirectory(false);
     // 手动关闭必须清掉 pending：否则下一次 ActionView 挂载会把这条旧意图
     // 再消费一遍，工作区「自己」又弹回来。
     setPendingTaskTab(null);
+    setPendingDesktopTab(null);
     setPendingPreviewFile(undefined);
     collapseWorkspace();
     if (isFocusMode) {
@@ -937,6 +926,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       return;
     }
     setPendingTaskTab(null);
+    setPendingDesktopTab(null);
     setPendingPreviewFile(undefined);
     collapseWorkspace();
   });
@@ -1365,9 +1355,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
    * 不该被立刻重新弹开，但下一个新子 Agent 仍应自动展开。
    */
   useEffect(() => {
-    if (thinkingDetail != null) {
-      return;
-    }
     if (!(streamLoading || activeChat?.loading)) {
       return;
     }
@@ -1381,7 +1368,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     }
     autoOpenedAgentRef.current = toolCallId;
     openAgentPanel(tool, activeChat);
-  }, [activeChat, openAgentPanel, streamLoading, thinkingDetail]);
+  }, [activeChat, openAgentPanel, streamLoading]);
   const waitingUserInput =
     String(activeChat?.metrics?.status || "").toUpperCase() === "WAITING_INPUT" ||
     activeChat?.tip === "需要你的帮助" ||
@@ -1411,10 +1398,12 @@ const ChatView: CuteType.FC<Props> = (props) => {
 
   const openDesktopPreview = useMemoizedFn(() => {
     if (!pendingDesktopStreamUrl) return;
-    setThinkingDetail(null);
-    setPendingAgentTab(null);
-    setPendingAgentDirectory(false);
-    setPendingPreviewFile(undefined);
+    resetPendingOpenIntents();
+    setPendingDesktopTab({
+      taskKey: pendingDesktopPreviewKey,
+      title: "桌面预览",
+      streamUrl: pendingDesktopStreamUrl,
+    });
     openRightWorkspace();
   });
 
@@ -1445,23 +1434,26 @@ const ChatView: CuteType.FC<Props> = (props) => {
    *
    * - `workspaceOpenRequested`：用户显式打开过（点工具卡 / 文件 / 子智能体 / 思考块）；
    * - `workspaceHasTabs`：还有真实 tab → 工作区必须在，不能因为流结束就消失；
-   * - 覆盖层（thinking / 桌面预览）与待打开意图：内容马上就有。
+   * - 待打开意图：内容马上就有。
    *
    * 注意**不包含** `showAction`：它只表示「流式里有值得看的任务」，而工作区现在
    * 「有 tab 才有内容」—— 直接拿它当展开条件就会得到一张空白面板（旧「动态」空态
    * 卡出现的情形）。流式自动跟随改由下面的 effect 负责：展开的同时**一定**会开一个
    * 真实任务 tab。
    */
-  const hasWorkspaceContent = Boolean(
-    workspaceOpenRequested ||
-      workspaceHasTabs ||
-      thinkingDetail ||
+  const hasWorkspaceContent = hasWorkspaceSurface({
+    workspaceHasTabs,
+    hasPendingOpenIntent: Boolean(
       pendingTaskTab ||
-      pendingAgentTab ||
-      pendingAgentDirectory ||
-      pendingSourceTab ||
-      pendingDesktopStreamUrl
-  );
+        pendingAgentTab ||
+        pendingAgentDirectory ||
+        pendingSourceTab ||
+        pendingDesktopTab ||
+        pendingPreviewFile
+    ),
+    workspaceOpenRequested,
+    hasOpenRequestedPlan: workspaceOpenRequested && Boolean(plan),
+  });
   /** 工作区此刻是否真的占着右侧（收起 / 无内容都算「不可见」）。等价于渲染时的 `hasWorkspaceLayout`。 */
   const workspaceVisible = hasWorkspaceContent && !isRightCollapsed;
 
@@ -1551,8 +1543,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
           pendingAgentDirectory ||
           pendingSourceTab ||
           pendingPreviewFile ||
-          thinkingDetail != null ||
-          pendingDesktopStreamUrl
+          pendingDesktopTab
       ),
     });
     hadWorkspaceTabsRef.current = decision.hadTabs;
@@ -1593,6 +1584,21 @@ const ChatView: CuteType.FC<Props> = (props) => {
     }
     return currentProduct?.name || "新任务";
   }, [conversation.chatTitle, conversation.title, currentProduct?.name]);
+
+  const latestReviewTurn = useMemo(() => {
+    const turn = chatTurns[chatTurns.length - 1];
+    if (
+      !turn ||
+      turn.chat.loading ||
+      ["RUNNING", "WAITING_INPUT"].includes(
+        String(turn.chat.metrics?.status || "").toUpperCase()
+      ) ||
+      turn.requestIds.length === 0
+    ) {
+      return null;
+    }
+    return turn;
+  }, [chatTurns]);
 
   /** Composer 堆栈：任务条常驻；pending HITL 替换 Composer（后台子 Agent 入口在右上角面板 + 输入框徽标） */
   const renderComposerStack = (inputKey: string) => (
@@ -1762,19 +1768,30 @@ const ChatView: CuteType.FC<Props> = (props) => {
           ? handleUndoLastTurn
           : undefined
       }
-      thinkingPanelOpen={thinkingDetail != null}
-      onSyncThinking={syncThinkingPanel}
       onOpenToolDiff={handleOpenToolDiffForChat}
       onOpenAgent={openAgentPanel}
       onOpenWorkspaceFiles={onOpenTaskFiles}
       onRequestReplay={onRequestRunReplay ? requestReplay : undefined}
       replayLoading={turn.requestIds.some((id) => replayLoadingIds.has(id))}
+      onReview={
+        readOnly ||
+        turn.chat.loading ||
+        ["RUNNING", "WAITING_INPUT"].includes(
+          String(turn.chat.metrics?.status || "").toUpperCase()
+        )
+          ? undefined
+          : openTaskReview
+      }
+      reviewSessionId={conversation.sessionId || conversation.id}
+      reviewRequestIds={turn.requestIds}
     />
   );
 
   const renderChatDialogues = () => {
     const lastRequestId =
       deferredChatList[deferredChatList.length - 1]?.requestId;
+    // sessionId 在“本地快照 → 远端完整回放”替换时保持不变，conversation.id 可能重建。
+    const sessionKey = conversation.sessionId || conversation.id;
 
     const loadMoreSlot =
       onLoadMoreHistory && conversation.historyHasMore ? (
@@ -1810,7 +1827,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       <>
         <VirtualizedTurnList
           items={virtualTurns}
-          sessionKey={conversation.id}
+          sessionKey={sessionKey}
           getItemKey={getTurnKey}
           headerSlot={loadMoreSlot}
           onVirtualItemsChange={setVirtualTurnRows}
@@ -1818,7 +1835,12 @@ const ChatView: CuteType.FC<Props> = (props) => {
           renderItem={(turn) => renderTurn(turn, lastRequestId)}
           liveTail={
             liveTurn ? (
-              <div data-live-tail="true">{renderTurn(liveTurn, lastRequestId)}</div>
+              <div
+                key={`${sessionKey}\0${liveTurn.key}`}
+                data-live-tail="true"
+              >
+                {renderTurn(liveTurn, lastRequestId)}
+              </div>
             ) : null
           }
         />
@@ -1891,6 +1913,23 @@ const ChatView: CuteType.FC<Props> = (props) => {
               {(!hasWorkspaceLayout || !isFocusMode) ? (
                 <div className="flex shrink-0 items-center gap-1">
                   {renderWorkspaceReopenTrigger()}
+                  {!readOnly && latestReviewTurn ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openTaskReview(
+                          conversation.sessionId || conversation.id,
+                          latestReviewTurn.requestIds
+                        )
+                      }
+                      className="flex h-8 items-center gap-1 rounded-full px-2 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                      title="复盘最近一轮任务"
+                      aria-label="复盘最近一轮任务"
+                    >
+                      <ClipboardCheck className="h-4 w-4" />
+                      <span>复盘</span>
+                    </button>
+                  ) : null}
                   {/* 智能体入口与文件夹按钮并列；展开面板从头部向下浮出，避免盖住消息。 */}
                   <SubAgentsPanel
                     chat={activeChat}
@@ -2076,9 +2115,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
           className="cute-workspace-panel relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--workspace-panel-radius)] bg-background"
           data-workspace-collapsed="false"
         >
-          {/* ActionView 常驻挂载，独占面板改为**覆盖层**。
-                原因：ActionView 持有工作区 tab 列表（文件 / 子智能体详情 / 目录），
-                一旦被独占面板顶掉就会卸载、tab 全部丢失。 */}
+          {/* ActionView 常驻挂载；文件、任务、子智能体与桌面预览共用同一套 tab。 */}
           <TaskTabLiveStateContext.Provider value={taskTabLiveState}>
             <ActionView
               key={conversation.id}
@@ -2094,6 +2131,9 @@ const ChatView: CuteType.FC<Props> = (props) => {
               }
               pendingTaskTab={pendingTaskTab}
               onPendingTaskTabConsumed={() => setPendingTaskTab(null)}
+              pendingDesktopTab={pendingDesktopTab}
+              onPendingDesktopTabConsumed={() => setPendingDesktopTab(null)}
+              workspaceStateKey={conversation.id}
               agentRoster={subAgentRoster}
               onOpenAgent={openAgentPanel}
               renderAgentTab={renderAgentTab}
@@ -2108,29 +2148,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
               onClose={closeActionView}
             />
           </TaskTabLiveStateContext.Provider>
-
-          {pendingDesktopStreamUrl ? (
-            <div className="absolute inset-0 z-20 flex min-h-0 flex-col bg-background">
-              <DesktopPreviewPanel
-                streamUrl={pendingDesktopStreamUrl}
-                onClose={closeActionView}
-              />
-            </div>
-          ) : thinkingDetail != null ? (
-            <div className="absolute inset-0 z-20 flex min-h-0 flex-col bg-background">
-              <ThinkingPanel
-                text={thinkingDetail}
-                onClose={() => {
-                  closeThinkingPanel();
-                  if (!showAction && !workspaceOpenRequested) {
-                    // 走统一的收起入口：tab 哨兵必须一起复位，否则下次打开时
-                    // ActionView 首次上报的 0 会被误判成「刚关掉最后一个 tab」。
-                    collapseWorkspace();
-                  }
-                }}
-              />
-            </div>
-          ) : null}
         </Panel>
       </Group>
     );

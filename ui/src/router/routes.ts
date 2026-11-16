@@ -11,6 +11,8 @@ export const ROUTES = {
   WORKSPACE_SUB_AGENTS: "/workspace/sub-agents",
   WORKSPACE_MODELS: "/workspace/models",
   WORKSPACE_CAPABILITIES: "/workspace/capabilities",
+  TASK_REVIEW: "/task-review",
+  TASK_REVIEW_DETAIL: "/task-review/:jobId",
   OPENUI_DEMO: "/openui-demo",
   NOT_FOUND: "*",
 } as const;

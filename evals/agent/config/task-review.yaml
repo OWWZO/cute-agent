@@ -1,0 +1,24 @@
+server:
+  host: 127.0.0.1
+  port: 8765
+
+java:
+  baseUrl: http://127.0.0.1:8100
+  preflightPath: /api/agent/task-review/preflight
+  tracePath: /api/agent/task-review/traces
+  modelConfigPath: /api/agent/task-review/model-config
+  timeoutSeconds: 15
+
+judge:
+  enabled: true
+  model: group/deepseek
+  baseUrl: http://127.0.0.1:3425/v1
+  timeoutSeconds: 180
+
+limits:
+  maxRequestIds: 20
+  maxTraceBytes: 20971520
+
+storage:
+  home: ~/.cute-evals/task-reviews
+  retentionDays: 30

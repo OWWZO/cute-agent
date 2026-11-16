@@ -40,13 +40,14 @@ type Props = {
   changeFile?: CHAT.OpenFileHandler;
   changePlan?: () => void;
   onUndo?: () => void;
-  thinkingPanelOpen?: boolean;
-  onSyncThinking?: (text: string) => void;
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
   onOpenWorkspaceFiles?: () => void;
   onRequestReplay?: ReplayRequestHandler;
   replayLoading?: boolean;
+  onReview?: (sessionId: string, requestIds: string[]) => void;
+  reviewSessionId?: string;
+  reviewRequestIds?: string[];
 };
 
 /**
@@ -78,13 +79,14 @@ const DialogueComponent: FC<Props> = (props) => {
     changeFile,
     changePlan,
     onUndo,
-    thinkingPanelOpen = false,
-    onSyncThinking,
     onOpenToolDiff,
     onOpenAgent,
     onOpenWorkspaceFiles,
     onRequestReplay,
     replayLoading = false,
+    onReview,
+    reviewSessionId,
+    reviewRequestIds,
   } = props;
   const isPlanSolveMessage = isPlanSolveConversation(chat.agentType, deepThink);
   const isReactType = !isPlanSolveMessage;
@@ -179,11 +181,20 @@ const DialogueComponent: FC<Props> = (props) => {
     [changeTask]
   );
 
-  useEffect(() => {
-    if (thinkingPanelOpen && thoughtText) {
-      onSyncThinking?.(thoughtText);
+  const handleReview = useCallback(() => {
+    const sessionId = reviewSessionId || chat.sessionId;
+    if (!onReview || !sessionId) {
+      return;
     }
-  }, [thinkingPanelOpen, thoughtText, onSyncThinking]);
+    const requestIds = (reviewRequestIds?.length
+      ? reviewRequestIds
+      : [chat.requestId]
+    ).filter(Boolean);
+    if (!requestIds.length) {
+      return;
+    }
+    onReview(sessionId, requestIds);
+  }, [chat.requestId, chat.sessionId, onReview, reviewRequestIds, reviewSessionId]);
 
   const handleThoughtPrev = useCallback(() => {
     setThoughtVersionIndex((current) => stepVersionCursor(current, -1, latestRoundIndex));
@@ -299,7 +310,11 @@ const DialogueComponent: FC<Props> = (props) => {
               />
             </MessageContent>
             {!chat.loading ? (
-              <MessageToolbar response={chat.response} />
+              <MessageToolbar
+                response={chat.response}
+                alwaysVisible={Boolean(onReview)}
+                onReview={onReview ? handleReview : undefined}
+              />
             ) : null}
           </Message>
         </div>
@@ -336,6 +351,12 @@ const DialogueComponent: FC<Props> = (props) => {
         </Collapsible>
       ) : null}
 
+      {!chat.loading && onReview && !chat.response && !chat.conclusion ? (
+        <div className="mt-2 w-full max-w-[min(960px,100%)]">
+          <MessageToolbar alwaysVisible onReview={handleReview} />
+        </div>
+      ) : null}
+
       {/* 结论：过程之后的人话结果 */}
       {chat.conclusion ? (
         <div className="timeline-segment-enter mt-3 w-full max-w-[min(960px,100%)]">
@@ -344,6 +365,7 @@ const DialogueComponent: FC<Props> = (props) => {
             changeFile={changeFile}
             sessionArtifactFiles={sessionArtifactFiles}
             onOpenWorkspaceFiles={onOpenWorkspaceFiles}
+            onReview={onReview ? handleReview : undefined}
           />
         </div>
       ) : null}
@@ -363,8 +385,6 @@ const Dialogue = memo(
     prev.changeFile === next.changeFile &&
     prev.changePlan === next.changePlan &&
     prev.onUndo === next.onUndo &&
-    prev.thinkingPanelOpen === next.thinkingPanelOpen &&
-    prev.onSyncThinking === next.onSyncThinking &&
     prev.onOpenToolDiff === next.onOpenToolDiff &&
     prev.onOpenAgent === next.onOpenAgent &&
     prev.onOpenWorkspaceFiles === next.onOpenWorkspaceFiles &&

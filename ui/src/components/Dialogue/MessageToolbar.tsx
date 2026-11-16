@@ -12,6 +12,7 @@ import {
 import {
   CopyIcon,
   CheckIcon,
+  ClipboardCheckIcon,
   Undo2Icon,
   MoreHorizontalIcon,
 } from "lucide-react";
@@ -23,12 +24,15 @@ export type MessageToolbarProps = {
   onUndo?: () => void;
   /** 对齐 kimi-web a-msg-ft：终答脚常显，不依赖 hover */
   alwaysVisible?: boolean;
+  /** 打开单次任务复盘 */
+  onReview?: () => void;
 };
 
 export const MessageToolbar: FC<MessageToolbarProps> = ({
   response,
   onUndo,
   alwaysVisible = false,
+  onReview,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -44,7 +48,7 @@ export const MessageToolbar: FC<MessageToolbarProps> = ({
     });
   }, [response]);
 
-  if (!response && !onUndo) {
+  if (!response && !onUndo && !onReview) {
     return null;
   }
 
@@ -62,6 +66,11 @@ export const MessageToolbar: FC<MessageToolbarProps> = ({
           <Undo2Icon className="size-4" />
         </MessageAction>
       ) : null}
+      {onReview ? (
+        <MessageAction tooltip="复盘这次任务" onClick={onReview}>
+          <ClipboardCheckIcon className="size-4" />
+        </MessageAction>
+      ) : null}
       {response ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -73,6 +82,9 @@ export const MessageToolbar: FC<MessageToolbarProps> = ({
             <DropdownMenuItem onClick={handleCopy}>复制原文</DropdownMenuItem>
             {onUndo ? (
               <DropdownMenuItem onClick={onUndo}>撤销并编辑</DropdownMenuItem>
+            ) : null}
+            {onReview ? (
+              <DropdownMenuItem onClick={onReview}>复盘这次任务</DropdownMenuItem>
             ) : null}
           </DropdownMenuContent>
         </DropdownMenu>

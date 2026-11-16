@@ -23,6 +23,10 @@ const FeaturedConversationDetail = React.lazy(
 const NotFound = React.lazy(() => import('@/components/NotFound'));
 const AuthPage = React.lazy(() => import('@/pages/Auth'));
 const OpenUiDemo = React.lazy(() => import('@/pages/OpenUiDemo'));
+const TaskReview = React.lazy(() => import('@/pages/TaskReview'));
+const TaskReviewDetail = React.lazy(
+  () => import('@/pages/TaskReview/detail')
+);
 
 // OpenUI 混排协议的验证页：只在开发环境注册，不进生产产物。
 const openUiDemoRoutes = import.meta.env.DEV
@@ -116,6 +120,22 @@ const router = createBrowserRouter([
           {
             path: ROUTES.WORKSPACE_CAPABILITIES,
             element: <Navigate to={`${ROUTES.HOME}?view=capabilities`} replace />,
+          },
+          {
+            path: ROUTES.TASK_REVIEW,
+            element: (
+              <Suspense fallback={<Loading loading={true} branded className="h-full" />}>
+                <TaskReview />
+              </Suspense>
+            ),
+          },
+          {
+            path: ROUTES.TASK_REVIEW_DETAIL,
+            element: (
+              <Suspense fallback={<Loading loading={true} branded className="h-full" />}>
+                <TaskReviewDetail />
+              </Suspense>
+            ),
           },
         ],
       },
