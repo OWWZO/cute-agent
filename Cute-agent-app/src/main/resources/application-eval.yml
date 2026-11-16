@@ -48,6 +48,9 @@ autobots:
     channel:
       terminal-push: false
   autoagent:
+    # eval 专用 cute-tool 地址：默认指向本机评测服务，允许通过环境变量替换。
+    # 不复用 dev/prod 的私有配置，避免评测误连开发环境。
+    code_interpreter_url: "${AUTOBOTS_AUTOAGENT_CODE_INTERPRETER_URL:http://127.0.0.1:1601}"
     skill:
       enabled: false
     web_search:

@@ -205,6 +205,7 @@ public final class EvalBenchmarkLiveRunnerCli {
         JSONArray tracePaths = new JSONArray();
         String finalText = "";
         String aggregateError = null;
+        String aggregateErrorCode = null;
         int aggregateStatus = ExecutionLedgerConstants.STATUS_SUCCESS;
         boolean dynamicCompleted = false;
 
@@ -415,6 +416,7 @@ public final class EvalBenchmarkLiveRunnerCli {
             if (status != ExecutionLedgerConstants.STATUS_SUCCESS) {
                 aggregateStatus = status;
                 aggregateError = errorMsg;
+                aggregateErrorCode = errorCode;
                 if (dynamicTurns) {
                     break;
                 }
@@ -465,6 +467,9 @@ public final class EvalBenchmarkLiveRunnerCli {
         }
         if (aggregateError != null) {
             result.put("error", aggregateError);
+        }
+        if (aggregateErrorCode != null) {
+            result.put("errorCode", aggregateErrorCode);
         }
         return result;
     }

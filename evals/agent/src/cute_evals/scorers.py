@@ -258,10 +258,21 @@ def score_case(
     scores: list[ScoreRecord] = []
     final_text = trace.final_text
     missing = [value for value in case.expected.final_contains if value not in final_text]
+    missing_any = (
+        []
+        if not case.expected.final_contains_any
+        or any(value in final_text for value in case.expected.final_contains_any)
+        else list(case.expected.final_contains_any)
+    )
     forbidden = [
         value for value in case.expected.final_not_contains if value in final_text
     ]
-    task_ok = trace.status == "SUCCESS" and not missing and not forbidden
+    task_ok = (
+        trace.status == "SUCCESS"
+        and not missing
+        and not missing_any
+        and not forbidden
+    )
     scores.append(
         _record(
             case,
@@ -273,6 +284,7 @@ def score_case(
             evidence={
                 "runStatus": trace.status,
                 "missingFinalContains": missing,
+                "missingFinalContainsAny": missing_any,
                 "forbiddenFinalContains": forbidden,
             },
         )

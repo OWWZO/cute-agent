@@ -250,6 +250,16 @@ flowchart LR
 
 ## 核心亮点
 
+### 评测与 Agent 对照
+
+仓库内置 `evals/agent` 评测侧车，支持同一题目集分别运行 Cute Agent 与 Codex CLI，
+再用确定性 Scorer 比较任务结果、工作区状态、耗时和 Token。评测工作区可运行在
+local 或 E2B 后端；E2B 会同步远端新增、修改和删除，`input/**` 保持只向远端推送，
+发生并发冲突时显式失败而不是覆盖用户文件。
+
+完整启动方式、沙箱配置和同步边界见
+[`evals/agent/README.md`](evals/agent/README.md)。
+
 ### 1. Observe：深度研究、NL2SQL 与 RAG
 
 Cute 将“搜索”视为一个可以继续执行的研究过程，而不是一次关键词查询。

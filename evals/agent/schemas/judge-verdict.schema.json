@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/judge-verdict.schema.json",
+  "title": "Cute-Agent Bench Semantic Judge Verdict",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "rubricId",
+    "rubricHash",
+    "caseId",
+    "agent",
+    "attempt",
+    "status",
+    "verdict",
+    "confidence",
+    "summary",
+    "weightedScore",
+    "semanticPass",
+    "dimensions",
+    "assertions",
+    "limitations",
+    "judge",
+    "rawResponse",
+    "error",
+    "promptInjectionSuspected"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "rubricId": {"type": "string", "minLength": 1},
+    "rubricHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "caseId": {"type": "string", "minLength": 1},
+    "agent": {"type": "string", "minLength": 1},
+    "attempt": {"type": "integer", "minimum": 1},
+    "status": {
+      "type": "string",
+      "enum": ["verified", "unverified", "disputed"]
+    },
+    "verdict": {"type": "string", "enum": ["pass", "fail", "unknown"]},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "summary": {"type": "string"},
+    "weightedScore": {"type": ["number", "null"]},
+    "semanticPass": {"type": ["boolean", "null"]},
+    "dimensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "score",
+          "weight",
+          "passed",
+          "reason",
+          "evidence"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "score": {"type": "number", "minimum": 0, "maximum": 5},
+          "weight": {"type": "number", "exclusiveMinimum": 0},
+          "passed": {"type": "boolean"},
+          "reason": {"type": "string"},
+          "evidence": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/evidence"}
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["assertion", "met", "reason", "evidence"],
+        "properties": {
+          "assertion": {"type": "string", "minLength": 1},
+          "met": {"type": "boolean"},
+          "reason": {"type": "string"},
+          "evidence": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/evidence"}
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "judge": {
+      "type": "object",
+      "required": ["model", "promptHash"],
+      "properties": {
+        "model": {"type": ["string", "null"]},
+        "promptHash": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rawResponse": {"type": ["string", "null"]},
+    "error": {"type": ["object", "null"]},
+    "promptInjectionSuspected": {"type": "boolean"}
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "required": ["kind", "id", "path", "quote"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "final_text",
+            "conversation",
+            "tool_call",
+            "workspace_file",
+            "deterministic_score"
+          ]
+        },
+        "id": {"type": ["string", "null"]},
+        "path": {"type": ["string", "null"]},
+        "quote": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

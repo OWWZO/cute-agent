@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/compare-trace.schema.json",
+  "title": "Cute-Agent Bench Normalized Comparison Trace",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "producer",
+    "run",
+    "llmInvocations",
+    "toolInvocations",
+    "artifacts",
+    "environment"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "producer": {
+      "type": "object",
+      "required": ["agent"],
+      "properties": {
+        "agent": {"type": "string"},
+        "runtimeVersion": {"type": ["string", "null"]},
+        "exportedAt": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "run": {
+      "type": "object",
+      "required": ["caseId", "requestId", "status", "finalSummaryText"],
+      "properties": {
+        "caseId": {"type": "string"},
+        "requestId": {"type": "string"},
+        "status": {"type": "string"},
+        "finalSummaryText": {"type": ["string", "null"]},
+        "durationMs": {"type": ["integer", "null"]},
+        "totalTokens": {"type": ["integer", "null"]},
+        "promptTokens": {"type": ["integer", "null"]},
+        "completionTokens": {"type": ["integer", "null"]},
+        "errorCode": {"type": ["string", "null"]},
+        "errorMessage": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "llmInvocations": {"type": "array", "items": {"type": "object"}},
+    "toolInvocations": {"type": "array", "items": {"type": "object"}},
+    "artifacts": {"type": "array", "items": {"type": "object"}},
+    "contextEvents": {"type": "array", "items": {"type": "object"}},
+    "conversation": {"type": "array", "items": {"type": "object"}},
+    "environment": {
+      "type": "object",
+      "required": ["agent", "workspace", "datasetHash", "mode"],
+      "properties": {
+        "agent": {"type": "string"},
+        "agentVersion": {"type": ["string", "null"]},
+        "workspace": {"type": "string"},
+        "workspaceHash": {"type": ["string", "null"]},
+        "datasetHash": {"type": "string"},
+        "mode": {"type": "string"},
+        "network": {"type": "object"},
+        "budgets": {"type": "object"},
+        "adapter": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "raw": {"type": "object"}
+  },
+  "additionalProperties": true
+}

@@ -139,10 +139,12 @@ def test_conversation_manifest_carries_memory_seed_and_turn_budgets(
                         {
                             "caseId": "memory-case",
                             "conversationId": "session-1",
-                            "status": "SUCCESS",
+                            "status": "FAILED",
                             "finalText": "FINAL_ANSWER: ok",
                             "turns": [],
                             "tracePaths": [],
+                            "error": "evaluation budget exceeded: total_tokens",
+                            "errorCode": "EVAL_BUDGET_EXCEEDED",
                         }
                     ]
                 }
@@ -198,3 +200,4 @@ def test_conversation_manifest_carries_memory_seed_and_turn_budgets(
     assert row["answerContract"]["linePrefix"] == "FINAL_ANSWER:"
     assert row["independentTurns"] is True
     assert result.task_id == "memory-case"
+    assert result.error_code == "EVAL_BUDGET_EXCEEDED"

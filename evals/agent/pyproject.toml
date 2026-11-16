@@ -30,6 +30,11 @@ judge = [
     "scikit-learn>=1.5,<2",
     "tqdm>=4.65,<5",
 ]
+service = [
+    "fastapi>=0.115,<1",
+    "httpx>=0.27,<1",
+    "uvicorn[standard]>=0.30,<1",
+]
 memoryagentbench = [
     "nltk>=3.8,<4",
     "pyarrow>=15,<27",
@@ -90,6 +95,12 @@ packages = ["src/cute_evals"]
 "schemas/judge_benchmark.schema.json" = "cute_evals/schemas/judge_benchmark.schema.json"
 "schemas/trajectory_quality.schema.json" = "cute_evals/schemas/trajectory_quality.schema.json"
 "schemas/agent_benchmark.schema.json" = "cute_evals/schemas/agent_benchmark.schema.json"
+"schemas/compare-case.schema.json" = "cute_evals/schemas/compare-case.schema.json"
+"schemas/compare-trace.schema.json" = "cute_evals/schemas/compare-trace.schema.json"
+"schemas/compare-report.schema.json" = "cute_evals/schemas/compare-report.schema.json"
+"schemas/judge-verdict.schema.json" = "cute_evals/schemas/judge-verdict.schema.json"
+"schemas/semantic-judge-report.schema.json" = "cute_evals/schemas/semantic-judge-report.schema.json"
+"schemas/task-review.schema.json" = "cute_evals/schemas/task-review.schema.json"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0",
+  "suite": "compare-analytics",
+  "version": 1,
+  "description": "SQLite-backed analytics tasks for comparing Cute Agent and Codex CLI.",
+  "cases": [
+    {
+      "id": "analytics.orders.completed-total",
+      "query": "Using data/analytics.sqlite, compute the total amount of completed orders. Reply with the numeric result in the form RESULT: <value>.",
+      "workspace": {"template": "workspaces/analytics"},
+      "expected": {"finalContains": ["RESULT: 1000"]},
+      "budgets": {"maxWallMs": 180000, "maxTotalTokens": 150000, "maxToolCalls": 30},
+      "network": {"mode": "deny", "hosts": []},
+      "metadata": {"taskType": "sql-aggregation", "risk": "low"}
+    },
+    {
+      "id": "analytics.region.highest-revenue",
+      "query": "Using data/analytics.sqlite, find the customer region with the highest completed-order revenue. Reply in the form RESULT: <region>.",
+      "workspace": {"template": "workspaces/analytics"},
+      "expected": {"finalContains": ["RESULT: East"]},
+      "budgets": {"maxWallMs": 180000, "maxTotalTokens": 150000, "maxToolCalls": 30},
+      "network": {"mode": "deny", "hosts": []},
+      "metadata": {"taskType": "sql-join", "risk": "low"}
+    },
+    {
+      "id": "analytics.inventory.value",
+      "query": "Using data/analytics.sqlite, calculate the total inventory value as stock multiplied by unit_cost. Reply with the numeric result in the form RESULT: <value>.",
+      "workspace": {"template": "workspaces/analytics"},
+      "expected": {"finalContains": ["RESULT: 387.5"]},
+      "budgets": {"maxWallMs": 180000, "maxTotalTokens": 150000, "maxToolCalls": 30},
+      "network": {"mode": "deny", "hosts": []},
+      "metadata": {"taskType": "sql-aggregation", "risk": "low"}
+    },
+    {
+      "id": "analytics.products.null-category",
+      "query": "Using data/analytics.sqlite, identify the product whose category_id is NULL. Reply in the form RESULT: <product name>.",
+      "workspace": {"template": "workspaces/analytics"},
+      "expected": {"finalContains": ["RESULT: Mystery"]},
+      "budgets": {"maxWallMs": 180000, "maxTotalTokens": 150000, "maxToolCalls": 30},
+      "network": {"mode": "deny", "hosts": []},
+      "metadata": {"taskType": "sql-null-handling", "risk": "low"}
+    },
+    {
+      "id": "analytics.orders.average-completed",
+      "query": "Using data/analytics.sqlite, calculate the average completed-order amount. Reply with the numeric result in the form RESULT: <value>.",
+      "workspace": {"template": "workspaces/analytics"},
+      "expected": {"finalContainsAny": ["RESULT: 200", "RESULT: 200.0"]},
+      "budgets": {"maxWallMs": 180000, "maxTotalTokens": 150000, "maxToolCalls": 30},
+      "network": {"mode": "deny", "hosts": []},
+      "metadata": {"taskType": "sql-aggregation", "risk": "low"}
+    },
+    {
+      "id": "analytics.daily.total-revenue",
+      "query": "Using data/analytics.sqlite, calculate total daily_sales revenue. Reply with the numeric result in the form RESULT: <value>.",
+      "workspace": {"template": "workspaces/analytics"},
+      "expected": {"finalContains": ["RESULT: 810.75"]},
+      "budgets": {"maxWallMs": 180000, "maxTotalTokens": 150000, "maxToolCalls": 30},
+      "network": {"mode": "deny", "hosts": []},
+      "metadata": {"taskType": "sql-aggregation", "risk": "low"}
+    },
+    {
+      "id": "analytics.daily.best-day",
+      "query": "Using data/analytics.sqlite, find the sale_date with the highest daily_sales revenue. Reply in the form RESULT: <YYYY-MM-DD>.",
+      "workspace": {"template": "workspaces/analytics"},
+      "expected": {"finalContains": ["RESULT: 2026-11-01"]},
+      "budgets": {"maxWallMs": 180000, "maxTotalTokens": 150000, "maxToolCalls": 30},
+      "network": {"mode": "deny", "hosts": []},
+      "metadata": {"taskType": "sql-ranking", "risk": "low"}
+    },
+    {
+      "id": "analytics.artifact.hardware-product",
+      "query": "Using data/analytics.sqlite, find the hardware product and write output/hardware-product.txt containing exactly one line in the form Hardware: <product name>. Do not include the product id or other fields. Reply exactly DONE.",
+      "workspace": {"template": "workspaces/analytics"},
+      "expected": {
+        "finalContains": ["DONE"],
+        "workspaceChecks": [
+          {"path": "output/hardware-product.txt", "contains": ["Hardware: Widget"]}
+        ]
+      },
+      "budgets": {"maxWallMs": 180000, "maxTotalTokens": 150000, "maxToolCalls": 30},
+      "network": {"mode": "deny", "hosts": []},
+      "metadata": {"taskType": "sql-artifact", "risk": "medium"}
+    }
+  ]
+}

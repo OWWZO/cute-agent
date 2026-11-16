@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/compare-report.schema.json",
+  "title": "Cute-Agent Bench Agent Comparison Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "suite",
+    "datasetHash",
+    "mode",
+    "repeat",
+    "agents",
+    "summary",
+    "cases"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "generatedAt": {"type": "string"},
+    "suite": {"type": "string"},
+    "datasetHash": {"type": "string"},
+    "mode": {"enum": ["controlled", "product-default"]},
+    "repeat": {"type": "integer", "minimum": 1},
+    "agents": {"type": "object"},
+    "summary": {"type": "object"},
+    "cases": {"type": "array", "items": {"type": "object"}},
+    "environment": {"type": "object"}
+  },
+  "additionalProperties": true
+}

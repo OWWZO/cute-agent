@@ -14,10 +14,14 @@ import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.askuser.IUserQuestionRepository;
+import org.wwz.ai.domain.agent.runtime.askuser.UserQuestionRecord;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,9 +81,17 @@ public final class EvalLiveRunnerCli {
         try (ConfigurableApplicationContext context = application.run()) {
             AgentDispatchService dispatch = context.getBean(AgentDispatchService.class);
             ExecutionLedgerQueryService query = context.getBean(ExecutionLedgerQueryService.class);
+            IUserQuestionRepository userQuestions = context.getBean(IUserQuestionRepository.class);
             JSONArray results = new JSONArray();
             for (int i = 0; i < cases.size(); i++) {
-                results.add(runCase(cases.getJSONObject(i), outDir, dispatch, query, environment));
+                results.add(runCase(
+                        cases.getJSONObject(i),
+                        outDir,
+                        dispatch,
+                        query,
+                        userQuestions,
+                        environment
+                ));
             }
             JSONObject result = new JSONObject();
             result.put("schemaVersion", "1.0");
@@ -93,6 +105,7 @@ public final class EvalLiveRunnerCli {
                                       Path outDir,
                                       AgentDispatchService dispatch,
                                       ExecutionLedgerQueryService query,
+                                      IUserQuestionRepository userQuestions,
                                       JSONObject environment) throws Exception {
         String caseId = evalCase.getString("id");
         String caseQuery = evalCase.getString("query");
@@ -102,16 +115,15 @@ public final class EvalLiveRunnerCli {
         String suffix = UUID.randomUUID().toString().replace("-", "");
         String runPrefix = System.getenv("CUTE_EVAL_RUN_PREFIX");
         String prefix = runPrefix == null || runPrefix.isBlank() ? "" : runPrefix + "-";
-        String requestId = prefix + "eval-live-" + caseId.replaceAll("[^A-Za-z0-9_-]", "-") + "-" + suffix;
+        String requestId = requestId(prefix, suffix);
         String sessionId = prefix + "eval-live-session-" + suffix;
-        AgentExecutionCommand request = AgentExecutionCommand.builder()
-                .requestId(requestId)
-                .sessionId(sessionId)
-                .userId("eval-user")
-                .query(caseQuery)
-                .agentType(AgentType.REACT.getValue())
-                .isStream(Boolean.TRUE)
-                .build();
+        String workspaceRoot = evalCase.getString("workspaceRoot");
+        AgentExecutionCommand request = executionCommand(
+                requestId,
+                sessionId,
+                caseQuery,
+                workspaceRoot
+        );
 
         String error = null;
         try {
@@ -140,19 +152,83 @@ public final class EvalLiveRunnerCli {
             return result;
         }
 
+        Integer runStatus = detail.getRun().getStatus();
+        String finalText = detail.getRun().getFinalSummaryText();
+        if (runStatus != null
+                && runStatus == ExecutionLedgerConstants.STATUS_WAITING_INPUT) {
+            finalText = pendingQuestionText(userQuestions.listOpenBySessionId(sessionId));
+            if (finalText == null || finalText.isBlank()) {
+                finalText = detail.getRun().getErrorMsg();
+            }
+        }
         JSONObject trace = EvalFixtureRunnerCli.toTrace(caseId, detail, environment);
+        if (runStatus != null
+                && runStatus == ExecutionLedgerConstants.STATUS_WAITING_INPUT) {
+            JSONObject traceRun = trace.getJSONObject("run");
+            traceRun.put("finalSummaryText", finalText);
+            traceRun.put("evaluationStatus", "WAITING_INPUT");
+            traceRun.put("status", "SUCCESS");
+        }
         Path caseDir = outDir.resolve("traces").resolve(caseId);
         Files.createDirectories(caseDir);
         Files.writeString(caseDir.resolve("trace.json"), trace.toJSONString(), StandardCharsets.UTF_8);
-        result.put("status", detail.getRun().getStatus() == null
+        result.put("status", runStatus == null
                 ? "UNKNOWN"
-                : EvalFixtureRunnerCli.statusName(detail.getRun().getStatus()));
-        result.put("finalText", detail.getRun().getFinalSummaryText());
+                : runStatus == ExecutionLedgerConstants.STATUS_WAITING_INPUT
+                ? "SUCCESS"
+                : EvalFixtureRunnerCli.statusName(runStatus));
+        result.put("finalText", finalText);
         result.put("tracePath", "traces/" + caseId + "/trace.json");
         if (error != null) {
             result.put("error", error);
         }
         return result;
+    }
+
+    static String pendingQuestionText(List<UserQuestionRecord> records) {
+        if (records == null || records.isEmpty()) {
+            return null;
+        }
+        StringBuilder text = new StringBuilder();
+        for (UserQuestionRecord record : records) {
+            for (Map<String, Object> question : record.getQuestions() == null
+                    ? List.<Map<String, Object>>of()
+                    : record.getQuestions()) {
+                Object value = question.get("question");
+                if (value == null || value.toString().isBlank()) {
+                    continue;
+                }
+                if (text.length() > 0) {
+                    text.append('\n');
+                }
+                text.append(value);
+            }
+        }
+        return text.length() == 0 ? null : text.toString();
+    }
+
+    static String requestId(String prefix, String suffix) {
+        String head = prefix + "eval-live-";
+        int suffixLength = Math.min(24, 64 - head.length());
+        if (suffixLength < 8) {
+            throw new IllegalArgumentException("CUTE_EVAL_RUN_PREFIX is too long");
+        }
+        return head + suffix.substring(0, suffixLength);
+    }
+
+    static AgentExecutionCommand executionCommand(String requestId,
+                                                  String sessionId,
+                                                  String query,
+                                                  String workspaceRoot) {
+        return AgentExecutionCommand.builder()
+                .requestId(requestId)
+                .sessionId(sessionId)
+                .userId("eval-user")
+                .query(query)
+                .agentType(AgentType.REACT.getValue())
+                .isStream(Boolean.TRUE)
+                .workspaceRoot(workspaceRoot)
+                .build();
     }
 
     private static ExecutionRunDetail awaitTerminalRun(ExecutionLedgerQueryService query,

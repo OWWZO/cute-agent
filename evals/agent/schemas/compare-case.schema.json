@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/compare-case.schema.json",
+  "title": "Cute-Agent Bench Agent Comparison Dataset",
+  "type": "object",
+  "required": ["schemaVersion", "suite", "version", "cases"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "suite": {"type": "string", "minLength": 1},
+    "version": {"type": "integer", "minimum": 1},
+    "description": {"type": "string"},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "query", "workspace", "expected"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "hardGate": {"type": "boolean"},
+          "query": {"type": "string", "minLength": 1},
+          "workspace": {
+            "type": "object",
+            "required": ["template"],
+            "properties": {
+              "template": {"type": "string", "minLength": 1},
+              "readOnlyPaths": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+                "default": []
+              }
+            },
+            "additionalProperties": false
+          },
+          "expected": {
+            "type": "object",
+            "properties": {
+              "finalContains": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": []
+              },
+              "finalContainsAny": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": []
+              },
+              "finalNotContains": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": []
+              },
+              "requiredTools": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": []
+              },
+              "forbiddenTools": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": []
+              },
+              "minArtifacts": {"type": "integer", "minimum": 0, "default": 0},
+              "workspaceChecks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["path"],
+                  "properties": {
+                    "path": {"type": "string", "minLength": 1},
+                    "exists": {"type": "boolean", "default": true},
+                    "contains": {
+                      "type": "array",
+                      "items": {"type": "string"},
+                      "default": []
+                    },
+                    "notContains": {
+                      "type": "array",
+                      "items": {"type": "string"},
+                      "default": []
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "default": []
+              }
+            },
+            "additionalProperties": false
+          },
+          "budgets": {
+            "type": "object",
+            "properties": {
+              "maxWallMs": {"type": ["integer", "null"], "minimum": 1},
+              "maxTotalTokens": {"type": ["integer", "null"], "minimum": 1},
+              "maxToolCalls": {"type": ["integer", "null"], "minimum": 0},
+              "maxSteps": {"type": ["integer", "null"], "minimum": 1}
+            },
+            "additionalProperties": false
+          },
+          "network": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["deny", "allowlist", "allow"]
+              },
+              "hosts": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": []
+              }
+            },
+            "additionalProperties": false
+          },
+          "judge": {
+            "type": "object",
+            "required": ["enabled", "rubricId"],
+            "properties": {
+              "enabled": {"type": "boolean"},
+              "mode": {"const": "advisory"},
+              "rubricId": {
+                "type": "string",
+                "enum": [
+                  "safety.v1",
+                  "clarification.v1",
+                  "failure-honesty.v1",
+                  "artifact-report.v1"
+                ]
+              },
+              "requiredEvidence": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "final_text",
+                    "conversation",
+                    "tool_calls",
+                    "workspace",
+                    "deterministic_scores"
+                  ]
+                },
+                "default": ["final_text"]
+              },
+              "dimensions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": []
+              },
+              "passThreshold": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 5,
+                "default": 4.0
+              },
+              "vetoDimensions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": []
+              }
+            },
+            "additionalProperties": false
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "taskType": {"type": "string"},
+              "risk": {"enum": ["low", "medium", "high"]},
+              "description": {"type": "string"}
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

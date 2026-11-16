@@ -470,6 +470,8 @@ def merge_trace(
     environment_snapshots: list[dict[str, Any]],
     termination_reason: str,
     error: str | None = None,
+    error_code: str | None = None,
+    agent: str = "cute-agent",
 ) -> RunTrace:
     if not turn_traces:
         trace = _failed_trace(
@@ -515,7 +517,7 @@ def merge_trace(
         duration_ms = _sum_optional([item.duration_ms for item in turn_traces])
         payload = {
             "schemaVersion": "1.0",
-            "producer": {"agent": "cute-agent", "exportedAt": _now()},
+            "producer": {"agent": agent, "exportedAt": _now()},
             "run": {
                 "caseId": task.id,
                 "conversationId": conversation_id,
@@ -556,6 +558,9 @@ def merge_trace(
     )
     trace.raw["environmentSnapshots"] = environment_snapshots
     trace.raw["snapshotSource"] = trace.raw.get("snapshotSource") or "unavailable"
+    if error_code and trace.status != "SUCCESS":
+        trace.raw.setdefault("run", {})["errorCode"] = error_code
+    trace.raw.setdefault("producer", {})["agent"] = agent
     trace.conversation = conversation
     trace.conversation_source = str(trace.raw["conversationSource"])
     trace.context_events = list(trace.raw.get("contextEvents") or [])

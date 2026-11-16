@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/semantic-judge-report.schema.json",
+  "title": "Cute-Agent Bench Semantic Judge Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "mode",
+    "officialScore",
+    "gateEligible",
+    "scopes",
+    "sourceReports",
+    "summary",
+    "verdicts"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "generatedAt": {"type": "string"},
+    "mode": {"const": "advisory"},
+    "officialScore": {"const": false},
+    "gateEligible": {"const": false},
+    "scopes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "sourceReports": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "eligibleRuns",
+        "verifiedRuns",
+        "unverifiedRuns",
+        "disputedRuns",
+        "judgeCoverage",
+        "verdicts",
+        "agents"
+      ],
+      "additionalProperties": true
+    },
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "rubricId",
+          "rubricHash",
+          "caseId",
+          "agent",
+          "attempt",
+          "status",
+          "verdict",
+          "confidence",
+          "summary",
+          "weightedScore",
+          "semanticPass",
+          "dimensions",
+          "assertions",
+          "limitations",
+          "judge",
+          "rawResponse",
+          "error",
+          "promptInjectionSuspected"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -39,6 +39,7 @@ class JavaConversationResult:
     traces: list[RunTrace]
     trace_paths: list[str]
     error: str | None = None
+    error_code: str | None = None
 
 
 def _maven_command() -> str:
@@ -621,4 +622,5 @@ def run_java_conversation(
             traces=traces,
             trace_paths=trace_paths,
             error=row.get("error"),
+            error_code=row.get("errorCode"),
         )

@@ -1,0 +1,11 @@
+order_id,customer_id,region,amount
+1,c1,east,10
+2,c2,west,75
+3,c3,west,55
+4,c1,east,25
+5,c4,north,5
+6,c5,south,80
+7,c6,east,50
+8,c7,west,20
+9,c8,north,100
+10,c9,south,45

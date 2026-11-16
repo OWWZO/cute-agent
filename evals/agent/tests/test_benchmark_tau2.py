@@ -13,6 +13,7 @@ from cute_evals.benchmarks.base import BenchmarkTask, PreparedTask
 from cute_evals.benchmarks.tau2 import adapter as tau2_adapter
 from cute_evals.benchmarks.tau2.adapter import Tau2Adapter, Tau2UserSimulator
 from cute_evals.benchmarks.tau2.adapter import Tau2TaskServer
+from cute_evals.benchmarks.tau2 import mcp_server as tau2_mcp
 from cute_evals.models import RunTrace
 
 
@@ -404,3 +405,65 @@ def test_tau2_collect_closes_owned_server(tmp_path: Path) -> None:
     adapter.collect(task, trace, "trace.json", prepared=prepared)
 
     assert server.closed is True
+
+
+def test_tau2_mcp_server_exposes_official_tools_and_forwards_calls(
+    monkeypatch,
+) -> None:
+    calls: list[tuple[str, str, dict]] = []
+
+    def fake_request(endpoint: str, path: str, payload: dict):
+        calls.append((endpoint, path, payload))
+        if path == "/tools":
+            return [
+                {
+                    "name": "get_user_details",
+                    "description": "Look up a user",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"user_id": {"type": "string"}},
+                    },
+                }
+            ]
+        return {"user_id": payload["arguments"]["user_id"]}
+
+    monkeypatch.setattr(tau2_mcp, "_request", fake_request)
+    server = tau2_mcp.Tau2McpServer("http://127.0.0.1:1234")
+
+    listed = server.handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    )
+    called = server.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "get_user_details",
+                "arguments": {"user_id": "user-1"},
+            },
+        }
+    )
+
+    assert listed["result"]["tools"] == [
+        {
+            "name": "get_user_details",
+            "description": "Look up a user",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"user_id": {"type": "string"}},
+            },
+        }
+    ]
+    assert called["result"]["isError"] is False
+    assert json.loads(called["result"]["content"][0]["text"]) == {
+        "user_id": "user-1"
+    }
+    assert calls[-1] == (
+        "http://127.0.0.1:1234",
+        "/call",
+        {
+            "toolName": "get_user_details",
+            "arguments": {"user_id": "user-1"},
+        },
+    )

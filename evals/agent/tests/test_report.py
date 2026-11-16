@@ -335,6 +335,7 @@ def test_report_separates_answer_quality_from_slo_budget(tmp_path: Path) -> None
     assert report["caseSummaries"][0]["qualityStatus"] == "passed"
     assert report["caseSummaries"][0]["sloStatus"] == "failed"
     assert report["caseSummaries"][0]["status"] == "failed"
+    assert report["caseSummaries"][0]["failureCategories"] == {"budget": 1}
 
 
 def test_report_summarizes_compaction_and_control(tmp_path: Path) -> None:

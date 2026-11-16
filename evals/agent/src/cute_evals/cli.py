@@ -5,7 +5,7 @@ import hashlib
 import json
 import os
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta
 from importlib.util import find_spec
 from pathlib import Path
@@ -19,6 +19,7 @@ from .ab_runner import (
     run_experiment,
 )
 from .benchmarks.bird import BirdAdapter
+from .benchmarks.budget import BudgetPolicy, policy_from_args
 from .benchmarks.compactbench import CompactBenchAdapter
 from .benchmarks.deepresearch import DeepResearchAdapter
 from .benchmarks.deepresearch.runner import run_deepsearch
@@ -34,6 +35,16 @@ from .benchmarks.rag import RagAdapter, run_mrag
 from .benchmarks.spider2 import Spider2Adapter
 from .benchmarks.tau2 import Tau2Adapter, Tau2UserSimulator
 from .case_loader import load_case_dirs
+from .compare.runner import (
+    materialize_compare_dataset,
+    run_compare,
+    validate_compare_dataset,
+)
+from .compare.codex_adapter import (
+    CodexOptions,
+    codex_version,
+    run_codex_case,
+)
 from .data_dataset import load_data_dataset_manifest
 from .gate import evaluate_gate
 from .inspect_runner import run_inspect_attempt
@@ -79,6 +90,12 @@ from .runtime import (
     snapshot_payload,
 )
 from .scorers import score_case
+from .semantic_judge import (
+    SemanticJudgeConfig,
+    build_semantic_report,
+    run_reports,
+    write_semantic_report,
+)
 from .trajectory_quality import (
     QualityJudgeConfig,
     resolve_trace_paths,
@@ -151,6 +168,20 @@ def _judge_from_args(args: argparse.Namespace) -> JudgeConfig:
         model=args.judge_model or os.environ.get("CUTE_EVAL_JUDGE_MODEL"),
         base_url=args.judge_base_url or os.environ.get("CUTE_EVAL_JUDGE_BASE_URL"),
         api_key=args.judge_api_key or os.environ.get("CUTE_EVAL_JUDGE_API_KEY"),
+        timeout_seconds=getattr(args, "judge_timeout", 120),
+    )
+
+
+def _semantic_judge_config(args: argparse.Namespace) -> SemanticJudgeConfig:
+    return SemanticJudgeConfig(
+        model=args.judge_model or os.environ.get("CUTE_EVAL_JUDGE_MODEL"),
+        base_url=args.judge_base_url or os.environ.get("CUTE_EVAL_JUDGE_BASE_URL"),
+        api_key=args.judge_api_key or os.environ.get("CUTE_EVAL_JUDGE_API_KEY"),
+        mode=args.mode,
+        timeout_seconds=args.judge_timeout,
+        max_evidence_chars=args.judge_max_evidence_chars,
+        max_tool_result_chars=args.judge_max_tool_result_chars,
+        max_file_chars=args.judge_max_file_chars,
     )
 
 
@@ -833,6 +864,33 @@ def _benchmark_settings(args: argparse.Namespace) -> tuple[str, int, Path]:
     return mode, repeat, output_dir
 
 
+def _benchmark_agent(args: argparse.Namespace) -> str:
+    return "codex-cli" if getattr(args, "agent", "cute") == "codex" else AGENT_ID
+
+
+def _codex_options(args: argparse.Namespace) -> CodexOptions:
+    return CodexOptions(
+        command=args.codex_command,
+        model=args.codex_model,
+        sandbox=args.codex_sandbox,
+        approval=args.codex_approval,
+    )
+
+
+def _prompt_with_contract(case) -> str:
+    instruction = (case.answer_contract or {}).get("instruction")
+    if not instruction:
+        return case.query
+    return f"{case.query}\n\n{instruction}"
+
+
+def _codex_timeout_seconds(case, timeout: int) -> int:
+    max_wall_ms = case.budgets.max_wall_ms
+    if max_wall_ms is None:
+        return timeout
+    return min(timeout, max(1, (int(max_wall_ms) + 999) // 1000))
+
+
 def _report_benchmark(
     *,
     adapter,
@@ -842,11 +900,19 @@ def _report_benchmark(
     mode: str,
     repeat: int,
     require_official: bool = False,
+    agent: str | None = None,
+    budget_policy: BudgetPolicy | None = None,
 ) -> int:
     metadata = adapter.report_metadata()
+    if budget_policy is not None:
+        metadata = {
+            **metadata,
+            "budgetPolicy": budget_policy.to_dict(),
+        }
+    subject_agent = agent or AGENT_ID
     report = build_report(
         profile=args.profile,
-        agent=AGENT_ID,
+        agent=subject_agent,
         cases=results,
         output_dir=output_dir,
         environment={
@@ -858,10 +924,20 @@ def _report_benchmark(
             ),
             "runnerMode": mode,
             "repeat": repeat,
+            "budgetMode": (
+                budget_policy.mode if budget_policy is not None else "product"
+            ),
+            "budgetPolicy": (
+                budget_policy.to_dict() if budget_policy is not None else None
+            ),
             "sampling": {
                 "temperature": 0.0,
                 "mode": "deterministic",
-                "source": "application-eval.yml",
+                "source": (
+                    "codex-cli"
+                    if subject_agent == "codex-cli"
+                    else "application-eval.yml"
+                ),
             },
             "suite": f"{adapter.name}-{metadata['split']}",
             "datasetHash": metadata["datasetHash"],
@@ -873,6 +949,8 @@ def _report_benchmark(
     summary = report["summary"]
     print(
         f"cute-evals benchmark={adapter.name} version={adapter.version} "
+        f"agent={subject_agent} "
+        f"budget-mode={budget_policy.mode if budget_policy else 'product'} "
         f"cases={summary['caseCount']} attempts={summary['attemptCount']} "
         f"passed={summary['passed']} failed={summary['failed']} "
         f"unstable={summary['unstable']} unverified={summary['unverified']} "
@@ -898,7 +976,10 @@ def _report_benchmark(
                 f"metric={official.get('metric')}"
             )
     print(f"report: {output_dir / 'report.html'}")
-    blocked = summary["failed"] or summary["unstable"]
+    if budget_policy is not None and budget_policy.mode == "capability":
+        blocked = summary["qualityPassAtKCount"] != summary["caseCount"]
+    else:
+        blocked = summary["failed"] or summary["unstable"]
     require_unverified = require_official or getattr(args, "require_judge", False)
     if require_unverified and summary["unverified"]:
         blocked = True
@@ -917,6 +998,18 @@ def _run_gaia_benchmark(args: argparse.Namespace) -> int:
     )
     tasks = adapter.tasks(args.split)
     mode, repeat, output_dir = _benchmark_settings(args)
+    budget_policy = policy_from_args(args)
+    judge = _judge_from_args(args)
+    if getattr(args, "agent", "cute") == "codex":
+        if mode != "live":
+            raise ValueError("Codex GAIA benchmark requires live mode")
+        return _run_gaia_codex_benchmark(
+            args,
+            adapter,
+            tasks,
+            repeat=repeat,
+            output_dir=output_dir,
+        )
     if not args.skip_build:
         compile_java_fixture_runner()
     results: list[CaseResult] = []
@@ -927,7 +1020,10 @@ def _run_gaia_benchmark(args: argparse.Namespace) -> int:
             adapter.prepare(task, attempt_dir / "workspace" / task.id)
             for task in tasks
         ]
-        cases = [adapter.case_for_task(item.task) for item in prepared]
+        cases = [
+            budget_policy.apply(adapter.case_for_task(item.task))
+            for item in prepared
+        ]
         timeout_seconds = _case_batch_timeout_seconds(cases, args.timeout)
         traces = run_java_cases(
             cases,
@@ -954,7 +1050,7 @@ def _run_gaia_benchmark(args: argparse.Namespace) -> int:
                 f"{attempt_relative}/traces/{item.task.id}/trace.json",
                 prepared=item,
             )
-            result = adapter.score(run)
+            result = adapter.score(run, case=case)
             result.attempt = attempt
             results.append(result)
     return _report_benchmark(
@@ -965,6 +1061,77 @@ def _run_gaia_benchmark(args: argparse.Namespace) -> int:
         mode=mode,
         repeat=repeat,
         require_official=mode == "live",
+        budget_policy=budget_policy,
+    )
+
+
+def _run_gaia_codex_benchmark(
+    args: argparse.Namespace,
+    adapter: GAIAAdapter,
+    tasks,
+    *,
+    repeat: int,
+    output_dir: Path,
+) -> int:
+    options = _codex_options(args)
+    version = codex_version(options.command)
+    report_metadata = adapter.report_metadata()
+    budget_policy = policy_from_args(args)
+    results: list[CaseResult] = []
+    for attempt in range(1, repeat + 1):
+        attempt_relative = f"attempts/{attempt:02d}"
+        attempt_dir = output_dir / attempt_relative
+        for task in tasks:
+            prepared = adapter.prepare(
+                task,
+                attempt_dir / "workspace" / task.id,
+            )
+            case = budget_policy.apply(adapter.case_for_task(task))
+            codex_case = replace(case, query=_prompt_with_contract(case))
+            trace = run_codex_case(
+                codex_case,
+                prepared.workspace,
+                attempt_dir / "codex" / task.id,
+                options=options,
+                timeout_seconds=_codex_timeout_seconds(codex_case, args.timeout),
+                environment={
+                    "agent": "codex-cli",
+                    "agentVersion": version,
+                    "workspace": str(prepared.workspace),
+                    "datasetHash": report_metadata["datasetHash"],
+                    "split": args.split,
+                    "mode": "codex-cli",
+                    "budgetMode": budget_policy.mode,
+                },
+                app_server=True,
+                soft_budget_finalize=budget_policy.mode == "product",
+            )
+            trace_relative = f"{attempt_relative}/traces/{task.id}/trace.json"
+            trace_path = output_dir / trace_relative
+            trace_path.parent.mkdir(parents=True, exist_ok=True)
+            trace_path.write_text(
+                json.dumps(trace.raw, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            run = adapter.collect(
+                task,
+                trace,
+                trace_relative,
+                prepared=prepared,
+            )
+            result = adapter.score(run, case=case)
+            result.attempt = attempt
+            results.append(result)
+    return _report_benchmark(
+        adapter=adapter,
+        args=args,
+        results=results,
+        output_dir=output_dir,
+        mode="codex-cli",
+        repeat=repeat,
+        require_official=True,
+        agent="codex-cli",
+        budget_policy=budget_policy,
     )
 
 
@@ -1201,11 +1368,24 @@ def _run_tau2_benchmark(args: argparse.Namespace) -> int:
     )
     tasks = adapter.tasks(args.split)
     mode, repeat, output_dir = _benchmark_settings(args)
+    budget_policy = policy_from_args(args)
+    judge = _judge_from_args(args)
     if args.user_simulator_model is None:
         raise ValueError("tau2 requires --user-simulator-model")
     if args.user_simulator_base_url is None or args.user_simulator_api_key is None:
         raise ValueError(
             "tau2 requires --user-simulator-base-url and --user-simulator-api-key"
+        )
+    if getattr(args, "agent", "cute") == "codex":
+        if mode != "live":
+            raise ValueError("Codex tau2 benchmark requires live mode")
+        return _run_tau2_codex_benchmark(
+            args,
+            adapter,
+            tasks,
+            repeat=repeat,
+            output_dir=output_dir,
+            judge=judge,
         )
     if not args.skip_build:
         compile_java_fixture_runner()
@@ -1222,7 +1402,7 @@ def _run_tau2_benchmark(args: argparse.Namespace) -> int:
                     attempt_dir / "workspace" / task.id,
                     server=server,
                 )
-                case = adapter.case_for_task(prepared.task)
+                case = budget_policy.apply(adapter.case_for_task(prepared.task))
                 simulator = Tau2UserSimulator(
                     server=server,
                     model=args.user_simulator_model,
@@ -1311,6 +1491,7 @@ def _run_tau2_benchmark(args: argparse.Namespace) -> int:
                         )
                     ),
                     error=conversation.error,
+                    error_code=conversation.error_code,
                 )
                 trace_path = attempt_dir / "traces" / task.id / "trace.json"
                 trace_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1326,6 +1507,13 @@ def _run_tau2_benchmark(args: argparse.Namespace) -> int:
                         "error": str(exc),
                         "status": "infrastructure_error",
                     }
+                nl_assertion = (
+                    adapter.evaluate_nl(server, trace, judge)
+                    if (
+                        prepared.task.raw.get("evaluation_criteria") or {}
+                    ).get("nl_assertions")
+                    else None
+                )
                 run = adapter.collect(
                     prepared.task,
                     trace,
@@ -1333,7 +1521,9 @@ def _run_tau2_benchmark(args: argparse.Namespace) -> int:
                     oracle=oracle,
                     prepared=prepared,
                 )
-                result = adapter.score(run)
+                if nl_assertion is not None:
+                    run.metadata["nlAssertion"] = nl_assertion
+                result = adapter.score(run, case=case)
                 result.attempt = attempt
                 results.append(result)
             finally:
@@ -1348,6 +1538,277 @@ def _run_tau2_benchmark(args: argparse.Namespace) -> int:
         mode=mode,
         repeat=repeat,
         require_official=True,
+        budget_policy=budget_policy,
+    )
+
+
+def _run_tau2_codex_benchmark(
+    args: argparse.Namespace,
+    adapter: Tau2Adapter,
+    tasks,
+    *,
+    repeat: int,
+    output_dir: Path,
+    judge: JudgeConfig,
+) -> int:
+    options = _codex_options(args)
+    version = codex_version(options.command)
+    report_metadata = adapter.report_metadata()
+    budget_policy = policy_from_args(args)
+    mcp_script = (
+        Path(__file__).resolve().parent
+        / "benchmarks"
+        / "tau2"
+        / "mcp_server.py"
+    )
+    results: list[CaseResult] = []
+    for attempt in range(1, repeat + 1):
+        attempt_relative = f"attempts/{attempt:02d}"
+        attempt_dir = output_dir / attempt_relative
+        for task in tasks:
+            server = adapter.task_server(task).start()
+            try:
+                prepared = adapter.prepare(
+                    task,
+                    attempt_dir / "workspace" / task.id,
+                    server=server,
+                )
+                case = budget_policy.apply(adapter.case_for_task(prepared.task))
+                simulator = Tau2UserSimulator(
+                    server=server,
+                    model=args.user_simulator_model,
+                    base_url=args.user_simulator_base_url,
+                    api_key=args.user_simulator_api_key,
+                )
+                user_message = simulator.start(prepared.task)
+                if not user_message:
+                    raise RuntimeError(
+                        simulator.error()
+                        or "user simulator produced no initial message"
+                    )
+                conversation_id = f"eval-codex-{uuid4().hex}"
+                conversation_entries: list[ConversationEntry] = []
+                turn_traces: list[RunTrace] = []
+                environment_events: list[EnvironmentEvent] = []
+                session_id: str | None = None
+                token_usage_baseline = {
+                    "totalTokens": 0,
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "cachedInputTokens": 0,
+                }
+                termination_reason = "agent_failure"
+                error: str | None = None
+                error_code: str | None = None
+                max_turns = int(adapter.manifest["budgets"]["maxTurns"])
+                mcp_config = _tau2_mcp_config(
+                    mcp_script,
+                    server.endpoint,
+                )
+                for turn_index in range(1, max_turns + 1):
+                    turn_id = f"turn-{turn_index:03d}"
+                    conversation_entries.append(
+                        ConversationEntry(
+                            message_id=f"msg-{uuid4().hex[:12]}",
+                            conversation_id=conversation_id,
+                            turn_id=turn_id,
+                            turn_index=turn_index,
+                            role="user",
+                            actor="user-simulator",
+                            content=user_message,
+                        )
+                    )
+                    turn_case = replace(
+                        case,
+                        query=_prompt_with_contract(
+                            replace(case, query=user_message)
+                        ),
+                    )
+                    trace = run_codex_case(
+                        turn_case,
+                        prepared.workspace,
+                        attempt_dir
+                        / "codex"
+                        / task.id
+                        / turn_id,
+                        options=options,
+                        timeout_seconds=_codex_timeout_seconds(
+                            turn_case,
+                            args.timeout,
+                        ),
+                        environment={
+                            "agent": "codex-cli",
+                            "agentVersion": version,
+                            "workspace": str(prepared.workspace),
+                            "datasetHash": report_metadata["datasetHash"],
+                            "split": args.split,
+                            "turnId": turn_id,
+                            "officialQuery": user_message,
+                            "mode": "codex-cli",
+                            "budgetMode": budget_policy.mode,
+                        },
+                        config_overrides=mcp_config,
+                        resume_session=session_id,
+                        ephemeral=False,
+                        app_server=True,
+                        soft_budget_finalize=budget_policy.mode == "product",
+                        token_usage_baseline=token_usage_baseline,
+                    )
+                    turn_traces.append(trace)
+                    adapter_environment = (
+                        (trace.raw.get("environment") or {}).get("adapter")
+                        or {}
+                    )
+                    cumulative_usage = adapter_environment.get(
+                        "cumulativeUsage"
+                    )
+                    if isinstance(cumulative_usage, dict):
+                        token_usage_baseline = {
+                            key: int(cumulative_usage.get(key) or 0)
+                            for key in (
+                                "totalTokens",
+                                "inputTokens",
+                                "outputTokens",
+                                "cachedInputTokens",
+                            )
+                        }
+                    if session_id is None:
+                        session_id = (
+                            str((trace.raw.get("run") or {}).get("sessionId") or "")
+                            or None
+                        )
+                    assistant_message = trace.final_text
+                    conversation_entries.append(
+                        ConversationEntry(
+                            message_id=f"msg-{uuid4().hex[:12]}",
+                            conversation_id=conversation_id,
+                            turn_id=turn_id,
+                            turn_index=turn_index,
+                            role="assistant",
+                            actor="codex-cli",
+                            content=assistant_message,
+                            metadata={"runStatus": trace.status},
+                        )
+                    )
+                    for invocation in trace.tool_invocations:
+                        environment_events.append(
+                            EnvironmentEvent(
+                                event_id=f"env-{uuid4().hex[:12]}",
+                                conversation_id=conversation_id,
+                                turn_id=turn_id,
+                                event_type="tool_call",
+                                payload=invocation,
+                            ).to_dict()
+                        )
+                    if trace.status != "SUCCESS":
+                        run_payload = trace.raw.get("run") or {}
+                        error = str(
+                            run_payload.get("errorMsg")
+                            or run_payload.get("errorMessage")
+                            or f"Codex turn ended with {trace.status}"
+                        )
+                        error_code = run_payload.get("errorCode")
+                        break
+                    if error_code is not None:
+                        break
+                    next_message = simulator.respond(
+                        task=prepared.task,
+                        history=[
+                            item.to_dict() for item in conversation_entries
+                        ],
+                        assistant_message=assistant_message,
+                        environment=None,
+                    )
+                    if simulator.error():
+                        termination_reason = "user_simulator_error"
+                        error = simulator.error()
+                        break
+                    if not next_message:
+                        termination_reason = simulator.termination_reason()
+                        break
+                    user_message = next_message
+                else:
+                    termination_reason = "max_turns"
+                    error = f"conversation exceeded {max_turns} turns"
+
+                final_snapshot = snapshot_payload(
+                    "tau2-db",
+                    server.snapshot(),
+                    turn_id="final",
+                )
+                trace = merge_trace(
+                    task=prepared.task,
+                    conversation_id=conversation_id,
+                    turn_traces=turn_traces,
+                    conversation=[
+                        item.to_dict() for item in conversation_entries
+                    ],
+                    environment_events=environment_events,
+                    environment_snapshots=[final_snapshot.to_dict()],
+                    termination_reason=termination_reason,
+                    error=error,
+                    error_code=error_code,
+                    agent="codex-cli",
+                )
+                trace_relative = (
+                    f"{attempt_relative}/traces/{task.id}/trace.json"
+                )
+                trace_path = output_dir / trace_relative
+                trace_path.parent.mkdir(parents=True, exist_ok=True)
+                trace_path.write_text(
+                    json.dumps(trace.raw, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                try:
+                    oracle = adapter.evaluate(server, trace)
+                except Exception as exc:  # noqa: BLE001 - official evaluator boundary
+                    oracle = {
+                        "reward": 0.0,
+                        "error": str(exc),
+                        "status": "infrastructure_error",
+                    }
+                nl_assertion = (
+                    adapter.evaluate_nl(server, trace, judge)
+                    if (
+                        prepared.task.raw.get("evaluation_criteria") or {}
+                    ).get("nl_assertions")
+                    else None
+                )
+                run = adapter.collect(
+                    prepared.task,
+                    trace,
+                    trace_relative,
+                    oracle=oracle,
+                    prepared=prepared,
+                )
+                if nl_assertion is not None:
+                    run.metadata["nlAssertion"] = nl_assertion
+                result = adapter.score(run, case=case)
+                result.attempt = attempt
+                results.append(result)
+            finally:
+                server.close()
+    return _report_benchmark(
+        adapter=adapter,
+        args=args,
+        results=results,
+        output_dir=output_dir,
+        mode="codex-cli",
+        repeat=repeat,
+        require_official=True,
+        agent="codex-cli",
+        budget_policy=budget_policy,
+    )
+
+
+def _tau2_mcp_config(script: Path, endpoint: str) -> tuple[str, ...]:
+    command = sys.executable
+    args = [str(script), "--endpoint", endpoint]
+    return (
+        f"mcp_servers.tau2.command={json.dumps(command)}",
+        f"mcp_servers.tau2.args={json.dumps(args)}",
+        "mcp_servers.tau2.required=true",
+        'mcp_servers.tau2.default_tools_approval_mode="approve"',
     )
 
 
@@ -1657,6 +2118,13 @@ def _run_spider2_benchmark(args: argparse.Namespace) -> int:
 
 
 def benchmark_command(args: argparse.Namespace) -> int:
+    if getattr(args, "agent", "cute") == "codex" and args.name not in {
+        "gaia",
+        "tau2",
+    }:
+        raise ValueError(
+            "Codex official adapter currently supports only GAIA and tau2"
+        )
     if args.name == "gaia":
         return _run_gaia_benchmark(args)
     if args.name == "deepresearch":
@@ -1734,6 +2202,7 @@ def trajectory_quality_command(args: argparse.Namespace) -> int:
         apb_source_dir=apb_source,
         trail_source_dir=trail_source,
         concurrency=args.concurrency,
+        agent_name=args.agent,
     )
     print(
         f"trajectory quality: runs={report['metrics']['runCount']} "
@@ -2302,6 +2771,167 @@ def ab_audit_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def compare_validate_command(args: argparse.Namespace) -> int:
+    dataset = validate_compare_dataset(_resolve_compare_dataset(args.dataset))
+    print(f"dataset: {dataset.source_path}")
+    print(f"suite: {dataset.suite} version: {dataset.version}")
+    print(f"cases: {len(dataset.cases)}")
+    print(f"dataset hash: {dataset.dataset_hash}")
+    return 0
+
+
+def compare_materialize_command(args: argparse.Namespace) -> int:
+    dataset = validate_compare_dataset(_resolve_compare_dataset(args.dataset))
+    output_dir = (
+        Path(args.out).resolve()
+        if args.out
+        else _repo_root() / ".eval-runs" / "compare" / "materialized"
+    )
+    payload = materialize_compare_dataset(dataset, output_dir)
+    print(f"materialized cases: {len(payload['cases'])}")
+    print(f"dataset hash: {payload['datasetHash']}")
+    print(f"manifest: {output_dir / 'manifest.json'}")
+    return 0
+
+
+def compare_run_command(args: argparse.Namespace) -> int:
+    agents = [name.strip() for name in args.agents.split(",") if name.strip()]
+    if not agents:
+        raise ValueError("--agents must include at least one agent")
+    if len(set(agents)) != len(agents):
+        raise ValueError("--agents must not contain duplicates")
+    invalid = sorted(set(agents) - {"cute", "codex"})
+    if invalid:
+        raise ValueError(f"unsupported compare agents: {', '.join(invalid)}")
+    if args.repeat < 1:
+        raise ValueError("--repeat must be >= 1")
+    engine = args.engine
+    if engine == "auto":
+        engine = "inspect" if find_spec("inspect_ai") is not None else "native"
+
+    dataset_path = _resolve_compare_dataset(args.dataset)
+    output_dir = (
+        Path(args.out).resolve()
+        if args.out
+        else _repo_root() / ".eval-runs" / "compare" / args.mode
+    )
+    payload = run_compare(
+        dataset_path,
+        output_dir=output_dir,
+        agents=agents,
+        mode=args.mode,
+        repeat=args.repeat,
+        timeout_seconds=args.timeout,
+        java_mode=args.java_mode,
+        build=not args.skip_build,
+        cute_model=args.cute_model,
+        tool_mode=args.tool_mode,
+        codex_command=args.codex_command,
+        codex_model=args.codex_model,
+        codex_sandbox=args.codex_sandbox,
+        codex_approval=args.codex_approval,
+        engine=engine,
+        budget_policy=policy_from_args(args),
+    )
+    summary = payload["summary"]
+    print(
+        f"cute-evals compare: cases={summary['caseCount']} "
+        f"repeat={payload['repeat']} agents={','.join(agents)} "
+        f"budget-mode={payload['environment']['budgetMode']} "
+        f"adequacy={summary['sampleAdequacy']}"
+    )
+    print(f"result wins: {summary['resultWins']}")
+    print(f"efficiency wins: {summary['efficiencyWins']}")
+    if payload.get("inspectErrors"):
+        print(f"inspect errors: {payload['inspectErrors']}")
+    print(f"report: {output_dir / 'report.html'}")
+    return 1 if payload.get("hasUnavailableAgent") else 0
+
+
+def _resolve_compare_dataset(value: str) -> Path:
+    path = Path(value).resolve()
+    if path.exists():
+        return path
+    fallback = (_repo_root() / value).resolve()
+    return fallback if fallback.exists() else path
+
+
+def semantic_judge_command(args: argparse.Namespace) -> int:
+    report_paths = [Path(value).resolve() for value in args.report]
+    missing = [path for path in report_paths if not path.exists()]
+    if missing:
+        raise FileNotFoundError(f"report not found: {missing[0]}")
+    scopes = [
+        value.strip()
+        for value in args.scope.split(",")
+        if value.strip()
+    ]
+    supported = {
+        "all",
+        "safety",
+        "clarification",
+        "failure-honesty",
+        "artifact-report",
+        "tau2-nl",
+    }
+    invalid = sorted(set(scopes) - supported)
+    if invalid:
+        raise ValueError(
+            "unsupported semantic judge scope(s): " + ", ".join(invalid)
+        )
+    config = _semantic_judge_config(args)
+    cache_dir = (
+        Path(args.judge_cache_dir).resolve()
+        if args.judge_cache_dir
+        else _repo_root() / "evals" / "agent" / ".judge-cache"
+    )
+    verdicts = run_reports(
+        report_paths,
+        scopes=scopes,
+        config=config,
+        cache_dir=cache_dir,
+        dataset_path=(
+            Path(args.dataset).resolve() if args.dataset else None
+        ),
+    )
+    payload = build_semantic_report(
+        verdicts,
+        mode=args.mode,
+        scopes=scopes,
+        report_paths=report_paths,
+    )
+    output_dir = Path(args.out).resolve()
+    write_semantic_report(output_dir, payload)
+    summary = payload["summary"]
+    print(
+        "cute-evals judge: "
+        f"eligible={summary['eligibleRuns']} "
+        f"verified={summary['verifiedRuns']} "
+        f"unverified={summary['unverifiedRuns']} "
+        f"coverage={summary['judgeCoverage']:.2%}"
+    )
+    print(f"report: {output_dir / 'report.html'}")
+    if args.require_verified and summary["unverifiedRuns"]:
+        return 1
+    return 0
+
+
+def _add_budget_mode_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--budget-mode",
+        choices=["product", "capability"],
+        default="product",
+        help=(
+            "product keeps the current budget and soft finalization; "
+            "capability applies the same higher budgets to both agents"
+        ),
+    )
+    parser.add_argument("--capability-token-multiplier", type=float, default=8.0)
+    parser.add_argument("--capability-wall-multiplier", type=float, default=4.0)
+    parser.add_argument("--capability-tool-multiplier", type=float, default=4.0)
+    parser.add_argument("--capability-step-multiplier", type=float, default=4.0)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cute-evals")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -2462,6 +3092,7 @@ def build_parser() -> argparse.ArgumentParser:
     trajectory_quality.add_argument("--judge-api-key")
     trajectory_quality.add_argument("--agent-process-bench-source")
     trajectory_quality.add_argument("--trail-source")
+    trajectory_quality.add_argument("--agent")
     trajectory_quality.add_argument("--concurrency", type=int, default=1)
     trajectory_quality.add_argument("--timeout", type=int, default=300)
     trajectory_quality.set_defaults(func=trajectory_quality_command)
@@ -2557,6 +3188,42 @@ def build_parser() -> argparse.ArgumentParser:
     judge_benchmark.add_argument("--dry-run", action="store_true")
     judge_benchmark.set_defaults(func=judge_benchmark_command)
 
+    judge = subparsers.add_parser(
+        "judge",
+        help="run advisory semantic judges over existing eval reports",
+    )
+    judge_sub = judge.add_subparsers(dest="judge_command", required=True)
+    judge_run = judge_sub.add_parser(
+        "run",
+        help="judge existing traces without rerunning either agent",
+    )
+    judge_run.add_argument("--report", action="append", required=True)
+    judge_run.add_argument(
+        "--scope",
+        default="safety",
+        help=(
+            "comma-separated: safety, clarification, failure-honesty, "
+            "artifact-report, tau2-nl, all"
+        ),
+    )
+    judge_run.add_argument(
+        "--mode",
+        choices=["advisory"],
+        default="advisory",
+    )
+    judge_run.add_argument("--judge-model")
+    judge_run.add_argument("--judge-base-url")
+    judge_run.add_argument("--judge-api-key")
+    judge_run.add_argument("--judge-cache-dir")
+    judge_run.add_argument("--judge-timeout", type=int, default=120)
+    judge_run.add_argument("--judge-max-evidence-chars", type=int, default=120000)
+    judge_run.add_argument("--judge-max-tool-result-chars", type=int, default=12000)
+    judge_run.add_argument("--judge-max-file-chars", type=int, default=24000)
+    judge_run.add_argument("--dataset")
+    judge_run.add_argument("--out", required=True)
+    judge_run.add_argument("--require-verified", action="store_true")
+    judge_run.set_defaults(func=semantic_judge_command)
+
     benchmark = subparsers.add_parser(
         "benchmark",
         help="run a pinned public benchmark through its official evaluator",
@@ -2592,6 +3259,25 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--manifest")
     benchmark.add_argument("--data-home")
     benchmark.add_argument(
+        "--agent",
+        choices=["cute", "codex"],
+        default="cute",
+        help="subject agent for supported official benchmarks",
+    )
+    _add_budget_mode_arguments(benchmark)
+    benchmark.add_argument("--codex-command", default="codex")
+    benchmark.add_argument("--codex-model")
+    benchmark.add_argument(
+        "--codex-sandbox",
+        choices=["read-only", "workspace-write", "danger-full-access"],
+        default="workspace-write",
+    )
+    benchmark.add_argument(
+        "--codex-approval",
+        choices=["on-request", "never"],
+        default="never",
+    )
+    benchmark.add_argument(
         "--data-file",
         help="explicit official LongMemEval JSON file",
     )
@@ -2603,6 +3289,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--judge-model")
     benchmark.add_argument("--judge-base-url")
     benchmark.add_argument("--judge-api-key")
+    benchmark.add_argument("--judge-timeout", type=int, default=120)
     benchmark.add_argument("--clean-model")
     benchmark.add_argument("--fact-model")
     benchmark.add_argument("--jina-api-key")
@@ -2800,6 +3487,72 @@ def build_parser() -> argparse.ArgumentParser:
     ab_audit.add_argument("--out", required=True)
     ab_audit.add_argument("--cell", required=True)
     ab_audit.set_defaults(func=ab_audit_command)
+
+    compare = subparsers.add_parser(
+        "compare",
+        help="compare Cute Agent and Codex CLI on one JSON case set",
+    )
+    compare_sub = compare.add_subparsers(dest="compare_command", required=True)
+    compare_validate = compare_sub.add_parser(
+        "validate",
+        help="validate a comparison dataset and print its stable hash",
+    )
+    compare_validate.add_argument("--dataset", required=True)
+    compare_validate.set_defaults(func=compare_validate_command)
+
+    compare_materialize = compare_sub.add_parser(
+        "materialize",
+        help="copy every comparison workspace into an isolated output directory",
+    )
+    compare_materialize.add_argument("--dataset", required=True)
+    compare_materialize.add_argument("--out")
+    compare_materialize.set_defaults(func=compare_materialize_command)
+
+    compare_run = compare_sub.add_parser(
+        "run",
+        help="run the same cases through Cute Agent and Codex CLI",
+    )
+    compare_run.add_argument("--dataset", required=True)
+    compare_run.add_argument("--agents", default="cute,codex")
+    compare_run.add_argument(
+        "--mode",
+        choices=["controlled", "product-default"],
+        default="controlled",
+    )
+    _add_budget_mode_arguments(compare_run)
+    compare_run.add_argument("--repeat", type=int, default=1)
+    compare_run.add_argument("--timeout", type=int, default=600)
+    compare_run.add_argument(
+        "--java-mode",
+        choices=["fixture", "live"],
+        default="live",
+    )
+    compare_run.add_argument(
+        "--tool-mode",
+        choices=["ephemeral", "production"],
+        default="ephemeral",
+    )
+    compare_run.add_argument("--cute-model")
+    compare_run.add_argument("--codex-command", default="codex")
+    compare_run.add_argument("--codex-model")
+    compare_run.add_argument(
+        "--codex-sandbox",
+        choices=["read-only", "workspace-write", "danger-full-access"],
+        default="workspace-write",
+    )
+    compare_run.add_argument(
+        "--codex-approval",
+        choices=["on-request", "never"],
+        default="never",
+    )
+    compare_run.add_argument(
+        "--engine",
+        choices=["auto", "inspect", "native"],
+        default="auto",
+    )
+    compare_run.add_argument("--skip-build", action="store_true")
+    compare_run.add_argument("--out")
+    compare_run.set_defaults(func=compare_run_command)
     return parser
 
 

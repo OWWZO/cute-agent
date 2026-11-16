@@ -32,6 +32,7 @@
       "type": "object",
       "properties": {
         "finalContains": {"type": "array", "items": {"type": "string"}},
+        "finalContainsAny": {"type": "array", "items": {"type": "string"}},
         "finalNotContains": {"type": "array", "items": {"type": "string"}},
         "maxSteps": {"type": ["integer", "null"], "minimum": 1},
         "requiredTools": {"type": "array", "items": {"type": "string"}},

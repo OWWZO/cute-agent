@@ -17,6 +17,7 @@ def parse_time(value: str | None) -> datetime | None:
 @dataclass(slots=True)
 class ExpectedSpec:
     final_contains: list[str] = field(default_factory=list)
+    final_contains_any: list[str] = field(default_factory=list)
     final_not_contains: list[str] = field(default_factory=list)
     max_steps: int | None = None
     required_tools: list[str] = field(default_factory=list)
@@ -49,6 +50,7 @@ class JudgeConfig:
     model: str | None = None
     base_url: str | None = None
     api_key: str | None = None
+    timeout_seconds: int = 120
 
     @property
     def configured(self) -> bool:
@@ -98,6 +100,7 @@ class EvalCase:
             query=str(input_spec.get("message", "")),
             expected=ExpectedSpec(
                 final_contains=list(expected.get("finalContains") or []),
+                final_contains_any=list(expected.get("finalContainsAny") or []),
                 final_not_contains=list(expected.get("finalNotContains") or []),
                 max_steps=expected.get("maxSteps"),
                 required_tools=list(expected.get("requiredTools") or []),

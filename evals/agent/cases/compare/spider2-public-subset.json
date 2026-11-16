@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "1.0",
+  "suite": "compare-spider2-public-subset",
+  "version": 1,
+  "description": "Three Spider2-Lite public tasks adapted to the shared-workspace comparison harness. This is not an official Spider2 score.",
+  "cases": [
+    {
+      "id": "spider2.local039",
+      "hardGate": true,
+      "query": "Using only database.sqlite in the workspace, solve this Spider2-Lite task: Please help me find the film category with the highest total rental hours in cities where the city's name either starts with \"A\" or contains a hyphen. Write output/answer.txt containing only the category name, then reply with RESULT: <category name>.",
+      "workspace": {
+        "template": "workspaces/spider2-public-subset/local039"
+      },
+      "expected": {
+        "finalContains": [
+          "RESULT: Sports"
+        ],
+        "workspaceChecks": [
+          {
+            "path": "output/answer.txt",
+            "exists": true,
+            "contains": [
+              "Sports"
+            ]
+          }
+        ]
+      },
+      "budgets": {
+        "maxWallMs": 600000,
+        "maxTotalTokens": 500000,
+        "maxToolCalls": 50,
+        "maxSteps": 30
+      },
+      "network": {
+        "mode": "deny",
+        "hosts": []
+      },
+      "metadata": {
+        "taskType": "sql-multi-join-aggregation",
+        "risk": "low",
+        "description": "Spider2-Lite local039, Pagila database"
+      }
+    },
+    {
+      "id": "spider2.local199",
+      "hardGate": true,
+      "query": "Using only database.sqlite in the workspace, solve this Spider2-Lite task: Can you identify the year and month with the highest rental orders created by the store's staff for each store? Please list the store ID, the year, the month, and the total rentals for those dates. Write output/result.csv with header store_id,year,month,total_rentals exactly; use numeric values for store_id, year, month, and total_rentals, order rows by store_id, and do not add a Markdown table or extra prose to the file. Then reply with RESULT: completed.",
+      "workspace": {
+        "template": "workspaces/spider2-public-subset/local199"
+      },
+      "expected": {
+        "finalContains": [
+          "RESULT: completed"
+        ],
+        "workspaceChecks": [
+          {
+            "path": "output/result.csv",
+            "exists": true,
+            "contains": [
+              "store_id,year,month,total_rentals",
+              "1,2005,7,3342",
+              "2,2005,7,3367"
+            ]
+          }
+        ]
+      },
+      "budgets": {
+        "maxWallMs": 600000,
+        "maxTotalTokens": 500000,
+        "maxToolCalls": 50,
+        "maxSteps": 30
+      },
+      "network": {
+        "mode": "deny",
+        "hosts": []
+      },
+      "metadata": {
+        "taskType": "sql-window-function",
+        "risk": "low",
+        "description": "Spider2-Lite local199, Sakila database"
+      }
+    },
+    {
+      "id": "spider2.local023",
+      "hardGate": true,
+      "query": "Using only database.sqlite in the workspace, solve this Spider2-Lite task: Please help me find the names of the top 5 players with the highest average runs per match in season 5, along with their batting averages. Write output/result.csv with header player_name,avg_runs_per_match,batting_average exactly, using four decimal places for the numeric columns and rows ordered from highest avg_runs_per_match to lowest; do not add a Markdown table or extra prose to the file. Then reply with RESULT: completed.",
+      "workspace": {
+        "template": "workspaces/spider2-public-subset/local023"
+      },
+      "expected": {
+        "finalContains": [
+          "RESULT: completed"
+        ],
+        "workspaceChecks": [
+          {
+            "path": "output/result.csv",
+            "exists": true,
+            "contains": [
+              "player_name,avg_runs_per_match,batting_average",
+              "CH Gayle,52.3571,61.0833",
+              "KP Pietersen,38.1250,61.0000",
+              "S Dhawan,37.9333,40.6429",
+              "CL White,36.8462,43.5455",
+              "SR Watson,36.4286,42.5000"
+            ]
+          }
+        ]
+      },
+      "budgets": {
+        "maxWallMs": 600000,
+        "maxTotalTokens": 500000,
+        "maxToolCalls": 50,
+        "maxSteps": 30
+      },
+      "network": {
+        "mode": "deny",
+        "hosts": []
+      },
+      "metadata": {
+        "taskType": "sql-cte-ranking",
+        "risk": "low",
+        "description": "Spider2-Lite local023, IPL database"
+      }
+    }
+  ]
+}

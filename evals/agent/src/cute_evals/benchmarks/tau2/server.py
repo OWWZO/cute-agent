@@ -22,6 +22,7 @@ class Tau2Runtime:
         from tau2.data_model.message import ToolCall as TauToolCall
         from tau2.data_model.simulation import SimulationRun, TerminationReason
         from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
+        from tau2.evaluator.evaluator_nl_assertions import NLAssertionsEvaluator
         from tau2.orchestrator.orchestrator import DEFAULT_FIRST_AGENT_MESSAGE
         from tau2.user.user_simulator import UserSimulator
 
@@ -33,6 +34,7 @@ class Tau2Runtime:
         self.TerminationReason = TerminationReason
         self.EvaluationType = EvaluationType
         self.evaluate_simulation = evaluate_simulation
+        self.NLAssertionsEvaluator = NLAssertionsEvaluator
         self.DEFAULT_FIRST_AGENT_MESSAGE = DEFAULT_FIRST_AGENT_MESSAGE
         self.UserSimulator = UserSimulator
         self.domain = domain
@@ -136,7 +138,7 @@ class Tau2Runtime:
             "dbHash": self.environment.get_db_hash(),
         }
 
-    def evaluate(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _messages(self, payload: dict[str, Any]) -> list[Any]:
         if self.task is None:
             raise ValueError("task is not reset")
         tools_by_turn: dict[str, list[dict[str, Any]]] = {}
@@ -179,6 +181,12 @@ class Tau2Runtime:
             messages.append(
                 self.AssistantMessage.text(str(item.get("content") or ""))
             )
+        return messages
+
+    def evaluate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.task is None:
+            raise ValueError("task is not reset")
+        messages = self._messages(payload)
         now = datetime.now(UTC).isoformat()
         simulation = self.SimulationRun(
             id=str(payload.get("conversationId") or "cute-eval"),
@@ -197,6 +205,46 @@ class Tau2Runtime:
             domain=self.domain,
         )
         return reward.model_dump(mode="json")
+
+    def evaluate_nl(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.task is None:
+            raise ValueError("task is not reset")
+        assertions = (
+            self.task.evaluation_criteria.nl_assertions
+            if self.task.evaluation_criteria is not None
+            else None
+        )
+        if not assertions:
+            return {
+                "applicable": False,
+                "reward": None,
+                "nl_assertions": [],
+                "info": {"note": "No nl_assertions to evaluate"},
+            }
+        judge = payload.get("judge") or {}
+        model = str(judge.get("model") or "")
+        if not model:
+            raise ValueError("NL assertion judge model is not configured")
+        from tau2.evaluator import evaluator_nl_assertions as nl_module
+
+        llm_args: dict[str, Any] = {"temperature": 0.0}
+        if judge.get("base_url"):
+            llm_args["api_base"] = str(judge["base_url"])
+            llm_args["custom_llm_provider"] = "openai"
+        if judge.get("api_key"):
+            llm_args["api_key"] = str(judge["api_key"])
+        if judge.get("timeout_seconds"):
+            llm_args["timeout"] = int(judge["timeout_seconds"])
+        nl_module.DEFAULT_LLM_NL_ASSERTIONS = model
+        nl_module.DEFAULT_LLM_NL_ASSERTIONS_ARGS = llm_args
+        reward = self.NLAssertionsEvaluator.calculate_reward(
+            task=self.task,
+            full_trajectory=self._messages(payload),
+        )
+        return {
+            "applicable": True,
+            **reward.model_dump(mode="json"),
+        }
 
 
 def _parse_arguments(value: Any) -> dict[str, Any]:
@@ -259,6 +307,8 @@ def main() -> None:
                     result = runtime.snapshot()
                 elif self.path == "/evaluate":
                     result = runtime.evaluate(body)
+                elif self.path == "/evaluate/nl":
+                    result = runtime.evaluate_nl(body)
                 elif self.path == "/user/start":
                     result = runtime.start_user(
                         str(body.get("model") or ""),

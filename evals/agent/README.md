@@ -11,6 +11,8 @@
 - `framework_scorers.py`：DeepEval、agentevals、Ragas 的统一 `ScoreRecord` 适配。
 - `report.py`：pass@1、pass^k、失败分类、baseline diff、JSON / HTML 报告。
 - `process_view.py`：把 Execution Ledger 投影成稳定的逐步骤 `ProcessView`。
+- `task_review/`：单次任务复盘的确定性体检、LLM 质量复盘和本地任务存储。
+- `service/`：供前端调用的任务复盘 HTTP 服务。
 - `judge_benchmarks/`：裁判评测适配层；与 Agent 任务评测分开记账。
 - `cases/`：`Cute-Agent Bench` 自有 Case。公开 Benchmark 接入后会放在独立 Adapter 中。
 
@@ -44,6 +46,152 @@ PR 固定使用 Fixture 模型脚本，但真实执行 Java ReAct 循环、工�
     ├── inspect-logs/
     └── traces/<case-id>/trace.json
 ```
+
+## Cute Agent / Codex 对照评测
+
+对照评测使用独立 JSON 题目集，不改变上面的单 Agent PR 门禁。每道题会复制一份
+干净工作区，分别交给 Cute Agent 和 Codex CLI；Inspect AI 为每道题生成一个
+`Sample`，最终判定仍由现有确定性 Scorer、`report.py` 和报告格式产生。
+
+先校验题目和计算稳定哈希：
+
+```powershell
+uv run cute-evals compare validate `
+  --dataset evals/agent/cases/compare/pilot.json
+```
+
+只物化两边的初始工作区：
+
+```powershell
+uv run cute-evals compare materialize `
+  --dataset evals/agent/cases/compare/pilot.json `
+  --out .eval-runs/compare/materialized
+```
+
+运行对照：
+
+```powershell
+uv run cute-evals compare run `
+  --dataset evals/agent/cases/compare/pilot.json `
+  --agents cute,codex `
+  --mode controlled `
+  --java-mode live `
+  --repeat 3
+```
+
+两种预算口径：
+
+```powershell
+# 产品口径：保留当前预算，Codex 与 Cute 一样在软预算处提前收尾
+uv run cute-evals compare run --dataset evals/agent/cases/compare/pilot.json `
+  --budget-mode product
+
+# 能力口径：两边使用同一组放大预算，只看官方质量，SLO 只作诊断
+uv run cute-evals compare run --dataset evals/agent/cases/compare/pilot.json `
+  --budget-mode capability `
+  --capability-token-multiplier 8 `
+  --capability-wall-multiplier 4 `
+  --capability-tool-multiplier 4 `
+  --capability-step-multiplier 4
+```
+
+能力口径的倍率会同时作用到 Cute 和 Codex，并把原始预算、实际预算和倍率写进
+`report.json` 与 Trace。能力口径的退出码只看官方质量和未验证项，不因 SLO 预算
+失败退出；产品口径继续使用完整 `pass@k` 与 SLO 门禁。两种口径不能合并成一个
+“总冠军”结论。
+
+输出：
+
+```text
+.eval-runs/compare/controlled/
+├── report.json                    # 对照结论
+├── report.html
+├── run.json
+└── agents/
+    ├── cute/
+    │   ├── report.json            # 现有单 Agent 报告
+    │   ├── report.html
+    │   ├── inspect-logs/
+    │   └── attempts/01/
+    └── codex/
+        ├── report.json
+        ├── report.html
+        ├── inspect-logs/
+        └── attempts/01/
+```
+
+查看逐题 Inspect 日志：
+
+```powershell
+uv run inspect view start `
+  --log-dir .eval-runs/compare/controlled/agents/codex/inspect-logs
+```
+
+边界：
+
+- Codex 使用 `codex app-server` 的原生事件流，能读取逐次
+  `thread/tokenUsage/updated`；默认只接受 `workspace-write` 或更严格的本地沙箱，
+  `approval=never`，不会自动提升权限。
+- 产品口径在 Token、工具调用或墙钟时间到达软阈值时调用 `turn/interrupt`，随后
+  在同一 thread 中只追加一次“停止探索并立即输出最终答案”的收尾回合。收尾事实
+  写入 `environment.adapter.softBudgetFinalization`。若最终实际用量仍超过硬预算，
+  产品 SLO 仍判失败。
+- Codex App Server 目前可能把一轮中的多次内置 `webSearch` 合并到回合末才发送
+  `thread/tokenUsage/updated`。产品口径仍会在可观察到的软阈值上收尾，但报告同时
+  记录 `tokenUsageUpdates` / `tokenUsageBeforeFinal`；不能把这种事件粒度限制说成
+  “与 Cute 的逐次 LLM 计数完全等价”。
+- 当前先实现普通子进程 Adapter。Inspect `sandbox_agent_bridge` 已在本地安装，
+  但真实接入需要在 Inspect 沙箱内启动 Agent；未完成前报告把模型控制标为
+  `unverified`，不能声称两边使用了同一个底层模型。
+- 题目的网络策略会写入 Trace，但当前还没有完成 Windows 网络隔离，因此报告
+  同时标记 `networkPolicyEnforced=false`；不能把它当作已经强制断网。
+- Codex 未登录、命令不存在或 Bridge 未完成时，报告会给出结构化
+  `unverified`，不会当作任务失败或伪造分数。
+- `repeat < 3` 或题目数少于 12 时，报告明确标记为 `provisional`。
+
+### 评测工作区与沙箱同步
+
+对照评测优先使用 E2B 验证真实远端执行链路。启动 Java eval runner 与 cute-tool
+前显式配置：
+
+```powershell
+$env:AUTOBOTS_AUTOAGENT_CODE_INTERPRETER_URL = "http://127.0.0.1:1601"
+$env:CODE_SANDBOX_BACKEND = "e2b"
+$env:CODE_EXECUTION_WORKSPACE_ROOTS = "D:\Java Code\ai-agent\Cute-agent\evals\agent\.eval-runs\compare"
+
+# 启动 sandbox + api 时让子进程继承上面的工作区白名单
+.\cute-tool\start-split.ps1
+```
+
+`CODE_EXECUTION_WORKSPACE_ROOTS` 支持多个根目录，Windows 用 `;` 分隔。旧的
+`CODE_EXECUTION_WORKSPACE_ROOT` 仍可继续使用。只授权本次评测运行目录，不要配置
+盘符根目录或用户主目录。cute-tool 进程和运行 `cute-evals` 的进程必须看到同一份
+白名单；也可以直接把白名单传给启动脚本：
+
+```powershell
+.\cute-tool\start-split.ps1 `
+  -WorkspaceRoots "D:\Java Code\ai-agent\Cute-agent\evals\agent\.eval-runs\compare"
+```
+
+对照评测在启动 Java runner 前会检查白名单是否覆盖实际用例工作区；不覆盖时直接
+标记为环境错误，不再把 `WORKSPACE_ROOT_NOT_ALLOWED` 误算成模型能力失败。
+
+工作区同步规则：
+
+- 普通业务文件和 `output/**` 双向同步，远端删除会回删本地。
+- `input/**` 只从本地推送到远端，远端对输入文件的删除不会回删本地原文件。
+- `skills/**` 继续走 skill 专用同步。
+- `.cute/**`、`.git/**`、`.venv/**`、`node_modules/**` 和构建缓存不参与普通同步。
+- 远端删除时若本地文件也被修改，工具返回 `WORKSPACE_DELETE_CONFLICT`，不会静默覆盖。
+- 同步状态位于 `.cute/e2b-sync.json`，当前为 v2，并兼容读取 v1。
+
+如遇删除同步异常，可临时设置 `E2B_WORKSPACE_DELETE_SYNC_ENABLED=false` 关闭双向
+删除；新增和修改的回传不受影响。恢复前应核对 trace 中的 `ignoredDeletes`。
+
+报告会记录 `sandboxBackend`、`workspaceRootMode`、`deletionSyncEnabled`，Trace 中
+可查看 `workspaceSync.deletedLocal`、`deletedRemote`、`ignoredDeletes` 和冲突证据。
+`extended.code.remove` 应同时检查本地 `tmp/remove-me.txt` 已消失且
+`tmp/keep-me.txt` 内容未变。
 
 ## Nightly / Release
 
@@ -82,6 +230,40 @@ uv run cute-evals run --profile pr --require-judge
 - agentevals 确定性 trajectory match 始终执行；LLM 轨迹 judge 首版仍是 advisory。
 - 对不严格执行 `json_schema` 的兼容端点，agentevals 会显式要求 JSON 输出，仍通过其公开 Evaluator 解析。
 
+## 语义质量 Judge（Advisory）
+
+对已有报告做后处理评分，不重跑 Agent：
+
+```powershell
+uv run cute-evals judge run `
+  --report .eval-runs\comprehensive-compare-20261115\extended\report.json `
+  --scope safety,clarification,failure-honesty,artifact-report `
+  --out .eval-runs\semantic\extended
+```
+
+tau2 自然语言断言可离线重判：
+
+```powershell
+$env:EVAL_DATA_HOME = "D:\cute-evals-data"
+uv run cute-evals judge run `
+  --report .eval-runs\comprehensive-compare-20261115\tau2-capability-cute\report.json `
+  --report .eval-runs\comprehensive-compare-20261115\tau2-capability-codex\report.json `
+  --scope tau2-nl `
+  --out .eval-runs\semantic\tau2
+```
+
+规则：
+
+- 输出固定标记 `officialScore=false`、`gateEligible=false`，只作复盘。
+- 确定性 Oracle、官方分数、pass@k 和 SLO 不因 Judge 改变。
+- Judge 缺配置、超时、非法 JSON 或伪证据时标记 `unverified`。
+- 每条维度结论必须引用真实最终文本、消息、工具调用、工作区文件或确定性分数。
+- 相同题目、轨迹、Rubric、Prompt 和模型参数命中内容缓存。
+
+tau2 在线评测在配置 `--judge-model` 后，会额外调用官方
+`NLAssertionsEvaluator`，并写入独立 `nl_assertion_reward` 与
+`nl_assertion_details`。这两个分数是 advisory，官方 DB reward 保持不变。
+
 ## 轨迹质量与裁判校准
 
 把真实 Ledger Trace 转成逐步骤视图：
@@ -99,7 +281,7 @@ uv run cute-evals process-view `
 `source=ledger-reconstructed`。缺失的 `responseText`、`firstTokenAt`、
 `cachedPromptTokens` 只进入缺口统计，不补造。
 
-用校准后的步骤质量裁判和根因裁判分析 Cute Agent 真实 Ledger Trace：
+用校准后的步骤质量裁判和根因裁判分析真实 Agent Trace：
 
 ```powershell
 uv run cute-evals trajectory-quality `
@@ -135,7 +317,7 @@ uv run cute-evals judge-benchmark `
   `git config core.autocrlf false`，否则数据 SHA-256 会因 CRLF 转换失败。
 - 官方 `llm_annotation.py` 和 `compare.py` 由独立 checkout 原地调用，不复制、
   不改写 Prompt、标签或评分逻辑。
-- 结果写入 `judge-calibration` 命名空间，不能混入 Cute Agent 任务成功率。
+- 结果写入 `judge-calibration` 命名空间，不能混入 Agent 任务成功率。
 
 TRAIL 的入口：
 
@@ -336,6 +518,18 @@ $env:HF_TOKEN = "<token-with-GAIA-access>"
 uv sync --extra dev --extra phase3
 uv run cute-evals benchmark --name gaia --profile nightly
 ```
+
+Codex 对照的最小命令：
+
+```powershell
+uv run cute-evals benchmark --name gaia --profile nightly `
+  --agent codex `
+  --budget-mode capability `
+  --codex-command "D:\npm-global\codex.cmd"
+```
+
+能力口径只表示“不因预算提前截断能力判断”，不把验证集子集写成完整 GAIA 成绩。
+产品口径用 `--budget-mode product`，并保留 Codex App Server 的软预算收尾轨迹。
 
 GAIA 是 gated dataset，不会把 validation 数据提交进仓库。Adapter 只读取固定 revision
 的官方数据；附件下载后写入任务 workspace 并记录 SHA-256。没有附件证据时，官方
@@ -739,6 +933,7 @@ $env:CUTE_EVAL_TAU2_PYTHON = "C:\path\to\python312\python.exe"
 uv run cute-evals benchmark `
   --name tau2 `
   --profile nightly `
+  --budget-mode product `
   --user-simulator-model "group/deepseek" `
   --user-simulator-base-url "http://127.0.0.1:3425/v1" `
   --user-simulator-api-key "<key>"
@@ -1101,6 +1296,65 @@ uv run cute-evals ops schedule `
 
 重要：采样报告是“运行健康审计”，不是成功率评测。自动生成的候选 Badcase 不能直接进 regression；
 必须人工补上确定性 `expected` Oracle、设 `replay.oracleReviewed=true`，再运行 `case-approve`。
+
+### 单次任务复盘服务
+
+`task_review` 把一次用户轮次的 Execution Ledger Trace 转成可直接在 Web 查看的复盘报告。
+它是按需触发的，不会自动把线上 Trace 变成回归 Case。
+
+启动 Python 评测侧车：
+
+```powershell
+cd evals/agent
+uv sync --extra service --extra judge
+$env:CUTE_EVAL_JAVA_BASE_URL = "http://127.0.0.1:8100"
+uv run uvicorn cute_evals.service.app:app --host 127.0.0.1 --port 8765
+```
+
+前端开发服务器通过 `/eval-api` 代理到 `CUTE_EVAL_API_BASE_URL`，默认是
+`http://127.0.0.1:8765`。Java 运行时提供三个只读接口：
+
+- `POST /api/agent/task-review/preflight`
+- `POST /api/agent/task-review/traces`
+- `POST /api/agent/task-review/model-config`
+
+Python 提供：
+
+- `POST /eval-api/task-review/jobs`
+- `GET /eval-api/task-review/jobs/{jobId}`
+- `GET /eval-api/task-review/jobs`
+- `POST /eval-api/task-review/jobs/{jobId}/cancel`
+
+浏览器在对话助手消息工具栏点击“复盘这次任务”，前端会把当前 turn 的所有 `requestId`
+提交给 Java preflight，再由 Python 拉取脱敏 Trace。Python 不连接 Java 数据库。
+
+报告分成两层：
+
+- 确定性快速体检：Run 状态、Token、耗时、工具失败、完全相同的重复调用、失败后重试、Artifact。
+- AI 深度复盘：工具选择、错误恢复、执行效率、结果验证和回答诚实性；所有结论必须引用 Trace 证据，
+  使用简体中文输出，并标记 `advisory=true`，不进入官方分数、pass@k 或 CI 门禁。
+
+执行时间线只展示有正文的 assistant 回复；只有工具调用、没有 assistant 文本的模型步骤
+不再显示为空助手行。对应工具仍按实际顺序独立展示工具名、参数、返回结果、耗时和
+失败/恢复状态。`final_summary_text` 作为最终回复单独展示。
+
+配置：
+
+Judge 默认复用当前会话在 Java Agent 中使用的模型目录配置，Python 不连接 Java 数据库，
+也不需要重复保存 API Key。以下环境变量只作为 Java 配置不可用时的显式兜底：
+
+```powershell
+$env:CUTE_EVAL_JUDGE_MODEL = "group/deepseek"
+$env:CUTE_EVAL_JUDGE_BASE_URL = "http://127.0.0.1:3425/v1"
+$env:CUTE_EVAL_JUDGE_API_KEY = "<key>"
+$env:CUTE_EVAL_REVIEW_HOME = "$env:USERPROFILE\.cute-evals\task-reviews"
+```
+
+也可以把非敏感配置放在 `config/task-review.yaml`，再设置
+`$env:CUTE_EVAL_TASK_REVIEW_CONFIG = "config/task-review.yaml"`。API Key 仍建议只放环境变量。
+
+没有 Judge 配置时，快速体检仍然可用，深度复盘会明确标记为 `unverified`。
+任务文件默认保留 30 天；Trace 和报告默认保存在本机，不提交到 Git。
 
 ## 边界
 

@@ -12,6 +12,7 @@ from cute_evals.runtime import (
     EnvironmentEvent,
     ScriptedUserSimulator,
     UserSimulatorServer,
+    merge_trace,
     run_conversation,
     snapshot_payload,
 )
@@ -178,3 +179,35 @@ def test_user_simulator_http_adapter_is_script_driven() -> None:
         }
     finally:
         server.close()
+
+
+def test_merge_trace_preserves_budget_error_code() -> None:
+    failed_turn = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": "multi-turn-1",
+                "requestId": "request-turn-001",
+                "status": "FAILED",
+                "errorCode": "EVAL_BUDGET_EXCEEDED",
+                "finalSummaryText": "evaluation budget exceeded: total_tokens",
+            },
+            "llmInvocations": [],
+            "toolInvocations": [],
+            "artifacts": [],
+        }
+    )
+
+    trace = merge_trace(
+        task=_task(),
+        conversation_id="conversation-budget",
+        turn_traces=[failed_turn],
+        conversation=[],
+        environment_events=[],
+        environment_snapshots=[],
+        termination_reason="agent_failure",
+        error="evaluation budget exceeded: total_tokens",
+        error_code="EVAL_BUDGET_EXCEEDED",
+    )
+
+    assert trace.status == "FAILED"
+    assert trace.raw["run"]["errorCode"] == "EVAL_BUDGET_EXCEEDED"

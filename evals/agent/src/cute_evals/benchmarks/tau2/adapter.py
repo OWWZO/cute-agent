@@ -23,6 +23,7 @@ from ...models import (
     CaseResult,
     EvalCase,
     ExpectedSpec,
+    JudgeConfig,
     RunTrace,
     ScoreRecord,
 )
@@ -169,6 +170,29 @@ class Tau2TaskServer:
 
     def evaluate(self, payload: dict[str, Any]) -> dict[str, Any]:
         return _request(self.endpoint + "/evaluate", payload)
+
+    def evaluate_nl(
+        self,
+        payload: dict[str, Any],
+        judge: JudgeConfig,
+    ) -> dict[str, Any]:
+        return _request(
+            self.endpoint + "/evaluate/nl",
+            {
+                "conversation": payload.get("conversation") or [],
+                "toolInvocations": payload.get("toolInvocations") or [],
+                "conversationId": (
+                    (payload.get("run") or {}).get("conversationId")
+                    or "cute-eval"
+                ),
+                "judge": {
+                    "model": judge.model,
+                    "base_url": judge.base_url,
+                    "api_key": judge.api_key,
+                    "timeout_seconds": judge.timeout_seconds,
+                },
+            },
+        )
 
     def start_user(
         self,
@@ -553,6 +577,32 @@ class Tau2Adapter:
     def evaluate(self, server: Tau2TaskServer, trace: RunTrace) -> dict[str, Any]:
         return server.evaluate(trace.raw)
 
+    def evaluate_nl(
+        self,
+        server: Tau2TaskServer,
+        trace: RunTrace,
+        judge: JudgeConfig,
+    ) -> dict[str, Any]:
+        if not judge.configured:
+            return {
+                "applicable": True,
+                "status": "unverified",
+                "error": "NL assertion judge model is not configured",
+            }
+        try:
+            payload = server.evaluate_nl(trace.raw, judge)
+        except Exception as exc:  # noqa: BLE001 - advisory judge boundary
+            return {
+                "applicable": True,
+                "status": "unverified",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        return {
+            **payload,
+            "status": "verified",
+            "judgeModel": judge.model,
+        }
+
     def collect(
         self,
         task: BenchmarkTask,
@@ -580,7 +630,12 @@ class Tau2Adapter:
             if prepared_metadata.get("ownedServer") and server is not None:
                 server.close()
 
-    def score(self, run: BenchmarkRun) -> CaseResult:
+    def score(
+        self,
+        run: BenchmarkRun,
+        *,
+        case: EvalCase | None = None,
+    ) -> CaseResult:
         reward = float(run.oracle.get("reward") or 0.0)
         verified = bool(run.oracle) and not run.oracle.get("error")
         termination_reason = str(
@@ -631,8 +686,58 @@ class Tau2Adapter:
                 status="verified" if verified else "unverified",
             ),
         ]
+        assertions = (
+            (run.task.raw.get("evaluation_criteria") or {}).get("nl_assertions")
+            or []
+        )
+        if assertions:
+            nl_result = dict(run.metadata.get("nlAssertion") or {})
+            nl_status = str(nl_result.get("status") or "unverified")
+            applicable = nl_result.get("applicable") is True
+            nl_reward = (
+                float(nl_result["reward"])
+                if applicable and nl_result.get("reward") is not None
+                else None
+            )
+            scores.extend(
+                [
+                    ScoreRecord(
+                        case_id=run.task.id,
+                        scorer="tau2.nl_assertions",
+                        name="nl_assertion_reward",
+                        value=nl_reward,
+                        unit="ratio",
+                        passed=(
+                            nl_reward == 1.0
+                            if nl_reward is not None
+                            else None
+                        ),
+                        hard_gate=False,
+                        status=nl_status,
+                        evidence={
+                            "assertionCount": len(assertions),
+                            "judgeModel": nl_result.get("judgeModel"),
+                            "error": nl_result.get("error"),
+                        },
+                    ),
+                    ScoreRecord(
+                        case_id=run.task.id,
+                        scorer="tau2.nl_assertions",
+                        name="nl_assertion_details",
+                        value=nl_result.get("nl_assertions"),
+                        unit="object",
+                        passed=None,
+                        hard_gate=False,
+                        status=nl_status,
+                        evidence={
+                            "assertions": assertions,
+                            "info": nl_result.get("info"),
+                        },
+                    ),
+                ]
+            )
         return CaseResult(
-            case=self.case_for_task(run.task),
+            case=case or self.case_for_task(run.task),
             trace=run.trace,
             scores=scores,
             trace_path=run.trace_path,
@@ -671,4 +776,8 @@ class Tau2Adapter:
             "taskIds": [task.id for task in self.tasks(split)],
             "sourceSha256": self.manifest["source"]["sha256"],
             "datasetHash": self.dataset_hash(),
+            "semanticJudge": {
+                "tau2NlAssertions": "advisory",
+                "officialRewardUnchanged": True,
+            },
         }

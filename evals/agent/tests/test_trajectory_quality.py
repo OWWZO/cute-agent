@@ -56,10 +56,10 @@ class FakeJudge:
         )
 
 
-def _write_trace(path: Path) -> None:
+def _write_trace(path: Path, agent: str = "cute-agent") -> None:
     payload = {
         "schemaVersion": "1.1",
-        "producer": {"agent": "cute-agent"},
+        "producer": {"agent": agent},
         "run": {
             "runUid": "run-quality-1",
             "requestId": "req-quality-1",
@@ -212,3 +212,33 @@ def test_invalid_root_cause_location_is_unverified(tmp_path: Path) -> None:
     assert result["judgments"]["stepQuality"]["status"] == "verified"
     assert result["judgments"]["rootCause"]["status"] == "unverified"
     assert result["judgments"]["rootCause"]["error"]["kind"] == "invalid_location"
+
+
+def test_codex_trace_uses_generic_agent_prompts(tmp_path: Path) -> None:
+    trace_path = tmp_path / "trace.json"
+    _write_trace(trace_path, agent="codex-cli")
+
+    class CapturingJudge(FakeJudge):
+        def __init__(self) -> None:
+            self.prompts: list[str] = []
+
+        def complete(self, messages, *, timeout_seconds=None):
+            self.prompts.append(
+                "\n".join(message["content"] for message in messages)
+            )
+            return super().complete(
+                messages,
+                timeout_seconds=timeout_seconds,
+            )
+
+    judge = CapturingJudge()
+    result = analyze_trace(
+        trace_path,
+        judge=judge,
+        apb_source_dir=None,
+        trail_source_dir=None,
+    )
+
+    assert result["agent"] == "codex"
+    assert "Cute Agent" not in "\n".join(judge.prompts)
+    assert "codex observable trajectory" in "\n".join(judge.prompts)

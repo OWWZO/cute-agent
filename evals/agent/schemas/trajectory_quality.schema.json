@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cute-agent.local/schemas/trajectory_quality.schema.json",
-  "title": "Cute Agent Product-Derived Trajectory Quality Report",
+  "title": "Agent Product-Derived Trajectory Quality Report",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -29,7 +29,7 @@
       "type": "object",
       "required": ["name", "version", "judgeModel", "judgeBaseUrl"],
       "properties": {
-        "name": {"const": "cute-agent-trajectory-quality"},
+        "name": {"type": "string", "minLength": 1},
         "version": {"type": "string"},
         "judgeModel": {"type": "string"},
         "judgeBaseUrl": {"type": "string"},
@@ -100,6 +100,7 @@
           "requestId": {"type": "string"},
           "sessionId": {"type": ["string", "null"]},
           "status": {"type": "string"},
+          "agent": {"type": "string"},
           "tracePath": {"type": "string"},
           "traceSha256": {"type": "string"},
           "processViewSource": {

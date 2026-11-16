@@ -360,7 +360,12 @@ class GAIAAdapter:
             metadata={"attachment": (prepared.metadata if prepared else {}).get("attachment")},
         )
 
-    def score(self, run: BenchmarkRun) -> CaseResult:
+    def score(
+        self,
+        run: BenchmarkRun,
+        *,
+        case: EvalCase | None = None,
+    ) -> CaseResult:
         scorer = self._official_scorer()
         expected = str(run.task.metadata["answer"])
         raw_answer = run.trace.final_text
@@ -441,7 +446,7 @@ class GAIAAdapter:
                 ),
             )
         return CaseResult(
-            case=self.case_for_task(run.task),
+            case=case or self.case_for_task(run.task),
             trace=run.trace,
             scores=scores,
             trace_path=run.trace_path,
