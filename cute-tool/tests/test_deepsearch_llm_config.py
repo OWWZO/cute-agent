@@ -98,7 +98,7 @@ class DeepSearchLlmConfigTest(unittest.IsolatedAsyncioTestCase):
             queries,
         )
         self.assertEqual(1, len(captured_kwargs))
-        self.assertIn("search_queries", captured_kwargs[0]["messages"][0]["content"])
+        self.assertIn("actions", captured_kwargs[0]["messages"][0]["content"])
         self.assertNotIn(
             "thinking_result", captured_kwargs[0]["messages"][0]["content"]
         )
