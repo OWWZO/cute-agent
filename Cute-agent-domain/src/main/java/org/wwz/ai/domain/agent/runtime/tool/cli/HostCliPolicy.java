@@ -2,13 +2,14 @@ package org.wwz.ai.domain.agent.runtime.tool.cli;
 
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Host CLI 准入策略：白名单、社交 CLI 只读约束、超时和代理环境。
+ * Host CLI 准入策略：白名单、社交 CLI 只读约束、超时、UTF-8 和代理环境。
  * <p>
  * 普通 {@code host_cli} 工具和 Code Mode 的 {@code host} capability 共用这一份实现，
  * 避免出现两套白名单。新增 CLI 限制只改这里。
@@ -83,6 +84,15 @@ public final class HostCliPolicy {
                 "http_proxy", proxy,
                 "https_proxy", proxy,
                 "all_proxy", proxy);
+    }
+
+    /** 子进程固定使用 UTF-8，避免 Windows 默认 GBK 导致 Python CLI 输出中文或 emoji 时崩溃。 */
+    public static Map<String, String> processEnvironment(String proxy) {
+        Map<String, String> environment = new LinkedHashMap<>();
+        environment.put("PYTHONUTF8", "1");
+        environment.put("PYTHONIOENCODING", "utf-8");
+        environment.putAll(proxyEnvironment(proxy));
+        return environment;
     }
 
     /** proxy 为空时需要显式清掉继承来的代理变量。 */

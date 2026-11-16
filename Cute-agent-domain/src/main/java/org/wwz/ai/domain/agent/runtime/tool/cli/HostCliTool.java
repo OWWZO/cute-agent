@@ -7,6 +7,7 @@ import org.wwz.ai.domain.agent.adapter.port.cli.CliResult;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
+import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.types.agent.config.HostCliProperties;
 
@@ -39,12 +40,14 @@ public class HostCliTool implements BaseTool {
     @Override
     public String getDescription() {
         return "在会话 workspace 里调用宿主机已装 CLI，不经 shell。当前可用：" + String.join(", ", availableTools)
-                + "。cwd 固定为会话 workspace；twitter 和 rdt 仅允许只读命令。";
+                + "。cwd 固定为会话 workspace；twitter 和 rdt 仅允许只读命令。"
+                + ToolCallIntentSchema.descriptionSuffix();
     }
 
     @Override
     public Map<String, Object> toParams() {
         Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put(ToolCallIntentSchema.FIELD, ToolCallIntentSchema.property());
         properties.put("tool", Map.of(
                 "type", "string",
                 "description", "二进制名，必须是：" + String.join(", ", availableTools),
@@ -62,7 +65,7 @@ public class HostCliTool implements BaseTool {
         return Map.of(
                 "type", "object",
                 "properties", properties,
-                "required", List.of("tool", "args")
+                "required", List.of(ToolCallIntentSchema.FIELD, "tool", "args")
         );
     }
 
@@ -112,7 +115,7 @@ public class HostCliTool implements BaseTool {
                         .tool(tool)
                         .args(args)
                         .cwd(cwd)
-                        .env(HostCliPolicy.proxyEnvironment(proxy))
+                        .env(HostCliPolicy.processEnvironment(proxy))
                         .unsetEnv(HostCliPolicy.proxyUnsetVariables(proxy))
                         .timeoutMs(timeoutMs)
                         .capture("both")

@@ -9,13 +9,13 @@ function splitParagraphs(text: string): string[] {
 }
 
 describe("resolveStreamingSummary", () => {
-  it("只返回最后一个非空行", () => {
+  it("只返回最后一个已经结束的非空行", () => {
     expect(resolveStreamingSummary("第一行\n第二行\n  \n最后一行  ")).toBe(
-      "最后一行"
+      "第二行"
     );
     expect(resolveStreamingSummary("空\n\n")).toBe("空");
     expect(resolveStreamingSummary("\n  \n")).toBeUndefined();
-    expect(resolveStreamingSummary("超长".repeat(1000))).toBe("超长".repeat(1000));
+    expect(resolveStreamingSummary("超长".repeat(1000))).toBeUndefined();
   });
 });
 

@@ -128,7 +128,7 @@ export const AskUserToolCall = memo(function AskUserToolCall({
           )}
         </div>
       ) : (
-        <div className="kimi-au-raw">
+        <div className="kimi-tool-detail kimi-tool-detail-code kimi-au-raw">
           {rawLines.map((line, i) => (
             <div key={`${i}-${line.slice(0, 12)}`}>{line}</div>
           ))}

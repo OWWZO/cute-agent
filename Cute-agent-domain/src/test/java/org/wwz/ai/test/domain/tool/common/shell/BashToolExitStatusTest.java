@@ -44,6 +44,34 @@ public class BashToolExitStatusTest {
         Assert.assertEquals(Boolean.TRUE, data.get("ok"));
     }
 
+    @Test
+    public void fileInfoKeepsWorkspaceRelativePath() throws Exception {
+        Map<?, ?> data = execute("""
+                {"exitCode":0,"stdout":"done","fileInfo":[
+                  {"fileName":"desktop.png","relativePath":"test-page/screens/desktop.png",
+                   "domainUrl":"https://file.example.com/preview/desktop.png"}
+                ]}
+                """);
+
+        java.util.List<?> produced = (java.util.List<?>) data.get("produced_files");
+        Assert.assertNotNull(produced);
+        Map<?, ?> first = (Map<?, ?>) produced.get(0);
+        Assert.assertEquals("test-page/screens/desktop.png", first.get("relative_path"));
+    }
+
+    @Test
+    public void workspaceSyncAndDeletedFilesArePassedThrough() throws Exception {
+        Map<?, ?> data = execute("""
+                {"exitCode":0,"stdout":"done",
+                 "workspaceSync":{"backend":"e2b","status":"ok",
+                   "deletedLocal":["tmp/remove-me.txt"]},
+                 "deletedFiles":[{"relativePath":"tmp/remove-me.txt","status":"synced"}]}
+                """);
+
+        Assert.assertNotNull(data.get("workspace_sync"));
+        Assert.assertNotNull(data.get("deleted_files"));
+    }
+
     private static Map<?, ?> execute(String responseBody) throws Exception {
         RemoteHttpPort port = mock(RemoteHttpPort.class);
         when(port.execute(any())).thenReturn(responseBody);

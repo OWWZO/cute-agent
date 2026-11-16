@@ -33,8 +33,10 @@ public class BrowserToolTest {
         BrowserTool tool = new BrowserTool();
 
         Assert.assertEquals("browser", tool.getName());
-        Assert.assertEquals("远程操作用户的浏览器。", tool.getDescription());
+        Assert.assertTrue(tool.getDescription().startsWith("远程操作用户的浏览器。"));
+        Assert.assertTrue(tool.getDescription().contains("intent"));
         Map<?, ?> params = (Map<?, ?>) tool.toParams().get("properties");
+        Assert.assertTrue(params.containsKey("intent"));
         Map<?, ?> args = (Map<?, ?>) params.get("args");
         String argsDescription = String.valueOf(args.get("description"));
         Assert.assertTrue(argsDescription.contains("list"));
@@ -84,7 +86,10 @@ public class BrowserToolTest {
         AgentContext context = onlineContext(cli);
 
         ToolResultPayload payload = (ToolResultPayload) tool.execute(
-                Map.of("args", List.of("browser", "cookies")), context);
+                Map.of(
+                        "intent", "读取当前登录态 Cookie 用于确认浏览器身份",
+                        "args", List.of("browser", "cookies")
+                ), context);
 
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         // 敏感命令：模型需要完整输出才能继续推理，落库/回放/前端只保留脱敏版。

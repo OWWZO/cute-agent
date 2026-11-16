@@ -7,7 +7,16 @@ import {
   useRef,
   useState,
 } from "react";
-import { LoaderCircleIcon, MinusIcon, ChevronUpIcon } from "lucide-react";
+import {
+  ChevronUpIcon,
+  CircleDotIcon,
+  CircleHelpIcon,
+  CircleIcon,
+  LoaderCircleIcon,
+  MinusIcon,
+  SquareCheckIcon,
+  SquareIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { askUserApi, dispatchAskUserResume } from "@/services/askUser";
 import {
@@ -144,7 +153,17 @@ const AskUserQuestionCard: FC<AskUserQuestionCardProps> = memo(({ tool }) => {
     Boolean((customText[question.question] || "").trim());
 
   const glyphFor = (multi: boolean, on: boolean) =>
-    multi ? (on ? "■" : "□") : on ? "●" : "○";
+    multi ? (
+      on ? (
+        <SquareCheckIcon className="size-3.5" aria-hidden />
+      ) : (
+        <SquareIcon className="size-3.5" aria-hidden />
+      )
+    ) : on ? (
+      <CircleDotIcon className="size-3.5" aria-hidden />
+    ) : (
+      <CircleIcon className="size-3.5" aria-hidden />
+    );
 
   const submit = async () => {
     if (!questionId || !allAnswered || busy || submitted) return;
@@ -236,7 +255,9 @@ const AskUserQuestionCard: FC<AskUserQuestionCardProps> = memo(({ tool }) => {
     return (
       <div className="kimi-ui-card kimi-qcard">
         <div className="kimi-ui-card__head">
-          <span className="kimi-qcard-ic">?</span>
+          <span className="kimi-qcard-ic" aria-hidden>
+            <CircleHelpIcon />
+          </span>
           <span className="kimi-qcard-title">提问</span>
         </div>
         <div className="kimi-ui-card__body">等待用户回答（题目解析失败）</div>
@@ -248,7 +269,9 @@ const AskUserQuestionCard: FC<AskUserQuestionCardProps> = memo(({ tool }) => {
     return (
       <div className="kimi-ui-card kimi-qcard">
         <div className="kimi-ui-card__head">
-          <span className="kimi-qcard-ic">?</span>
+          <span className="kimi-qcard-ic" aria-hidden>
+            <CircleHelpIcon />
+          </span>
           <span className="kimi-qcard-title">已回答</span>
         </div>
         <div className="kimi-ui-card__body">答案已回传，Agent 继续中…</div>
@@ -263,7 +286,9 @@ const AskUserQuestionCard: FC<AskUserQuestionCardProps> = memo(({ tool }) => {
       tabIndex={-1}
     >
       <div className="kimi-ui-card__head">
-        <span className="kimi-qcard-ic">?</span>
+        <span className="kimi-qcard-ic" aria-hidden>
+          <CircleHelpIcon />
+        </span>
         <span className="kimi-qcard-title">提问</span>
         {total > 1 && !minimized ? (
           <span className="kimi-qcard-step">

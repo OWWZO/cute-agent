@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * 单次 Code Mode 执行的配额账本。
  * <p>
- * 三重配额：整体 wall-clock、内部 capability 调用次数、累计写入字节。
+ * 双重配额：整体 wall-clock、累计写入字节。
  * 每次 capability 调用前都要过 {@link #beginCall(AgentContext)}，
  * 它会同时检查用户取消和剩余时间，保证超时/停止能穿透到阻塞中的 CLI 调用。
  * </p>
@@ -20,12 +20,10 @@ import java.util.concurrent.TimeUnit;
 public final class CodeModeExecutionBudget {
 
     private static final int MAX_LOGS = 200;
-    private static final int DEFAULT_MAX_TOOL_CALLS = 100;
     private static final long DEFAULT_MAX_TOTAL_WRITE_BYTES = 134_217_728L;
 
     private final long startedNanos;
     private final long deadlineNanos;
-    private final int maxToolCalls;
     private final long maxTotalWriteBytes;
 
     private int toolCalls;
@@ -33,16 +31,15 @@ public final class CodeModeExecutionBudget {
     private final List<String> logs = new ArrayList<>();
     private final Set<String> producedFiles = new LinkedHashSet<>();
 
-    public CodeModeExecutionBudget(long timeoutMs, int maxToolCalls, long maxTotalWriteBytes) {
+    public CodeModeExecutionBudget(long timeoutMs, long maxTotalWriteBytes) {
         long now = System.nanoTime();
         this.startedNanos = now;
         this.deadlineNanos = now + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, timeoutMs));
-        this.maxToolCalls = maxToolCalls > 0 ? maxToolCalls : DEFAULT_MAX_TOOL_CALLS;
         this.maxTotalWriteBytes = maxTotalWriteBytes > 0 ? maxTotalWriteBytes : DEFAULT_MAX_TOTAL_WRITE_BYTES;
     }
 
     /**
-     * 开始一次 capability 调用：先判取消，再判超时，最后判调用次数。
+     * 开始一次 capability 调用：先判取消，再判超时。
      */
     public synchronized void beginCall(AgentContext agentContext) {
         if (agentContext != null && agentContext.isRunCancelled()) {
@@ -50,10 +47,6 @@ public final class CodeModeExecutionBudget {
         }
         if (remainingMs() <= 0) {
             throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_TIMEOUT, "Code Mode 执行超时");
-        }
-        if (toolCalls >= maxToolCalls) {
-            throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_TOOL_CALL_LIMIT,
-                    "内部能力调用次数超过上限 " + maxToolCalls);
         }
         toolCalls++;
     }

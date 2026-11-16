@@ -10,6 +10,7 @@ import org.wwz.ai.domain.agent.adapter.port.cli.CliResult;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
+import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.tool.cli.CliArtifactCaptureCoordinator;
@@ -80,9 +81,10 @@ public class BrowserTool implements BaseTool {
     /** 描述按命令面切换：bsk 与 opencli 的词汇不能混在一份描述里。 */
     @Override
     public String getDescription(AgentContext context) {
-        return isBskSurface(context)
+        String description = isBskSurface(context)
                 ? "远程操作用户的浏览器（bsk 命令面）。"
                 : "远程操作用户的浏览器。";
+        return description + ToolCallIntentSchema.descriptionSuffix();
     }
 
     @Override

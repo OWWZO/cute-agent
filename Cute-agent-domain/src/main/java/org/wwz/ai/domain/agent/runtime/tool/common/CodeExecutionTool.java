@@ -12,6 +12,7 @@ import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.dto.CodeInterpreterResponse;
 import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
+import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspacePaths;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
@@ -40,12 +41,17 @@ public class CodeExecutionTool implements BaseTool {
                 + "plt.savefig('chart.png')；df.to_excel('结果.xlsx')。\n"
                 + "本次新增或修改的工作区文件会自动采集上传，前端可预览/下载。\n"
                 + "结果里的 produced_files[].url 可直接作为 document_generate 的 image.url。\n"
+                + "输入数据确定后，多个图表/表格复用同一批输入时，应在一次脚本中生成全部派生列和最终结构，"
+                + "并做一次关键断言；探索源数据或修复失败脚本允许必要迭代。"
+                + "禁止用 print(\"ok\")、echo 或重复打印同一数据结构来试探语法。\n"
                 + "禁止写死宿主绝对路径。fileNames 仅用于公网 http(s) URL 或会话工作区内路径；"
-                + "工作区外绝对路径与内网地址会被拒绝。";
+                + "工作区外绝对路径与内网地址会被拒绝。"
+                + ToolCallIntentSchema.descriptionSuffix();
     }
 
     @Override public Map<String, Object> toParams() {
         Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put(ToolCallIntentSchema.FIELD, ToolCallIntentSchema.property());
         properties.put("source", Map.of(
                 "type", "string",
                 "description", "完整 Python 源码。cwd 为会话工作区；生成文件用相对路径，例如 Path('chart.png')、"
@@ -75,7 +81,11 @@ public class CodeExecutionTool implements BaseTool {
         properties.put("importTier", Map.of("type", "string", "enum", List.of("stdlib", "extended", "unrestricted")));
         properties.put("resetWorkspace", Map.of("type", "boolean"));
         properties.put("workspaceFile", Map.of("type", "string", "description", "工作区内已有 Python 源码文件，提供时优先执行它"));
-        return Map.of("type", "object", "properties", properties, "required", List.of());
+        return Map.of(
+                "type", "object",
+                "properties", properties,
+                "required", List.of(ToolCallIntentSchema.FIELD)
+        );
     }
 
     @Override @SuppressWarnings("unchecked")
@@ -100,6 +110,7 @@ public class CodeExecutionTool implements BaseTool {
             Path workspaceRoot = WorkspacePaths.resolveSandboxRoot(
                     context.getWorkspaceRoot(), context.getSessionId());
             Map<String, Object> request = new LinkedHashMap<>(params);
+            request.remove(ToolCallIntentSchema.FIELD);
             request.put("fileNames", validateFileNames(toStringList(params.get("fileNames")), workspaceRoot));
             String workspaceFile = validateWorkspaceFile(workspaceFileArg);
             if (workspaceFile != null) {
@@ -119,8 +130,10 @@ public class CodeExecutionTool implements BaseTool {
                 request.put("source", source);
             }
             // 远端执行统一绑定当前会话工作区；返回文件再登记到当前 tool artifact source，形成可回放的产物链。
+            String endpoint = SandboxRemoteEndpoint.toolUrl(
+                    config.getCodeInterpreterUrl(), "/v1/tool/code_execution");
             String body = context.getRuntimeDependencies().requireRemoteHttpPort().execute(RemoteHttpRequest.builder()
-                    .method("POST").url(config.getCodeInterpreterUrl() + "/v1/tool/code_execution")
+                    .method("POST").url(endpoint)
                     .headers(Map.of("Content-Type", "application/json")).body(JSON.toJSONString(request))
                     .connectTimeoutSeconds(60L).readTimeoutSeconds(660L).writeTimeoutSeconds(60L).callTimeoutSeconds(660L).build());
             JSONObject response = JSON.parseObject(body);
@@ -128,9 +141,12 @@ public class CodeExecutionTool implements BaseTool {
             if (fileInfo == null) fileInfo = List.of();
             for (CodeInterpreterResponse.FileInfo info : fileInfo) {
                 // 只登记执行服务明确返回的文件，不扫描整个工作区，避免把历史产物误归入本次调用。
+                String relativePath = StringUtils.firstNonBlank(
+                        info.getRelativePath(), info.getFileName());
                 context.registerGeneratedArtifact(artifactSource, File.builder().fileName(info.getFileName())
                         .ossUrl(info.getOssUrl()).domainUrl(info.getDomainUrl()).fileSize(info.getFileSize())
-                        .description(info.getFileName()).isInternalFile(false).build());
+                        .relativePath(relativePath)
+                        .description(relativePath).isInternalFile(false).build());
             }
             if (!fileInfo.isEmpty() && context.getPrinter() != null) {
                 Map<String, Object> event = new LinkedHashMap<>();
@@ -146,6 +162,12 @@ public class CodeExecutionTool implements BaseTool {
             data.put("status", response.getString("status"));
             data.put("stdout", StringUtils.defaultString(response.getString("stdout")));
             data.put("stderr", StringUtils.defaultString(response.getString("stderr")));
+            if (response.get("workspaceSync") != null) {
+                data.put("workspace_sync", response.get("workspaceSync"));
+            }
+            if (response.get("deletedFiles") != null) {
+                data.put("deleted_files", response.get("deletedFiles"));
+            }
             if (response.get("result") != null) {
                 data.put("result", response.get("result"));
             }
@@ -160,6 +182,8 @@ public class CodeExecutionTool implements BaseTool {
                     }
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("file_name", info.getFileName());
+                    row.put("relative_path", StringUtils.firstNonBlank(
+                            info.getRelativePath(), info.getFileName()));
                     String url = StringUtils.firstNonBlank(info.getDomainUrl(), info.getOssUrl());
                     if (StringUtils.isNotBlank(url)) {
                         row.put("url", url);

@@ -62,4 +62,17 @@ public class HostCliPolicyTest {
         Assert.assertTrue(HostCliPolicy.proxyUnsetVariables(null).contains("HTTP_PROXY"));
         Assert.assertTrue(HostCliPolicy.proxyUnsetVariables("http://p:1").isEmpty());
     }
+
+    @Test
+    public void processEnvironmentUsesUtf8WithAndWithoutProxy() {
+        Map<String, String> direct = HostCliPolicy.processEnvironment(null);
+        Assert.assertEquals("1", direct.get("PYTHONUTF8"));
+        Assert.assertEquals("utf-8", direct.get("PYTHONIOENCODING"));
+        Assert.assertFalse(direct.containsKey("HTTP_PROXY"));
+
+        Map<String, String> proxied = HostCliPolicy.processEnvironment("http://127.0.0.1:7890");
+        Assert.assertEquals("1", proxied.get("PYTHONUTF8"));
+        Assert.assertEquals("utf-8", proxied.get("PYTHONIOENCODING"));
+        Assert.assertEquals("http://127.0.0.1:7890", proxied.get("HTTP_PROXY"));
+    }
 }

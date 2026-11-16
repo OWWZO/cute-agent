@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
+import { CircleHelpIcon, MonitorIcon } from "lucide-react";
 import { EASE_OUT } from "@/lib/motion";
 import { useMsgTypes } from "./useMsgTypes";
 import HTMLRenderer from "./HTMLRenderer";
@@ -147,7 +148,9 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
             <div className={cn("h-full overflow-auto", !noPadding && "px-1 py-1")}>
               <div className="kimi-ui-card kimi-qcard">
                 <div className="kimi-ui-card__head">
-                  <span className="kimi-qcard-ic">?</span>
+                  <span className="kimi-qcard-ic" aria-hidden>
+                    <CircleHelpIcon />
+                  </span>
                   <span className="kimi-qcard-title">提问</span>
                 </div>
                 <div className="kimi-ui-card__body">请在底部输入区作答</div>
@@ -172,6 +175,9 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
               ) : (
                 <div className="kimi-ui-card kimi-qcard">
                   <div className="kimi-ui-card__head">
+                    <span className="kimi-qcard-ic" aria-hidden>
+                      <MonitorIcon />
+                    </span>
                     <span className="kimi-qcard-title">桌面控制</span>
                   </div>
                   <div className="kimi-ui-card__body">

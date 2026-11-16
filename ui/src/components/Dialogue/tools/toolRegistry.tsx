@@ -4,13 +4,19 @@ import { AskUserToolCall } from "./AskUserToolCall";
 import DesktopControlCard from "../DesktopControlCard";
 import { EditToolCall } from "./EditToolCall";
 import { GenericToolCall } from "./GenericToolCall";
+import { ToolFailureCard } from "./ToolFailureCard";
 import { McpToolCall } from "./McpToolCall";
 import { isMcpToolName } from "./mcpToolName";
 import { ReadToolCall } from "./ReadToolCall";
 import { SubAgentToolCall } from "./SubAgentToolCall";
-import { normalizeToolName } from "./toolMeta";
+import { normalizeToolName, toolLabel } from "./toolMeta";
 import type { ToolRowStackPosition } from "./ToolRow";
-import { resolveTaskToolName, resolveToolKey } from "./toolTaskAdapter";
+import {
+  resolveTaskToolName,
+  resolveTaskToolOutput,
+  resolveTaskToolStatus,
+  resolveToolKey,
+} from "./toolTaskAdapter";
 import { useToolEntranceAnimation } from "./useToolEntranceAnimation";
 
 export type ToolCallViewProps = {
@@ -79,6 +85,7 @@ function AskUserAdapter(props: ToolCallViewProps) {
 /** 时间线统一入口：按工具名分发 Edit / Read / MCP / Agent / AskUser / Generic */
 export function ToolCallView(props: ToolCallViewProps) {
   const kind = resolveToolRendererKind(props.tool);
+  const status = resolveTaskToolStatus(props.tool);
   // 进场淡入挂在最外层：ZCode 也是包在 `div.w-full` 上，而不是卡片内部。
   // 去重按 toolId，避免历史重放 / 虚拟列表重挂时整屏闪。
   const shouldAnimateEntrance = useToolEntranceAnimation(
@@ -87,7 +94,14 @@ export function ToolCallView(props: ToolCallViewProps) {
   );
 
   let content: ReactNode;
-  if (kind === "edit") content = <EditToolCall {...props} />;
+  if (status === "error") {
+    content = (
+      <ToolFailureCard
+        name={toolLabel(resolveTaskToolName(props.tool))}
+        text={resolveTaskToolOutput(props.tool).join("\n")}
+      />
+    );
+  } else if (kind === "edit") content = <EditToolCall {...props} />;
   else if (kind === "read") content = <ReadToolCall {...props} />;
   else if (kind === "mcp") content = <McpToolCall {...props} />;
   else if (kind === "agent") content = <SubAgentToolCall {...props} />;

@@ -43,7 +43,7 @@ public class CodeModeWorkspaceCapabilityTest {
         WorkspaceService workspaceService = new WorkspaceService(null, new WorkspacePathGuard(), null, null);
         capability = new WorkspaceCodeCapability(
                 agentContext,
-                new CodeModeExecutionBudget(30_000L, 100, 64L * 1024 * 1024),
+                new CodeModeExecutionBudget(30_000L, 64L * 1024 * 1024),
                 workspaceService,
                 new CodeModeProperties().getWorkspace());
     }
@@ -204,7 +204,7 @@ public class CodeModeWorkspaceCapabilityTest {
                 .workspaceRoot(workspace.toAbsolutePath().normalize().toString())
                 .build();
         WorkspaceCodeCapability small = new WorkspaceCodeCapability(
-                agentContext, new CodeModeExecutionBudget(30_000L, 100, 1_000_000L),
+                agentContext, new CodeModeExecutionBudget(30_000L, 1_000_000L),
                 new WorkspaceService(null, new WorkspacePathGuard(), null, null), limits);
 
         try {

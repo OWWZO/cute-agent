@@ -167,7 +167,7 @@ public class ToolSchemaNormalizerTest {
         Map<?, ?> schema = new CodeModeTool(null).toParams();
 
         Assert.assertEquals("object", schema.get("type"));
-        Assert.assertEquals(List.of(), schema.get("required"));
+        Assert.assertEquals(List.of("intent"), schema.get("required"));
 
         Map<?, ?> inputs = (Map<?, ?>) ((Map<?, ?>) schema.get("properties")).get("inputs");
         Assert.assertEquals("object", inputs.get("type"));

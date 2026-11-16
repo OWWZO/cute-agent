@@ -3,7 +3,7 @@ import { ToolJsonBlock, type ToolJsonValue } from "./ToolJsonBlock";
 /**
  * 工具入参段。
  *
- * 段标题固定 `Parameters`，容器与出参段同规格：淡底、无描边、上限 240px。
+ * 段标题固定 `参数`，容器与出参段共用工具详情面，上限 240px。
  * 解析不出 JSON 时退化为等宽纯文本 —— ZCode 那边 `input` 已经是对象，
  * 而 Cute 拿到的是流式累积的 `argumentsText` 原始串，可能尚未成形。
  */
@@ -26,8 +26,11 @@ export function ToolParametersBlock({
 
   return (
     <section className="kimi-tool-section">
-      <h4 className="kimi-tool-section-title">Parameters</h4>
-      <div className="kimi-tool-section-body" data-testid="tool-parameters">
+      <h4 className="kimi-tool-section-title">参数</h4>
+      <div
+        className="kimi-tool-detail kimi-tool-section-body"
+        data-testid="tool-parameters"
+      >
         {value !== undefined && value !== null ? (
           <ToolJsonBlock data={value} />
         ) : (

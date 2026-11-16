@@ -1,4 +1,5 @@
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";import {
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
   AppWindowIcon,
   BotIcon,
   FolderIcon,
@@ -147,6 +148,7 @@ export const GenericToolCall = memo(function GenericToolCall({
   const isExecute = normalizeToolName(name) === "bash";
   const executeCommand = isExecute ? extractExecuteCommand(arg) : "";
   const isError = status === "error";
+  const opensCanvas = shouldOpenCanvasPreview(tool);
 
   /**
    * 失败态只保留可读错误文本：ZCode `ToolOutput` 在 `errorText` 存在时**不渲染**结构化输出，
@@ -207,6 +209,20 @@ export const GenericToolCall = memo(function GenericToolCall({
     }
   }, [canExpand, defaultExpanded, userToggled, setOpen]);
 
+  // 没有入参、输出、计数或可打开内容的已完成工具，不再留下一个只有图标和
+  // 工具名的死行。运行态仍保留，因为它代表真实进行中的调用。
+  const isContentlessCompletedTool =
+    status === "ok" &&
+    !showArgStream &&
+    !showRawFallback &&
+    !summary.trim() &&
+    output.length === 0 &&
+    !chipNode &&
+    !opensCanvas;
+  if (isContentlessCompletedTool) {
+    return null;
+  }
+
   const stacked = stackPosition !== "single";
   // `canExpand` 已包含 `showArgStream`，这里不再重复或运算。
   const expandable = canExpand;
@@ -246,7 +262,7 @@ export const GenericToolCall = memo(function GenericToolCall({
         setOpen((v) => !v);
       }}
       onOpenWorkspace={
-        shouldOpenCanvasPreview(tool)
+        opensCanvas
           ? () => {
               const files = getTaskFiles(tool);
               if (files.length && changeFile) {
@@ -261,7 +277,7 @@ export const GenericToolCall = memo(function GenericToolCall({
       {isExecute ? (
         // execute：展开区 = 等宽完整命令 + 吸底输出。
         // 命令用 `$` 前缀保持终端观感；输出交给 ExecuteOutput 做程序吸底 / 上滚冻结。
-        <div className="kimi-tool-execute">
+        <div className="kimi-tool-detail kimi-tool-execute">
           {executeCommand ? (
             <div className="kimi-tool-execute-command">
               <span className="kimi-tool-execute-prompt">$</span>
@@ -288,7 +304,10 @@ export const GenericToolCall = memo(function GenericToolCall({
             />
           ) : null}
           {showRawFallback ? (
-            <pre className="kimi-tool-raw-json" data-testid="tool-raw-json">
+            <pre
+              className="kimi-tool-detail kimi-tool-detail-code kimi-tool-raw-json"
+              data-testid="tool-raw-json"
+            >
               {rawFallbackJson}
             </pre>
           ) : null}

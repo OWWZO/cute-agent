@@ -59,6 +59,10 @@ export const ReadToolCall = memo(function ReadToolCall({
     );
   }
 
+  if (status === "ok" && !filePath && !summary.trim()) {
+    return null;
+  }
+
   return (
     <ToolRow
       status={status}

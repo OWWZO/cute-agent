@@ -77,7 +77,6 @@ public class GraalJsCodeModeExecutor implements CodeModeExecutorPort {
     public CodeModeResult execute(CodeModeRequest request, AgentContext agentContext) {
         CodeModeExecutionBudget budget = new CodeModeExecutionBudget(
                 resolveTimeout(request),
-                this.properties.getMaxToolCalls(),
                 this.properties.getMaxTotalMemoryBytes());
         if (request == null) {
             return failure(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT, "请求为空", budget, null);

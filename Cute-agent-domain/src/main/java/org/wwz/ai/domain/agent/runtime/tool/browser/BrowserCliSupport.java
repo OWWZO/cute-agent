@@ -6,6 +6,7 @@ import com.alibaba.fastjson.JSONObject;
 import org.wwz.ai.domain.agent.adapter.port.cli.CliResult;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
 import org.wwz.ai.domain.agent.runtime.tool.cli.CliArtifactCaptureCoordinator;
 import org.wwz.ai.domain.agent.runtime.tool.cli.CliArtifactCapturePlan;
 import org.wwz.ai.domain.agent.runtime.tool.cli.CliArtifactFailure;
@@ -60,6 +61,7 @@ public final class BrowserCliSupport {
     /** 参数表骨架一致，args 的说明按命令面传入。 */
     public static Map<String, Object> toParams(String argsDescription) {
         Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put(ToolCallIntentSchema.FIELD, ToolCallIntentSchema.property());
         properties.put("args", Map.of(
                 "type", "array",
                 "items", Map.of("type", "string"),
@@ -72,7 +74,7 @@ public final class BrowserCliSupport {
         return Map.of(
                 "type", "object",
                 "properties", properties,
-                "required", List.of("args")
+                "required", List.of(ToolCallIntentSchema.FIELD, "args")
         );
     }
 

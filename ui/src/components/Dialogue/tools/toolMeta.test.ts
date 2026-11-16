@@ -48,6 +48,36 @@ describe("toolMeta", () => {
     ).toBe("ls -la");
   });
 
+  it("prefers intent for code-like tools", () => {
+    const intent = "下载年报并保存到工作区";
+    for (const name of [
+      "bash",
+      "code_execution",
+      "code_mode",
+      "browser",
+      "agent_browser",
+      "host_cli",
+    ]) {
+      expect(
+        toolSummary(
+          name,
+          JSON.stringify({
+            intent,
+            command: "curl -L https://example.com/report.pdf",
+            source: "print('ignored')",
+            args: ["browser", "click", "@e3"],
+          })
+        )
+      ).toBe(intent);
+    }
+  });
+
+  it("falls back when intent is blank", () => {
+    expect(
+      toolSummary("bash", JSON.stringify({ intent: "  ", command: "ls -la" }))
+    ).toBe("ls -la");
+  });
+
   it("摘要与展开区共用命令字段优先级（input 也能出摘要）", () => {
     expect(
       toolSummary("bash", JSON.stringify({ input: "echo hi" }))

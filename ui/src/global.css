@@ -2457,35 +2457,79 @@ ol {
   -webkit-overflow-scrolling: touch;
 }
 
-/* 工具入参流：铺在时间线里的独立卡，入参默认折叠，点头部才展开 */
+/* 工具详情面：摘要行保持无卡片，展开内容统一使用中性轻玻璃表面。 */
+.kimi-tool-arg-stream,
+.kimi-tool-detail,
+.kimi-qcard {
+  --tool-detail-border: color-mix(in srgb, var(--color-line) 72%, transparent);
+  --tool-detail-bg: color-mix(
+    in srgb,
+    var(--color-surface-raised, var(--color-surface)) 92%,
+    transparent
+  );
+  --tool-detail-code-bg: color-mix(
+    in srgb,
+    var(--color-surface-sunken, var(--color-surface-raised)) 66%,
+    var(--color-surface-raised, var(--color-surface))
+  );
+  --tool-detail-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.025);
+}
+
+.kimi-tool-detail {
+  border: 1px solid var(--tool-detail-border);
+  border-radius: 14px;
+  background: var(--tool-detail-bg);
+  box-shadow: var(--tool-detail-shadow);
+}
+
+.kimi-tool-detail-code {
+  border: 1px solid var(--tool-detail-border);
+  border-radius: 10px;
+  background: var(--tool-detail-code-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+.kimi-tool-detail-title {
+  margin: 0;
+  color: var(--color-text-muted);
+  font: 500 12px / 1.35 var(--font-ui, inherit);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* 工具入参流：Apple 风格的轻量玻璃卡。入参默认折叠，点头部才展开。 */
 .kimi-tool-arg-stream {
   width: 100%;
   margin: 2px 0 10px;
-  padding: 10px 12px 12px;
-  border: 1px solid var(--color-line);
-  border-radius: var(--kimi-radius-md, 10px);
-  background: var(--color-surface-raised, var(--color-surface));
+  padding: 8px;
+  border: 1px solid var(--tool-detail-border);
+  border-radius: 14px;
+  background: var(--tool-detail-bg);
+  box-shadow: var(--tool-detail-shadow);
 }
 
 .kimi-tool-arg-stream-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
   min-width: 0;
-  margin-bottom: 8px;
-  padding: 0;
+  min-height: 28px;
+  margin-bottom: 0;
+  padding: 2px 3px;
   border: none;
   background: none;
   color: var(--color-text);
-  font: 600 12px / 1.3 var(--font-ui, inherit);
+  font: 500 13px / 1.35 var(--font-sans);
   text-align: left;
   cursor: pointer;
 }
 
 /* 收起态：头部就是整张卡，不留底部空白 */
-.kimi-tool-arg-stream:not(.is-open) .kimi-tool-arg-stream-head {
-  margin-bottom: 0;
+.kimi-tool-arg-stream.is-open .kimi-tool-arg-stream-head {
+  margin-bottom: 8px;
 }
 
 .kimi-tool-arg-stream-chevron {
@@ -2496,12 +2540,26 @@ ol {
 
 .kimi-tool-arg-stream-glyph {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   flex: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--color-surface-sunken) 78%, transparent);
   color: var(--color-text-muted);
+}
+
+.kimi-tool-arg-stream-glyph svg {
+  width: 14px;
+  height: 14px;
 }
 
 .kimi-tool-arg-stream-name {
   flex: none;
+  color: var(--color-text);
+  font-weight: 590;
+  letter-spacing: -0.01em;
 }
 
 .kimi-tool-arg-stream-meta {
@@ -2516,8 +2574,12 @@ ol {
 
 .kimi-tool-arg-stream-chip {
   flex: none;
-  color: var(--color-text-faint);
-  font: 11px / 1 var(--font-ui, inherit);
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-sunken) 76%, transparent);
+  color: var(--color-text-muted);
+  font: 500 11px / 1 var(--font-ui, inherit);
+  font-variant-numeric: tabular-nums;
 }
 
 .kimi-tool-stream-preview {
@@ -2533,16 +2595,15 @@ ol {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
-  color: var(--color-text-faint);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  margin: 0 2px 6px;
+  color: var(--color-text-muted);
+  font: 500 11px / 1.3 var(--font-ui, inherit);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .kimi-tool-stream-preview-pulse {
-  color: var(--color-accent, #3b82f6);
+  color: var(--color-text-muted);
   font-size: 8px;
   animation: kimi-tool-stream-pulse 1.1s ease-in-out infinite;
 }
@@ -2551,32 +2612,124 @@ ol {
   margin: 0;
   max-height: min(320px, 42vh);
   overflow: auto;
-  padding: 12px 14px;
-  border: 1px solid var(--color-line);
-  border-radius: var(--kimi-radius-md, 8px);
-  background: var(--color-surface-sunken, var(--color-surface-raised));
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 72%, transparent);
+  border-radius: 10px;
+  background: color-mix(
+    in srgb,
+    var(--color-surface-sunken, var(--color-surface-raised)) 66%,
+    var(--color-surface-raised, var(--color-surface))
+  );
   color: var(--color-text);
-  font: var(--text-ui-base) / 1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  font: 12.5px / 1.65 var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
   scrollbar-gutter: stable;
 }
 
 .kimi-tool-stream-preview.is-prominent .kimi-tool-stream-preview-body {
-  border-color: color-mix(in srgb, var(--color-accent, #3b82f6) 22%, var(--color-line));
-  background: color-mix(
-    in srgb,
-    var(--color-accent, #3b82f6) 4%,
-    var(--color-surface-sunken, var(--color-surface-raised))
-  );
+  border-color: color-mix(in srgb, var(--color-line) 72%, transparent);
 }
 
 .kimi-tool-stream-preview-cursor {
   display: inline-block;
   margin-left: 1px;
-  color: var(--color-accent, #3b82f6);
+  color: var(--color-text-muted);
   animation: kimi-tool-stream-blink 1s step-end infinite;
+}
+
+/* 统一工具失败卡：失败后只保留可复制的错误原文。 */
+.kimi-tool-failure {
+  margin: 2px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #ff3b30 17%, transparent);
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #ff3b30 7%, var(--color-surface-raised)),
+    color-mix(in srgb, #ff3b30 4%, var(--color-surface-raised))
+  );
+  box-shadow: 0 1px 2px rgba(180, 30, 24, 0.035);
+}
+
+.kimi-tool-failure-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kimi-tool-failure-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, #ff3b30 11%, transparent);
+  color: color-mix(in srgb, #ff3b30 84%, var(--color-text));
+}
+
+.kimi-tool-failure-glyph svg {
+  width: 15px;
+  height: 15px;
+}
+
+.kimi-tool-failure-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font: 590 13px / 1.35 var(--font-sans);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kimi-tool-failure-status {
+  flex: none;
+  color: color-mix(in srgb, #ff3b30 84%, var(--color-text));
+  font: 500 12px / 1.3 var(--font-ui, inherit);
+}
+
+.kimi-tool-failure-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: color-mix(in srgb, #ff3b30 72%, var(--color-text-muted));
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.kimi-tool-failure-copy:hover {
+  background: color-mix(in srgb, #ff3b30 9%, transparent);
+}
+
+.kimi-tool-failure-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
+.kimi-tool-failure-text {
+  max-height: min(180px, 30vh);
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-raised) 76%, transparent);
+  color: color-mix(in srgb, #c62828 70%, var(--color-text));
+  font: 12.5px / 1.65 var(--font-ui, inherit);
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-gutter: stable;
 }
 
 @keyframes kimi-tool-stream-blink {
@@ -2662,13 +2815,7 @@ ol {
   color: #fcd34d;
 }
 
-/* ---- 参数 / 结果两段（对齐 ZCode `ai-elements/tool.tsx` 的 ToolInput / ToolOutput）----
-   段标题 = 14px 大写 + 字距 + 次浅色；容器 = 淡底、**无描边**、上限 240px（ZCode `max-h-60`）。
-   ZCode 刻意不给这两块描边：展开体已经是卡片，再加一层边框就是「卡里套卡」。
-
-   底色写成 `color-mix(muted 50%, surface)` —— 这正是 ZCode `bg-muted/50` 的合成结果，
-   但显式把 `--color-muted`（只跟全局明暗走）合成到 `--color-surface`（跟聊天主题走）上，
-   避免聊天主题切换时这块底色跟丢。 */
+/* ---- 参数 / 结果 / 错误段 ---- */
 .kimi-tool-section {
   display: flex;
   flex-direction: column;
@@ -2682,20 +2829,16 @@ ol {
 
 .kimi-tool-section-title {
   margin: 0;
-  color: var(--color-foreground-subtle);
-  font-family: var(--font-ui);
-  font-size: var(--text-ui-base);
-  font-weight: 500;
-  letter-spacing: 0.025em;
-  text-transform: uppercase;
+  color: var(--color-text-muted);
+  font: 500 12px / 1.35 var(--font-ui, inherit);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .kimi-tool-section-body {
   max-height: 240px;
   overflow: auto;
   padding: 12px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-muted) 50%, var(--color-surface));
   color: var(--color-text);
   font-size: var(--text-ui-base);
   scrollbar-gutter: stable;
@@ -2703,7 +2846,12 @@ ol {
 }
 
 .kimi-tool-section-body.is-error {
-  background: color-mix(in srgb, var(--color-destructive) 10%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-destructive) 18%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-destructive) 8%,
+    var(--tool-detail-bg)
+  );
   color: var(--color-destructive);
 }
 
@@ -2763,13 +2911,13 @@ ol {
 .kimi-tool-execute {
   display: flex;
   flex-direction: column;
-  /* ZCode execute 展开体：`space-y-3 rounded-xl border border-border bg-panel px-4 py-3` */
   gap: 12px;
   margin-top: 8px;
   padding: 12px 16px;
-  border: 1px solid var(--color-line);
-  border-radius: 12px;
-  background: var(--color-panel);
+  border: 1px solid var(--tool-detail-border);
+  border-radius: 14px;
+  background: var(--tool-detail-bg);
+  box-shadow: var(--tool-detail-shadow);
 }
 
 .kimi-tool-execute-command {
@@ -2837,8 +2985,6 @@ ol {
   overflow: auto;
   margin: 8px 0 0;
   padding: 12px 16px;
-  border-radius: 12px;
-  background: var(--color-surface-raised);
   color: var(--color-foreground-subtle);
   font-family: var(--font-mono);
   font-size: var(--text-ui-xs);
@@ -2925,13 +3071,9 @@ ol {
 
 .kimi-tool-mcp-title {
   margin: 0;
-  /* ZCode `renderers/mcp.tsx` 段标题：`text-ui-base font-medium text-foreground-subtle`
-     —— 不是小号大写字母间距标题，也不走等宽（展开体默认继承 mono，这里显式拉回 UI sans） */
-  color: var(--color-foreground-subtle);
-  font-family: var(--font-ui);
-  font-size: var(--text-ui-base);
-  font-weight: 500;
-  letter-spacing: normal;
+  color: var(--color-text-muted);
+  font: 500 12px / 1.35 var(--font-ui, inherit);
+  letter-spacing: 0;
   text-transform: none;
 }
 
@@ -2944,13 +3086,11 @@ ol {
   max-height: min(288px, 42vh);
   overflow: auto;
   margin: 0;
-  /* ZCode：`rounded-xl border border-border bg-card px-3 py-2 text-ui-base text-foreground-subtle`。
-     底色沿用本项目的 `--color-surface-raised`（= 聊天主题感知的内容卡底色），
-     不引 `--color-card`，那个令牌只跟全局明暗走、不跟聊天主题走。 */
   padding: 8px 12px;
-  border: 1px solid var(--color-line);
-  border-radius: 12px;
-  background: var(--color-surface-raised);
+  border: 1px solid var(--tool-detail-border);
+  border-radius: 14px;
+  background: var(--tool-detail-bg);
+  box-shadow: var(--tool-detail-shadow);
   font-family: var(--font-mono);
   font-size: var(--text-ui-base);
   line-height: 1.65;
@@ -2982,9 +3122,10 @@ ol {
 .kimi-tool-mcp-compact {
   margin: 0;
   padding: 8px 12px;
-  border: 1px solid var(--color-line);
-  border-radius: 12px;
-  background: var(--color-surface-raised);
+  border: 1px solid var(--tool-detail-border);
+  border-radius: 14px;
+  background: var(--tool-detail-bg);
+  box-shadow: var(--tool-detail-shadow);
   color: var(--color-foreground-subtle);
   /* ZCode 的 compact 分支是个普通 `<p>`（`text-ui-base`），走 UI sans 而不是等宽 */
   font-family: var(--font-ui);
@@ -2999,8 +3140,13 @@ ol {
 .kimi-tool-mcp-error-box {
   margin: 0;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-destructive) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-destructive) 18%, transparent);
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--color-destructive) 8%,
+    var(--tool-detail-bg)
+  );
   color: var(--color-destructive);
   font-family: var(--font-ui);
   font-size: var(--text-ui-base);
@@ -3041,10 +3187,8 @@ ol {
 
 .kimi-tool-mcp-detail-title {
   margin: 0;
-  /* ZCode `text-ui-sm font-medium text-foreground-subtlest` */
-  color: var(--color-foreground-subtlest);
-  font-size: var(--text-ui-sm);
-  font-weight: 500;
+  color: var(--color-text-muted);
+  font: 500 12px / 1.35 var(--font-ui, inherit);
 }
 
 /* 工具组：对齐 ZCode `ToolCallBlocks/ToolLayout.tsx:306` 的外壳 —— 只有
@@ -3385,8 +3529,7 @@ ol {
     min-height: 44px;
   }
 
-  .cute-workspace-panel .kimi-detail-panel-head button,
-  .cute-workspace-panel .kimi-thinking-panel-head button {
+  .cute-workspace-panel .kimi-detail-panel-head button {
     min-width: 44px;
     min-height: 44px;
   }
@@ -3412,8 +3555,7 @@ ol {
     max-height: 34dvh;
   }
 
-  .kimi-detail-panel-head,
-  .kimi-thinking-panel-head {
+  .kimi-detail-panel-head {
     padding-inline: 12px;
   }
 
@@ -3483,8 +3625,7 @@ ol {
   .kimi-tool-group-body,
   .kimi-tool-group-chevron,
   .kimi-think-wrap,
-  .kimi-detail-panel,
-  .kimi-thinking-panel {
+  .kimi-detail-panel {
     transition: none !important;
     animation: none !important;
   }
@@ -3607,37 +3748,6 @@ ol {
   max-height: 240px;
   overflow-y: auto;
   cursor: pointer;
-}
-
-.kimi-thinking-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--color-bg);
-  animation: detailPanelEnter var(--duration-message) var(--ease-out) both;
-}
-
-.kimi-thinking-panel-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--color-line);
-  flex: none;
-}
-
-.kimi-thinking-panel-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  margin: 0;
-  padding: 12px 14px;
-  font: var(--text-base) / var(--leading-relaxed) var(--font-ui);
-  font-weight: 425;
-  color: var(--color-text-muted);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 /* Kimi exclusive detail panels (diff / agent) */
@@ -3820,28 +3930,55 @@ ol {
 }
 
 .kimi-qcard {
-  border-color: var(--color-accent-bd);
+  overflow: hidden;
+  border-color: var(--tool-detail-border);
+  border-radius: 14px;
+  background: var(--tool-detail-bg);
+  box-shadow: var(--tool-detail-shadow);
 }
 .kimi-qcard .kimi-ui-card__head {
-  background: var(--color-accent-soft);
-  border-bottom-color: var(--color-accent-bd);
+  padding: 10px 12px;
+  border-bottom-color: var(--tool-detail-border);
+  background: transparent;
+}
+.kimi-qcard .kimi-ui-card__body {
+  padding: 12px;
+  background: transparent;
+}
+.kimi-qcard .kimi-ui-card__foot {
+  padding: 10px 12px;
+  border-top-color: var(--tool-detail-border);
+  background: transparent;
+}
+.kimi-qcard .kimi-appr-badge {
+  border-color: var(--tool-detail-border);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-sunken) 78%,
+    transparent
+  );
+  color: var(--color-text-muted);
 }
 .kimi-qcard-ic {
-  width: var(--p-ic-md);
-  height: var(--p-ic-md);
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-accent);
-  font-weight: var(--weight-semibold);
-  font-size: 15px;
-  line-height: 1;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-surface-sunken) 78%, transparent);
+  color: var(--color-text-muted);
   flex: none;
 }
+.kimi-qcard-ic svg {
+  width: 16px;
+  height: 16px;
+}
 .kimi-qcard-title {
-  color: var(--color-accent-hover);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 590;
+  letter-spacing: -0.01em;
 }
 .kimi-qcard-step {
   color: var(--color-text-muted);
@@ -3856,13 +3993,13 @@ ol {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: var(--kimi-radius-sm);
+  border-radius: 8px;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
 }
 .kimi-qcard-min:hover {
-  background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  background: color-mix(in srgb, var(--color-surface-sunken) 82%, transparent);
   color: var(--color-text);
 }
 .kimi-qcard-peek {
@@ -3907,11 +4044,11 @@ ol {
 .kimi-qcard-chip {
   display: inline-flex;
   margin-bottom: var(--space-2);
-  border: 1px solid var(--color-line);
-  border-radius: var(--kimi-radius-sm);
-  background: var(--color-surface-raised);
-  padding: 0 6px;
-  font: var(--text-xs) var(--font-mono);
+  border: 1px solid var(--tool-detail-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-sunken) 70%, transparent);
+  padding: 3px 8px;
+  font: 500 11px / 1.2 var(--font-ui);
   color: var(--color-text-muted);
 }
 .kimi-qcard-text {
@@ -3931,9 +4068,10 @@ ol {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-line);
-  border-radius: var(--kimi-radius-md);
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 78%, transparent);
+  border-radius: 10px;
   cursor: pointer;
   font: var(--text-sm) / var(--leading-normal) var(--font-ui);
   color: var(--color-text);
@@ -3946,11 +4084,12 @@ ol {
   user-select: none;
 }
 .kimi-qcard-opt:hover:not(:disabled) {
-  background: var(--color-surface-sunken);
+  border-color: var(--color-line-strong);
+  background: color-mix(in srgb, var(--color-surface-sunken) 58%, transparent);
 }
 .kimi-qcard-opt.is-selected {
-  border-color: var(--color-accent-bd);
-  background: var(--color-accent-soft);
+  border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-line));
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 .kimi-qcard-opt:disabled {
   cursor: default;
@@ -3964,11 +4103,16 @@ ol {
   text-align: center;
 }
 .kimi-qcard-opt-glyph {
-  color: var(--color-accent-hover);
-  font: var(--text-base) var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-faint);
   flex: none;
   width: 14px;
   text-align: center;
+}
+.kimi-qcard-opt.is-selected .kimi-qcard-opt-glyph {
+  color: color-mix(in srgb, var(--color-accent) 76%, var(--color-text));
 }
 .kimi-qcard-opt-text {
   flex: 1;
@@ -4013,11 +4157,15 @@ ol {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
-  border-radius: var(--kimi-radius-sm);
-  border: 1px solid var(--color-line);
-  background: var(--color-surface-raised);
+  border-radius: 8px;
+  border: 1px solid var(--tool-detail-border);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-raised) 82%,
+    transparent
+  );
   color: var(--color-text);
   font: var(--weight-medium) var(--text-sm) / 1 var(--font-ui);
   cursor: pointer;
@@ -4217,6 +4365,19 @@ ol {
   .kimi-appr-plan textarea {
     min-height: 220px;
   }
+
+  .kimi-qcard .kimi-ui-card__head {
+    padding: 10px 12px;
+  }
+
+  .kimi-qcard-opt,
+  .kimi-qcard-btn {
+    min-height: 44px;
+  }
+
+  .kimi-qcard-btn {
+    height: 44px;
+  }
 }
 
 /* AskUser answered result (ToolRow body) —— 对齐 ZCode `renderers/ask-question.tsx`：
@@ -4253,9 +4414,10 @@ ol {
 }
 .kimi-au-raw {
   padding: 11px 13px;
-  border: 1px solid var(--color-line);
-  border-radius: var(--kimi-radius-md);
-  background: var(--color-surface-raised);
+  border: 1px solid var(--tool-detail-border);
+  border-radius: 10px;
+  background: var(--tool-detail-code-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
   font: var(--text-ui-base) / 1.65 var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;

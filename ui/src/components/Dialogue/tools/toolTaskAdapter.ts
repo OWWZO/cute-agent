@@ -6,6 +6,7 @@ import {
   resolveTaskToolResultText,
 } from "@/utils/chat/toolCalls";
 import { isSubAgentParentTask } from "@/utils/chat/subagent";
+import { identityKeys, readTaskIdentity } from "@/utils/chat/taskIdentity";
 import { isTimelineToolActive } from "@/components/ChatView/streamState";
 import { resolveTaskSummaryText } from "../contentHelpers";
 import { isUsableUnifiedPatch } from "./toolDiff";
@@ -245,12 +246,18 @@ export function formatDurationLabel(ms?: number): string {
  */
 export function resolveToolKey(tool: CHAT.Task): string {
   const top = tool as unknown as Record<string, unknown>;
+  // taskId 可能是同一子会话共享的父任务 ID，不能先于工具调用自身身份使用，
+  // 否则展开一张子工具卡会让同组其他工具卡一起展开。
+  const [toolIdentity] = identityKeys(readTaskIdentity(tool));
+  if (toolIdentity) {
+    return toolIdentity;
+  }
   const candidates = [
-    tool.taskId,
     tool.messageId,
     tool.id,
     top.toolCallId,
     top.toolUseId,
+    tool.taskId,
   ];
   for (const candidate of candidates) {
     if (typeof candidate === "string" && candidate.trim()) {

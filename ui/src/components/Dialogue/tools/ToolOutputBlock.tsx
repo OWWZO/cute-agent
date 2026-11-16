@@ -10,7 +10,7 @@ import { clampOutputLines } from "./toolOutputLimit";
  *    「报错被一坨 JSON 淹没」比缺信息更糟。
  * 2. **没有输出就整段不渲染**（ZCode 是 `if (!(output || errorText)) return null`），
  *    不再给「暂无输出 / 等待输出…」占位。占位属于 execute 卡自己的空态。
- * 3. 段标题固定 `Result` / `Error`，容器是淡底**无描边**、上限 240px（ZCode `max-h-60`）。
+ * 3. 段标题固定 `结果` / `错误`，容器复用工具详情面，上限 240px。
  *
  * 另外对齐 ZCode `toolOutputSchema.truncated`：超长输出默认只渲染前若干行，
  * 尾部保留一小段，中间用一个「展开」按钮补齐。
@@ -56,8 +56,11 @@ export function ToolOutputBlock({
   if (trimmedError) {
     return (
       <section className="kimi-tool-section">
-        <h4 className="kimi-tool-section-title">Error</h4>
-        <div className="kimi-tool-section-body is-error" data-testid="tool-output-error">
+        <h4 className="kimi-tool-section-title">错误</h4>
+        <div
+          className="kimi-tool-detail kimi-tool-section-body is-error"
+          data-testid="tool-output-error"
+        >
           <div className="kimi-tool-section-error">{trimmedError}</div>
         </div>
       </section>
@@ -70,8 +73,11 @@ export function ToolOutputBlock({
 
   return (
     <section className="kimi-tool-section">
-      <h4 className="kimi-tool-section-title">Result</h4>
-      <div className="kimi-tool-section-body" data-testid="tool-output">
+      <h4 className="kimi-tool-section-title">结果</h4>
+      <div
+        className="kimi-tool-detail kimi-tool-section-body"
+        data-testid="tool-output"
+      >
         {jsonOutput ? (
           <ToolJsonBlock data={jsonOutput} />
         ) : (

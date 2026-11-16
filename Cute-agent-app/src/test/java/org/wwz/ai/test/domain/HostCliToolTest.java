@@ -52,7 +52,11 @@ public class HostCliToolTest {
                 .durationMs(3)
                 .build());
         HostCliTool tool = new HostCliTool(List.of("git"));
+        Map<?, ?> properties = (Map<?, ?>) tool.toParams().get("properties");
+        Assert.assertTrue(properties.containsKey("intent"));
+        Assert.assertTrue(((List<?>) tool.toParams().get("required")).contains("intent"));
         ToolResultPayload payload = (ToolResultPayload) tool.execute(Map.of(
+                "intent", "查看当前仓库状态",
                 "tool", "git",
                 "args", List.of("status")
         ), contextWith(cli));
@@ -60,9 +64,12 @@ public class HostCliToolTest {
         Assert.assertTrue(String.valueOf(payload.getLlmData()).contains("ok"));
         ArgumentCaptor<CliInvocation> invocationCaptor = ArgumentCaptor.forClass(CliInvocation.class);
         Mockito.verify(cli).exec(invocationCaptor.capture());
+        Assert.assertEquals(List.of("status"), invocationCaptor.getValue().getArgs());
         Map<String, String> env = invocationCaptor.getValue().getEnv();
         Assert.assertEquals("http://proxy.test:8080", env.get("HTTP_PROXY"));
         Assert.assertEquals("http://proxy.test:8080", env.get("HTTPS_PROXY"));
+        Assert.assertEquals("1", env.get("PYTHONUTF8"));
+        Assert.assertEquals("utf-8", env.get("PYTHONIOENCODING"));
         Assert.assertEquals("http://proxy.test:8080", env.get("ALL_PROXY"));
         Assert.assertEquals("http://proxy.test:8080", env.get("http_proxy"));
         Assert.assertEquals("http://proxy.test:8080", env.get("https_proxy"));
@@ -105,7 +112,10 @@ public class HostCliToolTest {
 
         ArgumentCaptor<CliInvocation> invocationCaptor = ArgumentCaptor.forClass(CliInvocation.class);
         Mockito.verify(cli).exec(invocationCaptor.capture());
-        Assert.assertTrue(invocationCaptor.getValue().getEnv().isEmpty());
+        Map<String, String> env = invocationCaptor.getValue().getEnv();
+        Assert.assertFalse(env.containsKey("HTTP_PROXY"));
+        Assert.assertEquals("1", env.get("PYTHONUTF8"));
+        Assert.assertEquals("utf-8", env.get("PYTHONIOENCODING"));
         Assert.assertTrue(invocationCaptor.getValue().getUnsetEnv().contains("HTTP_PROXY"));
         Assert.assertTrue(invocationCaptor.getValue().getUnsetEnv().contains("https_proxy"));
     }

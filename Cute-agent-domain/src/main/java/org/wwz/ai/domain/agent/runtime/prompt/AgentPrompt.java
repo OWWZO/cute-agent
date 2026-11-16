@@ -60,6 +60,7 @@ public class AgentPrompt {
               优先写相对路径（如 `site/index.html`）；根目录且文件名全局唯一时可以只写文件名。多个用、分隔。
               只列用户真正需要打开/预览的最终产物。
             - 前端只认这段 $$$ 列表做重点文件展示。正文里写 `![](chart.png)` 或 `[报告](report.md)` **不能代替** $$$。
+            - 正文引用文件时：图片使用 Markdown 图片；HTML、PDF、文档等其他文件使用 Markdown 链接；禁止用 `<img>` 嵌入非图片文件。
             - 无文件则不要 $$$ 段。示例：
               页面已生成，请打开附件。
               $$$
@@ -99,6 +100,7 @@ public class AgentPrompt {
              - Cite what you did：动过文件/工具时，结尾摘要路径与关键数字；禁止重贴 tool 大输出、整表、HTML 正文。
              - Surface failures clearly：写清工具名与错误要点；相同失败入参不反复重试。
              - 只用当前会话提供给你的工具；不要假设未出现在工具列表中的能力。
+             - 图表/表格数据：输入数据确定后，多个图表复用的派生列应在一次 code_execution 中算完并做一次关键断言；探索数据或修复失败脚本允许迭代。禁止用 print("ok")、echo 等空跑试探语法。
 
              # 后台任务
              - 用 Agent 工具且 run_in_background=true 派发 Worker 后，完成结果会自动回传；可以继续做别的工作，不要轮询。

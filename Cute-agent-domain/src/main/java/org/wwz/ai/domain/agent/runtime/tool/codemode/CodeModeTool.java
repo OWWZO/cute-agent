@@ -3,6 +3,7 @@ package org.wwz.ai.domain.agent.runtime.tool.codemode;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
+import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.types.agent.config.CodeModeProperties;
 
@@ -43,13 +44,16 @@ public class CodeModeTool implements BaseTool {
                 + "source 与 workspaceFile 二选一：source 直接传源码，workspaceFile 执行会话 workspace 内已存在的 .js 脚本（只允许 scripts/ 与 jobs/）。"
                 + "脚本内不能 require / import，不能访问 Java 类、文件系统和进程；"
                 + "浏览器和 CLI 只能经由 browser.command / host.exec 调用，host 只接受白名单 CLI 的 argv。"
+                + "workspace 文件接口统一接收对象：writeText({ path, content })、readText({ path })、"
+                + "writeBytes({ path, base64 })、writeCsv({ path, columns, rows })。"
                 + "已有的 Bash 工具是用来操作云端沙箱的，这个工具是用 JavaScript 来替代 本地Bash 的执行能力，所以本地Bash怎么调用这些CLI，JavaScript就怎么写。"
-                ;
+                + ToolCallIntentSchema.descriptionSuffix();
     }
 
     @Override
     public Map<String, Object> toParams() {
         Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put(ToolCallIntentSchema.FIELD, ToolCallIntentSchema.property());
         properties.put("source", Map.of(
                 "type", "string",
                 "description", "JavaScript 源码，必须包含 async function main(context)。与 workspaceFile 二选一。"
@@ -68,11 +72,11 @@ public class CodeModeTool implements BaseTool {
                 "type", "integer",
                 "description", "超时毫秒，默认 " + defaultTimeoutMs()
         ));
-        // source / workspaceFile 二选一，故 required 为空；显式声明避免下游自动补齐。
+        // source / workspaceFile 二选一；intent 是每次调用必须给出的意图说明。
         return Map.of(
                 "type", "object",
                 "properties", properties,
-                "required", List.of()
+                "required", List.of(ToolCallIntentSchema.FIELD)
         );
     }
 

@@ -10,6 +10,15 @@ import org.wwz.ai.domain.agent.runtime.prompt.AgentPrompt;
 public class AgentPromptContractStripTest {
 
     @Test
+    public void userFacingContractRequiresMarkdownForFileLinks() {
+        String contract = AgentPrompt.USER_FACING_REPLY_CONTRACT;
+
+        Assert.assertTrue(contract.contains("图片使用 Markdown 图片"));
+        Assert.assertTrue(contract.contains("HTML、PDF、文档等其他文件使用 Markdown 链接"));
+        Assert.assertTrue(contract.contains("禁止用 `<img>` 嵌入非图片文件"));
+    }
+
+    @Test
     public void coordinatorPromptDoesNotRetainUserFacingContractTail() {
         String withUserContract = AgentPrompt.ensureUserFacingReplyContract("# 角色\n你是助手。");
         String followedByAnotherSection = withUserContract + "\n# 附加规则\n不要泄漏内部实现。\n";

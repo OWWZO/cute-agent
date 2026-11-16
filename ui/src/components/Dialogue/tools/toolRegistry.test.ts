@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resolveToolRendererKind } from "./toolRegistry";
+import { resolveToolRendererKind, ToolCallView } from "./toolRegistry";
 import { buildEditDiffCode, editDiffStats, formatEditDiffChip } from "./toolDiff";
 import { normalizeToolName } from "./toolMeta";
 import { resolveTaskToolOutput } from "./toolTaskAdapter";
@@ -166,6 +166,55 @@ describe("toolRegistry", () => {
     ).toBe("generic");
   });
 
+  it("uses one persistent failure card for every failed tool renderer", () => {
+    const failedTools = [
+      taskOf("Fetch", { url: "https://example.com" }, {
+        status: "failed",
+        errorMsg: "request timed out",
+      }),
+      taskOf("Edit", { path: "a.ts" }, {
+        status: "failed",
+        errorMsg: "old_string not found",
+      }),
+      taskOf("Bash", { command: "exit 1" }, {
+        status: "failed",
+        errorMsg: "command failed",
+      }),
+    ];
+
+    for (const tool of failedTools) {
+      const html = renderToStaticMarkup(
+        createElement(ToolCallView, {
+          tool,
+          chat: {} as CHAT.ChatItem,
+          defaultExpanded: true,
+          changeActiveChat: () => undefined,
+        })
+      );
+      expect(html).toContain('data-testid="tool-failure"');
+      expect(html).toContain("执行失败");
+      expect(html).not.toContain("参数");
+      expect(html).not.toContain("结果");
+    }
+  });
+
+  it("does not render a completed generic tool with no visible content", () => {
+    const html = renderToStaticMarkup(
+      createElement(GenericToolCall, {
+        tool: toolTask({
+          resultMap: {
+            toolName: "Bash",
+            status: "success",
+          },
+        }),
+        chat: {} as CHAT.ChatItem,
+        changeActiveChat: () => undefined,
+      })
+    );
+
+    expect(html).toBe("");
+  });
+
   it("reads nested tool output for a child tool result", () => {
     const task = toolTask({
       resultMap: {
@@ -198,8 +247,8 @@ describe("toolRegistry", () => {
     );
 
     expect(html).toContain('aria-expanded="true"');
-    // 段标题对齐 ZCode `ToolInput` / `ToolOutput`：Parameters / Result
-    expect(html).toContain("Parameters");
+    expect(html).toContain("参数");
+    expect(html).toContain("kimi-tool-detail");
     expect(html).toContain("found Controller");
   });
 
@@ -220,7 +269,7 @@ describe("toolRegistry", () => {
 
     // 时间线不再传 defaultExpanded（此前是 step.active），卡片一律从收起态开始。
     expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain("Parameters");
+    expect(html).not.toContain("参数");
     expect(html).not.toContain("found Controller");
   });
 
@@ -417,6 +466,7 @@ describe("Stage 5 · 卡内展开区", () => {
     );
 
     expect(html).toContain("kimi-tool-execute");
+    expect(html).toContain("kimi-tool-detail");
     expect(html).toContain("kimi-tool-execute-prompt");
     expect(html).toContain("npm run build");
     // 吸底容器与 following 标记由 ExecuteOutput 提供
@@ -441,6 +491,7 @@ describe("Stage 5 · 卡内展开区", () => {
 
     // 一级：结果 + 头部动作
     expect(html).toContain("结果");
+    expect(html).toContain("kimi-tool-detail");
     expect(html).toContain("自动换行");
     expect(html).toContain("复制结果");
     expect(html).toContain('data-testid="mcp-result-surface"');
@@ -468,6 +519,7 @@ describe("Stage 5 · 卡内展开区", () => {
     );
 
     expect(html).toContain("kimi-tool-mcp-compact");
+    expect(html).toContain("kimi-tool-detail");
     expect(html).toContain("file contents");
     expect(html).not.toContain("kimi-tool-mcp-head");
   });
@@ -484,10 +536,62 @@ describe("Stage 5 · 卡内展开区", () => {
 
     // 对齐 ZCode `renderers/fallback.tsx`：一块 `<pre>` 原始 JSON，**不给段标题**。
     expect(html).toContain('data-testid="tool-raw-json"');
+    expect(html).toContain("kimi-tool-detail-code");
     expect(html).toContain("SomeUnknownTool");
-    // 卡片本身为空时不应该再出现 Parameters / Result 段
-    expect(html).not.toContain("Parameters");
-    expect(html).not.toContain("Result");
+    // 卡片本身为空时不应该再出现参数 / 结果段
+    expect(html).not.toContain("参数");
+    expect(html).not.toContain("结果");
+  });
+
+  it("mcp 运行中复用统一的入参流卡", () => {
+    const html = renderToStaticMarkup(
+      createElement(McpToolCall, {
+        tool: toolTask({
+          finish: false,
+          isFinal: false,
+          resultMap: {
+            toolName: "mcp__filesystem__read_file",
+            status: "streaming",
+            argsStreaming: true,
+            argumentsText: '{"path":"src/a.ts"}',
+          },
+        }),
+      })
+    );
+
+    expect(html).toContain('data-testid="mcp-tool-arg-stream"');
+    expect(html).toContain("MCP");
+    expect(html).toContain("filesystem · read_file");
+    expect(html).not.toContain('data-testid="mcp-expanded-content"');
+  });
+
+  it("完成态没有结果的 mcp 不再留下死行", () => {
+    const html = renderToStaticMarkup(
+      createElement(McpToolCall, {
+        tool: toolTask({
+          resultMap: {
+            toolName: "mcp__filesystem__read_file",
+          },
+        }),
+      })
+    );
+
+    expect(html).toBe("");
+  });
+
+  it("完成态没有路径的 read 不再留下死行", () => {
+    const html = renderToStaticMarkup(
+      createElement(ReadToolCall, {
+        tool: toolTask({
+          resultMap: {
+            toolName: "Read",
+          },
+        }),
+        chat: {} as CHAT.ChatItem,
+      })
+    );
+
+    expect(html).toBe("");
   });
 });
 
@@ -626,7 +730,7 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
     expect(html).toContain('data-testid="inline-diff-preview"');
     expect(html).toContain("const a = 2");
     // ZCode 在有内联 diff 的分支会把通用 Parameters 关掉：变更内容已由 diff 表达
-    expect(html).not.toContain("Parameters");
+    expect(html).not.toContain("参数");
     // diffToolStrategy 是 `showOutput: Boolean(errorText)` —— 成功态**不渲染 Result**。
     // 现在 toolResult 里还带着整份 patch，渲染出来就是一坨 JSON。
     expect(html).not.toContain("kimi-tool-section-title");
@@ -692,9 +796,9 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
         defaultExpanded: true,
       })
     );
-    expect(failed).toContain("Error");
+    expect(failed).toContain("错误");
     expect(failed).toContain("old_string not found");
-    expect(failed).not.toContain("Result");
+    expect(failed).not.toContain("结果");
   });
 
   it("多文件 edit 走 border-l 导轨 + 逐文件可展开子卡", () => {
@@ -799,9 +903,9 @@ describe("Edit 卡内联 diff（对齐 ZCode EditInlineDiffContent）", () => {
       })
     );
 
-    expect(html).toContain("Error");
+    expect(html).toContain("错误");
     expect(html).toContain("old_string not found");
     expect(html).not.toContain("kimi-inline-diff");
-    expect(html).not.toContain("Parameters");
+    expect(html).not.toContain("参数");
   });
 });

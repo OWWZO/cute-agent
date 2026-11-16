@@ -43,18 +43,30 @@ function hasTextSelection(): boolean {
   return Boolean(window.getSelection()?.toString());
 }
 
+export function isThinkingAtBottom(element: {
+  scrollHeight: number;
+  scrollTop: number;
+  clientHeight: number;
+}): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight < 48;
+}
+
 /** 收起 + 流式时，标题右侧滚动显示思考的最后一行（图3 的核心观感）。 */
 export function resolveStreamingSummary(text: string): string | undefined {
-  let lastTextIndex = text.length - 1;
-  while (lastTextIndex >= 0 && /\s/u.test(text[lastTextIndex])) {
-    lastTextIndex -= 1;
-  }
-  if (lastTextIndex < 0) {
+  // 只展示已经换行结束的完整行。若拿正在增长的末行做摘要，右侧文本会每个
+  // token 都重新排版，折叠态看起来像闪烁/重叠。
+  const lastBreak = text.lastIndexOf("\n");
+  if (lastBreak <= 0) {
     return undefined;
   }
-  const lineStart = text.lastIndexOf("\n", lastTextIndex) + 1;
-  const line = text.slice(lineStart, lastTextIndex + 1).trim();
-  return line || undefined;
+  const completedLines = text.slice(0, lastBreak).split("\n");
+  for (let index = completedLines.length - 1; index >= 0; index -= 1) {
+    const line = completedLines[index].trim();
+    if (line) {
+      return line;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -90,6 +102,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
 }: ThinkingBlockProps) {
   const bodyRef = useRef<HTMLPreElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
+  const stickToBottomRef = useRef(true);
   const wasStreamingRef = useRef(streaming);
   /** 用户手动点过折叠后，流式过程中不再被强制拉开 */
   const userToggledRef = useRef(false);
@@ -131,8 +144,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
     if (!el || !open) return;
     scrollFrameRef.current = requestAnimationFrame(() => {
       scrollFrameRef.current = null;
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-      if (atBottom || streaming) {
+      if (stickToBottomRef.current) {
         el.scrollTop = el.scrollHeight;
       }
     });
@@ -142,7 +154,14 @@ export const ThinkingBlock = memo(function ThinkingBlock({
         scrollFrameRef.current = null;
       }
     };
-  }, [text, open, streaming]);
+  }, [text, open]);
+
+  const handleBodyScroll = useCallback(() => {
+    const el = bodyRef.current;
+    if (el) {
+      stickToBottomRef.current = isThinkingAtBottom(el);
+    }
+  }, []);
 
   /** Radix 负责 toggle；这里只拦「用户正在选中文本」这一种情况，避免打断复制。 */
   const handleOpenChange = useCallback((next: boolean) => {
@@ -273,6 +292,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
               <pre
                 ref={bodyRef}
                 className="kimi-think-live"
+                onScroll={handleBodyScroll}
                 onClick={() => {
                   handleOpenChange(false);
                 }}

@@ -9,6 +9,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ToolRow, type ToolRowStackPosition } from "./ToolRow";
+import { ToolArgStreamCard } from "./ToolArgStreamCard";
 import { ToolJsonBlock, parseToolJson } from "./ToolJsonBlock";
 import {
   resolveTaskToolArg,
@@ -19,6 +20,11 @@ import {
 } from "./toolTaskAdapter";
 import { isCompactMcpResult, parseMcpToolName } from "./mcpToolName";
 import { useToolCardOpen } from "./useToolCardOpen";
+import {
+  formatToolStreamChip,
+  isToolArgStreaming,
+  shouldShowToolArgStream,
+} from "./toolStreamPreview";
 
 type McpToolCallProps = {
   tool: CHAT.Task;
@@ -53,6 +59,8 @@ export const McpToolCall = memo(function McpToolCall({
   const arg = resolveTaskToolArg(tool);
   const status = resolveTaskToolStatus(tool);
   const output = resolveTaskToolOutput(tool);
+  const argStreaming = isToolArgStreaming(tool);
+  const showArgStream = shouldShowToolArgStream(tool);
 
   const [open, setOpen] = useToolCardOpen(resolveToolKey(tool), Boolean(defaultExpanded));
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -75,12 +83,36 @@ export const McpToolCall = memo(function McpToolCall({
   const hasOutput = output.length > 0;
   const hasCallDetails = Boolean(inputJson) || Boolean(arg.trim());
   const expandable = hasOutput || hasCallDetails;
+  const isContentlessCompleted =
+    status === "ok" && !showArgStream && !hasOutput && !hasCallDetails;
 
   const handleCopy = () => {
     copyText(resultText);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   };
+
+  if (isContentlessCompleted) {
+    return null;
+  }
+
+  if (showArgStream) {
+    return (
+      <ToolArgStreamCard
+        icon={<PlugIcon className="size-4" />}
+        name={identity ? "MCP" : fallbackLabel}
+        summary={
+          identity
+            ? [server, toolName].filter(Boolean).join(" · ")
+            : rawName
+        }
+        chip={formatToolStreamChip(arg, arg)}
+        text={arg}
+        streaming={argStreaming}
+        testId="mcp-tool-arg-stream"
+      />
+    );
+  }
 
   return (
     <ToolRow
@@ -101,20 +133,30 @@ export const McpToolCall = memo(function McpToolCall({
         {/* ---- 一级：结果 ---- */}
         {isError ? (
           <section className="kimi-tool-mcp-section">
-            <h4 className="kimi-tool-mcp-title is-error">结果</h4>
-            <p className="kimi-tool-mcp-error-box" data-testid="mcp-result-surface">
+            <h4 className="kimi-tool-detail-title kimi-tool-mcp-title is-error">
+              错误
+            </h4>
+            <p
+              className="kimi-tool-detail kimi-tool-mcp-error-box"
+              data-testid="mcp-result-surface"
+            >
               {resultText || "调用失败"}
             </p>
           </section>
         ) : compactResult ? (
           // 短结果：一行文本，不给标题、不给动作按钮（ZCode 的 compact 分支）
-          <p className="kimi-tool-mcp-compact" data-testid="mcp-result-surface">
+          <p
+            className="kimi-tool-detail kimi-tool-mcp-compact"
+            data-testid="mcp-result-surface"
+          >
             {resultText}
           </p>
         ) : resultText ? (
           <section className="kimi-tool-mcp-section">
             <div className="kimi-tool-mcp-head">
-              <h4 className="kimi-tool-mcp-title">结果</h4>
+              <h4 className="kimi-tool-detail-title kimi-tool-mcp-title">
+                结果
+              </h4>
               <div className="flex shrink-0 items-center gap-0.5">
                 <button
                   type="button"
@@ -144,13 +186,16 @@ export const McpToolCall = memo(function McpToolCall({
             </div>
 
             {resultJson ? (
-              <div className="kimi-tool-mcp-text" data-testid="mcp-result-surface">
+              <div
+                className="kimi-tool-detail kimi-tool-mcp-text"
+                data-testid="mcp-result-surface"
+              >
                 <ToolJsonBlock data={resultJson} />
               </div>
             ) : (
               <pre
                 className={cn(
-                  "kimi-tool-mcp-text",
+                  "kimi-tool-detail kimi-tool-mcp-text",
                   wrap ? "is-wrap" : "is-nowrap"
                 )}
                 data-testid="mcp-result-surface"
@@ -162,7 +207,10 @@ export const McpToolCall = memo(function McpToolCall({
         ) : status === "running" ? (
           // 运行中且暂无结果（对齐 ZCode 的 pending 分支）：套一个浅色描边卡，
           // 让「还没结果」和「结果为空」在视觉上区分开。
-          <p className="kimi-tool-mcp-compact" data-testid="mcp-pending-surface">
+          <p
+            className="kimi-tool-detail kimi-tool-mcp-compact"
+            data-testid="mcp-pending-surface"
+          >
             调用中…
           </p>
         ) : (
@@ -196,13 +244,17 @@ export const McpToolCall = memo(function McpToolCall({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="kimi-tool-mcp-details-body">
-                <h4 className="kimi-tool-mcp-detail-title">参数</h4>
+                <h4 className="kimi-tool-detail-title kimi-tool-mcp-detail-title">
+                  参数
+                </h4>
                 {inputJson ? (
-                  <div className="kimi-tool-mcp-text">
+                  <div className="kimi-tool-detail kimi-tool-mcp-text">
                     <ToolJsonBlock data={inputJson} />
                   </div>
                 ) : (
-                  <pre className="kimi-tool-mcp-text is-wrap">{arg}</pre>
+                  <pre className="kimi-tool-detail kimi-tool-mcp-text is-wrap">
+                    {arg}
+                  </pre>
                 )}
               </div>
             </CollapsibleContent>

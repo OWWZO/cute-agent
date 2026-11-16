@@ -54,9 +54,13 @@ public class AgentBrowserToolTest {
         AgentBrowserTool tool = new AgentBrowserTool();
         AgentContext context = context(cli, sessionPort);
         ToolResultPayload payload = (ToolResultPayload) tool.execute(
-                Map.of("args", List.of("browser", "list")), context);
+                Map.of(
+                        "intent", "查看当前 Agent 浏览器中的标签页",
+                        "args", List.of("browser", "list")
+                ), context);
 
         Assert.assertEquals("agent_browser", tool.getName());
+        Assert.assertTrue(tool.getDescription().contains("intent"));
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         Assert.assertNull(context.getRuntimeDependencies().getOptionalBrowserRelayPort());
         ArgumentCaptor<CliInvocation> captor = ArgumentCaptor.forClass(CliInvocation.class);

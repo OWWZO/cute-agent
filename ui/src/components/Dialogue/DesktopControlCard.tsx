@@ -1,5 +1,5 @@
 import { FC, memo, useMemo, useState } from "react";
-import { LoaderCircleIcon, PanelRightOpen } from "lucide-react";
+import { LoaderCircleIcon, MonitorIcon, PanelRightOpen } from "lucide-react";
 import { toast } from "sonner";
 import {
   desktopControlApi,
@@ -75,7 +75,9 @@ const DesktopControlCard: FC<DesktopControlCardProps> = memo(({ tool }) => {
   return (
     <div className="kimi-ui-card kimi-qcard" data-testid="desktop-control-card">
       <div className="kimi-ui-card__head">
-        <span className="kimi-qcard-ic">🖥</span>
+        <span className="kimi-qcard-ic" aria-hidden>
+          <MonitorIcon />
+        </span>
         <span className="kimi-qcard-title">桌面控制</span>
         <span className="kimi-appr-badge ml-auto">
           {done ? "已完成" : "待操作"}
@@ -87,7 +89,7 @@ const DesktopControlCard: FC<DesktopControlCardProps> = memo(({ tool }) => {
           {fields.streamUrl && !done ? (
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--color-hover)] px-3 text-ui-caption"
+              className="kimi-qcard-btn"
               onClick={openDesktop}
             >
               <PanelRightOpen className="h-3.5 w-3.5" aria-hidden="true" />
@@ -96,7 +98,7 @@ const DesktopControlCard: FC<DesktopControlCardProps> = memo(({ tool }) => {
           ) : null}
           <button
             type="button"
-            className="inline-flex h-8 items-center gap-1 rounded-md bg-[var(--color-text)] px-3 text-ui-caption text-[var(--color-bg)] disabled:opacity-50"
+            className="kimi-qcard-btn is-primary"
             disabled={!fields.controlId || busy || done}
             onClick={() => void complete()}
           >

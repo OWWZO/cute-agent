@@ -40,7 +40,10 @@ public class CodeExecutionToolRequestTest {
 
         context.bindCurrentToolArtifactSource(artifactSource);
         try {
-            new CodeExecutionTool().execute(Map.of("workspaceFile", "scripts/run.py"), context);
+            new CodeExecutionTool().execute(Map.of(
+                    "intent", "运行工作区脚本并生成结果文件",
+                    "workspaceFile", "scripts/run.py"
+            ), context);
         } finally {
             context.clearCurrentToolArtifactSource();
         }
@@ -50,5 +53,6 @@ public class CodeExecutionToolRequestTest {
         Assert.assertTrue("source 必须是字符串", request.get("source") instanceof String);
         Assert.assertFalse("source 必须满足远端 min_length=1", request.getString("source").isBlank());
         Assert.assertEquals("scripts/run.py", request.getString("workspaceFile"));
+        Assert.assertFalse("intent 只属于工具调用元数据，不能传给沙箱", request.containsKey("intent"));
     }
 }

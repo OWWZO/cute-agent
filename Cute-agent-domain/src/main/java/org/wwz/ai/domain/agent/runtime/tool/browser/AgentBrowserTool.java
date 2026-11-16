@@ -11,6 +11,7 @@ import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
+import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.tool.cli.CliArtifactCaptureCoordinator;
 import org.wwz.ai.domain.agent.runtime.tool.cli.CliArtifactCaptureLease;
@@ -40,7 +41,8 @@ public class AgentBrowserTool implements BaseTool {
 
     @Override
     public String getDescription() {
-        return "远程操作当前用户的 Agent 浏览器。";
+        return "远程操作当前用户的 Agent 浏览器。"
+                + ToolCallIntentSchema.descriptionSuffix();
     }
 
     @Override

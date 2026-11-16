@@ -287,8 +287,16 @@ export function toolSummary(
         return path ? c(path) : fallback();
       }
       case "bash": {
+        const intent = str(d.intent)?.trim();
+        if (intent) return c(intent);
         const cmd = commandText(d);
         return cmd ? c(cmd, BASH_MAX) : fallback();
+      }
+      case "browser":
+      case "agent_browser":
+      case "host_cli": {
+        const intent = str(d.intent)?.trim();
+        return intent ? c(intent) : fallback();
       }
       case "grep":
       case "search": {

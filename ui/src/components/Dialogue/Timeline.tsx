@@ -25,8 +25,10 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CircleHelpIcon,
   LoaderCircleIcon,
   FileTextIcon,
+  MonitorIcon,
   SearchIcon,
   UserIcon,
 } from "lucide-react";
@@ -171,7 +173,9 @@ export const ToolItem: FC<ToolItemProps> = memo(({
       return (
         <div className="kimi-ui-card kimi-qcard">
           <div className="kimi-ui-card__head">
-            <span className="kimi-qcard-ic">🖥</span>
+            <span className="kimi-qcard-ic" aria-hidden>
+              <MonitorIcon />
+            </span>
             <span className="kimi-qcard-title">桌面控制</span>
             <span className="kimi-appr-badge">
               {status === "completed" ? "已完成" : "待操作"}
@@ -195,7 +199,9 @@ export const ToolItem: FC<ToolItemProps> = memo(({
       return (
         <div className="kimi-ui-card kimi-qcard">
           <div className="kimi-ui-card__head">
-            <span className="kimi-qcard-ic">?</span>
+            <span className="kimi-qcard-ic" aria-hidden>
+              <CircleHelpIcon />
+            </span>
             <span className="kimi-qcard-title">提问</span>
             <span className="kimi-appr-badge">
               待回答

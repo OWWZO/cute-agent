@@ -23,8 +23,6 @@ public enum CodeModeErrorCode {
     CODE_MODE_CANCELLED,
     /** main 返回值超过输出上限。 */
     CODE_MODE_OUTPUT_TOO_LARGE,
-    /** 内部 capability 调用次数超过上限。 */
-    CODE_MODE_TOOL_CALL_LIMIT,
     /** capability 策略拒绝（非白名单 CLI、越界路径等）。 */
     CODE_MODE_CAPABILITY_DENIED,
     /** capability 依赖未装配（opencli 缺失、浏览器离线等）。 */

@@ -13,7 +13,9 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
+import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
+import org.wwz.ai.domain.agent.runtime.tool.common.SandboxRemoteEndpoint;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillRuntimeOptions;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillVirtualPaths;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspacePaths;
@@ -52,7 +54,8 @@ public class BashTool implements BaseTool {
                 + "命令示例：python skills/<name>/scripts/xxx.py。"
                 + "沙箱内对 skills/** 的修改会回写全局 skill 库（注册表本轮不刷新）。"
                 + "不要使用宿主绝对路径。"
-                + "默认超时 " + defaultSec + "s，上限 " + maxSec + "s。";
+                + "默认超时 " + defaultSec + "s，上限 " + maxSec + "s。"
+                + ToolCallIntentSchema.descriptionSuffix();
     }
 
     @Override
@@ -69,13 +72,14 @@ public class BashTool implements BaseTool {
                 + (skillRuntimeOptions == null ? 600 : skillRuntimeOptions.getBashMaxTimeoutSec()));
 
         Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put(ToolCallIntentSchema.FIELD, ToolCallIntentSchema.property());
         properties.put("command", command);
         properties.put("timeout_sec", timeoutSec);
 
         Map<String, Object> parameters = new LinkedHashMap<>();
         parameters.put("type", "object");
         parameters.put("properties", properties);
-        parameters.put("required", List.of("command"));
+        parameters.put("required", List.of(ToolCallIntentSchema.FIELD, "command"));
         return parameters;
     }
 
@@ -94,8 +98,12 @@ public class BashTool implements BaseTool {
             }
 
             CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
-            if (StringUtils.isBlank(config.getCodeInterpreterUrl())) {
-                return ToolResultPayload.failureFrom("codeInterpreterUrl 未配置，无法调用沙箱 bash", null);
+            String endpoint;
+            try {
+                endpoint = SandboxRemoteEndpoint.toolUrl(
+                        config.getCodeInterpreterUrl(), "/v1/tool/bash");
+            } catch (IllegalStateException e) {
+                return ToolResultPayload.failureFrom(e.getMessage(), null);
             }
 
             String sessionId = StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId());
@@ -131,7 +139,7 @@ public class BashTool implements BaseTool {
             String body = context.getRuntimeDependencies().requireRemoteHttpPort().execute(
                     RemoteHttpRequest.builder()
                             .method("POST")
-                            .url(config.getCodeInterpreterUrl() + "/v1/tool/bash")
+                            .url(endpoint)
                             .headers(Map.of("Content-Type", "application/json"))
                             .body(JSON.toJSONString(request))
                             .connectTimeoutSeconds(60L)
@@ -168,6 +176,16 @@ public class BashTool implements BaseTool {
             data.put("timed_out", timedOut);
             data.put("duration_ms", firstNonNull(response.get("durationMs"), response.get("duration_ms"), 0));
             data.put("cwd", ".");
+            Object workspaceSync = firstNonNull(
+                    response.get("workspaceSync"), response.get("workspace_sync"));
+            if (workspaceSync != null) {
+                data.put("workspace_sync", workspaceSync);
+            }
+            Object deletedFiles = firstNonNull(
+                    response.get("deletedFiles"), response.get("deleted_files"));
+            if (deletedFiles != null) {
+                data.put("deleted_files", deletedFiles);
+            }
             Object fileInfo = firstNonNull(response.get("fileInfo"), response.get("file_info"));
             if (fileInfo instanceof List<?> files && !files.isEmpty()) {
                 List<Map<String, Object>> produced = new ArrayList<>();
@@ -179,9 +197,18 @@ public class BashTool implements BaseTool {
                     }
                     Map<String, Object> file = new LinkedHashMap<>();
                     Object fileName = firstNonNull(rawFile.get("fileName"), rawFile.get("file_name"));
+                    Object relativePathValue = firstNonNull(
+                            rawFile.get("relativePath"), rawFile.get("relative_path"));
                     Object fileSize = firstNonNull(rawFile.get("fileSize"), rawFile.get("file_size"));
                     if (fileName != null && StringUtils.isNotBlank(String.valueOf(fileName))) {
                         file.put("file_name", fileName);
+                    }
+                    String relativePath = stringValue(relativePathValue);
+                    if (StringUtils.isBlank(relativePath)) {
+                        relativePath = stringValue(fileName);
+                    }
+                    if (StringUtils.isNotBlank(relativePath)) {
+                        file.put("relative_path", relativePath);
                     }
                     if (fileSize != null) {
                         file.put("file_size", fileSize);
@@ -205,13 +232,17 @@ public class BashTool implements BaseTool {
                                     .ossUrl(downloadUrl)
                                     .domainUrl(previewUrl)
                                     .fileSize(size)
-                                    .description(String.valueOf(fileName))
+                                    .relativePath(relativePath)
+                                    .description(relativePath)
                                     .isInternalFile(false)
                                     .build());
                         }
 
                         Map<String, Object> eventFile = new LinkedHashMap<>();
                         eventFile.put("fileName", fileName);
+                        if (StringUtils.isNotBlank(relativePath)) {
+                            eventFile.put("relativePath", relativePath);
+                        }
                         if (StringUtils.isNotBlank(downloadUrl)) {
                             eventFile.put("ossUrl", downloadUrl);
                             eventFile.put("downloadUrl", downloadUrl);

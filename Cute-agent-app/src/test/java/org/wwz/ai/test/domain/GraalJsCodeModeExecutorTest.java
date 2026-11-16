@@ -353,22 +353,18 @@ public class GraalJsCodeModeExecutorTest {
     }
 
     @Test
-    public void enforcesToolCallLimit() {
-        CodeModeProperties properties = new CodeModeProperties();
-        properties.setMaxToolCalls(2);
-        GraalJsCodeModeExecutor limited = executor(properties);
-        CodeModeResult result = limited.execute(CodeModeRequest.builder()
-                .source("""
-                        async function main({ workspace }) {
-                          for (let i = 0; i < 5; i++) {
-                            await workspace.writeText({ path: "outputs/n" + i + ".txt", content: "x" });
-                          }
-                          return { done: true };
-                        }
-                        """)
-                .timeoutMs(30_000L)
-                .build(), agentContext);
-        assertFailure(result, "CODE_MODE_TOOL_CALL_LIMIT");
+    public void allowsMoreThanLegacyToolCallCeiling() {
+        CodeModeResult result = run("""
+                async function main({ workspace }) {
+                  await workspace.writeText({ path: "outputs/seed.txt", content: "x" });
+                  for (let i = 0; i < 101; i++) {
+                    await workspace.readText({ path: "outputs/seed.txt" });
+                  }
+                  return { done: true };
+                }
+                """);
+        Assert.assertTrue(String.valueOf(result.getErrorMessage()), result.isSuccess());
+        Assert.assertEquals(102, result.getToolCallCount());
     }
 
     @Test

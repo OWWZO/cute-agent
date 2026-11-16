@@ -29,9 +29,6 @@ public class CodeModeProperties {
     /** main 返回值序列化后的最大字符数。 */
     private int maxOutputChars = 1_048_576;
 
-    /** 单次执行允许的内部 capability 调用总次数。 */
-    private int maxToolCalls = 100;
-
     /** 单次执行累计写回 workspace 的字节预算。 */
     private long maxTotalMemoryBytes = 134_217_728L;
 

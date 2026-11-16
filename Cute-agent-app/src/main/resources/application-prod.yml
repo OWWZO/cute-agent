@@ -35,7 +35,6 @@ cute:
     max-timeout-ms: 540000
     max-source-chars: 262144
     max-output-chars: 1048576
-    max-tool-calls: 100
     max-total-memory-bytes: 134217728
     workspace:
       max-read-bytes: 33554432

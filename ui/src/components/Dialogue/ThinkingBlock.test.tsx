@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { ThinkingBlock } from "./ThinkingBlock";
+import {
+  ThinkingBlock,
+  isThinkingAtBottom,
+  resolveStreamingSummary,
+} from "./ThinkingBlock";
 
 describe("ThinkingBlock", () => {
   it("流式展示时展开正文并显示可点击标题", () => {
@@ -74,5 +78,20 @@ describe("ThinkingBlock", () => {
 
     expect(html).toContain('data-open="true"');
     expect(html).not.toContain("thinking-streaming-summary");
+  });
+
+  it("折叠摘要只使用已经换行结束的完整行", () => {
+    expect(resolveStreamingSummary("第一行\n正在输出")).toBe("第一行");
+    expect(resolveStreamingSummary("第一行\n第二行\n正在输出")).toBe("第二行");
+    expect(resolveStreamingSummary("还没有完整行")).toBeUndefined();
+  });
+
+  it("只有靠近底部时才继续跟随思考输出", () => {
+    expect(
+      isThinkingAtBottom({ scrollHeight: 1000, scrollTop: 620, clientHeight: 340 })
+    ).toBe(true);
+    expect(
+      isThinkingAtBottom({ scrollHeight: 1000, scrollTop: 500, clientHeight: 340 })
+    ).toBe(false);
   });
 });

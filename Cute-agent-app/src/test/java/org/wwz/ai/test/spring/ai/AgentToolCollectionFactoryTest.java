@@ -747,9 +747,12 @@ public class AgentToolCollectionFactoryTest {
 
         Assert.assertTrue(toolCollection.getToolMap().containsKey("browser"));
         Assert.assertFalse(toolCollection.getToolMap().containsKey("browser_site"));
-        Assert.assertEquals("远程操作用户的浏览器。", toolCollection.getTool("browser").getDescription());
+        Assert.assertTrue(toolCollection.getTool("browser").getDescription()
+                .startsWith("远程操作用户的浏览器。"));
+        Assert.assertTrue(toolCollection.getTool("browser").getDescription().contains("intent"));
         Map<String, Object> params = toolCollection.getTool("browser").toParams();
         Assert.assertTrue(((List<?>) params.get("required")).contains("args"));
+        Assert.assertTrue(((List<?>) params.get("required")).contains("intent"));
     }
 
     @Test
@@ -911,7 +914,10 @@ public class AgentToolCollectionFactoryTest {
 
         Assert.assertTrue(toolCollection.getToolMap().containsKey("host_cli"));
         Assert.assertTrue(toolCollection.getTool("host_cli").getDescription().contains("git"));
+        Assert.assertTrue(toolCollection.getTool("host_cli").getDescription().contains("intent"));
         Assert.assertFalse(toolCollection.getTool("host_cli").getDescription().contains("missing-bin"));
+        Map<String, Object> hostCliParams = toolCollection.getTool("host_cli").toParams();
+        Assert.assertTrue(((List<?>) hostCliParams.get("required")).contains("intent"));
     }
 
     /**
