@@ -61,6 +61,11 @@ const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
   const [displayedHtmlContent, setDisplayedHtmlContent] = useState(
     htmlContent || ""
   );
+  /**
+   * URL 型 HTML 预览延后到首屏绘制后的空闲阶段再挂 iframe。
+   * 聊天区和重报告互不依赖，不能因为右侧开始解析 HTML 而拖慢会话切换。
+   */
+  const [displayedHtmlUrl, setDisplayedHtmlUrl] = useState("");
   const pendingHtmlContentRef = useRef(htmlContent || "");
   const flushTimerRef = useRef<number | null>(null);
   const lastFlushAtRef = useRef(0);
@@ -102,6 +107,48 @@ const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
   useEffect(() => {
     setError(null);
   }, [htmlContent]);
+
+  useEffect(() => {
+    if (!htmlUrl) {
+      setDisplayedHtmlUrl("");
+      return;
+    }
+    if (displayedHtmlUrl === htmlUrl) {
+      return;
+    }
+
+    let cancelled = false;
+    let frameOne = 0;
+    let frameTwo = 0;
+    let idleId: number | null = null;
+    let fallbackTimer = 0;
+
+    const reveal = () => {
+      if (!cancelled) {
+        setDisplayedHtmlUrl(htmlUrl);
+      }
+    };
+
+    frameOne = window.requestAnimationFrame(() => {
+      frameTwo = window.requestAnimationFrame(() => {
+        if (typeof window.requestIdleCallback === "function") {
+          idleId = window.requestIdleCallback(reveal, { timeout: 700 });
+        } else {
+          fallbackTimer = window.setTimeout(reveal, 0);
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frameOne);
+      window.cancelAnimationFrame(frameTwo);
+      if (idleId !== null) {
+        window.cancelIdleCallback?.(idleId);
+      }
+      window.clearTimeout(fallbackTimer);
+    };
+  }, [displayedHtmlUrl, htmlUrl]);
 
   // 流式 HTML 只按固定间隔刷新 srcDoc：iframe 每次重载都会重新解析整份文档，
   // 逐 token 更新会造成明显闪烁和脚本状态丢失。非流式时立即写入最终内容。
@@ -249,21 +296,23 @@ const HTMLRenderer: CuteType.FC<HTMLRendererProps> = memo((props) => {
             className="absolute inset-0 z-10 h-full w-full bg-white/70"
           />
         ) : null}
-        <iframe
-          ref={frameRef}
-          className="absolute inset-0 h-full w-full border-0 bg-white"
-          title="HTML preview"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-          referrerPolicy="no-referrer-when-downgrade"
-          {...(htmlUrl
-            ? { src: htmlUrl }
-            : { srcDoc: displayedHtmlContent })}
-          onLoad={stopLoading}
-          onError={() => {
-            setError("引用资源不存在或已失效");
-            stopLoading();
-          }}
-        />
+        {htmlUrl && !displayedHtmlUrl ? null : (
+          <iframe
+            ref={frameRef}
+            className="absolute inset-0 h-full w-full border-0 bg-white"
+            title="HTML preview"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+            referrerPolicy="no-referrer-when-downgrade"
+            {...(htmlUrl
+              ? { src: displayedHtmlUrl }
+              : { srcDoc: displayedHtmlContent })}
+            onLoad={stopLoading}
+            onError={() => {
+              setError("引用资源不存在或已失效");
+              stopLoading();
+            }}
+          />
+        )}
       </div>
     );
   }

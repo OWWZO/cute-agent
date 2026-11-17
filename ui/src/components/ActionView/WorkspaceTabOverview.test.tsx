@@ -41,6 +41,8 @@ describe("WorkspaceTabOverview", () => {
         activeKey: "agent:tc-1",
         onActivate: () => {},
         onCloseTab: () => {},
+        onCloseOther: () => {},
+        onCloseAll: () => {},
       })
     );
     expect(html).toContain("workspace-tab-overview-trigger");
@@ -54,6 +56,8 @@ describe("WorkspaceTabOverview", () => {
         activeKey: "",
         onActivate: () => {},
         onCloseTab: () => {},
+        onCloseOther: () => {},
+        onCloseAll: () => {},
       })
     );
     expect(html).toContain("workspace-tab-overview-trigger");

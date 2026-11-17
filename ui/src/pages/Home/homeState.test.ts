@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   deriveConversationMetaFromInput,
+  canReuseCompletedSessionSnapshot,
   getConversationPendingFiles,
   getConversationDraft,
   mergeLocalRecentConversations,
@@ -116,6 +117,37 @@ describe("homeState", () => {
       localConversation: undefined,
       shouldLoadRemote: true,
     });
+  });
+
+  it("未更新的已完成会话可复用本地快照，运行中或已变化时仍需刷新", () => {
+    const session = {
+      sessionId: "session-1",
+      lastActiveAt: "2026-11-17T10:00:00.000Z",
+      status: "SUCCESS",
+    } as unknown as CHAT.ConversationSessionItem;
+    const localConversation = {
+      sessionId: "session-1",
+      updatedAt: Date.parse(session.lastActiveAt),
+    } as unknown as CHAT.ConversationHistory;
+
+    expect(
+      canReuseCompletedSessionSnapshot(localConversation, session)
+    ).toBe(true);
+    expect(
+      canReuseCompletedSessionSnapshot(undefined, session)
+    ).toBe(false);
+    expect(
+      canReuseCompletedSessionSnapshot(localConversation, {
+        ...session,
+        status: "RUNNING",
+      })
+    ).toBe(false);
+    expect(
+      canReuseCompletedSessionSnapshot(
+        { ...localConversation, updatedAt: Date.parse(session.lastActiveAt) - 1 },
+        session
+      )
+    ).toBe(false);
   });
 
   it("输入草稿按会话保存，切换会话后仍可恢复", () => {

@@ -62,6 +62,7 @@ import { isSubAgentSessionId } from "@/utils/sessionTree";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   deriveConversationMetaFromInput,
+  canReuseCompletedSessionSnapshot,
   getConversationPendingFiles,
   getConversationDraft,
   mergeLocalRecentConversations,
@@ -74,8 +75,6 @@ import {
 } from "./homeState";
 import FeaturedConversationAdminPanel from "./FeaturedConversationAdminPanel";
 import {
-  applyInlineReplays,
-  hydrateSessionWithRunningReplay,
   resolveInitialSession,
 } from "./sessionBootstrap";
 import { useRecentSessions } from "./useRecentSessions";
@@ -221,6 +220,10 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     CHAT.ConversationHistory[]
   >([]);
   const localRecentConversationsRef = useRef<CHAT.ConversationHistory[]>([]);
+  /** 浏览过的会话快照只做切换缓存，不参与侧栏排序。 */
+  const localSessionSnapshotsRef = useRef<Map<string, CHAT.ConversationHistory>>(
+    new Map()
+  );
   const localRecentSummaryRef = useRef<Map<string, string>>(new Map());
   // 视图以 URL 为唯一数据源：刷新、前进/后退、直接访问 `?view=` 都能落到同一处。
   const [searchParams, setSearchParams] = useSearchParams();
@@ -310,16 +313,6 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     },
     []
   );
-  const reportRunningReplayError = useCallback(
-    (requestId: string, error: unknown) => {
-      console.error(
-        `加载运行中会话回放失败 (requestId=${requestId})`,
-        error
-      );
-    },
-    []
-  );
-
   const closeMobileSidebar = useCallback(() => {
     setMobileSidebarOpen(false);
   }, []);
@@ -406,6 +399,21 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       files: sessionWorkspaceFilesCacheRef.current.get(currentConversation.sessionId) || [],
     });
   }, [currentConversation.sessionId]);
+
+  useEffect(() => {
+    const sessionId = currentConversation.sessionId;
+    if (!sessionId || isSubAgentSessionId(sessionId)) {
+      return;
+    }
+    const snapshots = localSessionSnapshotsRef.current;
+    snapshots.delete(sessionId);
+    snapshots.set(sessionId, currentConversation);
+    while (snapshots.size > 20) {
+      const oldest = snapshots.keys().next().value;
+      if (!oldest) break;
+      snapshots.delete(oldest);
+    }
+  }, [currentConversation]);
 
   const ensureCurrentSessionWorkspaceFiles = useCallback((force = false) => {
     if (!currentConversation.chatList.length) {
@@ -540,16 +548,15 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
               if (disposed || !detail || isHistoryDetailEmpty(detail)) {
                 return;
               }
-              const hydrated = await hydrateSessionWithRunningReplay(
-                detail,
-                (requestId) => loadRunReplay(initialSessionId, requestId),
-                reportRunningReplayError
-              );
+              const hydrated = hydrateConversationFromSummaryPage(detail);
+              setCurrentConversation(hydrated);
               const restored = await restoreHitlForSession(hydrated);
               if (disposed) {
                 return;
               }
-              setCurrentConversation(restored);
+              setCurrentConversation((previous) =>
+                previous.sessionId === hydrated.sessionId ? restored : previous
+              );
             })
             .catch((error) => {
               console.error("加载默认会话详情失败", error);
@@ -582,9 +589,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     };
   }, [
     refreshRecentSessions,
-    loadRunReplay,
     loadSessionWorkspaceFiles,
-    reportRunningReplayError,
   ]);
 
   useEffect(() => {
@@ -698,9 +703,18 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       );
 
       const localSelection = resolveLocalSessionSelection(
-        localRecentConversationsRef.current,
+        Array.from(localSessionSnapshotsRef.current.values()),
         session.sessionId
       );
+      const reusableCompletedSnapshot = canReuseCompletedSessionSnapshot(
+        localSelection.localConversation,
+        session
+      );
+      // 右侧工作区自我加载，不再等聊天 bootstrap。即使本次点的是已完成且可直接
+      // 复用的会话，也在这里独立补齐文件缓存。
+      if (reusableCompletedSnapshot || localSelection.shouldLoadRemote) {
+        void loadSessionWorkspaceFiles(session.sessionId);
+      }
       if (localSelection.localConversation) {
         // 本地已有完整快照就先同步换过去；远端刷新只做增量校正。
         setCurrentConversation(localSelection.localConversation);
@@ -710,6 +724,9 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
         // 没有目标快照时，必须在这一帧用实色占位盖住旧会话。
         setSessionSwitchPending(session.sessionId);
       }
+      if (reusableCompletedSnapshot) {
+        return;
+      }
       if (!localSelection.shouldLoadRemote && localSelection.localConversation) {
         // 新建但尚未发送过消息的会话只存在前端，不能向后端请求不存在的详情。
         return;
@@ -717,34 +734,28 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
 
       // 切换已有会话始终从后端读取最新详情，避免用前端流式缓存覆盖已完成状态。
       conversationHistoryApi
-        .getSessionBootstrap(session.sessionId, { limit: HISTORY_PAGE_SIZE })
-        .then(async (bootstrap) => {
+        .getSessionBootstrap(session.sessionId, {
+          limit: HISTORY_PAGE_SIZE,
+          includeFiles: false,
+          includeReplays: false,
+        })
+        .then((bootstrap) => {
           if (selectionVersion !== sessionSelectionVersionRef.current) {
             return;
           }
-          // bootstrap 已带回文件清单：灌进缓存，后续 loadSessionWorkspaceFiles 命中缓存不再发请求。
-          const bootstrapFiles = normalizeSessionArtifactFiles(
-            bootstrap?.files || [],
-            session.sessionId
-          );
-          sessionWorkspaceFilesCacheRef.current.set(session.sessionId, bootstrapFiles);
-          setSessionWorkspaceFilesState({
-            sessionId: session.sessionId,
-            files: bootstrapFiles,
-          });
           const detail = bootstrap?.detail;
           if (!detail || isHistoryDetailEmpty(detail)) {
+            let nextConversation: CHAT.ConversationHistory;
             if (localSelection.localConversation) {
-              setCurrentConversation(localSelection.localConversation);
+              nextConversation = localSelection.localConversation;
             } else {
-              setCurrentConversation(
-                createConversation({
-                  sessionId: session.sessionId,
-                  title: session.title,
-                  chatTitle: session.title,
-                })
-              );
+              nextConversation = createConversation({
+                sessionId: session.sessionId,
+                title: session.title,
+                chatTitle: session.title,
+              });
             }
+            setCurrentConversation(nextConversation);
             return;
           }
           const hitlPending = {
@@ -753,43 +764,19 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
             planApproval: bootstrap.planApproval || [],
           };
 
-          if (bootstrap.replaysIncluded) {
-            // 回放已内联：摘要壳 + 回放 + HITL 全部在本地合并，不再发请求。
-            // 顺序不能反 —— mergeRunReplayIntoConversation 按 requestId 整块替换 chat，
-            // HITL 卡片挂在 chat 上，先合 HITL 会被回放覆盖掉。
-            const withReplay = applyInlineReplays(
-              hydrateConversationFromSummaryPage(detail),
-              bootstrap.replays
-            );
-            if (selectionVersion !== sessionSelectionVersionRef.current) {
-              return;
-            }
-            setCurrentConversation(applySessionHitlPending(withReplay, hitlPending));
-            resetInput();
-            return;
-          }
-
-          // 未内联（超预算 / 无回放）：先让界面活起来，回放后台并行补。
-          // 用户此刻已能看到完整的一问一答（detail 里的 finalSummaryText），
-          // 工具卡稍后浮现，而不是整页冻结等 N 个 RTT。
-          // 这一步只合 HITL、不补回放，所以卡片会落在摘要壳上；
-          // 回放到达后整块替换 chat，再由下面那次 HITL 合并把卡片补回。
-          if (!localSelection.localConversation) {
-            setCurrentConversation(hydrateConversationFromSummaryPage(detail));
-            resetInput();
-          }
-
-          const withReplay = await hydrateSessionWithRunningReplay(
-            detail,
-            (requestId) => loadRunReplay(session.sessionId, requestId),
-            reportRunningReplayError
+          // 首屏只消费摘要壳。过程 replay 留给用户展开「已工作」时按轮加载，
+          // 不再在切换会话后自动下载并合并 1MB 级时间线。
+          const summarized = hydrateConversationFromSummaryPage(detail);
+          setCurrentConversation(summarized);
+          setSessionSwitchPending(null);
+          resetInput();
+          const nextConversation = applySessionHitlPending(
+            summarized,
+            hitlPending
           );
-          if (selectionVersion !== sessionSelectionVersionRef.current) {
-            return;
-          }
           setCurrentConversation((previous) =>
             previous.sessionId === session.sessionId
-              ? applySessionHitlPending(withReplay, hitlPending)
+              ? nextConversation
               : previous
           );
         })
@@ -815,7 +802,11 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           }
         });
     },
-    [loadRunReplay, loadSessionWorkspaceFiles, reportRunningReplayError, resetInput, setActiveView]
+    [
+      loadSessionWorkspaceFiles,
+      resetInput,
+      setActiveView,
+    ]
   );
 
   /**
@@ -838,28 +829,19 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     try {
       const bootstrap = await conversationHistoryApi.getSessionBootstrap(sessionId, {
         limit: HISTORY_PAGE_SIZE,
+        includeFiles: false,
+        includeReplays: false,
       });
       const detail = bootstrap?.detail;
       if (!detail || isHistoryDetailEmpty(detail)) {
         return;
-      }
-      const bootstrapFiles = normalizeSessionArtifactFiles(
-        bootstrap.files || [],
-        sessionId
-      );
-      sessionWorkspaceFilesCacheRef.current.set(sessionId, bootstrapFiles);
-      if (currentConversationRef.current.sessionId === sessionId) {
-        setSessionWorkspaceFilesState({ sessionId, files: bootstrapFiles });
       }
       setCurrentConversation((previous) => {
         if (previous.sessionId !== sessionId) {
           return previous;
         }
         const merged = mergeConversationHistoryPage(previous, detail);
-        const withReplay = bootstrap.replaysIncluded
-          ? applyInlineReplays(merged, bootstrap.replays)
-          : merged;
-        const withHitl = applySessionHitlPending(withReplay, {
+        const withHitl = applySessionHitlPending(merged, {
           askUser: bootstrap.askUser || [],
           desktopControl: bootstrap.desktopControl || [],
           planApproval: bootstrap.planApproval || [],

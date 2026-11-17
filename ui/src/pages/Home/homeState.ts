@@ -61,6 +61,24 @@ export function resolveLocalSessionSelection(
   };
 }
 
+/**
+ * 已完成且本地时间戳不早于服务端最近活动时间时，完整历史快照可直接复用。
+ * RUNNING 会话仍必须刷新，避免本地停在旧的运行态。
+ */
+export function canReuseCompletedSessionSnapshot(
+  conversation: CHAT.ConversationHistory | undefined,
+  session: CHAT.ConversationSessionItem
+) {
+  if (
+    !conversation ||
+    String(session.status).toUpperCase() === "RUNNING"
+  ) {
+    return false;
+  }
+  const lastActiveAt = Date.parse(session.lastActiveAt);
+  return Number.isFinite(lastActiveAt) && conversation.updatedAt >= lastActiveAt;
+}
+
 export type ConversationDrafts = Record<string, string>;
 
 export function getConversationDraft(

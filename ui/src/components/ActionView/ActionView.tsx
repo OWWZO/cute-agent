@@ -12,13 +12,13 @@ import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { DURATION, EASE_OUT, useMotionConfig } from "@/lib/motion";
 import {
+  ArrowLeft,
   ChevronRightIcon,
   Download,
   ExternalLink,
   Link2,
   Maximize2,
   Minimize2,
-  MoreHorizontalIcon,
   RefreshCw,
   Star,
   X,
@@ -69,11 +69,10 @@ import { WorkspaceTabIcon } from "./WorkspaceTabIcon";
 import { TabTitleTooltip } from "./TabTitleTooltip";
 import { resolveWorkspaceTabDisplay } from "./workspaceTabDisplay";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  pruneTabHistory,
+  pushTabHistory,
+  takeTabBack,
+} from "./workspaceTabHistory";
 import type { SubAgentRosterItem } from "@/utils/chat/subAgentRoster";
 import {
   resolveFilePreviewKind,
@@ -289,6 +288,8 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     left: false,
     right: false,
   });
+  /** 当前 tab 的前台切换历史；返回按钮只消费这一份。 */
+  const [backStack, setBackStack] = useState<string[]>([]);
 
   /**
    * 文件预览头部的插槽节点（给 renderer 用 portal 挂「预览专属」按钮）。
@@ -345,6 +346,34 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     });
   }, [openTabs, catalogMap]);
 
+  const openTabKeys = useMemo(
+    () => new Set(openTabs.map((tab) => workspaceTabKey(tab))),
+    [openTabs]
+  );
+  const currentTabKey = useMemo(() => {
+    if (selectedKey && openTabKeys.has(selectedKey)) {
+      return selectedKey;
+    }
+    return openTabs.length
+      ? workspaceTabKey(openTabs[openTabs.length - 1])
+      : "";
+  }, [selectedKey, openTabKeys, openTabs]);
+  const backTarget = useMemo(
+    () => takeTabBack(backStack, openTabKeys, currentTabKey).target,
+    [backStack, openTabKeys, currentTabKey]
+  );
+
+  /**
+   * 用户切换前台 tab 的唯一入口。
+   *
+   * 打开新 tab、点击 tab、从标签页列表激活都走这里，所以都会留下返回历史；
+   * 关闭 tab 后的相邻兜底和返回本身直接调用 setSelectedKey，不会污染历史。
+   */
+  const selectTab = useMemoizedFn((key: string) => {
+    setBackStack((prev) => pushTabHistory(prev, currentTabKey, key));
+    setSelectedKey(key);
+  });
+
   /**
    * 打开一个 `CodeViewerSource` tab（Stage 4）。
    *
@@ -368,7 +397,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       }
       return [...prev, next];
     });
-    setSelectedKey(key);
+    selectTab(key);
     setViewMode("preview");
   });
 
@@ -404,7 +433,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       }
       return [...prev, next];
     });
-    setSelectedKey(key);
+    selectTab(key);
   });
 
   /** 打开 / 激活子智能体目录 tab（单例） */
@@ -425,7 +454,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
         },
       ];
     });
-    setSelectedKey(AGENT_DIRECTORY_TAB_KEY);
+    selectTab(AGENT_DIRECTORY_TAB_KEY);
   });
 
   /**
@@ -454,7 +483,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       };
       return upsertWorkspaceTab(prev, next);
     });
-    setSelectedKey(key);
+    selectTab(key);
   });
 
   /** 打开 / 激活桌面控制预览 tab。同一个任务只保留一个桌面 tab。 */
@@ -479,7 +508,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       }
       return [...prev, next];
     });
-    setSelectedKey(key);
+    selectTab(key);
   });
 
   const closeTab = useMemoizedFn((key: string) => {
@@ -508,12 +537,22 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       prev.filter((item) => workspaceTabKey(item) === keepKey)
     );
     setSelectedKey(keepKey);
+    setBackStack([]);
   });
 
   /** 关闭全部 tab。全关光之后由宿主（`onTabsChange` → 0）收起整个工作区。 */
   const closeAllTabs = useMemoizedFn(() => {
     setOpenTabs([]);
     setSelectedKey("");
+    setBackStack([]);
+  });
+
+  const goBack = useMemoizedFn(() => {
+    const result = takeTabBack(backStack, openTabKeys, currentTabKey);
+    setBackStack(result.stack);
+    if (result.target) {
+      setSelectedKey(result.target);
+    }
   });
 
   const openFileInTab = useMemoizedFn((file: CHAT.TFile) => {
@@ -554,7 +593,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       // 任务 tab 与文件 tab 身份键不同，但渲染的是同一份内容。
       return upsertWorkspaceTab(prev, next);
     });
-    setSelectedKey(workspaceFileKey(resolved));
+    selectTab(workspaceFileKey(resolved));
     setViewMode("preview");
   });
 
@@ -644,36 +683,9 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     });
   }, [openTabs, selectedKey, viewMode, workspaceStateKey]);
 
-  // 没有任务产物时认为会话工作区已清空，关闭旧**文件** tab；有产物时保留用户已打开
-  // 的 tab，避免每次流式 taskList 更新都重置预览位置。
-  //
-  // 子智能体 tab / 目录 tab / 任务预览 tab / 桌面预览 tab 不受这条规则影响：
-  // 它们的生命周期跟会话与用户操作走，跟「这轮有没有产物文件」无关。
   useEffect(() => {
-    if (taskList?.length || catalog.length) {
-      return;
-    }
-    const kept = openTabs.filter(
-      (tab) =>
-        isAgentTab(tab) ||
-        isAgentDirectoryTab(tab) ||
-        isTaskTab(tab) ||
-        isDesktopTab(tab)
-    );
-    if (kept.length === openTabs.length) {
-      return;
-    }
-    setOpenTabs(kept);
-    setSelectedKey((current) => {
-      if (!current) {
-        return current;
-      }
-      if (kept.some((tab) => workspaceTabKey(tab) === current)) {
-        return current;
-      }
-      return kept.length ? workspaceTabKey(kept[kept.length - 1]) : "";
-    });
-  }, [taskList, catalog.length, openTabs]);
+    setBackStack((prev) => pruneTabHistory(prev, openTabKeys));
+  }, [openTabKeys]);
 
   useEffect(() => {
     setViewMode("preview");
@@ -891,24 +903,30 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
         ease: EASE_OUT,
       }}
     >
-      {/* 顶栏：最左「标签页列表」+ 已打开 tab；内容区完全由选中的 tab 决定。
+      {/* 顶栏：最左「返回上一个标签页」+ 已打开 tab；右侧是标签页列表与关闭操作。
+          内容区完全由选中的 tab 决定。
           ZCode `AnimatedSidePanePanel.tsx:946` 的 TabsList 是
           `border-b border-border/50 bg-transparent` —— **半透明分隔线 + 无底色**。
           全量 `border-border` 配 `bg-surface/30` 会把这一行画成一条明显的横杠。 */}
       <div className="cute-workspace-toolbar flex h-10 shrink-0 items-center px-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          {/* 最左固定位：标签页列表浮层（对齐 ZCode `AnimatedSidePanePanel.tsx:957-960`
-              的 `p-2` 固定槽）。放在滚动容器**之外**，溢出时也不会跟着滚走。 */}
+          {/* 最左固定位：返回上一个标签页。关闭标签后的相邻落点不会写入历史。 */}
           {files.length > 0 ? (
             <div className="flex shrink-0 items-center">
-              <WorkspaceTabOverview
-                tabs={files}
-                activeKey={workspaceTabKey(selectedTab || files[0])}
-                onActivate={(key) => {
-                  setSelectedKey(key);
-                }}
-                onCloseTab={closeTab}
-              />
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={!backTarget}
+                className={cn(
+                  iconBtnClass,
+                  "disabled:pointer-events-none disabled:opacity-40"
+                )}
+                title={backTarget ? "返回上一个标签页" : "没有可返回的标签页"}
+                aria-label="返回上一个标签页"
+                data-testid="workspace-tab-back"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
             </div>
           ) : null}
           {files.length > 0 ? (
@@ -960,7 +978,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
                     <TabTitleTooltip
                       label={display.title}
                       onActivate={() => {
-                        setSelectedKey(key);
+                        selectTab(key);
                       }}
                     >
                       <WorkspaceTabIcon spec={display.icon} />
@@ -999,41 +1017,21 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
             </div>
           ) : null}
 
-          {/* tab 条最右的批量操作菜单。ZCode 用的是 tab 右键菜单
-              （`SidePaneTabTrigger.tsx:189-195`），但 Web 上右键没有任何视觉提示、
-              且用户预期是浏览器原生菜单，所以换成同款三项的可见 `…` 入口。 */}
+          {/* tab 条最右：标签页列表 + 批量关闭命令。原来左侧的下箭头和三点菜单
+              合并到这里，入口总数不增加。 */}
           {files.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
-                  aria-label="标签页操作"
-                  title="标签页操作"
-                  data-testid="workspace-tab-actions"
-                >
-                  <MoreHorizontalIcon className="size-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                side="bottom"
-                sideOffset={6}
-                className="w-44 rounded-lg border border-popover-border bg-popover p-1 shadow-md"
-              >
-                <DropdownMenuItem
-                  disabled={files.length < 2}
-                  onSelect={() =>
-                    closeOtherTabs(workspaceTabKey(selectedTab || files[0]))
-                  }
-                >
-                  关闭其他标签
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => closeAllTabs()}>
-                  关闭所有标签
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex shrink-0 items-center">
+              <WorkspaceTabOverview
+                tabs={files}
+                activeKey={workspaceTabKey(selectedTab || files[0])}
+                onActivate={selectTab}
+                onCloseTab={closeTab}
+                onCloseOther={() =>
+                  closeOtherTabs(workspaceTabKey(selectedTab || files[0]))
+                }
+                onCloseAll={closeAllTabs}
+              />
+            </div>
           ) : null}
 
           <div className="flex shrink-0 items-center gap-0.5">

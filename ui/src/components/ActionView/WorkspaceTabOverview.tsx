@@ -46,6 +46,8 @@ type Props = {
   activeKey: string;
   onActivate: (key: string) => void;
   onCloseTab: (key: string) => void;
+  onCloseOther: () => void;
+  onCloseAll: () => void;
 };
 
 export function stopsWorkspaceTabCloseEvent(key: string): boolean {
@@ -57,6 +59,8 @@ export function WorkspaceTabOverview({
   activeKey,
   onActivate,
   onCloseTab,
+  onCloseOther,
+  onCloseAll,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -102,7 +106,7 @@ export function WorkspaceTabOverview({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        align="start"
+        align="end"
         side="bottom"
         sideOffset={6}
         // 让输入框的 autoFocus 生效：Radix 默认会把焦点收到内容容器上。
@@ -190,6 +194,29 @@ export function WorkspaceTabOverview({
               没有找到标签页。
             </CommandEmpty>
           </CommandList>
+          <div className="border-t border-border/50 p-1">
+            <button
+              type="button"
+              disabled={tabs.length < 2}
+              onClick={() => {
+                onCloseOther();
+                setOpen(false);
+              }}
+              className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-ui-base text-foreground-subtle transition-colors hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+            >
+              关闭其他标签
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onCloseAll();
+                setOpen(false);
+              }}
+              className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-ui-base text-foreground-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
+            >
+              关闭全部标签
+            </button>
+          </div>
         </Command>
       </PopoverContent>
     </Popover>
