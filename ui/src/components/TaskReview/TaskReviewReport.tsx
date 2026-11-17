@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
   CircleHelp,
   Clock3,
   Coins,
+  GitBranch,
   ListChecks,
   ShieldAlert,
   Sparkles,
@@ -12,11 +13,19 @@ import {
   XCircle,
 } from "lucide-react";
 import type {
+  TaskReviewDiagnosticSummary,
+  TaskReviewEvidenceIndexEntry,
+  TaskReviewFailureAttribution,
   TaskReviewFinding,
   TaskReviewJob,
   TaskReviewQuality,
 } from "@/services/taskReview";
 import { cn } from "@/lib/utils";
+import {
+  EvidenceInspectorDialog,
+  type EvidencePreview,
+} from "./EvidenceInspectorDialog";
+import { NarrativeReportPanel } from "./NarrativeReportPanel";
 
 const CONCLUSION_LABELS: Record<string, string> = {
   completed: "完成",
@@ -47,6 +56,17 @@ const STEP_STATUS_LABELS: Record<string, string> = {
   RUNNING: "进行中",
   MODEL_STEP: "模型步骤",
   COMPLETED: "已完成",
+};
+
+const FAILURE_LAYER_LABELS: Record<string, string> = {
+  MODEL_DECISION: "模型决策",
+  MODEL_ARGUMENT: "模型参数",
+  HARNESS_CONTRACT: "Harness 合约",
+  HARNESS_RUNTIME: "Harness 运行时",
+  ENVIRONMENT: "环境",
+  USER_ACTION: "用户操作",
+  TRACE_GAP: "Trace 缺口",
+  UNKNOWN: "无法判断",
 };
 
 function formatMs(value?: number | null) {
@@ -150,7 +170,40 @@ function Metric({
   );
 }
 
-function FindingCard({ finding }: { finding: TaskReviewFinding }) {
+function EvidenceButton({
+  evidenceRef,
+  onOpenEvidence,
+}: {
+  evidenceRef: string;
+  onOpenEvidence: (ref: string) => void;
+}) {
+  if (!evidenceRef.startsWith("tool:")) {
+    return (
+      <code className="rounded-md bg-white/80 px-1.5 py-1 text-[10px] text-[var(--chat-text-muted)] ring-1 ring-black/5">
+        {evidenceRef}
+      </code>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenEvidence(evidenceRef)}
+      title="查看工具调用"
+      className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-white/80 px-2 py-1 font-mono text-[10px] text-[var(--chat-text-muted)] ring-1 ring-black/5 transition hover:text-[var(--chat-accent)] hover:ring-[var(--chat-accent)]/20"
+    >
+      <span className="truncate">{evidenceRef}</span>
+      <span aria-hidden="true">›</span>
+    </button>
+  );
+}
+
+function FindingCard({
+  finding,
+  onOpenEvidence,
+}: {
+  finding: TaskReviewFinding;
+  onOpenEvidence: (ref: string) => void;
+}) {
   const evidence = finding.evidence || [];
   return (
     <div className="rounded-[18px] bg-[var(--chat-surface-soft)]/80 p-3.5">
@@ -176,12 +229,11 @@ function FindingCard({ finding }: { finding: TaskReviewFinding }) {
           {finding.evidenceRefs?.length ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {finding.evidenceRefs.map((ref) => (
-                <code
+                <EvidenceButton
                   key={ref}
-                  className="rounded-md bg-white/80 px-1.5 py-1 text-[10px] text-[var(--chat-text-muted)] ring-1 ring-black/5"
-                >
-                  {ref}
-                </code>
+                  evidenceRef={ref}
+                  onOpenEvidence={onOpenEvidence}
+                />
               ))}
             </div>
           ) : null}
@@ -213,7 +265,177 @@ function FindingCard({ finding }: { finding: TaskReviewFinding }) {
   );
 }
 
-function QualitySection({ quality }: { quality: TaskReviewQuality }) {
+function attributionTone(layer: string) {
+  if (layer === "MODEL_DECISION" || layer === "MODEL_ARGUMENT") {
+    return "bg-blue-500/10 text-blue-700 ring-blue-500/15";
+  }
+  if (layer === "HARNESS_CONTRACT" || layer === "HARNESS_RUNTIME") {
+    return "bg-amber-500/10 text-amber-700 ring-amber-500/15";
+  }
+  if (layer === "ENVIRONMENT") {
+    return "bg-orange-500/10 text-orange-700 ring-orange-500/15";
+  }
+  if (layer === "USER_ACTION") {
+    return "bg-black/[0.045] text-[var(--chat-text-soft)] ring-black/5";
+  }
+  return "bg-red-500/[0.07] text-red-700 ring-red-500/10";
+}
+
+function FailureAttributionSection({
+  attributions,
+  summary,
+  onOpenEvidence,
+}: {
+  attributions: TaskReviewFailureAttribution[];
+  summary?: TaskReviewDiagnosticSummary;
+  onOpenEvidence: (ref: string) => void;
+}) {
+  const layerCounts = summary?.layerCounts || {};
+  return (
+    <Panel
+      title="失败与责任归因"
+      description="逐次失败区分模型决策、参数、Harness、环境和 Trace 缺口；证据不足时不硬猜。"
+      icon={<GitBranch className="size-[18px]" />}
+    >
+      <div className="space-y-4">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric
+            icon={<AlertTriangle className="size-3.5" />}
+            label="失败调用"
+            value={formatNumber(summary?.totalFailures ?? attributions.length)}
+          />
+          <Metric
+            icon={<Wrench className="size-3.5" />}
+            label="参数问题"
+            value={formatNumber(summary?.parameterIssueCount ?? 0)}
+          />
+          <Metric
+            icon={<CheckCircle2 className="size-3.5" />}
+            label="已恢复"
+            value={formatNumber(summary?.recoveredCount ?? 0)}
+          />
+          <Metric
+            icon={<XCircle className="size-3.5" />}
+            label="未恢复"
+            value={formatNumber(summary?.unrecoveredCount ?? 0)}
+          />
+        </div>
+        {Object.values(layerCounts).some((count) => Number(count) > 0) ? (
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(layerCounts)
+              .filter(([, count]) => Number(count) > 0)
+              .map(([layer, count]) => (
+                <span
+                  key={layer}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-medium ring-1",
+                    attributionTone(layer)
+                  )}
+                >
+                  {FAILURE_LAYER_LABELS[layer] || layer} · {count}
+                </span>
+              ))}
+          </div>
+        ) : null}
+        {attributions.length ? (
+          <div className="space-y-2.5">
+            {attributions.map((attribution) => (
+              <div
+                key={attribution.attributionId}
+                className="rounded-[20px] bg-[var(--chat-surface-soft)]/75 p-4 ring-1 ring-black/[0.035]"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[14px] font-semibold text-[var(--chat-text)]">
+                    {attribution.toolName}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+                      attributionTone(String(attribution.primaryLayer))
+                    )}
+                  >
+                    {FAILURE_LAYER_LABELS[attribution.primaryLayer] ||
+                      attribution.primaryLayer}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px]",
+                      attribution.recovered
+                        ? "bg-emerald-500/10 text-emerald-700"
+                        : "bg-red-500/10 text-red-700"
+                    )}
+                  >
+                    {attribution.recovered ? "已恢复" : "未恢复"}
+                  </span>
+                  <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] text-[var(--chat-text-muted)] ring-1 ring-black/[0.045]">
+                    {attribution.source === "deterministic+judge"
+                      ? "事实 + AI 复核"
+                      : attribution.source === "judge"
+                        ? "AI 归因"
+                        : "确定性归因"}
+                  </span>
+                  {attribution.step != null ? (
+                    <span className="text-[10px] text-[var(--chat-text-muted)]">
+                      步骤 {attribution.step}
+                    </span>
+                  ) : null}
+                  <span className="ml-auto text-[10px] text-[var(--chat-text-muted)]">
+                    置信度 {Math.round(attribution.confidence * 100)}%
+                  </span>
+                </div>
+                <p className="mt-2 text-[13px] leading-5 text-[var(--chat-text-soft)]">
+                  {attribution.reason}
+                </p>
+                {attribution.recoverySummary ? (
+                  <p className="mt-1.5 text-[12px] leading-5 text-[var(--chat-text-muted)]">
+                    恢复情况：{attribution.recoverySummary}
+                  </p>
+                ) : null}
+                {attribution.contributingLayers.length ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--chat-text-muted)]">
+                    <span>贡献层</span>
+                    {attribution.contributingLayers.map((layer) => (
+                      <span
+                        key={layer}
+                        className="rounded-md bg-white/80 px-1.5 py-0.5 ring-1 ring-black/5"
+                      >
+                        {FAILURE_LAYER_LABELS[layer] || layer}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {attribution.evidenceRefs.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {attribution.evidenceRefs.map((ref) => (
+                      <EvidenceButton
+                        key={ref}
+                        evidenceRef={ref}
+                        onOpenEvidence={onOpenEvidence}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-[18px] bg-emerald-500/10 p-3.5 text-[13px] text-emerald-800">
+            <CheckCircle2 className="size-4" />
+            没有记录失败工具调用，因此没有生成责任归因。
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function QualitySection({
+  quality,
+  onOpenEvidence,
+}: {
+  quality: TaskReviewQuality;
+  onOpenEvidence: (ref: string) => void;
+}) {
   const statusLabel =
     quality.status === "verified"
       ? "已分析"
@@ -259,11 +481,15 @@ function QualitySection({ quality }: { quality: TaskReviewQuality }) {
                           : "bg-white/80 text-[var(--chat-text-soft)] ring-1 ring-black/5"
                     )}
                   >
-                    {LEVEL_LABELS[dimension.level] || dimension.level}
+                    {dimension.applicable === false
+                      ? "本次不适用"
+                      : LEVEL_LABELS[dimension.level] || dimension.level}
                   </span>
                 </div>
                 <p className="mt-2 text-[13px] leading-5 text-[var(--chat-text-soft)]">
-                  {dimension.reason}
+                  {dimension.applicable === false
+                    ? dimension.notApplicableReason || "当前任务没有适用证据。"
+                    : dimension.reason}
                 </p>
                 {dimension.evidence?.length ? (
                   <details className="mt-2 text-[11px] text-[var(--chat-text-muted)]">
@@ -290,7 +516,11 @@ function QualitySection({ quality }: { quality: TaskReviewQuality }) {
               语义问题
             </h3>
             {quality.findings.map((finding) => (
-              <FindingCard key={`${finding.code}-${finding.title}`} finding={finding} />
+              <FindingCard
+                key={`${finding.code}-${finding.title}`}
+                finding={finding}
+                onOpenEvidence={onOpenEvidence}
+              />
             ))}
           </div>
         ) : null}
@@ -357,9 +587,18 @@ function AssistantTimelineRow({ step }: { step: TaskReviewStep }) {
   );
 }
 
-function ToolTimelineRow({ tool }: { tool: TaskReviewTool }) {
+function ToolTimelineRow({
+  tool,
+  evidenceRef,
+  onOpenEvidence,
+}: {
+  tool: TaskReviewTool;
+  evidenceRef: string;
+  onOpenEvidence: (ref: string) => void;
+}) {
   return (
     <div
+      id={`tool-${tool.toolCallId || tool.id}`}
       className={cn(
         "rounded-[18px] p-3.5 ring-1",
         tool.failed
@@ -389,6 +628,13 @@ function ToolTimelineRow({ tool }: { tool: TaskReviewTool }) {
             {formatMs(tool.durationMs)}
           </span>
         ) : null}
+        <button
+          type="button"
+          onClick={() => onOpenEvidence(evidenceRef)}
+          className="rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-medium text-[var(--chat-text-muted)] ring-1 ring-black/5 transition hover:text-[var(--chat-accent)]"
+        >
+          完整证据
+        </button>
       </div>
       {tool.errorMsg ? (
         <p className="mt-2 break-words text-[11px] leading-5 text-red-700">
@@ -414,10 +660,79 @@ function ToolTimelineRow({ tool }: { tool: TaskReviewTool }) {
   );
 }
 
+function fallbackEvidenceIndex(
+  job: TaskReviewJob
+): Record<string, TaskReviewEvidenceIndexEntry> {
+  const result: Record<string, TaskReviewEvidenceIndexEntry> = {};
+  for (const run of job.fast.runs) {
+    for (const tool of run.timeline?.tools || []) {
+      const ref =
+        tool.evidenceRef || `tool:${run.requestId}:${tool.id || tool.toolCallId}`;
+      result[ref] = {
+        requestId: run.requestId,
+        runId: run.requestId,
+        toolCallId: tool.toolCallId || tool.id,
+        toolName: tool.toolName,
+        step: tool.stepNo,
+        status: tool.status,
+        failed: Boolean(tool.failed),
+      };
+    }
+  }
+  return result;
+}
+
+function evidencePreview(job: TaskReviewJob, ref: string): EvidencePreview | undefined {
+  const parts = ref.slice("tool:".length).split(":");
+  const requestId = parts.length > 1 ? parts[0] : undefined;
+  const toolCallId = parts.length > 1 ? parts[1] : parts[0];
+  for (const run of job.fast.runs) {
+    if (requestId && run.requestId !== requestId) continue;
+    const tool = (run.timeline?.tools || []).find(
+      (item) => item.id === toolCallId || item.toolCallId === toolCallId
+    );
+    if (!tool) continue;
+    return {
+      toolName: tool.toolName,
+      step: tool.stepNo,
+      status: tool.status,
+      argumentsPreview: tool.argumentsPreview || tool.inputPreview,
+      resultPreview: tool.resultPreview,
+      errorMsg: tool.errorMsg,
+    };
+  }
+  return undefined;
+}
+
 export function TaskReviewReport({ job }: { job: TaskReviewJob }) {
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [selectedEvidenceRef, setSelectedEvidenceRef] = useState<string | null>(
+    null
+  );
   const fast = job.fast;
   const completion = fast.completion;
   const statusLabel = CONCLUSION_LABELS[completion.conclusion] || completion.conclusion;
+  const diagnostics =
+    job.quality.diagnostics ||
+    job.diagnostics || {
+      failureAttributions: job.quality.failureAttributions || [],
+      diagnosticSummary: job.quality.diagnosticSummary,
+    };
+  const narrative = job.narrative || job.quality.narrative;
+  const evidenceIndex = {
+    ...fallbackEvidenceIndex(job),
+    ...(job.evidenceIndex || {}),
+  };
+  const selectedIndex = selectedEvidenceRef
+    ? evidenceIndex[selectedEvidenceRef]
+    : undefined;
+  const selectedPreview = selectedEvidenceRef
+    ? evidencePreview(job, selectedEvidenceRef)
+    : undefined;
+  const openEvidence = (ref: string) => {
+    setSelectedEvidenceRef(ref);
+    setEvidenceOpen(true);
+  };
 
   return (
     <div className="space-y-4">
@@ -453,6 +768,20 @@ export function TaskReviewReport({ job }: { job: TaskReviewJob }) {
         </div>
       </section>
 
+      {narrative ? (
+        <NarrativeReportPanel
+          narrative={narrative}
+          jobId={job.jobId}
+          onOpenEvidence={openEvidence}
+        />
+      ) : null}
+
+      <FailureAttributionSection
+        attributions={diagnostics.failureAttributions || []}
+        summary={diagnostics.diagnosticSummary}
+        onOpenEvidence={openEvidence}
+      />
+
       <Panel
         title="轨迹体检"
         description="这些结论来自 Trace 和确定性规则，不依赖大模型。"
@@ -467,7 +796,11 @@ export function TaskReviewReport({ job }: { job: TaskReviewJob }) {
           {fast.findings.length ? (
             <div className="space-y-2">
               {fast.findings.map((finding, index) => (
-                <FindingCard key={`${finding.code}-${index}`} finding={finding} />
+                <FindingCard
+                  key={`${finding.code}-${index}`}
+                  finding={finding}
+                  onOpenEvidence={openEvidence}
+                />
               ))}
             </div>
           ) : (
@@ -487,7 +820,7 @@ export function TaskReviewReport({ job }: { job: TaskReviewJob }) {
         </div>
       </Panel>
 
-      <QualitySection quality={job.quality} />
+      <QualitySection quality={job.quality} onOpenEvidence={openEvidence} />
 
       <Panel
         title="执行时间线"
@@ -547,26 +880,35 @@ export function TaskReviewReport({ job }: { job: TaskReviewJob }) {
                     event.kind === "assistant" ? (
                       <AssistantTimelineRow key={event.key} step={event.step} />
                     ) : (
-                      <ToolTimelineRow key={event.key} tool={event.tool} />
+                      <ToolTimelineRow
+                        key={event.key}
+                        tool={event.tool}
+                        evidenceRef={
+                          event.tool.evidenceRef ||
+                          `tool:${run.requestId}:${
+                            event.tool.id || event.tool.toolCallId
+                          }`
+                        }
+                        onOpenEvidence={openEvidence}
+                      />
                     )
                   )}
                 </div>
-                {run.finalText?.trim() ? (
-                  <div className="rounded-[22px] border border-[var(--chat-accent)]/15 bg-[var(--chat-accent-soft)]/55 px-4 py-4">
-                    <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--chat-accent)]">
-                      <Sparkles className="size-3.5" />
-                      最终回复
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap break-words text-[14px] leading-7 text-[var(--chat-text)]">
-                      {run.finalText}
-                    </p>
-                  </div>
-                ) : null}
               </div>
             );
           })}
         </div>
       </Panel>
+
+      <EvidenceInspectorDialog
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
+        jobId={job.jobId}
+        evidenceRef={selectedEvidenceRef}
+        indexEntry={selectedIndex}
+        preview={selectedPreview}
+        onNavigateRef={openEvidence}
+      />
     </div>
   );
 }

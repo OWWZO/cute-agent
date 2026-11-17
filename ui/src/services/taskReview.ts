@@ -45,6 +45,78 @@ export type TaskReviewEvidence = {
   quote?: string;
 };
 
+export type TaskReviewEvidenceIndexEntry = {
+  requestId: string;
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  step?: number | null;
+  status: string;
+  failed: boolean;
+};
+
+export type TaskReviewEvidenceDetail = {
+  schemaVersion: string;
+  ref: string;
+  kind: "tool_call";
+  resolved: true;
+  requestId: string;
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  step?: number | null;
+  status: string;
+  failed: boolean;
+  input: {
+    present: boolean;
+    raw: string;
+    parsed: unknown;
+    parseError?: string | null;
+    truncated: boolean;
+    originalLength: number;
+  };
+  output: {
+    present: boolean;
+    source: "toolResult" | "llmObservation" | "missing";
+    raw: string;
+    parsed: unknown;
+    parseError?: string | null;
+    truncated: boolean;
+    originalLength: number;
+  };
+  error: {
+    message: string;
+    code?: string | null;
+    class: string;
+  };
+  timing: {
+    startedAt?: string | null;
+    finishedAt?: string | null;
+    durationMs?: number | null;
+  };
+  context: {
+    subAgentId?: string | null;
+    subAgentType?: string | null;
+    dispatchIndex?: number | null;
+    llmInvocationId?: number | string | null;
+  };
+  recovery: {
+    recovered: boolean;
+    type: string;
+    summary: string;
+    refs: string[];
+  };
+  artifacts: Array<{
+    artifactId: string;
+    relativeRef?: string | null;
+    mimeType?: string | null;
+    fileSize?: number | null;
+    fileHash?: string | null;
+    previewAvailable?: boolean | null;
+  }>;
+  limitations: string[];
+};
+
 export type TaskReviewFinding = {
   code: string;
   severity: "blocker" | "warning" | "info" | string;
@@ -61,8 +133,153 @@ export type TaskReviewDimension = {
   score?: number;
   level: "high" | "medium" | "low" | "unknown" | string;
   passed?: boolean;
+  applicable?: boolean;
+  notApplicableReason?: string;
+  diagnosticRefs?: string[];
   reason: string;
   evidence?: TaskReviewEvidence[];
+};
+
+export type TaskReviewFailureLayer =
+  | "MODEL_DECISION"
+  | "MODEL_ARGUMENT"
+  | "HARNESS_CONTRACT"
+  | "HARNESS_RUNTIME"
+  | "ENVIRONMENT"
+  | "USER_ACTION"
+  | "TRACE_GAP"
+  | "UNKNOWN";
+
+export type TaskReviewFailureAttribution = {
+  attributionId: string;
+  requestId: string;
+  runId: string;
+  toolCallId: string;
+  step?: number | null;
+  toolName: string;
+  toolStatus: string;
+  failureKind: string;
+  primaryLayer: TaskReviewFailureLayer | string;
+  contributingLayers: Array<TaskReviewFailureLayer | string>;
+  reason: string;
+  recovered: boolean;
+  recoverySummary: string;
+  confidence: number;
+  source: "deterministic" | "judge" | "deterministic+judge" | string;
+  ruleIds: string[];
+  evidenceRefs: string[];
+  evidence?: TaskReviewEvidence[];
+};
+
+export type TaskReviewDiagnosticSummary = {
+  totalFailures: number;
+  attributedFailures: number;
+  unattributedFailures: number;
+  layerCounts: Partial<Record<TaskReviewFailureLayer | string, number>>;
+  recoveredCount: number;
+  unrecoveredCount: number;
+  parameterIssueCount: number;
+  diagnosisMismatchCount: number;
+};
+
+export type TaskReviewDeveloperAction = {
+  actionId: string;
+  title: string;
+  targetLayer: TaskReviewFailureLayer | string;
+  priority: "P0" | "P1" | "P2" | string;
+  actionScope:
+    | "PRODUCT_RUNTIME"
+    | "TOOL_IMPLEMENTATION"
+    | "MODEL_POLICY"
+    | "ENVIRONMENT_CONFIG"
+    | "TRACE_INSTRUMENTATION"
+    | "USER_WORKSPACE"
+    | "NO_ACTION"
+    | string;
+  status: "ready" | "needs_more_evidence" | string;
+  bugSignature: string;
+  failureKind: string;
+  toolName: string;
+  frequency: {
+    count: number;
+    recovered: number;
+    unrecovered: number;
+  };
+  problemDefinition: {
+    observed: string;
+    expected: string;
+    impact: string;
+  };
+  evidenceRefs: string[];
+  reproduction: {
+    preconditions: string[];
+    steps: string[];
+    expectedFailure: string;
+  };
+  rootCauseHypothesis: {
+    summary: string;
+    confidence: number;
+    alternatives: string[];
+  };
+  affectedAreas: Array<{ kind: string; name: string }>;
+  fixPlan: Array<{ order: number; summary: string; detail: string }>;
+  testPlan: {
+    unit: string[];
+    integration: string[];
+    regression: string[];
+  };
+  acceptanceCriteria: string[];
+  target: string;
+  action: string;
+  expectedEffect: string;
+  agentPrompt: string;
+};
+
+export type TaskReviewNarrative = {
+  schemaVersion: string;
+  status: "verified" | "fact_only" | "failed" | string;
+  headline: string;
+  executiveSummary: string[];
+  taskUnderstanding: {
+    goal: string;
+    constraints: string[];
+    acceptanceCriteria: string[];
+  };
+  executionNarrative: Array<{
+    phase: string;
+    summary: string;
+    outcome: string;
+    evidenceRefs: string[];
+  }>;
+  toolStory: Array<{
+    toolName: string;
+    purpose: string;
+    calls: number;
+    failures: number;
+    assessment: string;
+  }>;
+  failureStory: Array<{
+    title: string;
+    primaryLayer: string;
+    detail: string;
+    recovered: boolean;
+    evidenceRefs: string[];
+  }>;
+  whatWorked: string[];
+  whatFailed: string[];
+  betterApproach: Array<{
+    title: string;
+    detail: string;
+    tradeoff: string;
+  }>;
+  developerActions: TaskReviewDeveloperAction[];
+  verification: {
+    verified: string[];
+    unverified: string[];
+  };
+  limitations: string[];
+  markdown: string;
+  error?: { kind?: string; message?: string } | null;
 };
 
 export type TaskReviewQuality = {
@@ -74,6 +291,16 @@ export type TaskReviewQuality = {
   dimensions?: TaskReviewDimension[];
   findings?: TaskReviewFinding[];
   suggestions?: Array<{ dimension?: string; title: string; detail: string }>;
+  rubricId?: string;
+  failureAttributions?: TaskReviewFailureAttribution[];
+  diagnosticSummary?: TaskReviewDiagnosticSummary;
+  diagnostics?: {
+    failureAttributions?: TaskReviewFailureAttribution[];
+    diagnosticSummary?: TaskReviewDiagnosticSummary;
+    toolContracts?: Array<Record<string, unknown>>;
+  };
+  narrative?: TaskReviewNarrative | null;
+  narrativeStatus?: string;
   limitations?: string[];
   error?: { kind?: string; message?: string } | null;
   advisory?: boolean;
@@ -166,6 +393,7 @@ export type TaskReviewFastReport = {
         argumentsPreview?: string;
         inputPreview?: string;
         resultPreview?: string;
+        evidenceRef?: string;
       }>;
     };
     artifacts?: Array<Record<string, unknown>>;
@@ -190,6 +418,13 @@ export type TaskReviewJob = {
   progress: Array<{ stage: string; status: string }>;
   fast: TaskReviewFastReport;
   quality: TaskReviewQuality;
+  diagnostics?: {
+    failureAttributions?: TaskReviewFailureAttribution[];
+    diagnosticSummary?: TaskReviewDiagnosticSummary;
+    toolContracts?: Array<Record<string, unknown>>;
+  };
+  evidenceIndex?: Record<string, TaskReviewEvidenceIndexEntry>;
+  narrative?: TaskReviewNarrative | null;
   report?: Record<string, unknown> | null;
 };
 
@@ -235,6 +470,33 @@ export async function listTaskReviewJobs(limit = 20) {
   );
 }
 
+export async function getTaskReviewEvidence(jobId: string, ref: string) {
+  const query = new URLSearchParams({ ref });
+  return evalFetch<TaskReviewEvidenceDetail>(
+    `/task-review/jobs/${encodeURIComponent(jobId)}/evidence?${query.toString()}`
+  );
+}
+
+export async function downloadTaskReviewReport(jobId: string) {
+  const token = getAccessToken();
+  const headers = new Headers();
+  headers.set("X-Device-Id", getDeviceId());
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const response = await fetch(
+    `${EVAL_API}/task-review/jobs/${encodeURIComponent(jobId)}/report.md`,
+    { headers, credentials: "include" }
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      body?.error?.message || `下载复盘报告失败（${response.status}）`
+    );
+  }
+  return response.blob();
+}
+
 async function evalFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getAccessToken();
   const headers = new Headers(init.headers);
@@ -255,7 +517,32 @@ async function evalFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
       body?.info ||
       body?.message ||
       `复盘服务请求失败（${response.status}）`;
-    throw new Error(message);
+    throw new TaskReviewApiError(message, {
+      status: response.status,
+      code: body?.error?.code,
+      candidates: body?.error?.candidates,
+    });
   }
   return body as T;
+}
+
+export class TaskReviewApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly candidates?: Array<Record<string, unknown>>;
+
+  constructor(
+    message: string,
+    options: {
+      status: number;
+      code?: string;
+      candidates?: Array<Record<string, unknown>>;
+    }
+  ) {
+    super(message);
+    this.name = "TaskReviewApiError";
+    this.status = options.status;
+    this.code = options.code;
+    this.candidates = options.candidates;
+  }
 }

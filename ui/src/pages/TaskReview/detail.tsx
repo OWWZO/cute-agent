@@ -11,7 +11,9 @@ const STAGE_LABELS: Record<string, string> = {
   exporting: "导出轨迹",
   projecting: "重建步骤",
   deterministic_audit: "确定性体检",
+  diagnostics: "失败归因",
   deep_review: "AI 深度复盘",
+  narrative: "综合报告",
 };
 
 const STAGE_STATUS_LABELS: Record<string, string> = {
@@ -117,7 +119,7 @@ export default function TaskReviewDetailPage() {
             <div className="flex items-center gap-2 text-[13px] font-medium">
               <LoaderCircle className="size-4 animate-spin text-[var(--chat-accent)]" />
               {job.status === "deep_running"
-                ? "快速体检已完成，AI 正在深度复盘"
+                ? "快速体检已完成，AI 正在评分、归因并整理综合报告"
                 : "正在生成快速体检"}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
