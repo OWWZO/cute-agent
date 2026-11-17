@@ -14,6 +14,7 @@ from cute_evals.java_runner import (
     export_ledger_traces,
     run_java_cases,
     run_java_conversation,
+    run_workbuddy_tool_preflight,
 )
 from cute_evals.models import BudgetSpec, EvalCase, ExpectedSpec
 
@@ -56,7 +57,7 @@ def test_java_case_exec_uses_per_arm_maven_repository(
 ) -> None:
     commands: list[list[str]] = []
 
-    def fake_run(command, timeout):
+    def fake_run(command, timeout, **kwargs):
         commands.append(command)
         return subprocess.CompletedProcess(command, 1, "", "failed")
 
@@ -97,6 +98,102 @@ def test_java_cases_reject_temp_dir_with_whitespace(
 
     with pytest.raises(EvalRunnerError, match="must not contain whitespace"):
         run_java_cases([_python_case()], tmp_path / "out", build=False)
+
+
+def test_workbuddy_tool_preflight_passes_artifact_root_and_report(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    captured: dict = {}
+
+    def fake_run(command, timeout, *, env_overrides=None):
+        captured["command"] = command
+        captured["env"] = env_overrides
+        exec_args = next(
+            item.removeprefix("-Dexec.args=")
+            for item in command
+            if item.startswith("-Dexec.args=")
+        )
+        report_path = Path(
+            exec_args.split("--out ", 1)[1].split(" --spring-profile ", 1)[0]
+        )
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(
+                {
+                    "requiredPassed": True,
+                    "checks": [
+                        {
+                            "name": "code_execution",
+                            "required": True,
+                            "status": "ok",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(java_runner, "_run", fake_run)
+    workspace = tmp_path / "preflight" / "workspace"
+
+    report = run_workbuddy_tool_preflight(
+        workspace,
+        workspace.parent / "report.json",
+        build=False,
+    )
+
+    assert report["requiredPassed"] is True
+    assert captured["env"]["CUTE_FILE_ARTIFACT_ALLOWED_ROOT"] == str(
+        workspace.parent.resolve()
+    )
+    assert any(
+        "WorkBuddyToolPreflightCli" in item
+        for item in captured["command"]
+    )
+
+
+def test_workbuddy_tool_preflight_fails_closed_on_required_check(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_run(command, timeout, *, env_overrides=None):
+        exec_args = next(
+            item.removeprefix("-Dexec.args=")
+            for item in command
+            if item.startswith("-Dexec.args=")
+        )
+        report_path = Path(
+            exec_args.split("--out ", 1)[1].split(" --spring-profile ", 1)[0]
+        )
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(
+                {
+                    "requiredPassed": False,
+                    "checks": [
+                        {
+                            "name": "code_execution",
+                            "required": True,
+                            "status": "error",
+                            "detail": "workspace not allowed",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 1, "", "")
+
+    monkeypatch.setattr(java_runner, "_run", fake_run)
+
+    with pytest.raises(EvalRunnerError, match="code_execution=error"):
+        run_workbuddy_tool_preflight(
+            tmp_path / "workspace",
+            tmp_path / "report.json",
+            build=False,
+        )
 
 
 def test_ledger_export_rejects_time_values_with_whitespace() -> None:
