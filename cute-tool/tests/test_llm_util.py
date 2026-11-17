@@ -57,6 +57,22 @@ class LlmUtilRoutingTest(unittest.TestCase):
         self.assertEqual("test-dashscope-key", params["api_key"])
         self.assertEqual("qwen3.5-plus", params["model"])
 
+    def test_should_route_group_model_to_global_openai_compatible_gateway(self):
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_BASE_URL": "http://127.0.0.1:3425/v1/chat/completions",
+                "OPENAI_API_KEY": "test-magpie-key",
+            },
+            clear=False,
+        ):
+            params = _prepare_litellm_params("group/deepseek")
+
+        self.assertEqual("openai_like", params["custom_llm_provider"])
+        self.assertEqual("http://127.0.0.1:3425/v1", params["api_base"])
+        self.assertEqual("test-magpie-key", params["api_key"])
+        self.assertEqual("group/deepseek", params["model"])
+
     def test_should_fill_default_user_agent_for_openai_compatible_headers(self):
         headers = _build_openai_compat_headers({"Accept": "application/json"})
 
@@ -84,6 +100,57 @@ class LlmUtilAsyncHeaderTest(unittest.IsolatedAsyncioTestCase):
         response = httpx.Response(429, headers=headers, request=request)
         return httpx.HTTPStatusError(
             "upstream rate limited", request=request, response=response
+        )
+
+    async def test_should_use_raw_http_for_group_model_with_global_gateway_config(
+        self,
+    ):
+        captured_raw_call = {}
+
+        async def fake_raw_openai_like_request(*args, **kwargs):
+            captured_raw_call.update(kwargs)
+            yield "ok"
+
+        async def fake_acompletion(*args, **kwargs):
+            raise AssertionError(
+                "group model with global gateway config should not use litellm"
+            )
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "OPENAI_BASE_URL": "http://127.0.0.1:3425/v1/chat/completions",
+                    "OPENAI_API_KEY": "test-magpie-key",
+                },
+                clear=False,
+            ),
+            patch(
+                "cute_tool.util.llm_util._raw_openai_like_request",
+                new=fake_raw_openai_like_request,
+            ),
+            patch(
+                "cute_tool.util.llm_util.acompletion",
+                new=fake_acompletion,
+            ),
+        ):
+            async for _ in ask_llm(
+                messages="hello",
+                model="group/deepseek",
+                stream=False,
+                only_content=True,
+            ):
+                pass
+
+        self.assertEqual(
+            "group/deepseek", captured_raw_call["params"]["model"]
+        )
+        self.assertEqual(
+            "http://127.0.0.1:3425/v1",
+            captured_raw_call["params"]["api_base"],
+        )
+        self.assertEqual(
+            "test-magpie-key", captured_raw_call["params"]["api_key"]
         )
 
     async def test_should_use_raw_http_for_openai_prefixed_model_when_api_base_is_not_dashscope(

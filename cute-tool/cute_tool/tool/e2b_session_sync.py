@@ -44,6 +44,7 @@ _E2B_MAX_NAME_BYTES = 200
 _E2B_MAX_PATH_BYTES = 1000
 _FINGERPRINT_REL = ".cute/e2b-sync.json"
 _DEFAULT_MAX_FILE_BYTES = 100 * 1024 * 1024
+_SKIP_FILE_NAMES = {"__last_source__.py"}
 _SAFE_REMOTE_RELATIVE_PATH = re.compile(
     r"^(?!\.\.)(?!/)(?!\\)(?:[^\x00-\x1f:*?\"<>|\\]+/)*[^\x00-\x1f:*?\"<>|\\]+$"
 )
@@ -329,6 +330,11 @@ def should_skip_rel(rel: Path, *, skip_top: set[str] | None = None) -> bool:
         return True
     if skip_top and rel.parts[0] in skip_top:
         return True
+    # code_execution rewrites this generated source before each sync. It is
+    # execution state, not a workspace file, so it must not participate in
+    # create/delete reconciliation.
+    if rel.name in _SKIP_FILE_NAMES:
+        return True
     for part in rel.parts:
         if part.startswith("."):
             return True
@@ -467,6 +473,7 @@ from pathlib import Path
 root = Path({remote_root!r})
 skip_top = set({skip!r})
 skip_dirs = set({sorted(_SKIP_DIR_NAMES)!r})
+skip_files = set({sorted(_SKIP_FILE_NAMES)!r})
 files = {{}}
 if root.is_dir():
     for path in root.rglob('*'):
@@ -477,7 +484,12 @@ if root.is_dir():
         except ValueError:
             continue
         parts = rel.parts
-        if not parts or parts[0] in skip_top or any(p.startswith('.') for p in parts):
+        if (
+            not parts
+            or parts[0] in skip_top
+            or rel.name in skip_files
+            or any(p.startswith('.') for p in parts)
+        ):
             continue
         if any(p in skip_dirs for p in parts):
             continue

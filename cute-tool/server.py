@@ -22,7 +22,7 @@ from cute_tool.util.middleware_util import (
     HTTPProcessTimeMiddleware,
 )
 
-load_dotenv()
+load_dotenv(override=True)
 
 # 压掉已知的第三方库噪音告警，避免排查真实异常时被无关 warning 干扰。
 warnings.filterwarnings(

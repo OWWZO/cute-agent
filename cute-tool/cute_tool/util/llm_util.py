@@ -582,7 +582,8 @@ def _prepare_litellm_params(model: str, **kwargs: Any) -> dict:
             use_dashscope = True
             api_base_raw = explicit_api_base
         else:
-            return {"model": model, **kwargs}
+            if explicit_api_base or not env_openai_api_base:
+                return {"model": model, **kwargs}
     elif model in _LITELLM_DASHSCOPE_MODELS or model.startswith("qwen"):
         use_dashscope = True
         # 只有 Qwen / DashScope 模型才自动复用 DashScope 环境，避免 gpt-* 被错误劫持到 DashScope。

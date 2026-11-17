@@ -3,7 +3,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from cute_tool.tool.e2b_session_sync import mkdir_remote, snapshot_remote_files
+from cute_tool.tool.e2b_session_sync import (
+    mkdir_remote,
+    snapshot_local_files,
+    snapshot_remote_files,
+)
 
 
 class _Commands:
@@ -40,7 +44,18 @@ def test_snapshot_uses_python_cli_and_parses_file_signatures():
     assert result == {"report.txt": (12, 34)}
     assert commands.calls[0][0].startswith("python -c ")
     assert "Path('/workspace/session')" in shlex.split(commands.calls[0][0])[2]
+    assert "__last_source__.py" in commands.calls[0][0]
     assert sandbox.run_code_calls == 0
+
+
+def test_local_snapshot_excludes_code_execution_transient_source(tmp_path):
+    (tmp_path / "__last_source__.py").write_text("print('transient')", encoding="utf-8")
+    (tmp_path / "user_module.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    result = snapshot_local_files(tmp_path)
+
+    assert "user_module.py" in result
+    assert "__last_source__.py" not in result
 
 
 def test_snapshot_fails_without_commands_api():
