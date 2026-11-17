@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/task-review-evidence.schema.json",
+  "title": "Cute Agent Task Review Evidence Detail",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "ref",
+    "kind",
+    "resolved",
+    "requestId",
+    "runId",
+    "toolCallId",
+    "toolName",
+    "step",
+    "status",
+    "failed",
+    "input",
+    "output",
+    "error",
+    "timing",
+    "context",
+    "recovery",
+    "artifacts",
+    "limitations"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "ref": {"type": "string", "minLength": 1},
+    "kind": {"const": "tool_call"},
+    "resolved": {"const": true},
+    "requestId": {"type": "string", "minLength": 1},
+    "runId": {"type": "string", "minLength": 1},
+    "toolCallId": {"type": "string", "minLength": 1},
+    "toolName": {"type": "string", "minLength": 1},
+    "step": {"type": ["integer", "null"]},
+    "status": {"type": "string", "minLength": 1},
+    "failed": {"type": "boolean"},
+    "input": {
+      "type": "object",
+      "required": [
+        "present",
+        "raw",
+        "parsed",
+        "parseError",
+        "truncated",
+        "originalLength"
+      ],
+      "properties": {
+        "present": {"type": "boolean"},
+        "raw": {"type": "string"},
+        "parsed": {},
+        "parseError": {"type": ["string", "null"]},
+        "truncated": {"type": "boolean"},
+        "originalLength": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "required": [
+        "present",
+        "source",
+        "raw",
+        "parsed",
+        "parseError",
+        "truncated",
+        "originalLength"
+      ],
+      "properties": {
+        "present": {"type": "boolean"},
+        "source": {
+          "enum": ["toolResult", "llmObservation", "missing"]
+        },
+        "raw": {"type": "string"},
+        "parsed": {},
+        "parseError": {"type": ["string", "null"]},
+        "truncated": {"type": "boolean"},
+        "originalLength": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": ["message", "code", "class"],
+      "properties": {
+        "message": {"type": "string"},
+        "code": {"type": ["string", "null"]},
+        "class": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "timing": {
+      "type": "object",
+      "required": ["startedAt", "finishedAt", "durationMs"],
+      "properties": {
+        "startedAt": {"type": ["string", "null"]},
+        "finishedAt": {"type": ["string", "null"]},
+        "durationMs": {"type": ["integer", "number", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "context": {
+      "type": "object",
+      "required": [
+        "subAgentId",
+        "subAgentType",
+        "dispatchIndex",
+        "llmInvocationId"
+      ],
+      "properties": {
+        "subAgentId": {"type": ["string", "null"]},
+        "subAgentType": {"type": ["string", "null"]},
+        "dispatchIndex": {"type": ["integer", "null"]},
+        "llmInvocationId": {"type": ["integer", "string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "recovery": {
+      "type": "object",
+      "required": ["recovered", "type", "summary", "refs"],
+      "properties": {
+        "recovered": {"type": "boolean"},
+        "type": {"type": "string", "minLength": 1},
+        "summary": {"type": "string"},
+        "refs": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "artifactId",
+          "relativeRef",
+          "mimeType",
+          "fileSize",
+          "fileHash",
+          "previewAvailable"
+        ],
+        "properties": {
+          "artifactId": {"type": "string", "minLength": 1},
+          "relativeRef": {"type": ["string", "null"]},
+          "mimeType": {"type": ["string", "null"]},
+          "fileSize": {"type": ["integer", "number", "null"]},
+          "fileHash": {"type": ["string", "null"]},
+          "previewAvailable": {"type": ["boolean", "null"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": false
+}

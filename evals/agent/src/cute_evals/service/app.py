@@ -5,11 +5,12 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..task_review.java_client import JavaTaskReviewError
 from ..task_review.jobs import TaskReviewJobManager
+from ..task_review.evidence_index import EvidenceRefError
 from ..task_review.models import TaskReviewSettings
 
 
@@ -83,6 +84,44 @@ def create_app(manager: TaskReviewJobManager | None = None) -> FastAPI:
         except (KeyError, ValueError):
             return _error(404, "JOB_NOT_FOUND", "复盘任务不存在")
 
+    @app.get("/task-review/jobs/{job_id}/report.md")
+    async def get_report_markdown(job_id: str) -> PlainTextResponse:
+        try:
+            markdown = await run_in_threadpool(
+                job_manager.report_markdown,
+                job_id,
+            )
+            return PlainTextResponse(
+                markdown,
+                media_type="text/markdown; charset=utf-8",
+                headers={
+                    "Content-Disposition": (
+                        f'attachment; filename="{job_id}-review.md"'
+                    )
+                },
+            )
+        except (KeyError, ValueError):
+            return _error(404, "REPORT_NOT_FOUND", "复盘报告不存在")
+
+    @app.get("/task-review/jobs/{job_id}/evidence")
+    async def get_evidence(job_id: str, ref: str = "") -> JSONResponse:
+        try:
+            evidence = await run_in_threadpool(
+                job_manager.evidence,
+                job_id,
+                ref,
+            )
+            return JSONResponse(content=evidence)
+        except EvidenceRefError as exc:
+            return _error(
+                exc.status_code,
+                exc.code,
+                str(exc),
+                candidates=exc.candidates,
+            )
+        except (KeyError, ValueError):
+            return _error(404, "JOB_NOT_FOUND", "复盘任务不存在")
+
     @app.get("/task-review/jobs")
     async def list_jobs(limit: int = 20) -> JSONResponse:
         jobs = await run_in_threadpool(job_manager.list, limit=limit)
@@ -100,7 +139,13 @@ def create_app(manager: TaskReviewJobManager | None = None) -> FastAPI:
     return app
 
 
-def _error(status_code: int, code: str, message: str) -> JSONResponse:
+def _error(
+    status_code: int,
+    code: str,
+    message: str,
+    *,
+    candidates: list[dict[str, Any]] | None = None,
+) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
         content={
@@ -108,6 +153,7 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
                 "code": code,
                 "message": message,
                 "retryable": status_code >= 500 or code == "JAVA_EXPORT_FAILED",
+                **({"candidates": candidates} if candidates else {}),
             }
         },
     )

@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 
@@ -86,7 +87,7 @@ public class TaskReviewTraceExportService {
         trace.put("run", run);
 
         JSONArray conversation = new JSONArray();
-        for (ConversationMessageView item : detail.getConversation()) {
+        for (ConversationMessageView item : conversationForRun(detail)) {
             JSONObject message = new JSONObject();
             message.put("messageId", item.getMessageId());
             message.put("conversationId", item.getConversationId());
@@ -158,6 +159,7 @@ public class TaskReviewTraceExportService {
 
         JSONArray toolCalls = new JSONArray();
         for (ToolInvocationView item : detail.getToolInvocations()) {
+            String resultText = item.resolveResultText();
             JSONObject tool = new JSONObject();
             tool.put("id", item.getId());
             tool.put("llmInvocationId", item.getLlmInvocationId());
@@ -173,16 +175,31 @@ public class TaskReviewTraceExportService {
             tool.put("toolProvider", item.getToolProvider());
             tool.put("inputJson", item.getInputJson());
             tool.put("llmObservation", item.getLlmObservation());
-            tool.put("toolResult", item.resolveResultText());
+            tool.put("toolResult", resultText);
             tool.put("status", statusName(item.getStatus()));
+            tool.put("statusSource", "execution-ledger");
             tool.put("errorMsg", item.getErrorMsg());
+            tool.put("errorCode", null);
+            tool.put("requestedAt", time(item.getCreateTime()));
             tool.put("startedAt", time(item.getStartedAt()));
             tool.put("finishedAt", time(item.getFinishedAt()));
             tool.put("durationMs", item.getDurationMs());
+            tool.put("httpStatus", null);
+            tool.put("timeoutMs", null);
+            tool.put("cancelledBy", null);
+            tool.put("retryCount", null);
+            tool.put("inputParseError", inputParseError(item.getInputJson()));
+            tool.put("inputValidationErrors", new JSONArray());
+            tool.put(
+                    "resultPresent",
+                    resultText != null && !resultText.isBlank()
+            );
             tool.put("artifactCount", item.getArtifactCount());
             toolCalls.add(tool);
         }
         trace.put("toolInvocations", toolCalls);
+        trace.put("toolContracts", new JSONArray());
+        trace.put("toolContractSource", "unavailable");
 
         JSONArray contextEvents = new JSONArray();
         for (ContextEventView item : detail.getContextEvents()) {
@@ -253,6 +270,9 @@ public class TaskReviewTraceExportService {
             artifact.put("fileSize", item.getFileSize());
             artifact.put("fileHash", item.getFileHash());
             artifact.put("metadataJson", item.getMetadataJson());
+            artifact.put("previewAvailable", false);
+            artifact.put("workspacePresent", null);
+            artifact.put("contentPreview", null);
             artifacts.add(artifact);
         }
         trace.put("artifacts", artifacts);
@@ -263,6 +283,30 @@ public class TaskReviewTraceExportService {
         environment.put("source", "execution-ledger");
         trace.put("environment", environment);
         return trace;
+    }
+
+    private static List<ConversationMessageView> conversationForRun(ExecutionRunDetail detail) {
+        List<ConversationMessageView> conversation = detail.getConversation();
+        if (conversation.isEmpty() || detail.getRun() == null) {
+            return conversation;
+        }
+        String requestId = detail.getRun().getRequestId();
+        Long runId = detail.getRun().getId();
+        List<ConversationMessageView> scoped = new ArrayList<>();
+        for (ConversationMessageView item : conversation) {
+            String messageRequestId = item.getRequestId();
+            if (requestId != null && !requestId.isBlank() && requestId.equals(messageRequestId)) {
+                scoped.add(item);
+                continue;
+            }
+            if ((messageRequestId == null || messageRequestId.isBlank())
+                    && runId != null
+                    && runId.equals(item.getRunId())) {
+                scoped.add(item);
+            }
+        }
+        // 兼容旧账本：没有 requestId/runId 锚点时才退回完整会话。
+        return scoped.isEmpty() ? conversation : scoped;
     }
 
     private static String hashUserId(String userId) {
@@ -286,6 +330,18 @@ public class TaskReviewTraceExportService {
             return JSON.parse(value);
         } catch (RuntimeException e) {
             return null;
+        }
+    }
+
+    private static String inputParseError(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            JSON.parse(value);
+            return null;
+        } catch (RuntimeException e) {
+            return e.getMessage();
         }
     }
 

@@ -73,6 +73,7 @@ def _finding(
 
 def _tools(trace: RunTrace) -> list[dict[str, Any]]:
     result = []
+    request_id = trace.request_id
     for index, tool in enumerate(trace.tool_invocations):
         if not isinstance(tool, dict):
             continue
@@ -107,7 +108,7 @@ def _tools(trace: RunTrace) -> list[dict[str, Any]]:
                     else tool.get("llmObservation")
                 ),
                 "artifactCount": tool.get("artifactCount"),
-                "evidenceRef": f"tool:{tool_id}",
+                "evidenceRef": f"tool:{request_id}:{tool_id}",
             }
         )
     return result
@@ -133,6 +134,9 @@ def _artifact_items(trace: RunTrace) -> list[dict[str, Any]]:
                 "mimeType": artifact.get("mimeType"),
                 "fileSize": artifact.get("fileSize"),
                 "fileHash": artifact.get("fileHash"),
+                "previewAvailable": artifact.get("previewAvailable"),
+                "workspacePresent": artifact.get("workspacePresent"),
+                "contentPreview": artifact.get("contentPreview"),
                 "evidenceRef": f"artifact:{artifact_id}",
             }
         )
@@ -227,18 +231,12 @@ def _step_presentation(step: Any) -> tuple[str, str, str, list[dict[str, Any]]]:
     tool_names = list(dict.fromkeys(item["toolName"] for item in calls))
     if content:
         summary = content
+        # Assistant text and tool outcome are independent. A failed tool must
+        # not turn an emitted reply into a failed assistant message.
+        display_status = "COMPLETED"
+        kind = "model"
     elif tool_names:
         summary = f"调用工具：{'、'.join(tool_names)}"
-    else:
-        has_llm = any(item.kind == "llm" for item in step.evidence)
-        summary = (
-            "模型完成了这次决策，但没有保存可展示的文本。"
-            if has_llm
-            else "执行了一个步骤。"
-        )
-
-    raw_status = str(step.status or "").upper()
-    if calls:
         if any(item["failed"] for item in calls):
             display_status = "FAILED"
         elif all(item["status"] != "REQUESTED" for item in calls):
@@ -247,6 +245,13 @@ def _step_presentation(step: Any) -> tuple[str, str, str, list[dict[str, Any]]]:
             display_status = "REQUESTED"
         kind = "tool"
     else:
+        has_llm = any(item.kind == "llm" for item in step.evidence)
+        summary = (
+            "模型完成了这次决策，但没有保存可展示的文本。"
+            if has_llm
+            else "执行了一个步骤。"
+        )
+        raw_status = str(step.status or "").upper()
         display_status = (
             "COMPLETED"
             if raw_status in {"", "OBSERVED", "UNKNOWN"} and content
@@ -308,7 +313,11 @@ def _repeated_and_retry_findings(
         if len(indexes) < 2:
             continue
         repeated_excess += len(indexes) - 1
-        refs = [f"tool:{_tool_id(tools[index], index)}" for index in indexes]
+        request_id = trace.request_id
+        refs = [
+            f"tool:{request_id}:{_tool_id(tools[index], index)}"
+            for index in indexes
+        ]
         findings.append(
             _finding(
                 "repeated_identical_call",
@@ -334,8 +343,8 @@ def _repeated_and_retry_findings(
             ):
                 retry_refs.extend(
                     [
-                        f"tool:{_tool_id(tool, index)}",
-                        f"tool:{_tool_id(later_tool, later)}",
+                        f"tool:{trace.request_id}:{_tool_id(tool, index)}",
+                        f"tool:{trace.request_id}:{_tool_id(later_tool, later)}",
                     ]
                 )
     if retry_refs:
@@ -402,6 +411,11 @@ def _run_report(
     criteria: str | None,
 ) -> dict[str, Any]:
     status = trace.status.upper()
+    final_text = (
+        process_view.final_text
+        if process_view is not None
+        else trace.final_text
+    )
     tools = _tools(trace)
     failed_tools = [item for item in tools if item["failed"]]
     repeated_findings, repeated_count = _repeated_and_retry_findings(trace)
@@ -439,7 +453,7 @@ def _run_report(
                 [f"run:{trace.request_id}"],
             )
         )
-    if status == "SUCCESS" and not trace.final_text.strip():
+    if status == "SUCCESS" and not final_text.strip():
         findings.append(
             _finding(
                 "empty_final_answer",
@@ -485,13 +499,26 @@ def _run_report(
     limitations = list(metrics.get("limitations") or [])
     if source == "ledger-reconstructed":
         limitations.append("轨迹从 Execution Ledger 重建，缺少部分原始对话上下文。")
+    if (
+        failed_tools
+        and str(trace.raw.get("toolContractSource") or "") == "unavailable"
+    ):
+        limitations.append(
+            "Execution Ledger 未导出工具输入 Schema，参数错误只能依据入参和错误信息判断。"
+        )
+    if artifacts and all(
+        item.get("previewAvailable") is False for item in artifacts
+    ):
+        limitations.append(
+            "产物内容预览不可用，产物质量只能依据文件元数据和工具轨迹判断。"
+        )
     completion = _completion([status], findings, criteria)
     return {
         "runId": trace.run_uid or trace.request_id,
         "requestId": trace.request_id,
         "sessionId": str((trace.raw.get("run") or {}).get("sessionId") or ""),
         "status": status,
-        "finalText": trace.final_text,
+        "finalText": final_text,
         "traceSha256": _sha256(trace.raw),
         "execution": {
             "status": status,

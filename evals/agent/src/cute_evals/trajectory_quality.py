@@ -175,7 +175,15 @@ def _parse_tool_result(value: Any) -> Any:
 
 def _tool_failure_signal(tool: dict[str, Any]) -> str | None:
     status = str(tool.get("status") or "").upper()
-    if status and status != "SUCCESS":
+    if status in {
+        "FAILED",
+        "ERROR",
+        "TIMEOUT",
+        "STOPPED",
+        "REJECTED",
+        "CANCELLED",
+        "CANCELED",
+    }:
         return f"status:{status}"
     if tool.get("errorMsg"):
         return "errorMsg"

@@ -1,0 +1,249 @@
+name: workbuddybench
+version: code-pytest-hybrid-v1
+upstream: https://github.com/Tencent/workbuddy-bench
+license: Tencent WorkBuddy Bench License; not intended for use within the European Union
+scoreLabel: compatibility-subset
+runnerMode: hybrid-host-agent-docker-verifier
+officialScore: false
+
+source:
+  archive: workbuddy-bench-main.zip
+  sha256: 630398917986fe04c0cd536a805b703c9d04e320a4dc5a52875b0375ae588b35
+
+dataset:
+  id: wb-bench-code-v1.0
+  archive: wb-bench-code-v1.0.tar.gz
+  sha256: f60394e44341f45f66af17ba69efc51ceadc61f17c08aa89e4af35b51f6f34e1
+  taskRoot: tasks
+
+supportedSplits:
+  - internal
+
+supportedVerifierFamilies:
+  - pytest_injected
+
+budgets:
+  maxWallMs: 1800000
+  maxTokens: 240000
+  maxSteps: 80
+  maxToolCalls: 80
+  softLimitPercent: 0.9
+
+discoveredTaskIds:
+  - bug_fix-easy-a_crash_in_local
+  - bug_fix-easy-filtered_relation_queryset_arg
+  - bug_fix-easy-invalid_filterwarnings_regex_error
+  - bug_fix-medium-error_key_uses_data_key
+  - bug_fix-medium-errors_from_earlier_indices
+  - bug_fix-medium-incorrect_linenos_on_fstring
+  - bug_fix-medium-matching_absolute_paths
+  - bug_fix-medium-permission_error_skip_continue
+  - bug_fix-medium-properly_render_double_braces
+  - bug_fix-medium-use_correct_runtime_dir
+  - feature-easy-add_python_dotenv_disabled
+  - feature-easy-dictofitems_type_for_configura
+  - feature-easy-lru_caching_to_tzoffset
+  - feature-hard-fallback_signers_and_switch
+  - feature-medium-add_support_for_dependencies
+  - feature-medium-envless_file_load
+  - feature-medium-etag_header_for_static
+  - feature-medium-humanize_metric_for_converting
+  - feature-medium-install_and_run_script
+  - feature-medium-validation_to_eliminate_uriref
+  - tool_behavior-easy-diagnostics_and_observability
+  - tool_behavior-hard-testing_and_automation
+
+taskIds:
+  - bug_fix-easy-a_crash_in_local
+  - bug_fix-easy-filtered_relation_queryset_arg
+  - bug_fix-easy-invalid_filterwarnings_regex_error
+  - bug_fix-medium-error_key_uses_data_key
+  - bug_fix-medium-errors_from_earlier_indices
+  - bug_fix-medium-matching_absolute_paths
+  - bug_fix-medium-permission_error_skip_continue
+  - bug_fix-medium-properly_render_double_braces
+  - bug_fix-medium-use_correct_runtime_dir
+  - feature-easy-add_python_dotenv_disabled
+  - feature-easy-dictofitems_type_for_configura
+  - feature-easy-lru_caching_to_tzoffset
+  - feature-medium-envless_file_load
+  - feature-medium-etag_header_for_static
+  - feature-medium-humanize_metric_for_converting
+  - feature-medium-install_and_run_script
+  - feature-medium-validation_to_eliminate_uriref
+  - tool_behavior-easy-diagnostics_and_observability
+  - tool_behavior-hard-testing_and_automation
+
+blockedTaskIds:
+  bug_fix-medium-incorrect_linenos_on_fstring:
+    failureCategory: verifier_environment
+    reason: >-
+      The official gold patch applies, but the official environment resolves
+      pytest 9 and tests/optional.py emits PytestRemovedIn10Warning; the
+      official scorer reports build_error.
+  feature-hard-fallback_signers_and_switch:
+    failureCategory: verifier_environment
+    reason: >-
+      The official gold patch does not apply to the shipped workspace baseline
+      at tests/test_itsdangerous/test_serializer.py.
+  feature-medium-add_support_for_dependencies:
+    failureCategory: verifier_environment
+    reason: >-
+      The official gold patch applies, but importing FastAPI emits an anyio
+      DeprecationWarning; the official scorer reports build_error.
+
+tasks:
+  bug_fix-easy-a_crash_in_local:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: 0483056bdec14b74931c5a95c8803b0fbffed876a59ff3e2ab0318fb8480961b
+    instructionSha256: 5ac35cb9c2f9d9d3d117d3668701397909981fe7b87302cd6a98fd2e7b00bf27
+    verifierSha256: b081c1ffa6eedebaa9033e8006b5e5555d9cd6abb82964b6ca5e489e217d3063
+    taskTomlSha256: 8c24b96958227818fd02157d1fa53575b3998cbdf217cf63839c6cb75cb433f0
+  bug_fix-easy-filtered_relation_queryset_arg:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: e856bf8d83d958ebc3c631f0dbab79436ad60d4e2adb246535e8eb65a2f2b4a5
+    instructionSha256: b3a79a54bc452466d5e1f1a14342bf19cdc170c5a9d5faccc6d91829a3254006
+    verifierSha256: 55f62055ca59c351075cc0d429ab418864a5560679181965c2c61bf90e4cba40
+    taskTomlSha256: 7413486348634bec0b6cf6cb4b5d06608b0d468e02eb148ab29bc17f4aec22c4
+  bug_fix-easy-invalid_filterwarnings_regex_error:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: 8602bc95ca3fa396bc0bdfa8793d637609167fe4cfd68962cb6051f7ec8a419b
+    instructionSha256: 2ad58d36ffb7b2e74ff6ff3b8130065b6d21cae9ab0f8dcd7789b7d0a591ae5c
+    verifierSha256: e38a48e68f7324e5262918115992a837dddeeadffff9c62687c5c3b8c86be266
+    taskTomlSha256: 96207c1d8b51227bf7bf88f0847445054236808feaae7e4ecf93cb4062be0313
+  bug_fix-medium-error_key_uses_data_key:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: 4d639f7eafb35510e384cd447cb03ef5c294f478bd4fee5a827efb62eb1b489a
+    instructionSha256: ee42418dcd078c1d3dc9b73eaad711b9e20e60f3bfdf8015008b8c5f3abb95f2
+    verifierSha256: 311220eeafcc551056391a3fe9dd54845aaff610487de07909ff0324c1333302
+    taskTomlSha256: 537b7465f1c360d52fceda311fd20ec615331b0c6976b19cfec83420e6b53989
+  bug_fix-medium-errors_from_earlier_indices:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: 6eeb3b460538b5d4f7ce2bf126bbfd94585dc4b97e4dae5667d7f5cf0f1a92de
+    instructionSha256: ba034b0b50bf413a1cd8d2647570ff0e0e4e2b043c7002c672637749d930a927
+    verifierSha256: 8489270ded615e51c6c167847bd2cd982d01e8ab3960773d1ac89c06e8e8a48f
+    taskTomlSha256: 58af0d03c837955a5c4bfd8cfc4fb0a8da03c6dd15a3aa1416080f0f1967f88d
+  bug_fix-medium-incorrect_linenos_on_fstring:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: a65bd1e4a6f3b10fefe785e9ec9988632675aef2975d2108633f319fa44dc89a
+    instructionSha256: 8f462d3386b1eb420823ba86ba994da8b730bb364f6b186c453535a344b1f659
+    verifierSha256: a6cd0cd4e50efe1425412d7f2e34f018cb0621a4cc3b02a391212fc3eb8f09c2
+    taskTomlSha256: 5afa677b661901eb1db458503c7ea8ce53cd1d5d502ae414c7a49fd85a1bb236
+  bug_fix-medium-matching_absolute_paths:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: d69c35cee39b0e886bbd53268827c8037b370fd5521d2de5fcf213cd22a2ed01
+    instructionSha256: 455cec3578a386e3842dcecaa676cb50f7795c2667552e5e2b2c0627d115e92a
+    verifierSha256: a2a3d64f42569b25540513a303fac2654f7e061e6ea9b491d52c66734d225a14
+    taskTomlSha256: 1702bb6e61d770c0dcedf4f5263962f96089768e6e3680d9bed9cf1793bac81a
+  bug_fix-medium-permission_error_skip_continue:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: 3a056da3805f82c6bc585253bdba40c44f3b1f4948bf5d7d183c7d5514712b9f
+    instructionSha256: 26086794151b5368ace470e50d6f78288885cf4479636fd1e3b769cb770ce716
+    verifierSha256: d457ac7700e5e6a2008d07162b4c2b1676339039b901602404c7a617ea22d34c
+    taskTomlSha256: 68cd0162cd07669a79e78443e2a9090a1cad95edd34b41c86fa7e677164240f5
+  bug_fix-medium-properly_render_double_braces:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: 6cb65da0bf5f1b2bb79a51af6e9de1d60a93e50a2e48302fab4784f05cf7b626
+    instructionSha256: 95d7899e5030e32e68e67faa0cde5be85650d1ab5f66ffb4efb2fb883a1e4e22
+    verifierSha256: c4e3b32596fbb161c58f88fe3e5a77fbe9cf0c0d458df1cd2ed9abd9b272bd19
+    taskTomlSha256: ed052a4e28679cb6eb987758ea99e511e237a41a43212fc944bff352aeb9b340
+  bug_fix-medium-use_correct_runtime_dir:
+    category: bug-fix
+    verifierFamily: pytest_injected
+    workspaceSha256: cb67235c5214f5eb1adf09060c84c5ab5961cde1ba1add6a7414a9351200efac
+    instructionSha256: e5c41e21da77de591b5eb5b17c8b6896986d2621fb2417d5dc20a6fde93b57e8
+    verifierSha256: b2bbe84da5f18cf9b450cd198bd02ac4b44168d85680d164ee2ef9d0fb2e1a65
+    taskTomlSha256: eea00b24158773c8ca1409a67e5b19a0d50e245bca90c83b02f8670713d6ff6f
+  feature-easy-add_python_dotenv_disabled:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: 15b7e33f832025f6444d345d90761e8161d383856bdb34523f71d49677b0535e
+    instructionSha256: ac0586aa69b71da696b51a7660fbfbb241f40d5f6c86b66f007d68fc35da6ec2
+    verifierSha256: 2f5b31a89001638fb80b8a573f31b7f13ee61da5436d06905f88e21b28d78dd2
+    taskTomlSha256: c1d6d85c162b889145c1a58e5174fbd8877ed27f5bcb373d86779274cff18dfe
+  feature-easy-dictofitems_type_for_configura:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: 5ecf3e18c93593d425bd9baee85a3644be5b595739cd83f43f40721fa9e69b3f
+    instructionSha256: 8aa08c73e878ec9ac43fe901a243e3ea32ecc3bb646696aaf29a80157020ed83
+    verifierSha256: 852dc242a2fd9c9ef7190e02c0d46aa7485f366099de713c993a0b192d8d3713
+    taskTomlSha256: 720214efb2a78de1b2f1be141d6383fbb5edda0dd66525c302a7d323f3163139
+  feature-easy-lru_caching_to_tzoffset:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: 6dc7dd32da70c059912b378037299dba09981b6c765968e96b370a51263d4730
+    instructionSha256: 5c8f8c85846df4f28a53c522eebe341e027d446d180df89c34feab2dc26780a1
+    verifierSha256: 5a09df347128e08370e505468422cf1438ed78ad6c18ac191ed460593affc9ca
+    taskTomlSha256: 9cb78f857d94cf49d6ca180ec2415d7ad248c0a4df08c8a2c33a079a279bebf4
+  feature-hard-fallback_signers_and_switch:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: e4e9fe25f082aac8d966a91b40e0be1a040be9d4e6d72b997281eefa3e275440
+    instructionSha256: fd6272df41d9d2c4d17e387e8fc2b3409e124efd6f91b3f5e3ce8bbf000e1cf6
+    verifierSha256: 916dfb999b19a3dba01f55011341061589aff04c21ca7d03587a46350840f153
+    taskTomlSha256: e12cf227820a91c7f2aec98624ea14b0cbb9b0a0c355916df07b940d0d1c508e
+  feature-medium-add_support_for_dependencies:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: d55dba85ceb0e9c66db3e12bfe351029318724e87569ee9b87cc3ffbc52291ac
+    instructionSha256: 8416325c1271fa34271c05c18306fd2c259f81072f8532a08133524baaaa0b53
+    verifierSha256: 32bf7833dc96aa79c04eddee32e16637bc3fb8261d8321abe9afe16e5aa7f499
+    taskTomlSha256: 3a4557b3a55ab65f90a7bc4e4fb7173433a39655a770cd5833f434e7eda2ad5b
+  feature-medium-envless_file_load:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: 4bd4a82bfe2275c4168b8398c1097fe7b790b17e671016823ae60022fa44bf50
+    instructionSha256: a3069dbbb02b22e28ed29adeb9bf54bd5f9cf21faa78b2ba2b56f435382e4796
+    verifierSha256: 46ed5035cae517d8b8813006e71eeb574cb67f1d5e473aa2e3830e14bc3c5b89
+    taskTomlSha256: 3f8616ab3761201b3544ac5074e9651c9930fc5f90cf4958a7e9189b4c0c7732
+  feature-medium-etag_header_for_static:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: 1929d4adea3c50a0de42c08980aea1ab9df0a8def4e529fc939f6ac6a8cc16b5
+    instructionSha256: 18e9166ed8fc87bf6788e5cbd45091021fea204b79f52f2a9070917638a1dfcf
+    verifierSha256: bf68e2e2e3a49df7f0c6325f1c6b51af00bb0101f4bdcd3dfcf315d4901745ca
+    taskTomlSha256: ea09f6eb0e55d947dd27fd957ceb9b2d3f58c495ac5ec948ea3c9162afc38a0c
+  feature-medium-humanize_metric_for_converting:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: fd2bbd6cc03ce8fb8491f550266d9b2b214f9c76b2b1d12501d8e37b24de3405
+    instructionSha256: a5bf2a1cd46f956b003bf6f150e1cf7b50bbbaf5ca78c68b6964e735041c8237
+    verifierSha256: 523c7cb23f91f235eb910fa0e8f1aefb12cfacfdb3ba4eaf85446de0343136a3
+    taskTomlSha256: 1e4d72dff09dd0c8857ce21dea397249c57fee98b1f3f3fe5578892b82f3579d
+  feature-medium-install_and_run_script:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: 2f7a205cb49b56991852c0f9a7ed2c2ac4a2751113228e32c624cc043edcbc43
+    instructionSha256: 4e5a346984ac0a6257216f1827ce28d4ee9dbac49582c6d2db261785f859796d
+    verifierSha256: 625cf59debd26f3b68beb65ca904829d09ac50ff8de865cd9c7a2e992bd7fd6c
+    taskTomlSha256: 8ec71e87cb6e775b362160820f1fbcd888a737dc88cfc6f55272b1b4579e0d94
+  feature-medium-validation_to_eliminate_uriref:
+    category: feature
+    verifierFamily: pytest_injected
+    workspaceSha256: 97a1d9847432f0f75b2133d90671aa1940cff702dffa6904ff13fbbc4cddd690
+    instructionSha256: 5c1e845ac5be9c54d9ee8e08ae56cca34b1e8c69c46bc2b3df4d60b10e960a20
+    verifierSha256: d68140da8f8b9e9afece1560efc9f5d390272027b9149e7b91928a110b39832f
+    taskTomlSha256: fba9b879b8f08ab1fcd7aae4dc0f7a3c7f0da9097328064795b7f6ad83d4b407
+  tool_behavior-easy-diagnostics_and_observability:
+    category: tool-behavior
+    verifierFamily: pytest_injected
+    workspaceSha256: e4b0803288b5bb4fb803ac47c198f1f617bd3927487897e8062ae93ef1072820
+    instructionSha256: e53be530f4eae60063ef9c7747ddb8031088dfb532ab041a44569613585d4871
+    verifierSha256: fa8e3a44062eb690a69f26d179e2c7b8d974568366bc4ebcef589981f19e469a
+    taskTomlSha256: 416dccac67a798f334526c03e5bd55ad2fb31b6724b4ed3947ee4f67c68b511c
+  tool_behavior-hard-testing_and_automation:
+    category: tool-behavior
+    verifierFamily: pytest_injected
+    workspaceSha256: 9e9796e553e9ffaf74b75fa2f259fa05385016b9cdb26c83e4b11146f00544d2
+    instructionSha256: 7af2cacc81866c2a04b3aa09c2a1718d391fa589e2b25e784f5184116cc8726f
+    verifierSha256: a55ef502996aa242b83e1d01a351694a723f22a3d47b3b633c6472f71d44b8b0
+    taskTomlSha256: 55d87677e334941b2e874250f5affc3e90ad332f35015a4916d7c4611bb58372

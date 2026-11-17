@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "1.0",
+  "runs": [
+    {
+      "requestId": "1794819108266-9502",
+      "sessionId": "session-evidence",
+      "trace": {
+        "schemaVersion": "1.1",
+        "run": {
+          "requestId": "1794819108266-9502",
+          "runUid": "run-evidence",
+          "status": "SUCCESS",
+          "queryText": "打开页面、执行代码并确认工作区",
+          "finalSummaryText": "任务完成",
+          "totalTokens": 600,
+          "durationMs": 12000
+        },
+        "conversation": [],
+        "llmInvocations": [],
+        "toolInvocations": [
+          {
+            "id": 101,
+            "toolCallId": "call_00_evbFUryT1gORJydhQYT84474",
+            "toolName": "browser",
+            "stepNo": 18,
+            "dispatchIndex": 0,
+            "llmInvocationId": 42,
+            "inputJson": "{\"args\":[\"click\",\"#publish-button\"]}",
+            "toolResult": "selector not found: #publish-button",
+            "llmObservation": "selector not found: #publish-button",
+            "status": "FAILED",
+            "errorMsg": "selector not found: #publish-button",
+            "errorCode": null,
+            "durationMs": 1000,
+            "startedAt": "2026-11-16T18:10:00",
+            "finishedAt": "2026-11-16T18:10:01",
+            "subAgentId": null,
+            "subAgentType": null,
+            "inputParseError": null,
+            "resultPresent": true,
+            "statusSource": "execution-ledger"
+          },
+          {
+            "id": 102,
+            "toolCallId": "call_00_1vWsLg98HlgrUu1kxDJU3779",
+            "toolName": "browser",
+            "stepNo": 19,
+            "dispatchIndex": 1,
+            "llmInvocationId": 43,
+            "inputJson": "{\"args\":[\"click\",\"button[aria-label='发布']\"]}",
+            "toolResult": "clicked",
+            "llmObservation": "clicked",
+            "status": "SUCCESS",
+            "errorMsg": null,
+            "errorCode": null,
+            "durationMs": 800,
+            "startedAt": "2026-11-16T18:10:02",
+            "finishedAt": "2026-11-16T18:10:03",
+            "subAgentId": null,
+            "subAgentType": null,
+            "inputParseError": null,
+            "resultPresent": true,
+            "statusSource": "execution-ledger"
+          },
+          {
+            "id": 103,
+            "toolCallId": "call_00_VFQSy5NvUino2xkUGz655695",
+            "toolName": "code_execution",
+            "stepNo": 20,
+            "dispatchIndex": 0,
+            "llmInvocationId": 44,
+            "inputJson": "{\"code\":\"print(1)\",\"url\":\"localhost\"}",
+            "toolResult": "Expected URL scheme 'http' or 'https' but no colon was found",
+            "llmObservation": "Expected URL scheme 'http' or 'https' but no colon was found",
+            "status": "FAILED",
+            "errorMsg": "Expected URL scheme 'http' or 'https' but no colon was found",
+            "errorCode": null,
+            "durationMs": 300,
+            "startedAt": "2026-11-16T18:10:04",
+            "finishedAt": "2026-11-16T18:10:04.300",
+            "subAgentId": null,
+            "subAgentType": null,
+            "inputParseError": null,
+            "resultPresent": true,
+            "statusSource": "execution-ledger"
+          },
+          {
+            "id": 104,
+            "toolCallId": "call_00_KlxXpkpA2GZEs9C84UbX5314",
+            "toolName": "shell",
+            "stepNo": 21,
+            "dispatchIndex": 0,
+            "llmInvocationId": 45,
+            "inputJson": "{\"command\":\"Get-Location\"}",
+            "toolResult": "D:\\\\work\\\\session",
+            "llmObservation": "D:\\\\work\\\\session",
+            "status": "SUCCESS",
+            "errorMsg": null,
+            "errorCode": null,
+            "durationMs": 120,
+            "startedAt": "2026-11-16T18:10:05",
+            "finishedAt": "2026-11-16T18:10:05.120",
+            "subAgentId": null,
+            "subAgentType": null,
+            "inputParseError": null,
+            "resultPresent": true,
+            "statusSource": "execution-ledger"
+          }
+        ],
+        "artifacts": [
+          {
+            "artifactId": "artifact-1",
+            "toolInvocationId": 104,
+            "toolCallId": "call_00_KlxXpkpA2GZEs9C84UbX5314",
+            "relativeRef": "artifacts/artifact-1.txt",
+            "mimeType": "text/plain",
+            "fileSize": 128,
+            "fileHash": "sha256:fixture",
+            "previewAvailable": false
+          }
+        ],
+        "toolContracts": []
+      }
+    }
+  ],
+  "artifacts": []
+}

@@ -264,6 +264,9 @@ public final class TaskReviewTraceSanitizer {
         projected.put("mimeType", artifact.get("mimeType"));
         projected.put("fileSize", artifact.get("fileSize"));
         projected.put("fileHash", artifact.get("fileHash"));
+        projected.put("previewAvailable", false);
+        projected.put("workspacePresent", null);
+        projected.put("contentPreview", null);
 
         Object id = artifact.get("id");
         String ref = id == null ? "artifact-" + (index + 1) : "artifact-" + id;

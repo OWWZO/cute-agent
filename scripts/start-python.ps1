@@ -1,4 +1,7 @@
 #Requires -Version 7.0
+param(
+    [string[]]$WorkspaceRoots = @()
+)
 <#
 .SYNOPSIS
     启动 Python 工具运行时（:1601 api / :1602 sandbox）。
@@ -96,6 +99,22 @@ if (-not $found) { Write-Ok '端口空闲，继续。' }
 Assert-PortsFree $Ports
 
 Write-Step '[2/2] 启动 cute-tool ...'
+if ($WorkspaceRoots.Count -gt 0) {
+    $resolvedWorkspaceRoots = @(
+        foreach ($workspaceRoot in $WorkspaceRoots) {
+            if (-not [string]::IsNullOrWhiteSpace($workspaceRoot)) {
+                [IO.Path]::GetFullPath($workspaceRoot)
+            }
+        }
+    )
+    if ($resolvedWorkspaceRoots.Count -eq 0) {
+        throw "WorkspaceRoots must contain at least one non-empty path."
+    }
+    $env:CODE_EXECUTION_WORKSPACE_ROOTS = (
+        $resolvedWorkspaceRoots -join [IO.Path]::PathSeparator
+    )
+    Write-Ok "允许代码执行的工作区: $($env:CODE_EXECUTION_WORKSPACE_ROOTS)"
+}
 try {
     & pwsh -NoProfile -File (Join-Path $Root 'cute-tool\start-split.ps1')
 }

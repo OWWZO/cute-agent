@@ -34,6 +34,7 @@ from .benchmarks.marble.runner import (
 from .benchmarks.rag import RagAdapter, run_mrag
 from .benchmarks.spider2 import Spider2Adapter
 from .benchmarks.tau2 import Tau2Adapter, Tau2UserSimulator
+from .benchmarks.workbuddybench import WorkBuddyBenchAdapter
 from .case_loader import load_case_dirs
 from .compare.runner import (
     materialize_compare_dataset,
@@ -57,6 +58,7 @@ from .java_runner import (
     export_ledger_traces,
     run_java_cases,
     run_java_conversation,
+    run_workbuddy_tool_preflight,
 )
 from .models import CaseResult, JudgeConfig, RunTrace
 from .multi_agent_view import project_multi_agent_view
@@ -2141,7 +2143,143 @@ def benchmark_command(args: argparse.Namespace) -> int:
         return _run_bird_benchmark(args)
     if args.name == "spider2":
         return _run_spider2_benchmark(args)
+    if args.name == "workbuddybench":
+        return _run_workbuddybench_benchmark(args)
     raise ValueError(f"unsupported benchmark: {args.name}")
+
+
+def _run_workbuddybench_benchmark(args: argparse.Namespace) -> int:
+    if getattr(args, "agent", "cute") != "cute":
+        raise ValueError("WorkBuddy Bench hybrid mode currently supports Cute Agent only")
+    if args.split != "internal":
+        raise ValueError("WorkBuddy Bench currently supports only --split internal")
+    source_dir = (
+        Path(args.source_dir).resolve()
+        if args.source_dir
+        else (
+            Path(os.environ["CUTE_EVAL_WORKBUDDY_BENCH_ROOT"]).resolve()
+            if os.environ.get("CUTE_EVAL_WORKBUDDY_BENCH_ROOT")
+            else None
+        )
+    )
+    if source_dir is None:
+        raise ValueError(
+            "WorkBuddy Bench requires --source-dir or "
+            "CUTE_EVAL_WORKBUDDY_BENCH_ROOT"
+        )
+    adapter = WorkBuddyBenchAdapter(
+        Path(args.manifest).resolve()
+        if args.manifest
+        else Path(__file__).resolve().parent
+        / "benchmarks"
+        / "workbuddybench"
+        / "manifest.yaml",
+        source_root=source_dir,
+    )
+    tasks = adapter.tasks(args.split)
+    if args.limit is not None:
+        if args.limit < 1:
+            raise ValueError("--limit must be >= 1")
+        tasks = tasks[: args.limit]
+    mode, repeat, output_dir = _benchmark_settings(args)
+    if mode != "live":
+        raise ValueError("WorkBuddy Bench requires --java-mode live")
+    if not args.skip_build:
+        compile_java_fixture_runner()
+    budget_policy = policy_from_args(args)
+    _validate_workbuddy_execution_roots(output_dir)
+    preflight_root = output_dir.resolve() / "_tool_preflight" / uuid4().hex
+    run_workbuddy_tool_preflight(
+        preflight_root / "workspace",
+        preflight_root / "report.json",
+        build=False,
+    )
+    artifact_env = {
+        "CUTE_FILE_ARTIFACT_ALLOWED_ROOT": str(output_dir.resolve()),
+    }
+    results: list[CaseResult] = []
+    for attempt in range(1, repeat + 1):
+        attempt_relative = f"attempts/{attempt:02d}"
+        attempt_dir = output_dir / attempt_relative
+        for task in tasks:
+            task_attempt_dir = attempt_dir / task.id
+            prepared = adapter.prepare(
+                task,
+                task_attempt_dir / "workspace" / task.id,
+            )
+            case = budget_policy.apply(adapter.case_for_task(prepared.task))
+            traces = run_java_cases(
+                [case],
+                task_attempt_dir,
+                mode=mode,
+                profile=args.profile,
+                build=False,
+                timeout_seconds=_case_batch_timeout_seconds(
+                    [case],
+                    args.timeout,
+                ),
+                runner_class="org.wwz.ai.test.domain.EvalBenchmarkLiveRunnerCli",
+                workspace_roots={task.id: prepared.workspace},
+                tool_mode="production",
+                env_overrides=artifact_env,
+            )
+            trace = traces.get(task.id)
+            if trace is None:
+                raise ValueError(f"Java runner returned no trace for {task.id}")
+            run = adapter.collect(
+                prepared.task,
+                trace,
+                (
+                    f"{attempt_relative}/{task.id}/traces/"
+                    f"{task.id}/trace.json"
+                ),
+                prepared=prepared,
+            )
+            result = adapter.score(run, case=case)
+            result.attempt = attempt
+            results.append(result)
+    return _report_benchmark(
+        adapter=adapter,
+        args=args,
+        results=results,
+        output_dir=output_dir,
+        mode=mode,
+        repeat=repeat,
+        require_official=True,
+        budget_policy=budget_policy,
+    )
+
+
+def _validate_workbuddy_execution_roots(output_dir: Path) -> None:
+    roots: list[Path] = []
+    multi_root = (os.environ.get("CODE_EXECUTION_WORKSPACE_ROOTS") or "").strip()
+    if multi_root:
+        roots.extend(
+            Path(item)
+            for item in multi_root.split(os.pathsep)
+            if item.strip()
+        )
+    for env_name in (
+        "CODE_EXECUTION_WORKSPACE_ROOT",
+        "SKILL_OUTPUT_ROOT",
+        "CUTE_SKILL_OUTPUT_ROOT",
+    ):
+        value = (os.environ.get(env_name) or "").strip()
+        if value:
+            roots.append(Path(value))
+    roots.append(_repo_root() / "cute-tool" / "skilloutput")
+    allowed = tuple(
+        dict.fromkeys(root.expanduser().resolve() for root in roots)
+    )
+    resolved_output = output_dir.resolve()
+    if any(resolved_output.is_relative_to(root) for root in allowed):
+        return
+    raise ValueError(
+        "WorkBuddy Bench Agent workspace is outside the Code Execution "
+        f"allowed roots: {resolved_output}. Set "
+        "CODE_EXECUTION_WORKSPACE_ROOTS before starting both cute-evals and "
+        f'cute-tool, for example: "{output_dir.parent}"'
+    )
 
 
 def process_view_command(args: argparse.Namespace) -> int:
@@ -3239,6 +3377,7 @@ def build_parser() -> argparse.ArgumentParser:
             "rag-python",
             "spider2",
             "tau2",
+            "workbuddybench",
         ],
         default="gaia",
     )

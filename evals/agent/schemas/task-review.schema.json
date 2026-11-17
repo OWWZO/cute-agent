@@ -75,6 +75,46 @@
       "type": "array",
       "items": {"type": "object"}
     },
+    "evidenceIndex": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "runId",
+          "toolCallId",
+          "toolName",
+          "step",
+          "status",
+          "failed"
+        ],
+        "properties": {
+          "requestId": {"type": "string"},
+          "runId": {"type": "string"},
+          "toolCallId": {"type": "string"},
+          "toolName": {"type": "string"},
+          "step": {"type": ["integer", "null"]},
+          "status": {"type": "string"},
+          "failed": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "properties": {
+        "failureAttributions": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "diagnosticSummary": {"type": "object"},
+        "toolContracts": {
+          "type": "array",
+          "items": {"type": "object"}
+        }
+      }
+    },
+    "narrative": {"type": ["object", "null"]},
     "quality": {
       "type": "object",
       "required": ["status", "advisory"],
@@ -87,6 +127,15 @@
         "dimensions": {"type": "array", "items": {"type": "object"}},
         "findings": {"type": "array", "items": {"type": "object"}},
         "suggestions": {"type": "array", "items": {"type": "object"}},
+        "failureAttributions": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "diagnosticSummary": {"type": "object"},
+        "diagnostics": {"type": "object"},
+        "narrative": {"type": ["object", "null"]},
+        "narrativeStatus": {"type": "string"},
+        "rubricId": {"type": "string"},
         "limitations": {"type": "array", "items": {"type": "string"}},
         "error": {"type": ["object", "null"]}
       }

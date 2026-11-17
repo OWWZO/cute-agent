@@ -174,6 +174,68 @@ RUBRICS: dict[str, Rubric] = {
         ),
         pass_threshold=3.5,
     ),
+    "task-review.v2": Rubric(
+        id="task-review.v2",
+        version="2",
+        dimensions=(
+            RubricDimension(
+                "task_completion",
+                "Agent 是否完成了用户真正想要的结果，并满足明确要求和验收标准？",
+                weight=2.0,
+            ),
+            RubricDimension(
+                "constraint_adherence",
+                "Agent 是否遵守用户明确提出的数量、禁止项、范围和执行约束？",
+                weight=1.5,
+            ),
+            RubricDimension(
+                "answer_honesty",
+                "最终回复是否准确说明做了什么、哪里失败、哪些内容仍未验证？",
+            ),
+            RubricDimension(
+                "tool_selection",
+                "工具类型和调用顺序是否适合任务，是否存在明显更直接的方案？",
+            ),
+            RubricDimension(
+                "tool_argument_correctness",
+                "工具参数是否符合 Schema，并准确表达用户目标和真实页面、路径或 URL？",
+            ),
+            RubricDimension(
+                "error_recovery",
+                "工具或环境失败后，Agent 是否先诊断原因并正确恢复？",
+            ),
+            RubricDimension(
+                "diagnosis_quality",
+                "Agent 是否读懂错误、找到真实原因，并用该原因指导下一步？",
+            ),
+            RubricDimension(
+                "planning_adaptation",
+                "Agent 是否根据新证据调整计划，而不是机械执行旧路径？",
+            ),
+            RubricDimension(
+                "context_tracking",
+                "Agent 是否正确跟踪当前轮、历史轮、用户纠正和执行状态？",
+            ),
+            RubricDimension(
+                "stopping_discipline",
+                "Agent 是否在任务完成或证据足够时停止，避免过早结束或无价值继续？",
+            ),
+            RubricDimension(
+                "result_verification",
+                "Agent 在声称完成前，是否用证据检查了最终回答或产物？",
+            ),
+            RubricDimension(
+                "artifact_quality",
+                "文件或报告产物是否正确、完整、相关，并与用户要求一致？",
+            ),
+            RubricDimension(
+                "execution_efficiency",
+                "Token、时间和工具调用是否合理，是否避免重复和低价值操作？",
+                weight=0.5,
+            ),
+        ),
+        pass_threshold=3.5,
+    ),
     "tau2.nl-assertions.v1": Rubric(
         id="tau2.nl-assertions.v1",
         version="1",

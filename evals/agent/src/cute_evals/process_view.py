@@ -133,6 +133,40 @@ def _message_source_id(message: dict[str, Any]) -> str | None:
     return None
 
 
+def _scope_messages_to_run(
+    messages: list[ProcessMessage],
+    *,
+    request_id: str,
+    run_id: str,
+) -> tuple[list[ProcessMessage], bool]:
+    scoped: list[ProcessMessage] = []
+    for message in messages:
+        message_request_id = str(message.metadata.get("requestId") or "")
+        message_run_id = str(message.metadata.get("runId") or "")
+        if request_id and message_request_id == request_id:
+            scoped.append(message)
+            continue
+        if (
+            run_id
+            and not message_request_id
+            and message_run_id == run_id
+        ):
+            scoped.append(message)
+    # Old traces may not carry request/run anchors. Keep their previous behavior.
+    return (scoped, True) if scoped else (messages, False)
+
+
+def _last_user_facing_assistant_text(
+    messages: list[ProcessMessage],
+) -> str:
+    for message in reversed(messages):
+        if message.role != "assistant":
+            continue
+        if message.content.strip():
+            return message.content
+    return ""
+
+
 def _tool_result_evidence(
     message: ProcessMessage,
     tool_invocations: dict[str, dict[str, Any]],
@@ -221,20 +255,32 @@ def project_process_view(trace: RunTrace | dict[str, Any]) -> ProcessView:
             )
         )
 
-    assistant_indices = [
-        item.message_index
+    raw_run = run_trace.raw.get("run") or {}
+    messages, request_scoped = _scope_messages_to_run(
+        messages,
+        request_id=run_trace.request_id,
+        run_id=(
+            str(raw_run["runId"])
+            if raw_run.get("runId") is not None
+            else ""
+        ),
+    )
+
+    assistant_messages = [
+        item
         for item in messages
         if item.role == "assistant"
     ]
-    if not assistant_indices:
+    if not assistant_messages:
         raise ProcessViewError(
             "trace has no assistant messages; process quality cannot be judged"
         )
 
+    assistant_indices = [item.message_index for item in assistant_messages]
     steps_by_message: dict[int, ProcessStep] = {}
     seen_step_ids: set[str] = set()
-    for ordinal, message_index in enumerate(assistant_indices, start=1):
-        message = messages[message_index]
+    for ordinal, message in enumerate(assistant_messages, start=1):
+        message_index = message.message_index
         seed = (
             message.source_id
             or f"{run_trace.request_id}:message:{message_index}"
@@ -345,20 +391,24 @@ def project_process_view(trace: RunTrace | dict[str, Any]) -> ProcessView:
             current_step.evidence.append(evidence)
 
     raw = run_trace.raw
-    run = raw.get("run") or {}
-    raw_tools = raw.get("tools") or run.get("tools") or []
+    raw_tools = raw.get("tools") or raw_run.get("tools") or []
     tools = [item for item in raw_tools if isinstance(item, dict)]
+    final_text = (
+        _last_user_facing_assistant_text(messages)
+        if request_scoped
+        else run_trace.final_text
+    )
     return ProcessView(
-        run_id=str(run.get("runUid") or run.get("requestId") or ""),
+        run_id=str(raw_run.get("runUid") or raw_run.get("requestId") or ""),
         request_id=run_trace.request_id,
         session_id=(
-            str(run["sessionId"])
-            if run.get("sessionId") is not None
+            str(raw_run["sessionId"])
+            if raw_run.get("sessionId") is not None
             else None
         ),
-        query=str(run.get("queryText") or ""),
+        query=str(raw_run.get("queryText") or ""),
         status=run_trace.status,
-        final_text=run_trace.final_text,
+        final_text=final_text,
         messages=messages,
         assistant_message_indices=assistant_indices,
         steps=ordered_steps,

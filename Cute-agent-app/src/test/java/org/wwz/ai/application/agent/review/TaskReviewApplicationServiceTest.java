@@ -6,6 +6,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
+import org.wwz.ai.domain.agent.ledger.model.ConversationMessageView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
@@ -52,6 +53,23 @@ public class TaskReviewApplicationServiceTest {
                         .getJSONObject("run")
                         .getString("requestId")
         );
+        Assert.assertEquals(
+                1,
+                bundle.getJSONArray("runs")
+                        .getJSONObject(0)
+                        .getJSONObject("trace")
+                        .getJSONArray("conversation")
+                        .size()
+        );
+        Assert.assertEquals(
+                "req-1",
+                bundle.getJSONArray("runs")
+                        .getJSONObject(0)
+                        .getJSONObject("trace")
+                        .getJSONArray("conversation")
+                        .getJSONObject(0)
+                        .getString("requestId")
+        );
     }
 
     @Test
@@ -94,6 +112,26 @@ public class TaskReviewApplicationServiceTest {
                     .build();
             ExecutionRunDetail detail = ExecutionRunDetail.builder()
                     .run(run)
+                    .conversation(List.of(
+                            ConversationMessageView.builder()
+                                    .messageId("previous")
+                                    .requestId("req-0")
+                                    .role("assistant")
+                                    .content("上一轮")
+                                    .build(),
+                            ConversationMessageView.builder()
+                                    .messageId("current")
+                                    .requestId("req-1")
+                                    .role("assistant")
+                                    .content("当前轮")
+                                    .build(),
+                            ConversationMessageView.builder()
+                                    .messageId("next")
+                                    .requestId("req-2")
+                                    .role("assistant")
+                                    .content("下一轮")
+                                    .build()
+                    ))
                     .build();
             Mockito.when(ledger.querySession("user-1", "session-1")).thenReturn(session);
             Mockito.when(ledger.queryRunSummary("user-1", "req-1")).thenReturn(run);

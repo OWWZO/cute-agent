@@ -217,6 +217,82 @@ def compile_java_fixture_runner() -> None:
         )
 
 
+def run_workbuddy_tool_preflight(
+    workspace: Path,
+    report_path: Path,
+    *,
+    spring_profile: str = "eval",
+    build: bool = True,
+    timeout_seconds: int = 300,
+    env_overrides: dict[str, str] | None = None,
+) -> dict:
+    """Exercise the production tool pool and fail closed before a model run."""
+    if build:
+        compile_java_fixture_runner()
+    workspace = workspace.resolve()
+    report_path = report_path.resolve()
+    _require_space_free_path(workspace, "tool preflight workspace")
+    _require_space_free_path(report_path, "tool preflight report")
+    workspace.mkdir(parents=True, exist_ok=True)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    preflight_env = {
+        "CUTE_FILE_ARTIFACT_ALLOWED_ROOT": str(workspace.parent),
+    }
+    if env_overrides:
+        preflight_env.update(env_overrides)
+    exec_args = (
+        f"--workspace {workspace} "
+        f"--out {report_path} "
+        f"--spring-profile {spring_profile}"
+    )
+    result = _run(
+        [
+            _maven_command(),
+            "-q",
+            *_maven_repo_args(),
+            "-pl",
+            "Cute-agent-app",
+            "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
+            "-Dexec.classpathScope=test",
+            "-Dexec.mainClass=org.wwz.ai.test.domain.WorkBuddyToolPreflightCli",
+            f"-Dexec.args={exec_args}",
+        ],
+        timeout=timeout_seconds,
+        env_overrides=preflight_env,
+    )
+    if not report_path.exists():
+        raise EvalRunnerError(
+            "environment",
+            "WorkBuddy tool preflight produced no report\n"
+            f"stdout:\n{result.stdout[-4000:]}\n"
+            f"stderr:\n{result.stderr[-4000:]}",
+        )
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EvalRunnerError(
+            "environment",
+            f"WorkBuddy tool preflight report is invalid: {exc}",
+        ) from exc
+    failures = [
+        check
+        for check in report.get("checks") or []
+        if check.get("required") and check.get("status") != "ok"
+    ]
+    if not report.get("requiredPassed") or result.returncode != 0 or failures:
+        detail = "; ".join(
+            f"{check.get('name')}={check.get('status')}: {check.get('detail')}"
+            for check in failures
+        )
+        raise EvalRunnerError(
+            "environment",
+            "WorkBuddy tool preflight failed"
+            + (f": {detail}" if detail else "")
+            + f"\nreport: {report_path}",
+        )
+    return report
+
+
 def export_ledger_traces(
     output_dir: Path,
     *,
@@ -335,6 +411,7 @@ def run_java_cases(
     workspace_roots: dict[str, Path] | None = None,
     tool_mode: str = "ephemeral",
     tool_endpoint: str | None = None,
+    env_overrides: dict[str, str] | None = None,
 ) -> dict[str, RunTrace]:
     if build:
         compile_java_fixture_runner()
@@ -418,6 +495,7 @@ def run_java_cases(
                 f"-Dexec.args={exec_args}",
             ],
             timeout=timeout_seconds,
+            env_overrides=env_overrides,
         )
         if result.returncode != 0:
             raise EvalRunnerError(

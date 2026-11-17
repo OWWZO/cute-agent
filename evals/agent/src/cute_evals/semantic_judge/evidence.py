@@ -37,6 +37,19 @@ PROMPT_INJECTION_MARKERS = (
     "忽略之前",
     "系统提示",
 )
+SENSITIVE_KEYS = frozenset(
+    {
+        "apikey",
+        "authorization",
+        "cookie",
+        "password",
+        "passwd",
+        "secret",
+        "accesstoken",
+        "refreshtoken",
+        "idtoken",
+    }
+)
 
 
 def _truncate(value: str, limit: int) -> tuple[str, bool]:
@@ -69,6 +82,28 @@ def _stringify(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _redact_structure(value: Any, *, string_limit: int) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): (
+                "[REDACTED]"
+                if str(key).replace("_", "").replace("-", "").lower()
+                in SENSITIVE_KEYS
+                else _redact_structure(item, string_limit=string_limit)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _redact_structure(item, string_limit=string_limit)
+            for item in value
+        ]
+    if isinstance(value, str):
+        content, _ = _truncate(_redact(value), string_limit)
+        return content
+    return value
 
 
 def _workspace_files(
@@ -120,6 +155,10 @@ def build_packet(
     risk: str | None,
     deterministic_scores: list[dict[str, Any]],
     workspace: Path | None,
+    event_sequence: list[dict[str, Any]] | None = None,
+    tool_contracts: list[dict[str, Any]] | None = None,
+    artifacts: list[dict[str, Any]] | None = None,
+    failure_candidates: list[dict[str, Any]] | None = None,
     metadata: dict[str, Any] | None = None,
     max_evidence_chars: int = 120_000,
     max_tool_result_chars: int = 12_000,
@@ -159,6 +198,21 @@ def build_packet(
                 "input": _redact(_stringify(item.get("inputJson"))),
                 "result": result,
                 "status": str(item.get("status") or "UNKNOWN"),
+                "step": item.get("stepNo"),
+                "errorCode": item.get("errorCode"),
+                "errorMsg": _redact(str(item.get("errorMsg") or "")),
+                "durationMs": item.get("durationMs"),
+                "retryCount": item.get("retryCount"),
+                "requestedAt": item.get("requestedAt"),
+                "startedAt": item.get("startedAt"),
+                "finishedAt": item.get("finishedAt"),
+                "httpStatus": item.get("httpStatus"),
+                "timeoutMs": item.get("timeoutMs"),
+                "cancelledBy": item.get("cancelledBy"),
+                "inputParseError": item.get("inputParseError"),
+                "inputValidationErrors": item.get("inputValidationErrors") or [],
+                "resultPresent": bool(result.strip()),
+                "statusSource": item.get("statusSource"),
                 "truncated": truncated,
             }
         )
@@ -185,6 +239,15 @@ def build_packet(
             *(item["input"] for item in tool_calls),
             *(item["result"] for item in tool_calls),
             *(item["content"] for item in workspace_files),
+            *(
+                _stringify(item)
+                for item in (
+                    list(event_sequence or [])
+                    + list(tool_contracts or [])
+                    + list(artifacts or [])
+                    + list(failure_candidates or [])
+                )
+            ),
         ]
     ).lower()
     suspected = any(
@@ -203,7 +266,26 @@ def build_packet(
         conversation=conversation,
         tool_calls=tool_calls,
         workspace_files=workspace_files,
-        metadata=metadata or {},
+        event_sequence=_redact_structure(
+            list(event_sequence or []),
+            string_limit=max_tool_result_chars,
+        ),
+        tool_contracts=_redact_structure(
+            list(tool_contracts or []),
+            string_limit=max_file_chars,
+        ),
+        artifacts=_redact_structure(
+            list(artifacts or []),
+            string_limit=max_file_chars,
+        ),
+        failure_candidates=_redact_structure(
+            list(failure_candidates or []),
+            string_limit=max_tool_result_chars,
+        ),
+        metadata=_redact_structure(
+            metadata or {},
+            string_limit=max_tool_result_chars,
+        ),
         prompt_injection_suspected=suspected,
     )
 
@@ -275,6 +357,58 @@ def validate_evidence(
             return f"unknown workspace evidence path: {evidence.path}"
         if not _quote_in(evidence.quote, item["content"]):
             return "workspace evidence quote was not found"
+        return None
+    if evidence.kind == "failure_attribution":
+        item = next(
+            (
+                candidate
+                for candidate in packet.failure_candidates
+                if str(candidate.get("attributionId") or "")
+                == evidence.evidence_id
+            ),
+            None,
+        )
+        if item is None:
+            return (
+                "unknown failure attribution evidence id: "
+                f"{evidence.evidence_id}"
+            )
+        if not _quote_in(evidence.quote, _stringify(item)):
+            return "failure attribution evidence quote was not found"
+        return None
+    if evidence.kind == "tool_contract":
+        item = next(
+            (
+                contract
+                for contract in packet.tool_contracts
+                if str(contract.get("toolName") or "")
+                == evidence.evidence_id
+            ),
+            None,
+        )
+        if item is None:
+            return f"unknown tool contract evidence id: {evidence.evidence_id}"
+        if not _quote_in(evidence.quote, _stringify(item)):
+            return "tool contract evidence quote was not found"
+        return None
+    if evidence.kind == "artifact":
+        item = next(
+            (
+                artifact
+                for artifact in packet.artifacts
+                if str(
+                    artifact.get("artifactId")
+                    or artifact.get("id")
+                    or ""
+                )
+                == evidence.evidence_id
+            ),
+            None,
+        )
+        if item is None:
+            return f"unknown artifact evidence id: {evidence.evidence_id}"
+        if not _quote_in(evidence.quote, _stringify(item)):
+            return "artifact evidence quote was not found"
         return None
     if evidence.kind == "deterministic_score":
         item = next(

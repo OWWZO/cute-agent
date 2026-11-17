@@ -18,6 +18,8 @@
     "semanticPass",
     "dimensions",
     "assertions",
+    "failureAttributions",
+    "diagnosticSummary",
     "limitations",
     "judge",
     "rawResponse",
@@ -58,6 +60,12 @@
           "weight": {"type": "number", "exclusiveMinimum": 0},
           "passed": {"type": "boolean"},
           "reason": {"type": "string"},
+          "applicable": {"type": "boolean"},
+          "notApplicableReason": {"type": "string"},
+          "diagnosticRefs": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
           "evidence": {
             "type": "array",
             "items": {"$ref": "#/$defs/evidence"}
@@ -83,6 +91,11 @@
         "additionalProperties": false
       }
     },
+    "failureAttributions": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "diagnosticSummary": {"type": ["object", "null"]},
     "limitations": {
       "type": "array",
       "items": {"type": "string"}
@@ -115,7 +128,10 @@
             "conversation",
             "tool_call",
             "workspace_file",
-            "deterministic_score"
+            "deterministic_score",
+            "failure_attribution",
+            "tool_contract",
+            "artifact"
           ]
         },
         "id": {"type": ["string", "null"]},

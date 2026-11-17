@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import jsonschema
 import pytest
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from cute_evals.semantic_judge.config import SemanticJudgeConfig
 from cute_evals.task_review.facts import build_fast_report
+import cute_evals.task_review.judge as task_review_judge
 from cute_evals.task_review.judge import run_task_review_judge
 from cute_evals.task_review.jobs import TaskReviewJobManager
 from cute_evals.task_review.models import TaskReviewSettings
@@ -191,6 +193,20 @@ def test_fast_report_explains_tool_only_steps() -> None:
     assert run["finalText"] == "已处理"
 
 
+def test_assistant_text_is_completed_even_when_its_tool_fails() -> None:
+    trace = _tool_only_trace()
+    trace["conversation"][1]["content"] = "我先检查失败原因。"
+
+    report = build_fast_report({"runs": [{"trace": trace}]})
+    run = report["runs"][0]
+    step = run["timeline"]["steps"][0]
+    tool = run["timeline"]["tools"][0]
+
+    assert step["status"] == "COMPLETED"
+    assert step["kind"] == "model"
+    assert tool["failed"] is True
+
+
 def test_tool_failure_signal_handles_sanitized_invalid_json() -> None:
     assert (
         _tool_failure_signal(
@@ -201,6 +217,11 @@ def test_tool_failure_signal_handles_sanitized_invalid_json() -> None:
         )
         == "result:ok=false"
     )
+
+
+def test_requested_tool_is_pending_not_failed() -> None:
+    assert _tool_failure_signal({"status": "REQUESTED"}) is None
+    assert _tool_failure_signal({"status": "RUNNING"}) is None
 
 
 def test_job_manager_writes_fast_report_and_cache(tmp_path: Path) -> None:
@@ -218,8 +239,18 @@ def test_job_manager_writes_fast_report_and_cache(tmp_path: Path) -> None:
         )
         assert job["status"] == "completed"
         assert job["quality"]["status"] == "unverified"
+        assert job["quality"]["narrative"]["status"] == "fact_only"
         assert job["report"]["execution"]["toolCount"] == 2
+        assert job["evidenceIndex"]
+        assert "tool:req-1:tool-1" in job["evidenceIndex"]
+        assert job["report"]["diagnostics"]["diagnosticSummary"]["totalFailures"] == 2
         assert manager.get(job["jobId"])["jobId"] == job["jobId"]
+        assert (
+            tmp_path
+            / job["jobId"]
+            / "quality"
+            / "narrative.md"
+        ).is_file()
         schema = json.loads(
             (
                 Path(__file__).parents[1]
@@ -229,6 +260,29 @@ def test_job_manager_writes_fast_report_and_cache(tmp_path: Path) -> None:
         )
         jsonschema.validate(job["report"], schema)
         assert manager.list()[0]["jobId"] == job["jobId"]
+
+        job_path = tmp_path / job["jobId"] / "job.json"
+        stored = json.loads(job_path.read_text(encoding="utf-8"))
+        stored["evidenceIndex"] = {}
+        stored["quality"]["narrative"]["developerActions"] = [
+            {
+                "target": "MODEL_ARGUMENT",
+                "priority": "P1",
+                "action": "优化 Prompt",
+                "expectedEffect": "提升稳定性",
+                "evidenceRefs": ["tool:req-1:tool-1"],
+            }
+        ]
+        manager.store.write(job_path, stored)
+        upgraded = manager.get(job["jobId"])
+        assert upgraded["evidenceIndex"]
+        assert all(
+            item.get("actionId")
+            for item in upgraded["quality"]["narrative"]["developerActions"]
+        )
+        assert "可复制给 Coding Agent 的修复任务" in (
+            upgraded["quality"]["narrative"]["markdown"]
+        )
     finally:
         manager.close()
 
@@ -253,6 +307,11 @@ def test_service_returns_job_and_errors(tmp_path: Path) -> None:
         def cancel(self, job_id):
             return {"jobId": job_id, "status": "cancelled"}
 
+        def report_markdown(self, job_id):
+            if job_id != "review-test":
+                raise KeyError(job_id)
+            return "# 复盘报告"
+
         def close(self):
             return None
 
@@ -270,6 +329,9 @@ def test_service_returns_job_and_errors(tmp_path: Path) -> None:
         assert response.json()["jobId"] == "review-test"
         assert client.get("/task-review/jobs/review-test").status_code == 200
         assert client.get("/task-review/jobs/missing").status_code == 404
+        report = client.get("/task-review/jobs/review-test/report.md")
+        assert report.status_code == 200
+        assert report.text == "# 复盘报告"
 
 
 def test_judge_without_config_is_unverified(tmp_path: Path) -> None:
@@ -287,8 +349,47 @@ def test_judge_without_config_is_unverified(tmp_path: Path) -> None:
     )
     assert result["status"] == "unverified"
     assert result["error"]["kind"] == "not_configured"
-    assert "中文结论" in result["error"]["message"]
+    assert "not configured" in result["error"]["message"]
     assert result["summary"] == "AI 深度复盘没有生成可验证结论。"
+
+
+def test_invalid_judge_output_preserves_validation_detail(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def _invalid_packet(*args, **kwargs):
+        return SimpleNamespace(
+            status="unverified",
+            summary="",
+            confidence=0.0,
+            weighted_score=None,
+            judge_model="test-model",
+            prompt_hash="sha256:test",
+            prompt_injection_suspected=False,
+            dimensions=[],
+            limitations=[],
+            error={
+                "kind": "invalid_judge_output",
+                "message": "ValueError: judge omitted dimensions: task_completion",
+            },
+        )
+
+    monkeypatch.setattr(task_review_judge, "judge_packet", _invalid_packet)
+    result = run_task_review_judge(
+        {"runs": [{"trace": _trace()}]},
+        build_fast_report({"runs": [{"trace": _trace()}]}),
+        settings=TaskReviewSettings(
+            review_home=tmp_path,
+            judge=SemanticJudgeConfig(),
+        ),
+        job_id="smoke-invalid",
+    )
+
+    assert result["error"]["kind"] == "invalid_judge_output"
+    assert (
+        "judge omitted dimensions: task_completion"
+        in result["error"]["message"]
+    )
 
 
 def test_resolves_judge_config_from_java_agent(tmp_path: Path) -> None:

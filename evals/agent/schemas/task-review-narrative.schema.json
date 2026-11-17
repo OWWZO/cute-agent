@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/task-review-narrative.schema.json",
+  "title": "Cute Agent Task Review Narrative Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "status",
+    "headline",
+    "executiveSummary",
+    "taskUnderstanding",
+    "executionNarrative",
+    "toolStory",
+    "failureStory",
+    "whatWorked",
+    "whatFailed",
+    "betterApproach",
+    "developerActions",
+    "verification",
+    "limitations",
+    "markdown"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "status": {"enum": ["verified", "fact_only", "failed"]},
+    "headline": {"type": "string"},
+    "executiveSummary": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "taskUnderstanding": {
+      "type": "object",
+      "required": ["goal", "constraints", "acceptanceCriteria"],
+      "properties": {
+        "goal": {"type": "string"},
+        "constraints": {"type": "array", "items": {"type": "string"}},
+        "acceptanceCriteria": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "executionNarrative": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["phase", "summary", "outcome", "evidenceRefs"],
+        "properties": {
+          "phase": {"type": "string"},
+          "summary": {"type": "string"},
+          "outcome": {"type": "string"},
+          "evidenceRefs": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "toolStory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["toolName", "purpose", "calls", "failures", "assessment"],
+        "properties": {
+          "toolName": {"type": "string"},
+          "purpose": {"type": "string"},
+          "calls": {"type": "integer", "minimum": 0},
+          "failures": {"type": "integer", "minimum": 0},
+          "assessment": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "failureStory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "primaryLayer", "detail", "recovered", "evidenceRefs"],
+        "properties": {
+          "title": {"type": "string"},
+          "primaryLayer": {"type": "string"},
+          "detail": {"type": "string"},
+          "recovered": {"type": "boolean"},
+          "evidenceRefs": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "whatWorked": {"type": "array", "items": {"type": "string"}},
+    "whatFailed": {"type": "array", "items": {"type": "string"}},
+    "betterApproach": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "detail", "tradeoff"],
+        "properties": {
+          "title": {"type": "string"},
+          "detail": {"type": "string"},
+          "tradeoff": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "developerActions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/developerAction"}
+    },
+    "verification": {
+      "type": "object",
+      "required": ["verified", "unverified"],
+      "properties": {
+        "verified": {"type": "array", "items": {"type": "string"}},
+        "unverified": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "limitations": {"type": "array", "items": {"type": "string"}},
+    "markdown": {"type": "string"},
+    "error": {"type": ["object", "null"]}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "developerAction": {
+      "type": "object",
+      "required": [
+        "actionId",
+        "title",
+        "targetLayer",
+        "priority",
+        "actionScope",
+        "status",
+        "bugSignature",
+        "failureKind",
+        "toolName",
+        "frequency",
+        "problemDefinition",
+        "evidenceRefs",
+        "reproduction",
+        "rootCauseHypothesis",
+        "affectedAreas",
+        "fixPlan",
+        "testPlan",
+        "acceptanceCriteria",
+        "target",
+        "action",
+        "expectedEffect",
+        "agentPrompt"
+      ],
+      "properties": {
+        "actionId": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "targetLayer": {
+          "enum": [
+            "MODEL_DECISION",
+            "MODEL_ARGUMENT",
+            "HARNESS_CONTRACT",
+            "HARNESS_RUNTIME",
+            "ENVIRONMENT",
+            "USER_ACTION",
+            "TRACE_GAP",
+            "UNKNOWN"
+          ]
+        },
+        "priority": {"enum": ["P0", "P1", "P2"]},
+        "actionScope": {
+          "enum": [
+            "PRODUCT_RUNTIME",
+            "TOOL_IMPLEMENTATION",
+            "MODEL_POLICY",
+            "ENVIRONMENT_CONFIG",
+            "TRACE_INSTRUMENTATION",
+            "USER_WORKSPACE",
+            "NO_ACTION"
+          ]
+        },
+        "status": {"enum": ["ready", "needs_more_evidence"]},
+        "bugSignature": {"type": "string", "minLength": 1},
+        "failureKind": {"type": "string", "minLength": 1},
+        "toolName": {"type": "string", "minLength": 1},
+        "frequency": {
+          "type": "object",
+          "required": ["count", "recovered", "unrecovered"],
+          "properties": {
+            "count": {"type": "integer", "minimum": 1},
+            "recovered": {"type": "integer", "minimum": 0},
+            "unrecovered": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "problemDefinition": {
+          "type": "object",
+          "required": ["observed", "expected", "impact"],
+          "properties": {
+            "observed": {"type": "string", "minLength": 1},
+            "expected": {"type": "string", "minLength": 1},
+            "impact": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "reproduction": {
+          "type": "object",
+          "required": ["preconditions", "steps", "expectedFailure"],
+          "properties": {
+            "preconditions": {"$ref": "#/$defs/stringList"},
+            "steps": {"$ref": "#/$defs/stringList"},
+            "expectedFailure": {"type": "string"}
+          },
+          "additionalProperties": false
+        },
+        "rootCauseHypothesis": {
+          "type": "object",
+          "required": ["summary", "confidence", "alternatives"],
+          "properties": {
+            "summary": {"type": "string", "minLength": 1},
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "alternatives": {"$ref": "#/$defs/stringList"}
+          },
+          "additionalProperties": false
+        },
+        "affectedAreas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "name"],
+            "properties": {
+              "kind": {"type": "string", "minLength": 1},
+              "name": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          }
+        },
+        "fixPlan": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["order", "summary", "detail"],
+            "properties": {
+              "order": {"type": "integer", "minimum": 1},
+              "summary": {"type": "string", "minLength": 1},
+              "detail": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          }
+        },
+        "testPlan": {
+          "type": "object",
+          "required": ["unit", "integration", "regression"],
+          "properties": {
+            "unit": {"$ref": "#/$defs/stringList"},
+            "integration": {"$ref": "#/$defs/stringList"},
+            "regression": {"$ref": "#/$defs/stringList"}
+          },
+          "additionalProperties": false
+        },
+        "acceptanceCriteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        },
+        "target": {"type": "string", "minLength": 1},
+        "action": {"type": "string", "minLength": 1},
+        "expectedEffect": {"type": "string", "minLength": 1},
+        "agentPrompt": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  }
+}

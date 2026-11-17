@@ -687,6 +687,14 @@ def build_report(
         "caseSummaries": case_summaries,
         "caseResults": [case.to_dict() for case in cases],
     }
+    if benchmark:
+        payload.update(
+            {
+                "officialScore": benchmark.get("officialScore"),
+                "scoreLabel": benchmark.get("scoreLabel"),
+                "runnerMode": benchmark.get("runnerMode"),
+            }
+        )
     payload["baselineDiff"] = (
         diff_baseline(payload, baseline) if baseline is not None else None
     )

@@ -29,12 +29,15 @@ class ReviewStore:
         return path
 
     def write(self, path: Path, payload: Any) -> None:
+        self.write_text(
+            path,
+            json.dumps(payload, ensure_ascii=False, indent=2),
+        )
+
+    def write_text(self, path: Path, content: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f".{path.name}.tmp")
-        temporary.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        temporary.write_text(content, encoding="utf-8")
         os.replace(temporary, path)
 
     def read(self, path: Path) -> Any:

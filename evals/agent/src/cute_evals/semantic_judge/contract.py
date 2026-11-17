@@ -47,6 +47,10 @@ class JudgePacket:
     conversation: list[dict[str, Any]]
     tool_calls: list[dict[str, Any]]
     workspace_files: list[dict[str, Any]]
+    event_sequence: list[dict[str, Any]] = field(default_factory=list)
+    tool_contracts: list[dict[str, Any]] = field(default_factory=list)
+    artifacts: list[dict[str, Any]] = field(default_factory=list)
+    failure_candidates: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     prompt_injection_suspected: bool = False
 
@@ -69,6 +73,10 @@ class JudgePacket:
             "conversation": self.conversation,
             "toolCalls": self.tool_calls,
             "workspaceFiles": self.workspace_files,
+            "eventSequence": self.event_sequence,
+            "toolContracts": self.tool_contracts,
+            "artifacts": self.artifacts,
+            "failureCandidates": self.failure_candidates,
             "promptInjectionSuspected": self.prompt_injection_suspected,
         }
 
@@ -105,6 +113,9 @@ class DimensionVerdict:
     passed: bool
     reason: str
     evidence: list[EvidenceReference] = field(default_factory=list)
+    applicable: bool = True
+    not_applicable_reason: str = ""
+    diagnostic_refs: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -114,6 +125,9 @@ class DimensionVerdict:
             "passed": self.passed,
             "reason": self.reason,
             "evidence": [item.to_dict() for item in self.evidence],
+            "applicable": self.applicable,
+            "notApplicableReason": self.not_applicable_reason,
+            "diagnosticRefs": self.diagnostic_refs,
         }
 
 
@@ -147,6 +161,8 @@ class JudgeVerdict:
     summary: str
     dimensions: list[DimensionVerdict] = field(default_factory=list)
     assertions: list[AssertionVerdict] = field(default_factory=list)
+    failure_attributions: list[dict[str, Any]] = field(default_factory=list)
+    diagnostic_summary: dict[str, Any] | None = None
     limitations: list[str] = field(default_factory=list)
     weighted_score: float | None = None
     semantic_pass: bool | None = None
@@ -186,6 +202,14 @@ class JudgeVerdict:
                         )
                         for evidence in item.get("evidence") or []
                     ],
+                    applicable=bool(item.get("applicable", True)),
+                    not_applicable_reason=str(
+                        item.get("notApplicableReason") or ""
+                    ),
+                    diagnostic_refs=[
+                        str(value)
+                        for value in item.get("diagnosticRefs") or []
+                    ],
                 )
                 for item in payload.get("dimensions") or []
             ],
@@ -206,6 +230,16 @@ class JudgeVerdict:
                 )
                 for item in payload.get("assertions") or []
             ],
+            failure_attributions=[
+                dict(item)
+                for item in payload.get("failureAttributions") or []
+                if isinstance(item, dict)
+            ],
+            diagnostic_summary=(
+                dict(payload["diagnosticSummary"])
+                if isinstance(payload.get("diagnosticSummary"), dict)
+                else None
+            ),
             limitations=[str(item) for item in payload.get("limitations") or []],
             weighted_score=(
                 float(payload["weightedScore"])
@@ -238,6 +272,8 @@ class JudgeVerdict:
             "semanticPass": self.semantic_pass,
             "dimensions": [item.to_dict() for item in self.dimensions],
             "assertions": [item.to_dict() for item in self.assertions],
+            "failureAttributions": self.failure_attributions,
+            "diagnosticSummary": self.diagnostic_summary,
             "limitations": self.limitations,
             "judge": {
                 "model": self.judge_model,

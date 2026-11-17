@@ -152,6 +152,137 @@ def test_rejects_trace_without_conversation() -> None:
         project_process_view(RunTrace.from_dict(payload))
 
 
+def test_scopes_conversation_and_final_text_to_current_request() -> None:
+    payload = _trace()
+    payload["run"]["requestId"] = "req-2"
+    payload["run"]["finalSummaryText"] = "上一轮答案"
+    payload["conversation"] = [
+        {
+            "messageId": "old-assistant",
+            "requestId": "req-1",
+            "role": "assistant",
+            "content": "上一轮答案",
+        },
+        {
+            "messageId": "current-user",
+            "requestId": "req-2",
+            "role": "user",
+            "content": "继续处理",
+        },
+        {
+            "messageId": "current-tool",
+            "requestId": "req-2",
+            "role": "assistant",
+            "content": "",
+            "toolCalls": [
+                {
+                    "id": "call-current",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"current.txt\"}",
+                    },
+                }
+            ],
+        },
+        {
+            "messageId": "current-result",
+            "requestId": "req-2",
+            "role": "tool",
+            "toolCallId": "call-current",
+            "content": "done",
+        },
+        {
+            "messageId": "current-final",
+            "requestId": "req-2",
+            "role": "assistant",
+            "content": "当前轮答案",
+        },
+    ]
+    payload["toolInvocations"] = [
+        {
+            "toolCallId": "call-current",
+            "toolName": "read_file",
+            "status": "SUCCESS",
+            "toolResult": "done",
+        }
+    ]
+
+    view = project_process_view(RunTrace.from_dict(payload))
+
+    assert [step.content for step in view.steps] == ["", "当前轮答案"]
+    assert view.final_text == "当前轮答案"
+    assert all(
+        step.content != "上一轮答案"
+        for step in view.steps
+    )
+
+
+def test_does_not_fall_back_to_previous_turn_final_summary() -> None:
+    payload = _trace()
+    payload["run"]["requestId"] = "req-2"
+    payload["run"]["finalSummaryText"] = "上一轮答案"
+    payload["conversation"] = [
+        {
+            "messageId": "old-assistant",
+            "requestId": "req-1",
+            "role": "assistant",
+            "content": "上一轮答案",
+        },
+        {
+            "messageId": "current-user",
+            "requestId": "req-2",
+            "role": "user",
+            "content": "继续处理",
+        },
+        {
+            "messageId": "current-tool",
+            "requestId": "req-2",
+            "role": "assistant",
+            "content": "",
+            "toolCalls": [],
+        },
+    ]
+
+    view = project_process_view(RunTrace.from_dict(payload))
+
+    assert view.final_text == ""
+
+
+def test_final_text_can_be_attached_to_assistant_tool_call() -> None:
+    payload = _trace()
+    payload["run"]["requestId"] = "req-2"
+    payload["run"]["finalSummaryText"] = "上一轮答案"
+    payload["conversation"] = [
+        {
+            "messageId": "current-user",
+            "requestId": "req-2",
+            "role": "user",
+            "content": "继续处理",
+        },
+        {
+            "messageId": "current-assistant",
+            "requestId": "req-2",
+            "role": "assistant",
+            "content": "当前轮的可见进度说明",
+            "toolCalls": [
+                {
+                    "id": "call-current",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"current.txt\"}",
+                    },
+                }
+            ],
+        },
+    ]
+
+    view = project_process_view(RunTrace.from_dict(payload))
+
+    assert view.final_text == "当前轮的可见进度说明"
+
+
 def test_reconstructs_ledger_steps_without_conversation() -> None:
     payload = {
         "schemaVersion": "1.1",

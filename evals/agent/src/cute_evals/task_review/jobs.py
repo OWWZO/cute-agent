@@ -7,10 +7,15 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
 
+from .diagnostics import build_diagnostics
+from .action_compiler import build_developer_actions
+from .evidence import resolve_evidence
+from .evidence_index import build_evidence_index
 from .facts import build_fast_report
 from .java_client import JavaTaskReviewClient
 from .judge import run_task_review_judge
 from .models import TaskReviewSettings
+from .narrative import generate_narrative, render_markdown
 from .storage import ReviewStore
 from ..semantic_judge.config import SemanticJudgeConfig
 
@@ -74,7 +79,11 @@ class TaskReviewJobManager:
             session_id=session_id,
             request_ids=ordered_ids,
         )
+        evidence_index = build_evidence_index(bundle)
         fast = build_fast_report(bundle, criteria=criteria)
+        failure_attributions, diagnostic_summary, contracts = build_diagnostics(
+            bundle
+        )
         judge_config = self._resolve_judge_config(
             headers,
             session_id,
@@ -100,6 +109,18 @@ class TaskReviewJobManager:
             include_llm_judge and mode != "fast",
             judge_config,
         )
+        diagnostics = {
+            "failureAttributions": failure_attributions,
+            "diagnosticSummary": diagnostic_summary,
+            "toolContracts": contracts,
+        }
+        quality.update(
+            {
+                "failureAttributions": failure_attributions,
+                "diagnosticSummary": diagnostic_summary,
+                "diagnostics": diagnostics,
+            }
+        )
         job = {
             "schemaVersion": "1.0",
             "jobId": job_id,
@@ -115,6 +136,8 @@ class TaskReviewJobManager:
             "progress": _progress("fast_ready", quality["status"]),
             "fast": fast,
             "quality": quality,
+            "diagnostics": diagnostics,
+            "evidenceIndex": evidence_index,
             "report": None,
         }
         if quality["status"] == "running" and judge_config is not None:
@@ -125,6 +148,19 @@ class TaskReviewJobManager:
             self._deep_pool.submit(self._run_deep, job_id)
         else:
             job["status"] = "completed"
+            job["quality"]["narrative"] = generate_narrative(
+                fast,
+                query=_query_text(bundle),
+                dimensions=[],
+                failure_attributions=failure_attributions,
+                diagnostic_summary=diagnostic_summary,
+                config=SemanticJudgeConfig(),
+            )
+            job["quality"]["narrativeStatus"] = job["quality"]["narrative"].get(
+                "status",
+                "fact_only",
+            )
+            self._write_narrative(job_id, job["quality"]["narrative"])
             job["report"] = _compose_report(job)
             self._save(job_id, job)
         return self.get(job_id)
@@ -134,7 +170,10 @@ class TaskReviewJobManager:
         if not path.is_file():
             raise KeyError(job_id)
         with self._lock:
-            return self.store.read(path)
+            job = self.store.read(path)
+            if self._upgrade_saved_artifacts(job_id, job):
+                self._save(job_id, job)
+            return job
 
     def list(self, *, limit: int = 20) -> list[dict[str, Any]]:
         summaries = []
@@ -157,6 +196,25 @@ class TaskReviewJobManager:
                 }
             )
         return summaries
+
+    def report_markdown(self, job_id: str) -> str:
+        job = self.get(job_id)
+        path = self.store.job_dir(job_id) / "quality" / "narrative.md"
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+        narrative = (job.get("quality") or {}).get("narrative") or {}
+        markdown = str(narrative.get("markdown") or "").strip()
+        if not markdown:
+            raise KeyError(job_id)
+        return markdown
+
+    def evidence(self, job_id: str, ref: str) -> dict[str, Any]:
+        self.get(job_id)
+        bundle_path = self.store.job_dir(job_id) / "trace" / "bundle.json"
+        if not bundle_path.is_file():
+            raise KeyError(job_id)
+        bundle = self.store.read(bundle_path)
+        return resolve_evidence(bundle, ref)
 
     def cancel(self, job_id: str) -> dict[str, Any]:
         with self._lock:
@@ -205,6 +263,15 @@ class TaskReviewJobManager:
             if job.get("cancelRequested"):
                 return
             job["quality"] = result
+            if result.get("diagnostics"):
+                job["diagnostics"] = result["diagnostics"]
+            narrative = result.get("narrative") or {}
+            if narrative:
+                self._write_narrative(job_id, narrative)
+            job["quality"]["narrativeStatus"] = narrative.get(
+                "status",
+                "fact_only",
+            )
             job["status"] = "completed" if result.get("status") == "verified" else "partial"
             job["updatedAt"] = _now()
             if result.get("completion"):
@@ -221,7 +288,9 @@ class TaskReviewJobManager:
                 return
             if job.get("cancelRequested"):
                 return
+            previous_quality = dict(job.get("quality") or {})
             job["quality"] = {
+                **previous_quality,
                 "status": "failed",
                 "summary": "深度复盘没有完成。",
                 "dimensions": [],
@@ -234,6 +303,32 @@ class TaskReviewJobManager:
                 },
                 "advisory": True,
             }
+            try:
+                bundle = self.store.read(
+                    self.store.job_dir(job_id) / "trace" / "bundle.json"
+                )
+                diagnostics = job.get("diagnostics") or {}
+                job["quality"]["narrative"] = generate_narrative(
+                    job.get("fast") or {},
+                    query=_query_text(bundle),
+                    dimensions=[],
+                    failure_attributions=(
+                        diagnostics.get("failureAttributions") or []
+                    ),
+                    diagnostic_summary=(
+                        diagnostics.get("diagnosticSummary") or {}
+                    ),
+                    config=SemanticJudgeConfig(),
+                )
+                job["quality"]["narrativeStatus"] = job["quality"][
+                    "narrative"
+                ].get("status", "fact_only")
+                self._write_narrative(
+                    job_id,
+                    job["quality"]["narrative"],
+                )
+            except Exception:  # noqa: BLE001 - keep the diagnostic ledger
+                pass
             job["status"] = "partial"
             job["updatedAt"] = _now()
             job["report"] = _compose_report(job)
@@ -260,6 +355,64 @@ class TaskReviewJobManager:
         with self._lock:
             self.store.write(self.store.job_dir(job_id) / "job.json", job)
 
+    def _upgrade_saved_artifacts(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+    ) -> bool:
+        """Backfill new evidence locators and detailed actions for old jobs."""
+        quality = job.get("quality") or {}
+        narrative = quality.get("narrative")
+        actions = (
+            narrative.get("developerActions")
+            if isinstance(narrative, dict)
+            else []
+        )
+        legacy_actions = any(
+            isinstance(item, dict) and not item.get("actionId")
+            for item in actions
+        )
+        has_failures = bool(
+            (job.get("diagnostics") or {}).get("failureAttributions")
+            or quality.get("failureAttributions")
+        )
+        needs_actions = isinstance(narrative, dict) and (
+            legacy_actions or (has_failures and not actions)
+        )
+        if job.get("evidenceIndex") and not needs_actions:
+            return False
+        bundle_path = self.store.job_dir(job_id) / "trace" / "bundle.json"
+        if not bundle_path.is_file():
+            return False
+        bundle = self.store.read(bundle_path)
+        if not job.get("evidenceIndex"):
+            job["evidenceIndex"] = build_evidence_index(bundle)
+        if needs_actions:
+            attributions = (
+                (job.get("diagnostics") or {}).get("failureAttributions")
+                or quality.get("failureAttributions")
+                or []
+            )
+            upgraded = dict(narrative)
+            upgraded["developerActions"] = build_developer_actions(
+                attributions,
+                fast=job.get("fast") or {},
+            )
+            upgraded["markdown"] = render_markdown(upgraded)
+            quality["narrative"] = upgraded
+            job["quality"] = quality
+            self._write_narrative(job_id, upgraded)
+        job["report"] = _compose_report(job)
+        return True
+
+    def _write_narrative(self, job_id: str, narrative: dict[str, Any]) -> None:
+        quality_dir = self.store.job_dir(job_id) / "quality"
+        self.store.write(quality_dir / "narrative.json", narrative)
+        self.store.write_text(
+            quality_dir / "narrative.md",
+            str(narrative.get("markdown") or ""),
+        )
+
     def _pending_quality(
         self,
         requested: bool,
@@ -269,6 +422,7 @@ class TaskReviewJobManager:
             return {
                 "status": "unverified",
                 "summary": "本次只执行快速体检。",
+                "narrativeStatus": "pending",
                 "dimensions": [],
                 "findings": [],
                 "suggestions": [],
@@ -280,6 +434,7 @@ class TaskReviewJobManager:
             return {
                 "status": "unverified",
                 "summary": "Judge 模型未配置，未执行 AI 深度复盘。",
+                "narrativeStatus": "pending",
                 "dimensions": [],
                 "findings": [],
                 "suggestions": [],
@@ -293,6 +448,7 @@ class TaskReviewJobManager:
         return {
             "status": "running",
             "summary": "AI 深度复盘进行中。",
+            "narrativeStatus": "pending",
             "judgeModel": active_judge.model,
             "dimensions": [],
             "findings": [],
@@ -368,11 +524,23 @@ def _job_id() -> str:
     return f"review-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
 
+def _query_text(bundle: dict[str, Any]) -> str:
+    return "\n\n".join(
+        str((run.get("trace") or {}).get("run", {}).get("queryText") or "")
+        for run in bundle.get("runs") or []
+        if isinstance(run, dict)
+        and str(
+            (run.get("trace") or {}).get("run", {}).get("queryText") or ""
+        ).strip()
+    )
+
+
 def _progress(status: str, quality_status: str) -> list[dict[str, str]]:
     stages = [
         ("exporting", "completed"),
         ("projecting", "completed"),
         ("deterministic_audit", "completed"),
+        ("diagnostics", "completed"),
         (
             "deep_review",
             "running"
@@ -381,9 +549,24 @@ def _progress(status: str, quality_status: str) -> list[dict[str, str]]:
             if quality_status == "verified"
             else "unverified",
         ),
+        (
+            "narrative",
+            "completed"
+            if quality_status == "verified"
+            else "failed"
+            if quality_status == "failed"
+            else "unverified",
+        ),
     ]
     if status in {"failed", "cancelled"}:
-        stages[-1] = ("deep_review", "failed" if status == "failed" else "cancelled")
+        stages[4] = (
+            "deep_review",
+            "failed" if status == "failed" else "cancelled",
+        )
+        stages[5] = (
+            "narrative",
+            "failed" if status == "failed" else "cancelled",
+        )
     return [{"stage": stage, "status": stage_status} for stage, stage_status in stages]
 
 
@@ -403,6 +586,19 @@ def _compose_report(job: dict[str, Any]) -> dict[str, Any]:
         "metrics": fast.get("metrics") or {},
         "runs": fast.get("runs") or [],
         "artifacts": fast.get("artifacts") or [],
+        "evidenceIndex": job.get("evidenceIndex") or {},
+        "diagnostics": (job.get("quality") or {}).get("diagnostics")
+        or job.get("diagnostics")
+        or {
+            "failureAttributions": (
+                (job.get("quality") or {}).get("failureAttributions") or []
+            ),
+            "diagnosticSummary": (
+                (job.get("quality") or {}).get("diagnosticSummary") or {}
+            ),
+            "toolContracts": [],
+        },
+        "narrative": (job.get("quality") or {}).get("narrative"),
         "limitations": fast.get("limitations") or [],
         "quality": job.get("quality") or {},
         "usagePolicy": {

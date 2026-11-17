@@ -469,6 +469,36 @@ uv run cute-evals benchmark --name bird --split official-full --profile release 
 注意：`official-full` 只表示官方完整选择和官方 evaluator，不等于已经生成官网提交包。
 当前仓库还没有统一的 `submission` 打包层；不能把 report.json 直接上传冒充官方成绩。
 
+### WorkBuddy Bench 混合模式
+
+WorkBuddy Code 的 `pytest_injected` 子集使用“宿主机 Cute Agent + Docker 官方
+verifier”的混合模式。Agent 在宿主工作区修改代码，Docker 只负责官方测试和
+scorer；报告固定标记为 `compatibility-subset`、`officialScore=false`。
+
+当前清单发现 22 道 `pytest_injected` 题，其中 19 道通过官方 gold patch 验证，
+3 道因官方环境漂移或 gold patch 无法应用而列为阻塞题，不进入 Agent 对照。
+
+```powershell
+$env:CODE_EXECUTION_WORKSPACE_ROOTS = "D:\cute-eval-tmp"
+& .\scripts\start-python.ps1 -WorkspaceRoots "D:\cute-eval-tmp"
+
+cd evals\agent
+uv run cute-evals benchmark `
+  --name workbuddybench `
+  --split internal `
+  --profile nightly `
+  --java-mode live `
+  --budget-mode capability `
+  --source-dir D:\cute-eval-tmp\workbuddy-bench-main `
+  --limit 3 `
+  --repeat 1 `
+  --out D:\cute-eval-tmp\workbuddy-code-pytest-subset
+```
+
+每道题的 workspace、Trace、Agent patch、Docker 日志和 reward 都保存在
+`attempts/<attempt>/<task-id>/` 下。详细设计和阻塞题原因见
+`docs/workbuddybench-hybrid-adapter-plan.md`。
+
 ### 内部 production / holdout
 
 `Cute-Agent Bench` 增加三个独立层：

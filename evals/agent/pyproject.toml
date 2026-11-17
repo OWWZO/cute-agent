@@ -81,6 +81,7 @@ packages = ["src/cute_evals"]
 "src/cute_evals/benchmarks/spider2/manifest.yaml" = "cute_evals/benchmarks/spider2/manifest.yaml"
 "src/cute_evals/benchmarks/tau2/manifest.yaml" = "cute_evals/benchmarks/tau2/manifest.yaml"
 "src/cute_evals/benchmarks/tau2/server.py" = "cute_evals/benchmarks/tau2/server.py"
+"src/cute_evals/benchmarks/workbuddybench/manifest.yaml" = "cute_evals/benchmarks/workbuddybench/manifest.yaml"
 "src/cute_evals/judge_benchmarks/agent_process_bench/manifest.yaml" = "cute_evals/judge_benchmarks/agent_process_bench/manifest.yaml"
 "src/cute_evals/judge_benchmarks/agent_reward_bench/manifest.yaml" = "cute_evals/judge_benchmarks/agent_reward_bench/manifest.yaml"
 "src/cute_evals/judge_benchmarks/trail/manifest.yaml" = "cute_evals/judge_benchmarks/trail/manifest.yaml"
@@ -101,6 +102,9 @@ packages = ["src/cute_evals"]
 "schemas/judge-verdict.schema.json" = "cute_evals/schemas/judge-verdict.schema.json"
 "schemas/semantic-judge-report.schema.json" = "cute_evals/schemas/semantic-judge-report.schema.json"
 "schemas/task-review.schema.json" = "cute_evals/schemas/task-review.schema.json"
+"schemas/task-review-diagnostics.schema.json" = "cute_evals/schemas/task-review-diagnostics.schema.json"
+"schemas/task-review-narrative.schema.json" = "cute_evals/schemas/task-review-narrative.schema.json"
+"schemas/task-review-evidence.schema.json" = "cute_evals/schemas/task-review-evidence.schema.json"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

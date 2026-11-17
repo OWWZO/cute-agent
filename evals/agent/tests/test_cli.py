@@ -3,6 +3,12 @@ from types import SimpleNamespace
 
 import pytest
 
+import cute_evals.cli as cli
+from cute_evals.benchmarks.base import (
+    BenchmarkRun,
+    BenchmarkTask,
+    PreparedTask,
+)
 from cute_evals.benchmarks.budget import BudgetPolicy
 from cute_evals.case_loader import load_case_file
 from cute_evals.cli import (
@@ -185,6 +191,222 @@ def test_phase3_benchmarks_are_registered() -> None:
         args = build_parser().parse_args(["benchmark", "--name", name])
         assert args.name == name
         assert args.func.__name__ == "benchmark_command"
+
+
+def test_workbuddybench_is_registered_for_internal_split() -> None:
+    args = build_parser().parse_args(
+        [
+            "benchmark",
+            "--name",
+            "workbuddybench",
+            "--split",
+            "internal",
+            "--java-mode",
+            "live",
+        ]
+    )
+
+    assert args.name == "workbuddybench"
+    assert args.split == "internal"
+    assert args.func.__name__ == "benchmark_command"
+
+
+def test_workbuddybench_isolates_attempt_dirs_per_task(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "CODE_EXECUTION_WORKSPACE_ROOTS",
+        str(tmp_path),
+    )
+    tasks = [
+        BenchmarkTask(
+            id=f"task-{index}",
+            category="bug-fix",
+            question=f"Fix task {index}.",
+            functions=[],
+            ground_truth=None,
+            raw={},
+        )
+        for index in (1, 2)
+    ]
+    prepared_workspaces = []
+    run_output_dirs = []
+    preflight_calls = []
+    case_env_overrides = []
+
+    class Adapter:
+        name = "workbuddybench"
+        version = "test"
+        upstream = "workbuddy"
+        score_label = "compatibility-subset"
+        docker_verifier = object()
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def tasks(self, split):
+            assert split == "internal"
+            return tasks
+
+        def prepare(self, task, workspace):
+            prepared_workspaces.append(workspace)
+            metadata = {
+                "workspaceRoot": str(workspace),
+                "verificationOutputDir": str(
+                    workspace.parent.parent / "verifier" / task.id
+                ),
+                "agentResultPath": str(
+                    workspace.parent.parent / "result.json"
+                ),
+            }
+            return PreparedTask(task, workspace, metadata)
+
+        def case_for_task(self, task):
+            return EvalCase(
+                id=task.id,
+                suite="workbuddybench-internal",
+                version=1,
+                hard_gate=True,
+                query=task.question,
+                expected=ExpectedSpec(),
+                budgets=BudgetSpec(),
+                script=[],
+                source_path="task.toml",
+            )
+
+        def collect(self, task, trace, trace_path, *, prepared):
+            return BenchmarkRun(
+                task=task,
+                trace=trace,
+                trace_path=trace_path,
+                calls=[],
+                metadata=dict(prepared.metadata),
+            )
+
+        def score(self, run, *, case=None):
+            return CaseResult(
+                case=case,
+                trace=run.trace,
+                scores=[],
+                trace_path=run.trace_path,
+            )
+
+    adapter = Adapter()
+    monkeypatch.setattr(
+        cli,
+        "WorkBuddyBenchAdapter",
+        lambda *args, **kwargs: adapter,
+    )
+    monkeypatch.setattr(cli, "compile_java_fixture_runner", lambda: None)
+
+    def fake_preflight(workspace, report_path, **kwargs):
+        preflight_calls.append((workspace, report_path, kwargs))
+        return {"requiredPassed": True, "checks": []}
+
+    monkeypatch.setattr(
+        cli,
+        "run_workbuddy_tool_preflight",
+        fake_preflight,
+    )
+
+    def fake_run_java_cases(cases, output_dir, **kwargs):
+        run_output_dirs.append(output_dir)
+        case_env_overrides.append(kwargs.get("env_overrides"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "result.json").write_text(
+            f'{{"case": "{cases[0].id}"}}',
+            encoding="utf-8",
+        )
+        return {
+            cases[0].id: RunTrace.from_dict(
+                {
+                    "run": {
+                        "caseId": cases[0].id,
+                        "requestId": "request",
+                        "status": "SUCCESS",
+                        "finalSummaryText": "done",
+                    },
+                    "llmInvocations": [],
+                    "toolInvocations": [],
+                    "artifacts": [],
+                    "environment": {},
+                }
+            )
+        }
+
+    monkeypatch.setattr(cli, "run_java_cases", fake_run_java_cases)
+    reported = {}
+
+    def fake_report(**kwargs):
+        reported.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(cli, "_report_benchmark", fake_report)
+    args = SimpleNamespace(
+        agent="cute",
+        name="workbuddybench",
+        split="internal",
+        source_dir=str(tmp_path / "source"),
+        manifest=None,
+        limit=None,
+        java_mode="live",
+        repeat=1,
+        out=str(tmp_path / "out"),
+        skip_build=True,
+        profile="nightly",
+        timeout=10,
+        budget_mode="product",
+        capability_token_multiplier=8.0,
+        capability_wall_multiplier=4.0,
+        capability_tool_multiplier=4.0,
+        capability_step_multiplier=4.0,
+    )
+
+    assert cli._run_workbuddybench_benchmark(args) == 0
+
+    attempt_dir = tmp_path / "out" / "attempts" / "01"
+    assert prepared_workspaces == [
+        attempt_dir / "task-1" / "workspace" / "task-1",
+        attempt_dir / "task-2" / "workspace" / "task-2",
+    ]
+    assert run_output_dirs == [
+        attempt_dir / "task-1",
+        attempt_dir / "task-2",
+    ]
+    assert len(preflight_calls) == 1
+    assert preflight_calls[0][2]["build"] is False
+    assert case_env_overrides == [
+        {"CUTE_FILE_ARTIFACT_ALLOWED_ROOT": str((tmp_path / "out").resolve())},
+        {"CUTE_FILE_ARTIFACT_ALLOWED_ROOT": str((tmp_path / "out").resolve())},
+    ]
+    assert [
+        result.trace_path for result in reported["results"]
+    ] == [
+        "attempts/01/task-1/traces/task-1/trace.json",
+        "attempts/01/task-2/traces/task-2/trace.json",
+    ]
+
+
+def test_workbuddybench_requires_code_execution_workspace_root(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    allowed = tmp_path / "eval-root"
+    output_dir = allowed / "workbuddy"
+    monkeypatch.setenv(
+        "CODE_EXECUTION_WORKSPACE_ROOTS",
+        str(allowed),
+    )
+
+    cli._validate_workbuddy_execution_roots(output_dir)
+
+    outside = tmp_path / "outside" / "workbuddy"
+    with pytest.raises(
+        ValueError,
+        match="outside the Code Execution allowed roots",
+    ):
+        cli._validate_workbuddy_execution_roots(outside)
 
 
 def test_rag_python_benchmark_is_registered_for_internal_split() -> None:

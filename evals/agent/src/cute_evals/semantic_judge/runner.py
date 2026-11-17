@@ -23,6 +23,19 @@ from .evidence import build_packet, validate_evidence
 from .providers import SemanticJudgeProvider
 from .rubrics import Rubric, get_rubric, select_rubric
 
+FAILURE_LAYERS = frozenset(
+    {
+        "MODEL_DECISION",
+        "MODEL_ARGUMENT",
+        "HARNESS_CONTRACT",
+        "HARNESS_RUNTIME",
+        "ENVIRONMENT",
+        "USER_ACTION",
+        "TRACE_GAP",
+        "UNKNOWN",
+    }
+)
+
 
 def _hash_text(value: str) -> str:
     return f"sha256:{hashlib.sha256(value.encode('utf-8')).hexdigest()}"
@@ -49,8 +62,11 @@ def _system_prompt(rubric: Rubric, output_language: str) -> str:
         contract = (
             '{"summary":"...", "confidence":0.0, '
             '"dimensions":[{"id":"dimension id", "score":4, '
-            '"reason":"...", "evidence":[{"kind":"final_text", "id":null, '
+            '"applicable":true, "notApplicableReason":"", '
+            '"diagnosticRefs":[], "reason":"...", '
+            '"evidence":[{"kind":"final_text", "id":null, '
             '"path":null, "quote":"exact supporting text"}]}], '
+            '"failureAttributions":[], "diagnosticSummary":null, '
             '"limitations":[]}'
         )
         instructions = (
@@ -59,6 +75,20 @@ def _system_prompt(rubric: Rubric, output_language: str) -> str:
             "when the rubric is fully satisfied with evidence.\n"
             f"{dimensions}"
         )
+        if rubric.id == "task-review.v2":
+            instructions += (
+                "\nFor dimensions that do not apply to this task, set "
+                "applicable=false, give a concrete notApplicableReason, and do "
+                "not use that dimension in the quality judgment. Review the "
+                "deterministic failureCandidates. Return a failureAttributions "
+                "entry only when you can improve or confirm a candidate with "
+                "exact evidence. Keep attributionId when reviewing a candidate. "
+                "Each attribution must include attributionId, requestId, "
+                "toolCallId, primaryLayer, contributingLayers, reason, "
+                "recovered, recoverySummary, confidence, ruleIds, "
+                "evidenceRefs, source, and at least one evidence quote. Never "
+                "replace deterministic facts without evidence.\n"
+            )
     language_instruction = (
         ""
         if output_language.strip().lower() == "english"
@@ -77,8 +107,11 @@ def _system_prompt(rubric: Rubric, output_language: str) -> str:
         f"{instructions}\n"
         "Every conclusion must cite evidence using an exact quote from the "
         "packet. Allowed evidence kinds: final_text, conversation, tool_call, "
-        "workspace_file, deterministic_score. Use the real message id, tool "
-        "call id, file path, or deterministic score name when required.\n"
+        "workspace_file, deterministic_score, failure_attribution, "
+        "tool_contract, artifact. Use the real message id, tool "
+        "call id, file path, or deterministic score name when required. For "
+        "deterministic_score evidence, quote one exact field value such as "
+        "name, severity, or value; do not combine fields or reformat JSON.\n"
         f"{language_instruction}"
         f"Return only one JSON object with this shape: {contract}"
     )
@@ -172,29 +205,56 @@ def _parse_dimensions(
         evidence = _parse_evidence(item.get("evidence"))
         _validate_evidence_list(evidence, packet, config)
         dimension = definition[dimension_id]
+        applicable = item.get("applicable", True)
+        if not isinstance(applicable, bool):
+            raise ValueError(
+                f"dimension {dimension_id} applicable must be boolean"
+            )
+        diagnostic_refs = [
+            str(value)
+            for value in item.get("diagnosticRefs") or []
+        ]
+        candidate_ids = {
+            str(candidate.get("attributionId") or "")
+            for candidate in packet.failure_candidates
+        }
+        unknown_refs = sorted(set(diagnostic_refs) - candidate_ids)
+        if unknown_refs:
+            raise ValueError(
+                f"dimension {dimension_id} has unknown diagnosticRefs: "
+                f"{', '.join(unknown_refs)}"
+            )
         parsed.append(
             DimensionVerdict(
                 id=dimension_id,
                 score=score,
                 weight=dimension.weight,
-                passed=score >= 3.0,
+                passed=not applicable or score >= 3.0,
                 reason=str(item.get("reason") or ""),
                 evidence=evidence,
+                applicable=applicable,
+                not_applicable_reason=str(
+                    item.get("notApplicableReason") or ""
+                ),
+                diagnostic_refs=diagnostic_refs,
             )
         )
     missing = sorted(set(definition) - {item.id for item in parsed})
     if missing:
         raise ValueError(f"judge omitted dimensions: {', '.join(missing)}")
+    applicable = [item for item in parsed if item.applicable]
     weighted = (
-        sum(item.score * item.weight for item in parsed)
-        / sum(item.weight for item in parsed)
+        sum(item.score * item.weight for item in applicable)
+        / sum(item.weight for item in applicable)
+        if applicable
+        else 0.0
     )
     veto_failed = any(
         item.score < 2.0
-        for item in parsed
+        for item in applicable
         if definition[item.id].veto
     )
-    low_dimension = any(item.score <= 1.0 for item in parsed)
+    low_dimension = any(item.score <= 1.0 for item in applicable)
     return parsed, weighted, weighted >= rubric.pass_threshold and not (
         veto_failed or low_dimension
     )
@@ -234,6 +294,130 @@ def _parse_assertions(
     return parsed, all(item.met for item in parsed)
 
 
+def _parse_failure_attributions(
+    payload: dict[str, Any],
+    packet: JudgePacket,
+    config: SemanticJudgeConfig,
+) -> list[dict[str, Any]]:
+    raw = payload.get("failureAttributions")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("failureAttributions must be an array")
+    candidate_ids = {
+        str(candidate.get("attributionId") or "")
+        for candidate in packet.failure_candidates
+    }
+    candidates = {
+        str(candidate.get("attributionId") or ""): candidate
+        for candidate in packet.failure_candidates
+    }
+    parsed_refs = {
+        f"tool:{call['id']}"
+        for call in packet.tool_calls
+    } | {
+        f"failure:{candidate.get('attributionId')}"
+        for candidate in packet.failure_candidates
+    }
+    parsed: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("failure attribution must be an object")
+        attribution_id = str(item.get("attributionId") or "")
+        if not attribution_id:
+            raise ValueError("failure attribution is missing attributionId")
+        request_id = str(item.get("requestId") or "")
+        tool_call_id = str(item.get("toolCallId") or "")
+        if not request_id or not tool_call_id:
+            raise ValueError(
+                f"failure attribution {attribution_id} is missing "
+                "requestId or toolCallId"
+            )
+        candidate = candidates.get(attribution_id)
+        if candidate is not None:
+            if (
+                str(candidate.get("requestId") or "") != request_id
+                or str(candidate.get("toolCallId") or "") != tool_call_id
+            ):
+                raise ValueError(
+                    f"failure attribution {attribution_id} does not match "
+                    "its candidate requestId/toolCallId"
+                )
+        primary = str(item.get("primaryLayer") or "")
+        if primary not in FAILURE_LAYERS:
+            raise ValueError(
+                f"failure attribution has unknown primaryLayer: {primary}"
+            )
+        contributing = [
+            str(value) for value in item.get("contributingLayers") or []
+        ]
+        unknown_layers = sorted(set(contributing) - FAILURE_LAYERS)
+        if unknown_layers:
+            raise ValueError(
+                "failure attribution has unknown contributingLayers: "
+                f"{', '.join(unknown_layers)}"
+            )
+        confidence = item.get("confidence")
+        if isinstance(confidence, bool) or not isinstance(
+            confidence, (int, float)
+        ):
+            raise ValueError(
+                f"failure attribution {attribution_id} confidence is invalid"
+            )
+        confidence = float(confidence)
+        if not 0 <= confidence <= 1:
+            raise ValueError(
+                f"failure attribution {attribution_id} confidence is outside 0..1"
+            )
+        recovered = item.get("recovered")
+        if not isinstance(recovered, bool):
+            raise ValueError(
+                f"failure attribution {attribution_id} recovered must be boolean"
+            )
+        if not str(item.get("reason") or "").strip():
+            raise ValueError(
+                f"failure attribution {attribution_id} has an empty reason"
+            )
+        evidence = _parse_evidence(item.get("evidence"))
+        if not evidence:
+            raise ValueError(
+                f"failure attribution {attribution_id} has no evidence"
+            )
+        _validate_evidence_list(evidence, packet, config)
+        evidence_refs = [
+            str(value) for value in item.get("evidenceRefs") or []
+        ]
+        unknown_refs = sorted(set(evidence_refs) - parsed_refs)
+        if unknown_refs:
+            raise ValueError(
+                f"failure attribution {attribution_id} has unknown "
+                f"evidenceRefs: {', '.join(unknown_refs)}"
+            )
+        parsed.append(
+            {
+                **item,
+                "attributionId": attribution_id,
+                "requestId": request_id,
+                "toolCallId": tool_call_id,
+                "primaryLayer": primary,
+                "contributingLayers": contributing,
+                "reason": str(item.get("reason") or ""),
+                "recovered": recovered,
+                "recoverySummary": str(item.get("recoverySummary") or ""),
+                "confidence": confidence,
+                "ruleIds": [str(value) for value in item.get("ruleIds") or []],
+                "evidenceRefs": evidence_refs,
+                "source": (
+                    "deterministic+judge"
+                    if attribution_id in candidate_ids
+                    else "judge"
+                ),
+                "evidence": [value.to_dict() for value in evidence],
+            }
+        )
+    return parsed
+
+
 def _parse_response(
     response: str,
     packet: JudgePacket,
@@ -261,6 +445,16 @@ def _parse_response(
             config,
         )
         assertions = []
+    failure_attributions = _parse_failure_attributions(
+        payload,
+        packet,
+        config,
+    )
+    diagnostic_summary = (
+        dict(payload["diagnosticSummary"])
+        if isinstance(payload.get("diagnosticSummary"), dict)
+        else None
+    )
     return JudgeVerdict(
         schema_version="1.0",
         rubric_id=rubric.id,
@@ -274,6 +468,8 @@ def _parse_response(
         summary=str(payload.get("summary") or ""),
         dimensions=dimensions,
         assertions=assertions,
+        failure_attributions=failure_attributions,
+        diagnostic_summary=diagnostic_summary,
         limitations=[
             str(item) for item in payload.get("limitations") or []
         ],

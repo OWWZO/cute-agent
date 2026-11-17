@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cute-agent.local/schemas/task-review-diagnostics.schema.json",
+  "title": "Cute Agent Task Review Diagnostics",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "failureAttributions",
+    "diagnosticSummary"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "failureAttributions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/failureAttribution"}
+    },
+    "diagnosticSummary": {"$ref": "#/$defs/diagnosticSummary"}
+  },
+  "$defs": {
+    "failureLayer": {
+      "type": "string",
+      "enum": [
+        "MODEL_DECISION",
+        "MODEL_ARGUMENT",
+        "HARNESS_CONTRACT",
+        "HARNESS_RUNTIME",
+        "ENVIRONMENT",
+        "USER_ACTION",
+        "TRACE_GAP",
+        "UNKNOWN"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["kind", "id", "path", "quote"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "final_text",
+            "conversation",
+            "tool_call",
+            "workspace_file",
+            "deterministic_score",
+            "failure_attribution",
+            "tool_contract",
+            "artifact"
+          ]
+        },
+        "id": {"type": ["string", "null"]},
+        "path": {"type": ["string", "null"]},
+        "quote": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "failureAttribution": {
+      "type": "object",
+      "required": [
+        "attributionId",
+        "requestId",
+        "runId",
+        "toolCallId",
+        "step",
+        "toolName",
+        "toolStatus",
+        "failureKind",
+        "primaryLayer",
+        "contributingLayers",
+        "reason",
+        "recovered",
+        "recoverySummary",
+        "confidence",
+        "source",
+        "ruleIds",
+        "evidenceRefs",
+        "evidence"
+      ],
+      "properties": {
+        "attributionId": {"type": "string", "minLength": 1},
+        "requestId": {"type": "string", "minLength": 1},
+        "runId": {"type": "string", "minLength": 1},
+        "toolCallId": {"type": "string", "minLength": 1},
+        "step": {"type": ["integer", "null"]},
+        "toolName": {"type": "string", "minLength": 1},
+        "toolStatus": {"type": "string", "minLength": 1},
+        "failureKind": {
+          "type": "string",
+          "enum": [
+            "ARG_JSON_INVALID",
+            "ARG_REQUIRED_MISSING",
+            "ARG_TYPE_MISMATCH",
+            "ARG_SELECTOR_NOT_FOUND",
+            "ARG_PATH_NOT_FOUND",
+            "ARG_URL_INVALID",
+            "ARG_REPEATED_AFTER_FAILURE",
+            "FAIL_USER_STOP",
+            "FAIL_TIMEOUT",
+            "FAIL_NETWORK",
+            "FAIL_AUTH",
+            "FAIL_EXECUTOR_EXCEPTION",
+            "FAIL_RESULT_MISSING",
+            "FAIL_SCHEMA_CONTRACT",
+            "UNKNOWN_FAILURE"
+          ]
+        },
+        "primaryLayer": {"$ref": "#/$defs/failureLayer"},
+        "contributingLayers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/failureLayer"}
+        },
+        "reason": {"type": "string", "minLength": 1},
+        "recovered": {"type": "boolean"},
+        "recoverySummary": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "source": {
+          "type": "string",
+          "enum": ["deterministic", "judge", "deterministic+judge"]
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidence"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "diagnosticSummary": {
+      "type": "object",
+      "required": [
+        "totalFailures",
+        "attributedFailures",
+        "unattributedFailures",
+        "layerCounts",
+        "recoveredCount",
+        "unrecoveredCount",
+        "parameterIssueCount",
+        "diagnosisMismatchCount"
+      ],
+      "properties": {
+        "totalFailures": {"type": "integer", "minimum": 0},
+        "attributedFailures": {"type": "integer", "minimum": 0},
+        "unattributedFailures": {"type": "integer", "minimum": 0},
+        "layerCounts": {
+          "type": "object",
+          "required": [
+            "MODEL_DECISION",
+            "MODEL_ARGUMENT",
+            "HARNESS_CONTRACT",
+            "HARNESS_RUNTIME",
+            "ENVIRONMENT",
+            "USER_ACTION",
+            "TRACE_GAP",
+            "UNKNOWN"
+          ],
+          "properties": {
+            "MODEL_DECISION": {"type": "integer", "minimum": 0},
+            "MODEL_ARGUMENT": {"type": "integer", "minimum": 0},
+            "HARNESS_CONTRACT": {"type": "integer", "minimum": 0},
+            "HARNESS_RUNTIME": {"type": "integer", "minimum": 0},
+            "ENVIRONMENT": {"type": "integer", "minimum": 0},
+            "USER_ACTION": {"type": "integer", "minimum": 0},
+            "TRACE_GAP": {"type": "integer", "minimum": 0},
+            "UNKNOWN": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "recoveredCount": {"type": "integer", "minimum": 0},
+        "unrecoveredCount": {"type": "integer", "minimum": 0},
+        "parameterIssueCount": {"type": "integer", "minimum": 0},
+        "diagnosisMismatchCount": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
