@@ -11,7 +11,7 @@ import org.wwz.ai.application.agent.query.GptQueryApplicationService;
 import org.wwz.ai.application.agent.run.AgentRunLaunchGate;
 import org.wwz.ai.application.agent.run.SessionInboxSupport;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
-import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
+import org.wwz.ai.application.agent.stream.AgentTimelineFrameEnricher;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
 import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
@@ -67,7 +67,7 @@ public class DesktopControlResumeApplicationService {
     private BackgroundTaskWakePort backgroundTaskWakePort;
 
     @Resource
-    private AgentTimelineEventProjector agentTimelineEventProjector;
+    private AgentTimelineFrameEnricher agentTimelineFrameEnricher;
 
     public AgentQuerySubmitResult resume(String resumeRequestId) {
         if (StringUtils.isBlank(resumeRequestId)) {
@@ -124,7 +124,7 @@ public class DesktopControlResumeApplicationService {
         try {
             projectingStream =
                     new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus,
-                            sessionEventClock, agentTimelineEventProjector)
+                            sessionEventClock, agentTimelineFrameEnricher)
                             .bindRegistry(sessionProjectionRegistry);
             AgentStreamProjection deferredStream = projectingStream;
             agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {

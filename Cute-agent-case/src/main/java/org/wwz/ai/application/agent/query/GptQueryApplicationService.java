@@ -10,7 +10,7 @@ import org.wwz.ai.application.agent.dispatch.IAgentDispatchService;
 import org.wwz.ai.application.agent.run.AgentRunLaunchGate;
 import org.wwz.ai.application.agent.run.SessionInboxSupport;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
-import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
+import org.wwz.ai.application.agent.stream.AgentTimelineFrameEnricher;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
 import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
@@ -31,11 +31,14 @@ import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionNotificationHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.StreamSettlePolicy;
 import org.wwz.ai.types.agent.config.AgentExecutorNames;
+import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
 import org.wwz.ai.types.agent.exception.AgentExecutorBusyException;
 import org.wwz.ai.types.agent.user.UserRequestContext;
 
 import javax.annotation.Resource;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
@@ -91,7 +94,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
     private SessionProjectionRegistry sessionProjectionRegistry;
 
     @Resource
-    private AgentTimelineEventProjector agentTimelineEventProjector;
+    private AgentTimelineFrameEnricher agentTimelineFrameEnricher;
 
     @Resource
     private IExecutionLedgerReadRepository executionLedgerReadRepository;
@@ -107,6 +110,15 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         AgentExecutionCommand agentRequest = agentExecutionCommandMapper.toExecutionCommand(
                 params, UserRequestContext.currentUserId());
         validateRequestedModel(agentRequest);
+        Optional<ActiveAgentRunRegistry.ActiveRun> existing = activeAgentRunRegistry.find(
+                agentRequest.getRequestId());
+        if (existing.isPresent()
+                && !Objects.equals(existing.get().getSessionId(), agentRequest.getSessionId())) {
+            throw new AgentConcurrentRunException(
+                    "requestId 已在其他会话使用",
+                    existing.get().getRequestId(),
+                    existing.get().getSessionId());
+        }
         log.info("{} start handle Agent request: sessionId={}, agentType={}, model={}",
                 agentRequest.getRequestId(),
                 agentRequest.getSessionId(),
@@ -120,6 +132,9 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                 agentRequest.getSessionId(),
                 agentRequest.getQuery()
         );
+        if (existing.isPresent()) {
+            return acceptedResult(agentRequest);
+        }
         // 渠道会话：owner 在 Web 代聊时，run 仍以会话原身份执行，避免长期记忆串到 owner 名下。
         String runUserId = conversationSessionAuthorizationService.resolveRunUserId(userId, session);
         agentRequest.setUserId(runUserId);
@@ -144,24 +159,24 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
             throw new IllegalStateException("当前会话有待批准的计划，请先批准/拒绝或取消后再发送新消息");
         }
 
-        activeAgentRunRegistry.begin(
+        ActiveAgentRunRegistry.ActiveRun activeRun = activeAgentRunRegistry.begin(
                 agentRequest.getRequestId(),
                 agentRequest.getSessionId(),
                 runUserId);
+        if (!activeRun.tryClaimDispatch()) {
+            return acceptedResult(agentRequest);
+        }
         SessionInboxSupport.releaseHeldUserMessages(sessionInboxPort, agentRequest.getSessionId());
 
         scheduleDispatch(agentRequest, runUserId);
-        return AgentQuerySubmitResult.builder()
-                .accepted(true)
-                .sessionId(agentRequest.getSessionId())
-                .requestId(agentRequest.getRequestId())
-                .build();
+        return acceptedResult(agentRequest);
     }
 
     @Override
     public AgentQuerySubmitResult submitSessionQuery(String sessionId,
                                                      String query,
-                                                     SessionPreferences preferences) {
+                                                     SessionPreferences preferences,
+                                                     String requestId) {
         if (StringUtils.isBlank(sessionId) || StringUtils.isBlank(query)) {
             throw new IllegalArgumentException("sessionId 和 query 不能为空");
         }
@@ -169,12 +184,28 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         if (StringUtils.isBlank(userId)) {
             throw new IllegalArgumentException("userId不能为空");
         }
+        String normalizedRequestId = StringUtils.defaultIfBlank(requestId, newRequestId());
+        Optional<ActiveAgentRunRegistry.ActiveRun> existing =
+                activeAgentRunRegistry.find(normalizedRequestId);
+        if (existing.isPresent() && !StringUtils.equals(sessionId, existing.get().getSessionId())) {
+            throw new AgentConcurrentRunException(
+                    "requestId 已在其他会话使用",
+                    existing.get().getRequestId(),
+                    existing.get().getSessionId());
+        }
         DialogueSession session = executionLedgerReadRepository.querySessionEntity(sessionId);
         if (session == null) {
             throw new SessionOwnershipDeniedException("当前会话不存在");
         }
         DialogueSession authorizedSession =
                 conversationSessionAuthorizationService.ensureInteractiveSessionAccessible(userId, sessionId);
+        if (existing.isPresent()) {
+            return AgentQuerySubmitResult.builder()
+                    .accepted(true)
+                    .sessionId(sessionId)
+                    .requestId(normalizedRequestId)
+                    .build();
+        }
         // 渠道会话：owner 在 Web 代聊时，run 仍以会话原身份执行，避免长期记忆串到 owner 名下。
         String runUserId = conversationSessionAuthorizationService.resolveRunUserId(userId, authorizedSession);
 
@@ -190,7 +221,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         boolean deepThink = deepThinkFlag != null && deepThinkFlag != 0;
 
         AgentExecutionCommand agentRequest = AgentExecutionCommand.builder()
-                .requestId(newRequestId())
+                .requestId(normalizedRequestId)
                 .sessionId(sessionId)
                 .userId(runUserId)
                 .query(query)
@@ -211,12 +242,24 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                     chosen.deepThink());
         }
 
-        activeAgentRunRegistry.begin(agentRequest.getRequestId(), sessionId, runUserId);
+        ActiveAgentRunRegistry.ActiveRun activeRun =
+                activeAgentRunRegistry.begin(agentRequest.getRequestId(), sessionId, runUserId);
+        if (!activeRun.tryClaimDispatch()) {
+            return AgentQuerySubmitResult.builder()
+                    .accepted(true)
+                    .sessionId(sessionId)
+                    .requestId(agentRequest.getRequestId())
+                    .build();
+        }
         SessionInboxSupport.releaseHeldUserMessages(sessionInboxPort, sessionId);
         scheduleDispatch(agentRequest, runUserId);
+        return acceptedResult(agentRequest);
+    }
+
+    private static AgentQuerySubmitResult acceptedResult(AgentExecutionCommand agentRequest) {
         return AgentQuerySubmitResult.builder()
                 .accepted(true)
-                .sessionId(sessionId)
+                .sessionId(agentRequest.getSessionId())
                 .requestId(agentRequest.getRequestId())
                 .build();
     }
@@ -230,7 +273,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         try {
             projectingStream =
                     new AgentStreamProjection(null, agentRequest, handlerMap, agentSessionEventBus,
-                            sessionEventClock, agentTimelineEventProjector)
+                            sessionEventClock, agentTimelineFrameEnricher)
                             .bindRegistry(sessionProjectionRegistry);
             AgentStreamProjection deferredStream = projectingStream;
             agentRunLaunchGate.defer(agentRequest.getRequestId(), agentRequest.getSessionId(), () -> {

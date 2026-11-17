@@ -28,5 +28,18 @@ public interface IGptQueryApplicationService {
      *
      * @param preferences 本轮用户显式选择；{@code null} 等价于全部沿用库里已存值
      */
-    AgentQuerySubmitResult submitSessionQuery(String sessionId, String query, SessionPreferences preferences);
+    default AgentQuerySubmitResult submitSessionQuery(String sessionId,
+                                                      String query,
+                                                      SessionPreferences preferences) {
+        return submitSessionQuery(sessionId, query, preferences, null);
+    }
+
+    /**
+     * 带客户端 requestId 的子会话提交。{@code requestId} 为空时保持原生成逻辑，
+     * 非空时用于同会话并发转换的幂等键。
+     */
+    AgentQuerySubmitResult submitSessionQuery(String sessionId,
+                                              String query,
+                                              SessionPreferences preferences,
+                                              String requestId);
 }

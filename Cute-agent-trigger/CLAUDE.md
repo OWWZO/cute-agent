@@ -24,7 +24,7 @@
 #### Agent 核心接口
 | 接口 | 方法 | 说明 |
 |-----|------|------|
-| `POST /web/api/v1/gpt/queryAgentStreamIncr` | `AiAgentController.queryAgentStreamIncr` | 主对话 SSE 流式查询 |
+| `POST /web/api/v1/gpt/queryAgentStreamIncr` | `AiAgentController.queryAgentStreamIncr` | 主对话提交；经 `AgentIngressApplicationService` 统一入站 |
 | `POST /armory_agent` | `AiAgentController.armoryAgent` | 装配 Agent |
 | `POST /armory_api` | `AiAgentController.armoryApi` | 装配 API |
 | `GET /query_available_agents` | `AiAgentController.queryAvailableAgents` | 查询可用 Agent |
@@ -46,6 +46,8 @@
 |-----|------|------|
 | `POST /api/agent/message/send-stream` | `AgentMessageController.sendStream` | 发送消息（SSE 流式） |
 | `POST /api/agent/message/stop` | `AgentMessageController.stop` | 强制停止 |
+| `POST /api/agent/session/{sessionId}/query` | `AgentSessionQueryController.query` | 已有会话/子会话新 run；新客户端带 `requestId` 与 ingress 协议头 |
+| `POST /api/agent/run/inject` | `AgentRunController.inject` | 用户中途指导；经统一入站路由写入 Session Inbox |
 
 #### Admin 管理接口
 | 接口 | 说明 |
@@ -144,6 +146,7 @@ A: Admin 接口是面向运营后台的 HTTP 接口，属于触发器职责。
 | 文件路径 | 说明 |
 |---------|------|
 | `src/main/java/org/wwz/ai/trigger/http/AiAgentController.java` | 核心 Agent 接口 |
+| `src/main/java/org/wwz/ai/trigger/http/agent/mapper/AgentIngressHttpMapper.java` | 入站协议头、结果与旧客户端响应兼容映射 |
 | `src/main/java/org/wwz/ai/trigger/http/dataagent/DataAgentController.java` | DataAgent HTTP 入口 |
 | `src/main/java/org/wwz/ai/trigger/http/agent/AgentConversationController.java` | 会话管理接口 |
 | `src/main/java/org/wwz/ai/trigger/http/agent/AgentMessageController.java` | 消息接口 |

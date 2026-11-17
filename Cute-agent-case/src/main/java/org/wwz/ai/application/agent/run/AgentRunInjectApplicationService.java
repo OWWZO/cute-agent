@@ -99,6 +99,7 @@ public class AgentRunInjectApplicationService {
         }
         if (run.getCancellation() != null && run.getCancellation().isCancelled()) {
             result.put("accepted", false);
+            result.put("mode", "held");
             result.put("message", "run 已在停止中，无法注入");
             return result;
         }
@@ -117,6 +118,7 @@ public class AgentRunInjectApplicationService {
 
         log.info("inject accepted requestId={} sessionId={} chars={}", requestId, run.getSessionId(), body.length());
         result.put("accepted", true);
+        result.put("mode", "injected");
         result.put("message", "已接受指导，将在下一步生效");
         result.put("queued", true);
         result.put("clientMessageId", idempotencyKey);
@@ -145,6 +147,7 @@ public class AgentRunInjectApplicationService {
         }
         if (SessionInboxItem.STATE_DELIVERED.equals(queued.getState())) {
             result.put("accepted", true);
+            result.put("mode", "injected");
             result.put("queued", false);
             result.put("message", "该消息已处理");
             return result;
@@ -154,6 +157,7 @@ public class AgentRunInjectApplicationService {
         if (autoWakePaused) {
             sessionInboxPort.holdPendingUserMessages(sessionId);
             result.put("accepted", true);
+            result.put("mode", "held");
             result.put("queued", true);
             result.put("held", true);
             result.put("wakeScheduled", false);
@@ -171,6 +175,7 @@ public class AgentRunInjectApplicationService {
                 activeAgentRunRegistry.findBySessionId(sessionId);
         if (current.isEmpty()) {
             result.put("accepted", true);
+            result.put("mode", "queued");
             result.put("queued", true);
             result.put("message", wakeScheduled
                     ? "已排队，将自动继续处理" : "消息已排队");
@@ -182,6 +187,7 @@ public class AgentRunInjectApplicationService {
         if (run.getCancellation() != null && run.getCancellation().isCancelled()) {
             sessionInboxPort.holdPendingUserMessages(sessionId);
             result.put("accepted", true);
+            result.put("mode", "held");
             result.put("queued", true);
             result.put("held", true);
             result.put("message", "run 已停止，消息已保留，需你确认后继续");
@@ -192,6 +198,7 @@ public class AgentRunInjectApplicationService {
                 notifyInjected(ctx, body, idempotencyKey);
             }
             result.put("accepted", true);
+            result.put("mode", "injected");
             result.put("queued", true);
             result.put("message", "已接受指导，将在下一步生效");
             return result;
@@ -199,6 +206,7 @@ public class AgentRunInjectApplicationService {
 
         // turnClosed 后 ActiveRun 可能尚未 end：先入队，再由 end 后的 onRunSettled 复查唤醒。
         result.put("accepted", true);
+        result.put("mode", "queued");
         result.put("queued", true);
         result.put("message", wakeScheduled
                 ? "当前回复已收尾，消息已排队并继续处理" : "当前回复已收尾，消息已排队");

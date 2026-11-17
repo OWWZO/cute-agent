@@ -1,5 +1,6 @@
 package org.wwz.ai.trigger.http.agent.vo;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,6 +35,8 @@ public class AgentStreamResponseVO {
     private String delta;
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private Map<String, Object> payload;
+    @JsonProperty("transient")
+    private boolean transientItem;
 
     private String status;
     private String response;

@@ -9,9 +9,14 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.wwz.ai.api.response.Response;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
-import org.wwz.ai.application.agent.run.AgentRunInjectApplicationService;
+import org.wwz.ai.application.agent.ingress.AgentIngressCommand;
+import org.wwz.ai.application.agent.ingress.AgentIngressMode;
+import org.wwz.ai.application.agent.ingress.AgentIngressResult;
+import org.wwz.ai.application.agent.ingress.AgentIngressStatus;
+import org.wwz.ai.application.agent.ingress.IAgentIngressApplicationService;
 import org.wwz.ai.application.agent.run.AgentRunStopApplicationService;
 import org.wwz.ai.trigger.http.agent.AgentRunController;
+import org.wwz.ai.trigger.http.agent.mapper.AgentIngressHttpMapper;
 import org.wwz.ai.trigger.http.agent.vo.AgentRunInjectReqVO;
 import org.wwz.ai.trigger.http.agent.vo.AgentRunStopReqVO;
 import org.wwz.ai.types.agent.user.UserRequestContext;
@@ -26,7 +31,7 @@ public class AgentRunControllerTest {
 
     private AgentRunController controller;
     private AgentRunStopApplicationService stopService;
-    private AgentRunInjectApplicationService injectService;
+    private IAgentIngressApplicationService ingressService;
     private ConversationSessionAuthorizationService authorizationService;
 
     @Before
@@ -34,10 +39,11 @@ public class AgentRunControllerTest {
         UserRequestContext.bind("user-test");
         controller = new AgentRunController();
         stopService = Mockito.mock(AgentRunStopApplicationService.class);
-        injectService = Mockito.mock(AgentRunInjectApplicationService.class);
+        ingressService = Mockito.mock(IAgentIngressApplicationService.class);
         authorizationService = Mockito.mock(ConversationSessionAuthorizationService.class);
         ReflectionTestUtils.setField(controller, "agentRunStopApplicationService", stopService);
-        ReflectionTestUtils.setField(controller, "agentRunInjectApplicationService", injectService);
+        ReflectionTestUtils.setField(controller, "agentIngressApplicationService", ingressService);
+        ReflectionTestUtils.setField(controller, "agentIngressHttpMapper", new AgentIngressHttpMapper());
         ReflectionTestUtils.setField(controller, "conversationSessionAuthorizationService", authorizationService);
     }
 
@@ -54,7 +60,7 @@ public class AgentRunControllerTest {
         Response<Map<String, Object>> response = controller.stop(req);
 
         Assert.assertEquals(ResponseCode.ILLEGAL_PARAMETER.getCode(), response.getCode());
-        Mockito.verifyNoInteractions(stopService, authorizationService);
+        Mockito.verifyNoInteractions(stopService);
     }
 
     @Test
@@ -78,13 +84,38 @@ public class AgentRunControllerTest {
         req.setRequestId("req-1");
         req.setSessionId("session-1");
         req.setText("补充一点");
-        Mockito.doThrow(new SessionOwnershipDeniedException("当前用户无权访问该会话"))
-                .when(authorizationService).ensureExistingSessionAccessible("user-test", "session-1");
+        Mockito.when(ingressService.submit(Mockito.any(AgentIngressCommand.class)))
+                .thenThrow(new SessionOwnershipDeniedException("当前用户无权访问该会话"));
 
-        Response<Map<String, Object>> response = controller.inject(req);
+        Response<Map<String, Object>> response = controller.inject(req, null);
 
         Assert.assertEquals(ResponseCode.FORBIDDEN.getCode(), response.getCode());
-        Mockito.verifyNoInteractions(injectService);
+    }
+
+    @Test
+    public void shouldInjectAccessibleSessionThroughIngress() {
+        AgentRunInjectReqVO req = new AgentRunInjectReqVO();
+        req.setRequestId("req-1");
+        req.setSessionId("session-1");
+        req.setText("补充一点");
+        req.setClientMessageId("client-1");
+        Mockito.when(ingressService.submit(Mockito.any(AgentIngressCommand.class)))
+                .thenReturn(AgentIngressResult.builder()
+                        .status(AgentIngressStatus.INJECTED)
+                        .mode(AgentIngressMode.INJECTED)
+                        .sessionId("session-1")
+                        .requestId("req-1")
+                        .clientMessageId("client-1")
+                        .accepted(true)
+                        .queued(true)
+                        .message("已接受指导")
+                        .build());
+
+        Response<Map<String, Object>> response = controller.inject(req, "1");
+
+        Assert.assertEquals(ResponseCode.SUCCESS.getCode(), response.getCode());
+        Assert.assertEquals("injected", response.getData().get("mode"));
+        Assert.assertEquals(Boolean.TRUE, response.getData().get("accepted"));
     }
 
     @Test

@@ -6,14 +6,23 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.wwz.ai.api.response.Response;
 import org.wwz.ai.application.agent.authorization.SessionNotInteractiveException;
 import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
-import org.wwz.ai.application.agent.query.AgentQuerySubmitResult;
+import org.wwz.ai.application.agent.ingress.AgentIngressCommand;
+import org.wwz.ai.application.agent.ingress.AgentIngressMode;
+import org.wwz.ai.application.agent.ingress.AgentIngressOrigin;
+import org.wwz.ai.application.agent.ingress.AgentIngressProtocol;
+import org.wwz.ai.application.agent.ingress.AgentIngressResult;
+import org.wwz.ai.application.agent.ingress.AgentIngressSource;
+import org.wwz.ai.application.agent.ingress.AgentIngressStatus;
+import org.wwz.ai.application.agent.ingress.AgentIngressType;
+import org.wwz.ai.application.agent.ingress.IAgentIngressApplicationService;
 import org.wwz.ai.application.agent.query.GptQueryCommand;
-import org.wwz.ai.application.agent.query.IGptQueryApplicationService;
+import org.wwz.ai.trigger.http.agent.mapper.AgentIngressHttpMapper;
 import org.wwz.ai.trigger.http.agent.mapper.GptQueryRequestMapper;
 import org.wwz.ai.trigger.http.agent.vo.GptQueryRequestVO;
 import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
@@ -33,10 +42,13 @@ import java.util.Objects;
 public class AiAgentController {
 
     @Resource
-    private IGptQueryApplicationService gptQueryApplicationService;
+    private IAgentIngressApplicationService agentIngressApplicationService;
 
     @Resource
     private GptQueryRequestMapper gptQueryRequestMapper;
+
+    @Resource
+    private AgentIngressHttpMapper agentIngressHttpMapper;
 
     @RequestMapping(value = "/web/health", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<String> health() {
@@ -48,15 +60,29 @@ public class AiAgentController {
      * 已有进行中的任务返回 409，不创建 SSE。
      */
     @RequestMapping(value = "/web/api/v1/gpt/queryAgentStreamIncr", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Response<Map<String, Object>>> queryAgentStreamIncr(@RequestBody GptQueryRequestVO params) {
+    public ResponseEntity<Response<Map<String, Object>>> queryAgentStreamIncr(
+            @RequestBody GptQueryRequestVO params,
+            @RequestHeader(value = AgentIngressProtocol.HEADER, required = false) String ingressVersion) {
         String requestId = Objects.toString(params == null ? null : params.getRequestId(), "legacy-gpt-query");
         try {
+            Integer protocolVersion = agentIngressHttpMapper.protocolVersion(ingressVersion);
             GptQueryCommand command = gptQueryRequestMapper.toCommand(params);
-            AgentQuerySubmitResult submitted = gptQueryApplicationService.submitAgentQuery(command);
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("accepted", submitted.isAccepted());
-            data.put("sessionId", submitted.getSessionId());
-            data.put("requestId", submitted.getRequestId());
+            AgentIngressResult result = agentIngressApplicationService.submit(AgentIngressCommand.builder()
+                    .source(AgentIngressSource.WEB)
+                    .type(AgentIngressType.NEW_TURN)
+                    .commandOrigin(AgentIngressOrigin.MAIN_CHAT)
+                    .protocolVersion(protocolVersion)
+                    .sessionId(params == null ? null : params.getSessionId())
+                    .requestId(params == null ? null : params.getRequestId())
+                    .query(params == null ? null : params.getQuery())
+                    .gptQueryCommand(command)
+                    .build());
+            if (result.getStatus() == AgentIngressStatus.INJECT_FAILED) {
+                return injectFailedResponse(result);
+            }
+            Map<String, Object> data = agentIngressHttpMapper.data(
+                    result,
+                    agentIngressHttpMapper.isProtocolV1(protocolVersion));
             return ResponseEntity.ok(Response.<Map<String, Object>>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -98,5 +124,19 @@ public class AiAgentController {
                     .info(e.getMessage())
                     .build());
         }
+    }
+
+    private static ResponseEntity<Response<Map<String, Object>>> injectFailedResponse(AgentIngressResult result) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("accepted", false);
+        data.put("mode", AgentIngressMode.INJECT_FAILED.value());
+        data.put("activeRequestId", result.getActiveRequestId());
+        data.put("retryable", true);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Response.<Map<String, Object>>builder()
+                        .code(ResponseCode.UN_ERROR.getCode())
+                        .info(result.getMessage())
+                        .data(data)
+                        .build());
     }
 }

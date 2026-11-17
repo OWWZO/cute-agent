@@ -18,6 +18,9 @@ public class AgentSessionQueryReqVO {
 
     private String query;
 
+    /** 新客户端必填，用于重复提交幂等和同会话并发转指导。 */
+    private String requestId;
+
     /** 本轮模型 modelId；空=沿用会话已存模型。 */
     private String model;
 

@@ -4,7 +4,7 @@
 
 ## 模块职责
 
-应用编排层（Application Layer）。`019-agent-ddd-convergence` 起，本模块作为 Trigger 进入主链路的**唯一稳定 seam**：负责按 agent 类型 dispatch 执行策略、装配（armory）、查询（gpt query）、知识库（rag）、数据问答（dataquery）、角色库（role）、任务调度（task）、匿名访客与会话归属（visitor）等跨领域应用编排，不承载底层协议细节，也不再回流到已被 `020-prune-agent-bridges` 删除的 legacy cute bridge。
+应用编排层（Application Layer）。`019-agent-ddd-convergence` 起，本模块作为 Trigger 进入主链路的**唯一稳定 seam**：负责统一入站路由（ingress）、按 agent 类型 dispatch 执行策略、装配（armory）、查询（gpt query）、知识库（rag）、数据问答（dataquery）、角色库（role）、任务调度（task）、匿名访客与会话归属（visitor）等跨领域应用编排，不承载底层协议细节，也不再回流到已被 `020-prune-agent-bridges` 删除的 legacy cute bridge。
 
 边界要点：
 
@@ -46,6 +46,7 @@
 ### Query / RAG / DataQuery / Role
 | 接口 / 实现 | 职责 |
 |------------|------|
+| `IAgentIngressApplicationService` / `AgentIngressApplicationService` | Web Agent 入站统一 seam：协议识别、`requestId` 幂等、新 run 与中途指导路由；不直接执行 Agent |
 | `IGptQueryApplicationService` / `GptQueryApplicationService` | GPT 流式查询的唯一 case seam，替代已删除的 `IGptProcessService` bridge |
 | `IRagApplicationService` / `RagApplicationService` | 知识库文件入库 seam，给 admin 入口用 |
 | `IDataAgentApplicationService` / `DataAgentApplicationService` | 数据问答 chat / NL2SQL / vector recall / es recall / preview，替代已删除的 `DataAgentService` + `Nl2SqlService` bridge |
@@ -152,6 +153,7 @@ A: 永远不会。`SseEmitter` 只允许在 `ai-agent-station-study-trigger` 中
 ```
 org.wwz.ai.application.agent
 ├── armory/        # Agent 装配
+├── ingress/       # Web 入站命令、路由、结果映射
 ├── channel/       # IM 渠道编排（inbound / outbound / binding）
 ├── dataquery/     # 数据问答（chat / NL2SQL / recall）
 ├── dispatch/      # 按 AgentType 分发执行策略
@@ -173,6 +175,7 @@ org.wwz.ai.application.agent
 | 文件路径 | 说明 |
 |---------|------|
 | `src/main/java/org/wwz/ai/application/agent/package-info.java` | 应用编排层包注释（dispatch / execute / armory / task seam 声明） |
+| `src/main/java/org/wwz/ai/application/agent/ingress/AgentIngressApplicationService.java` | 统一入站路由：新 run 直接启动，同会话忙碌时转 Session Inbox 指导 |
 | `src/main/java/org/wwz/ai/application/agent/dispatch/AgentDispatchService.java` | Dispatch 实现（按 AgentType 选择策略） |
 | `src/main/java/org/wwz/ai/application/agent/execute/IExecuteStrategy.java` | 应用层执行策略契约 |
 | `src/main/java/org/wwz/ai/application/agent/execute/react/ReactAgentExecuteStrategy.java` | ReAct 策略 |

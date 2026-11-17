@@ -35,6 +35,10 @@ function isAuthEndpoint(url?: string) {
   return /\/api\/auth\//.test(url || '');
 }
 
+function isAgentSessionQueryEndpoint(url?: string) {
+  return /\/api\/agent\/session\/[^/]+\/query(?:[/?#]|$)/.test(url || '');
+}
+
 function currentReturnUrl() {
   if (typeof window === 'undefined') {
     return ROUTES.HOME;
@@ -187,6 +191,13 @@ request.interceptors.response.use(
     if (error.response) {
       const { status, data: resData } = error.response;
       const config = error.config as AuthRetryConfig | undefined;
+      // 子会话入站由输入框自行处理 409 兜底和 503 一次重试，避免重复提示。
+      if (
+        isAgentSessionQueryEndpoint(config?.url) &&
+        (status === 409 || status === 503)
+      ) {
+        return Promise.reject(error);
+      }
 
       switch (status) {
         case 401:

@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -32,6 +33,7 @@ public class ActiveAgentRunRegistry {
         private final String sessionId;
         private final String userId;
         private final RunCancellation cancellation;
+        private final AtomicBoolean dispatchClaimed = new AtomicBoolean(false);
         /** 控制面 inject 队列：与 AgentContext 共享，不 begin 第二次 run */
         private final ConcurrentLinkedQueue<PendingInjectMessage> pendingInjects = new ConcurrentLinkedQueue<>();
         private volatile AgentContext agentContext;
@@ -80,6 +82,13 @@ public class ActiveAgentRunRegistry {
             this.stream.set(stream);
         }
 
+        /**
+         * 同一 requestId 的重试只能有一个请求真正注册派发。
+         */
+        public boolean tryClaimDispatch() {
+            return dispatchClaimed.compareAndSet(false, true);
+        }
+
         private boolean detachStream(AgentMessageStream expected) {
             return stream.compareAndSet(expected, null);
         }
@@ -116,6 +125,10 @@ public class ActiveAgentRunRegistry {
         String rid = requestId.trim();
         ActiveRun existingRun = byRequestId.get(rid);
         if (existingRun != null) {
+            if (StringUtils.isNotBlank(sessionId)
+                    && !StringUtils.equals(existingRun.getSessionId(), sessionId.trim())) {
+                throw concurrentRun(sessionId, existingRun.getRequestId(), rid);
+            }
             return existingRun;
         }
         String sid = StringUtils.trimToNull(sessionId);

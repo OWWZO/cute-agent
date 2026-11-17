@@ -69,13 +69,32 @@ public class ConversationSessionBootstrapApplicationService {
                                                        String sessionId,
                                                        Integer limit,
                                                        String after) {
+        return queryBootstrap(userId, sessionId, limit, after, true, true);
+    }
+
+    /**
+     * 可按用途裁剪的 bootstrap。
+     * <p>
+     * 会话切换首屏只需要历史摘要和 HITL；产物文件归右侧工作区，replay 归用户
+     * 展开过程时按轮加载。把两者从首屏路径移除后，三个读取链路不再互相等待。
+     */
+    public ConversationSessionBootstrap queryBootstrap(String userId,
+                                                       String sessionId,
+                                                       Integer limit,
+                                                       String after,
+                                                       boolean includeFiles,
+                                                       boolean includeReplays) {
         ConversationHistoryPage page = conversationHistoryReplayService.queryConversationHistoryPage(
                 userId, sessionId, limit, after);
-        List<ArtifactView> artifacts = executionLedgerQueryService.querySessionArtifacts(userId, sessionId);
-        InlineReplays inlineReplays = loadTailTurnReplays(userId, page);
+        List<ArtifactView> artifacts = includeFiles
+                ? executionLedgerQueryService.querySessionArtifacts(userId, sessionId)
+                : List.of();
+        InlineReplays inlineReplays = includeReplays
+                ? loadTailTurnReplays(userId, page)
+                : InlineReplays.skipped();
         return ConversationSessionBootstrap.builder()
                 .detail(page)
-                .files(artifacts == null ? List.of() : artifacts)
+                .files(artifacts)
                 .askUser(safeListPending("ask-user", sessionId, askUserQuestionApplicationService::listPending))
                 .desktopControl(safeListPending("desktop-control", sessionId,
                         desktopControlApplicationService::listPending))

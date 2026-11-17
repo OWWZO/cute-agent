@@ -95,7 +95,7 @@ public class SessionInboxInjectReliabilityTest {
         verify(inbox).offer(any());
         verify(wakePort).onInboxChanged("sess-idle");
         Assert.assertEquals(true, result.get("accepted"));
-        Assert.assertNull(result.get("mode"));
+        Assert.assertEquals("queued", result.get("mode"));
     }
 
     @Test
@@ -130,6 +130,7 @@ public class SessionInboxInjectReliabilityTest {
         verify(inbox).offer(any());
         verify(wakePort).onInboxChanged("sess-live");
         Assert.assertEquals(true, result.get("accepted"));
+        Assert.assertEquals("injected", result.get("mode"));
     }
 
     @Test
@@ -213,6 +214,7 @@ public class SessionInboxInjectReliabilityTest {
         Assert.assertEquals(true, result.get("accepted"));
         Assert.assertEquals(true, result.get("queued"));
         Assert.assertEquals(true, result.get("held"));
+        Assert.assertEquals("held", result.get("mode"));
         Assert.assertEquals(false, result.get("wakeScheduled"));
         Assert.assertEquals("消息已保留，需你确认后继续", result.get("message"));
         verify(inbox).holdPendingUserMessages("sess-paused");

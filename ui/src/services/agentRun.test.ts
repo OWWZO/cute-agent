@@ -27,9 +27,21 @@ vi.mock("@/services/authSessionExpired", () => ({
   emitAuthSessionExpired: vi.fn(),
 }));
 
+const { postMock } = vi.hoisted(() => ({
+  postMock: vi.fn(),
+}));
+
+vi.mock("./index", () => ({
+  default: {
+    post: postMock,
+  },
+}));
+
 import {
   AGENT_QUERY_SUBMIT_URL,
+  AGENT_INGRESS_VERSION_HEADER,
   AgentQuerySubmitError,
+  agentRunApi,
   buildAgentSessionStreamUrl,
   submitAcceptedCommand,
   submitAgentQuery,
@@ -40,6 +52,7 @@ describe("agentRun submit/observe", () => {
     vi.stubGlobal("SERVICE_BASE_URL", "http://localhost");
     getAccessTokenMock.mockReturnValue("access-token-1");
     refreshAccessTokenMock.mockReset();
+    postMock.mockReset();
   });
 
   it("session stream URL 只带 sessionId 和 lastEventSeq", () => {
@@ -91,6 +104,7 @@ describe("agentRun submit/observe", () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer access-token-1",
+          [AGENT_INGRESS_VERSION_HEADER]: "1",
         }),
       })
     );
@@ -166,5 +180,61 @@ describe("agentRun submit/observe", () => {
       status: 409,
       concurrent: true,
     } satisfies Partial<AgentQuerySubmitError>);
+  });
+
+  it("inject_failed 503 保留 activeRequestId 与 retryable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 503,
+        ok: false,
+        json: async () => ({
+          info: "消息队列暂不可用",
+          data: {
+            accepted: false,
+            mode: "inject_failed",
+            activeRequestId: "active-1",
+            retryable: true,
+          },
+        }),
+      })
+    );
+
+    await expect(submitAgentQuery({ requestId: "r1" })).rejects.toMatchObject({
+      name: "AgentQuerySubmitError",
+      status: 503,
+      activeRequestId: "active-1",
+      mode: "inject_failed",
+      retryable: true,
+    } satisfies Partial<AgentQuerySubmitError>);
+  });
+
+  it("中途指导 inject 也携带入口协议头", async () => {
+    postMock.mockResolvedValueOnce({
+      accepted: true,
+      mode: "injected",
+    });
+
+    await agentRunApi.inject({
+      sessionId: "sess-1",
+      requestId: "active-1",
+      text: "补充一点",
+      clientMessageId: "req-1",
+    });
+
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/agent/run/inject",
+      {
+        sessionId: "sess-1",
+        requestId: "active-1",
+        text: "补充一点",
+        clientMessageId: "req-1",
+      },
+      {
+        headers: {
+          [AGENT_INGRESS_VERSION_HEADER]: "1",
+        },
+      }
+    );
   });
 });

@@ -6,6 +6,8 @@ import lombok.Data;
 @Data
 @Builder
 public class ArtifactReferenceRespVO {
+    private String requestId;
+    private String artifactRole;
     private String artifactType;
     private String displayName;
     private String relativePath;

@@ -4,13 +4,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.wwz.ai.api.response.Response;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedException;
-import org.wwz.ai.application.agent.run.AgentRunInjectApplicationService;
+import org.wwz.ai.application.agent.ingress.AgentIngressCommand;
+import org.wwz.ai.application.agent.ingress.AgentIngressOrigin;
+import org.wwz.ai.application.agent.ingress.AgentIngressProtocol;
+import org.wwz.ai.application.agent.ingress.AgentIngressResult;
+import org.wwz.ai.application.agent.ingress.AgentIngressSource;
+import org.wwz.ai.application.agent.ingress.AgentIngressType;
+import org.wwz.ai.application.agent.ingress.IAgentIngressApplicationService;
 import org.wwz.ai.application.agent.run.AgentRunStopApplicationService;
+import org.wwz.ai.trigger.http.agent.mapper.AgentIngressHttpMapper;
 import org.wwz.ai.trigger.http.agent.vo.AgentRunInjectReqVO;
 import org.wwz.ai.trigger.http.agent.vo.AgentRunStopReqVO;
 import org.wwz.ai.types.agent.user.UserRequestContext;
@@ -31,10 +39,13 @@ public class AgentRunController {
     private AgentRunStopApplicationService agentRunStopApplicationService;
 
     @Resource
-    private AgentRunInjectApplicationService agentRunInjectApplicationService;
+    private ConversationSessionAuthorizationService conversationSessionAuthorizationService;
 
     @Resource
-    private ConversationSessionAuthorizationService conversationSessionAuthorizationService;
+    private IAgentIngressApplicationService agentIngressApplicationService;
+
+    @Resource
+    private AgentIngressHttpMapper agentIngressHttpMapper;
 
     @PostMapping("/stop")
     public Response<Map<String, Object>> stop(@RequestBody AgentRunStopReqVO req) {
@@ -77,7 +88,9 @@ public class AgentRunController {
     }
 
     @PostMapping("/inject")
-    public Response<Map<String, Object>> inject(@RequestBody AgentRunInjectReqVO req) {
+    public Response<Map<String, Object>> inject(
+            @RequestBody AgentRunInjectReqVO req,
+            @RequestHeader(value = AgentIngressProtocol.HEADER, required = false) String ingressVersion) {
         try {
             if (req == null || StringUtils.isBlank(req.getRequestId())) {
                 return Response.<Map<String, Object>>builder()
@@ -97,16 +110,20 @@ public class AgentRunController {
                         .info("sessionId 不能为空")
                         .build();
             }
-            // 放开 owner 续写后，必须阻止「拿到 requestId 就能往别人会话注入」。
-            conversationSessionAuthorizationService.ensureExistingSessionAccessible(
-                    UserRequestContext.requireUserId(),
-                    req.getSessionId()
-            );
-            Map<String, Object> data = agentRunInjectApplicationService.inject(
-                    req.getSessionId(),
-                    req.getRequestId(),
-                    req.getText(),
-                    req.getClientMessageId());
+            Integer protocolVersion = agentIngressHttpMapper.protocolVersion(ingressVersion);
+            AgentIngressResult result = agentIngressApplicationService.submit(AgentIngressCommand.builder()
+                    .source(AgentIngressSource.WEB)
+                    .type(AgentIngressType.USER_GUIDANCE)
+                    .commandOrigin(AgentIngressOrigin.RUN_INJECT)
+                    .protocolVersion(protocolVersion)
+                    .userId(UserRequestContext.requireUserId())
+                    .sessionId(req.getSessionId())
+                    .requestId(req.getRequestId())
+                    .clientMessageId(req.getClientMessageId())
+                    .idempotencyKey(req.getClientMessageId())
+                    .query(req.getText())
+                    .build());
+            Map<String, Object> data = agentIngressHttpMapper.injectData(result);
             boolean accepted = Boolean.TRUE.equals(data.get("accepted"));
             boolean newRun = "new_run".equals(data.get("mode"));
             return Response.<Map<String, Object>>builder()

@@ -4,6 +4,14 @@ import { resolveServiceBaseUrl } from "@/utils/origin";
 import { getDeviceId } from "@/services/agentConversation";
 import { clearAuthSession, getAccessToken } from "@/stores/auth";
 import { emitAuthSessionExpired } from "@/services/authSessionExpired";
+import {
+  AGENT_INGRESS_VERSION,
+  AGENT_INGRESS_VERSION_HEADER,
+  type AgentIngressMode,
+  type AgentIngressResponseFields,
+} from "@/services/agentIngressProtocol";
+
+export { AGENT_INGRESS_VERSION, AGENT_INGRESS_VERSION_HEADER } from "@/services/agentIngressProtocol";
 
 const customHost = resolveServiceBaseUrl(SERVICE_BASE_URL);
 const AGENT_RUN_API_PREFIX = "/api/agent/run";
@@ -34,7 +42,16 @@ export function buildAgentSessionStreamUrl(params: {
   return `${customHost}/api/agent/session/${encodeURIComponent(params.sessionId)}/stream?${search.toString()}`;
 }
 
-export type AgentQuerySubmitResult = {
+export function buildRunTimelineStreamUrl(params: {
+  requestId: string;
+  afterSeq?: number;
+}): string {
+  const search = new URLSearchParams();
+  search.set("afterSeq", String(params.afterSeq || 0));
+  return `${customHost}/api/agent/runs/${encodeURIComponent(params.requestId)}/timeline/stream?${search.toString()}`;
+}
+
+export type AgentQuerySubmitResult = AgentIngressResponseFields & {
   accepted: boolean;
   sessionId: string;
   requestId: string;
@@ -46,6 +63,8 @@ export class AgentQuerySubmitError extends Error {
   /** 409 时服务端正在执行的 run；用于把 Web 消息改投成指导。 */
   activeRequestId: string | null;
   activeSessionId: string | null;
+  mode: AgentIngressMode | null;
+  retryable: boolean;
 
   constructor(
     message: string,
@@ -54,6 +73,8 @@ export class AgentQuerySubmitError extends Error {
     details: {
       activeRequestId?: string | null;
       activeSessionId?: string | null;
+      mode?: AgentIngressMode | null;
+      retryable?: boolean;
     } = {}
   ) {
     super(message);
@@ -62,6 +83,8 @@ export class AgentQuerySubmitError extends Error {
     this.concurrent = concurrent;
     this.activeRequestId = details.activeRequestId ?? null;
     this.activeSessionId = details.activeSessionId ?? null;
+    this.mode = details.mode ?? null;
+    this.retryable = details.retryable === true;
   }
 }
 
@@ -77,6 +100,7 @@ export async function submitAcceptedCommand(
     "Content-Type": "application/json",
     Accept: "application/json",
     "X-Device-Id": getDeviceId(),
+    [AGENT_INGRESS_VERSION_HEADER]: AGENT_INGRESS_VERSION,
   };
   const accessToken = getAccessToken();
   if (accessToken) {
@@ -127,6 +151,18 @@ export async function submitAcceptedCommand(
       }
     );
   }
+  if (response.status === 503) {
+    throw new AgentQuerySubmitError(
+      payload?.info || "指导消息投递失败，请稍后重试",
+      503,
+      false,
+      {
+        activeRequestId: payload?.data?.activeRequestId,
+        mode: payload?.data?.mode,
+        retryable: payload?.data?.retryable,
+      }
+    );
+  }
   if (!response.ok) {
     throw new AgentQuerySubmitError(payload?.info || `请求失败，状态码: ${response.status}`, response.status);
   }
@@ -151,7 +187,13 @@ export const agentRunApi = {
     text: string;
     clientMessageId?: string;
   }) =>
-    api.post<Record<string, unknown>>(`${AGENT_RUN_API_PREFIX}/inject`, payload) as unknown as Promise<
-      Record<string, unknown>
-    >,
+    api.post<Record<string, unknown>>(
+      `${AGENT_RUN_API_PREFIX}/inject`,
+      payload,
+      {
+        headers: {
+          [AGENT_INGRESS_VERSION_HEADER]: AGENT_INGRESS_VERSION,
+        },
+      }
+    ) as unknown as Promise<Record<string, unknown>>,
 };
