@@ -52,6 +52,18 @@ public class HistoryReplayPrinterTest {
         Assert.assertEquals(1, result.size());
     }
 
+    @Test
+    public void taskSummaryDoesNotSuppressFallbackConclusion() {
+        AgentStreamResult frame = frame(Map.of(
+                "messageType", "task_summary",
+                "isFinal", true));
+
+        List<AgentStreamResult> result = printer.ensureReadableConclusion(run(), List.of(frame));
+
+        Assert.assertEquals(2, result.size());
+        Assert.assertEquals("主会话总结", result.get(1).getContent());
+    }
+
     private static DialogueRunView run() {
         return DialogueRunView.builder()
                 .requestId("req-1")

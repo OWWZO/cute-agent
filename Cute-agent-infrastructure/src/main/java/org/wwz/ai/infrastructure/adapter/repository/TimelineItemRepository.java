@@ -31,6 +31,15 @@ public class TimelineItemRepository implements ITimelineItemRepository {
     }
 
     @Override
+    public TimelineItem queryBySessionAndItemId(String sessionId, String itemId) {
+        if (sessionId == null || sessionId.isBlank()
+                || itemId == null || itemId.isBlank()) {
+            return null;
+        }
+        return timelineItemDao.queryBySessionAndItemId(sessionId, itemId);
+    }
+
+    @Override
     public List<TimelineItem> queryByRunIds(List<String> runIds) {
         if (runIds == null || runIds.isEmpty()) {
             return List.of();

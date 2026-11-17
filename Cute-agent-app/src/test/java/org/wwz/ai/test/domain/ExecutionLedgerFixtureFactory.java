@@ -38,6 +38,9 @@ import org.wwz.ai.domain.agent.ledger.replay.projector.impl.DefaultToolInvocatio
 import org.wwz.ai.domain.agent.ledger.replay.projector.impl.DeepSearchToolInvocationProjector;
 import org.wwz.ai.domain.agent.ledger.replay.projector.impl.ImageGenerationToolInvocationProjector;
 import org.wwz.ai.domain.agent.ledger.replay.projector.impl.MultiModalToolInvocationProjector;
+import org.wwz.ai.domain.agent.ledger.timeline.ITimelineItemRepository;
+import org.wwz.ai.domain.agent.ledger.timeline.LedgerTimelineProjectionWriter;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItem;
 import org.wwz.ai.domain.agent.ledger.tooloutput.ToolOutputReader;
 import org.wwz.ai.domain.agent.ledger.tooloutput.ToolOutputWriter;
 import org.wwz.ai.domain.agent.memory.WorkingMemoryCompactionEvent;
@@ -77,6 +80,8 @@ public final class ExecutionLedgerFixtureFactory {
         InMemoryLlmInvocationLedgerDao llmDao = new InMemoryLlmInvocationLedgerDao(store);
         InMemoryToolInvocationLedgerDao toolDao = new InMemoryToolInvocationLedgerDao(store);
         InMemoryArtifactLedgerDao artifactDao = new InMemoryArtifactLedgerDao(store);
+        InMemoryTimelineItemRepository timelineItemRepository =
+                new InMemoryTimelineItemRepository(store);
         InMemoryWorkingMemoryCompactionReadDao compactionReadDao =
                 new InMemoryWorkingMemoryCompactionReadDao(store);
         InMemoryLtmForkExecutionReadDao ltmForkReadDao =
@@ -114,14 +119,16 @@ public final class ExecutionLedgerFixtureFactory {
                 null
         );
         AgentExecutionRecorder recorder = new AgentExecutionRecorderImpl(
-                writeRepository, toolOutputWriter
+                writeRepository,
+                toolOutputWriter,
+                new LedgerTimelineProjectionWriter(timelineItemRepository, writeRepository)
         );
         return new LedgerTestContext(
                 store, recorder, queryService, replayService,
                 readRepository, writeRepository,
                 runDao, sessionDao, llmDao, toolDao, artifactDao,
                 compactionReadDao, ltmForkReadDao, conversationReadDao,
-                toolOutputWriter, toolOutputReader
+                toolOutputWriter, toolOutputReader, timelineItemRepository
         );
     }
 
@@ -236,6 +243,7 @@ public final class ExecutionLedgerFixtureFactory {
         final IWorkingMemoryConversationReadDao conversationReadDao;
         final ToolOutputWriter toolOutputWriter;
         final ToolOutputReader toolOutputReader;
+        final ITimelineItemRepository timelineItemRepository;
 
         private LedgerTestContext(InMemoryLedgerStore store,
                                   AgentExecutionRecorder recorder,
@@ -252,7 +260,8 @@ public final class ExecutionLedgerFixtureFactory {
                                   ILtmForkExecutionReadDao ltmForkReadDao,
                                   IWorkingMemoryConversationReadDao conversationReadDao,
                                   ToolOutputWriter toolOutputWriter,
-                                  ToolOutputReader toolOutputReader) {
+                                  ToolOutputReader toolOutputReader,
+                                  ITimelineItemRepository timelineItemRepository) {
             this.store = store;
             this.recorder = recorder;
             this.queryService = queryService;
@@ -269,6 +278,7 @@ public final class ExecutionLedgerFixtureFactory {
             this.conversationReadDao = conversationReadDao;
             this.toolOutputWriter = toolOutputWriter;
             this.toolOutputReader = toolOutputReader;
+            this.timelineItemRepository = timelineItemRepository;
         }
     }
 
@@ -281,6 +291,7 @@ public final class ExecutionLedgerFixtureFactory {
         long nextLlmId = 1L;
         long nextToolId = 1L;
         long nextArtifactId = 1L;
+        long nextTimelineItemId = 1L;
         Map<Long, DialogueSession> sessions = new LinkedHashMap<>();
         /** bindingId → owner_user_id，对应生产 SQL 里对 ai_agent_channel_binding 的子查询。 */
         Map<Long, String> bindingOwners = new LinkedHashMap<>();
@@ -288,6 +299,7 @@ public final class ExecutionLedgerFixtureFactory {
         Map<Long, LlmInvocation> llmInvocations = new LinkedHashMap<>();
         Map<Long, ToolInvocation> toolInvocations = new LinkedHashMap<>();
         Map<Long, ArtifactRecord> artifacts = new LinkedHashMap<>();
+        Map<String, TimelineItem> timelineItems = new LinkedHashMap<>();
         Map<Long, WorkingMemoryCompactionEvent> compactionEvents = new LinkedHashMap<>();
         Map<Long, LtmForkExecutionEvent> ltmForkEvents = new LinkedHashMap<>();
         List<WorkingMemoryConversationRow> conversationRows = new ArrayList<>();
@@ -307,6 +319,91 @@ public final class ExecutionLedgerFixtureFactory {
         boolean failConversationRead;
         int readToolOutputByInvocationIdCount;
         int readToolOutputByInvocationIdsCount;
+    }
+
+    static final class InMemoryTimelineItemRepository implements ITimelineItemRepository {
+        private final InMemoryLedgerStore store;
+
+        private InMemoryTimelineItemRepository(InMemoryLedgerStore store) {
+            this.store = store;
+        }
+
+        @Override
+        public int upsert(TimelineItem item) {
+            if (item == null || isBlank(item.getSessionId()) || isBlank(item.getItemId())) {
+                return 0;
+            }
+            String key = item.getSessionId() + ":" + item.getItemId();
+            TimelineItem existing = store.timelineItems.get(key);
+            if (existing == null) {
+                item.setId(store.nextTimelineItemId++);
+                item.setCreateTime(LocalDateTime.now());
+                item.setUpdateTime(item.getCreateTime());
+                item.setDeleted(0);
+                store.timelineItems.put(key, item);
+                return 1;
+            }
+            if (item.getParentItemId() != null) {
+                existing.setParentItemId(item.getParentItemId());
+            }
+            if (item.getOrderKey() != null
+                    && (existing.getOrderKey() == null || existing.getOrderKey() == 0)) {
+                existing.setOrderKey(item.getOrderKey());
+            }
+            if (item.getSubOrder() != null
+                    && (existing.getSubOrder() == null || existing.getSubOrder() == 0)) {
+                existing.setSubOrder(item.getSubOrder());
+            }
+            if (item.getStatus() != null) {
+                existing.setStatus(item.getStatus());
+            }
+            existing.setUpdatedSeq(Math.max(
+                    existing.getUpdatedSeq() == null ? 0L : existing.getUpdatedSeq(),
+                    item.getUpdatedSeq() == null ? 0L : item.getUpdatedSeq()));
+            existing.setUpdateTime(LocalDateTime.now());
+            existing.setDeleted(0);
+            return 1;
+        }
+
+        @Override
+        public int upsertBatch(List<TimelineItem> items) {
+            if (items == null || items.isEmpty()) {
+                return 0;
+            }
+            int affected = 0;
+            for (TimelineItem item : items) {
+                affected += upsert(item);
+            }
+            return affected;
+        }
+
+        @Override
+        public TimelineItem queryBySessionAndItemId(String sessionId, String itemId) {
+            if (isBlank(sessionId) || isBlank(itemId)) {
+                return null;
+            }
+            TimelineItem item = store.timelineItems.get(sessionId + ":" + itemId);
+            return item != null && (item.getDeleted() == null || item.getDeleted() == 0)
+                    ? item
+                    : null;
+        }
+
+        @Override
+        public List<TimelineItem> queryByRunIds(List<String> runIds) {
+            if (runIds == null || runIds.isEmpty()) {
+                return List.of();
+            }
+            return store.timelineItems.values().stream()
+                    .filter(item -> item.getDeleted() == null || item.getDeleted() == 0)
+                    .filter(item -> runIds.contains(item.getRunId()))
+                    .sorted(Comparator
+                            .comparingLong((TimelineItem item) ->
+                                    item.getOrderKey() == null ? 0L : item.getOrderKey())
+                            .thenComparingInt(item ->
+                                    item.getSubOrder() == null ? 0 : item.getSubOrder())
+                            .thenComparing(TimelineItem::getItemId))
+                    .toList();
+        }
     }
 
     static final class InMemoryToolOutputWriter implements ToolOutputWriter {
@@ -506,6 +603,12 @@ public final class ExecutionLedgerFixtureFactory {
         }
 
         @Override
+        public DialogueRun queryById(Long id) {
+            DialogueRun run = store.runs.get(id);
+            return run == null || run.getDeleted() != 0 ? null : cloneRun(run);
+        }
+
+        @Override
         public List<DialogueRun> queryOrphanedRunningRuns(LocalDateTime startedBefore, int limit) {
             return List.of();
         }
@@ -612,6 +715,7 @@ public final class ExecutionLedgerFixtureFactory {
 
     static final class InMemoryDialogueSessionLedgerDao implements IDialogueSessionLedgerDao {
         private final InMemoryLedgerStore store;
+        private long lastInsertId;
 
         private InMemoryDialogueSessionLedgerDao(InMemoryLedgerStore store) {
             this.store = store;
@@ -1022,6 +1126,27 @@ public final class ExecutionLedgerFixtureFactory {
             session.setUpdateTime(LocalDateTime.now());
             return 1;
         }
+
+        @Override
+        public int allocateTimelineSeq(String sessionId, int count) {
+            DialogueSession session = store.sessions.values().stream()
+                    .filter(item -> item.getDeleted() == 0 && item.getSessionId().equals(sessionId))
+                    .findFirst()
+                    .orElse(null);
+            if (session == null || count <= 0) {
+                return 0;
+            }
+            long current = session.getTimelineSeq() == null ? 0L : session.getTimelineSeq();
+            lastInsertId = current + count;
+            session.setTimelineSeq(lastInsertId);
+            session.setUpdateTime(LocalDateTime.now());
+            return 1;
+        }
+
+        @Override
+        public long queryLastInsertId() {
+            return lastInsertId;
+        }
     }
 
     static final class InMemoryLlmInvocationLedgerDao implements ILlmInvocationLedgerDao {
@@ -1076,6 +1201,14 @@ public final class ExecutionLedgerFixtureFactory {
             existing.setDurationMs(duration(existing.getStartedAt(), invocation.getFinishedAt()));
             existing.setUpdateTime(LocalDateTime.now());
             return 1;
+        }
+
+        @Override
+        public LlmInvocation queryById(Long id) {
+            LlmInvocation invocation = store.llmInvocations.get(id);
+            return invocation == null || invocation.getDeleted() != 0
+                    ? null
+                    : cloneLlm(invocation);
         }
 
         @Override
@@ -1182,6 +1315,25 @@ public final class ExecutionLedgerFixtureFactory {
             existing.setDurationMs(duration(existing.getStartedAt(), invocation.getFinishedAt()));
             existing.setUpdateTime(LocalDateTime.now());
             return 1;
+        }
+
+        @Override
+        public ToolInvocation queryById(Long id) {
+            ToolInvocation invocation = store.toolInvocations.get(id);
+            return invocation == null || invocation.getDeleted() != 0
+                    ? null
+                    : cloneTool(invocation);
+        }
+
+        @Override
+        public ToolInvocation queryByRunIdAndToolCallId(Long runId, String toolCallId) {
+            return store.toolInvocations.values().stream()
+                    .filter(item -> item.getDeleted() == 0
+                            && java.util.Objects.equals(item.getRunId(), runId)
+                            && java.util.Objects.equals(item.getToolCallId(), toolCallId))
+                    .findFirst()
+                    .map(ExecutionLedgerFixtureFactory::cloneTool)
+                    .orElse(null);
         }
 
         @Override

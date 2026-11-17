@@ -20,7 +20,6 @@ import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
 import org.wwz.ai.domain.agent.ledger.model.replay.ReplayFactBundle;
 import org.wwz.ai.domain.agent.ledger.timeline.ITimelineItemRepository;
 import org.wwz.ai.domain.agent.ledger.timeline.TimelineItem;
-import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemKind;
 import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemView;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
@@ -244,14 +243,18 @@ public class ConversationHistoryReplayService {
                 continue;
             }
             try {
-                views.add(TimelineItemProjection.projectEvent(
+                TimelineItemView view = TimelineItemProjection.projectEvent(
                         run.getRequestId(),
                         run.getSessionId(),
                         ++seq,
                         eventData,
                         frame.getStatus(),
                         frame.isComplete()
-                ));
+                );
+                // history 的 seq 是投影排序号，不是 transport 续流游标。
+                view.setEventSeq(0L);
+                detachParentOutsideRun(view, runToolCallIds);
+                views.add(view);
             } catch (RuntimeException e) {
                 // 目录/时间线是回放增强；单帧投影失败不能丢掉其他历史事实。
                 log.warn("history timeline projection failed, requestId={}, frameIndex={}",
@@ -261,11 +264,24 @@ public class ConversationHistoryReplayService {
         List<TimelineItem> directory = loadDirectory(run.getRequestId());
         List<TimelineItemView> merged = TimelineItemProjection.mergeDirectory(
                 views, directory == null ? List.of() : directory);
-        enrichArtifactPayloads(merged, artifacts);
-        if (directory != null && directory.isEmpty() && isTerminalRun(run)) {
-            backfillDirectory(run, merged);
-        }
+        TimelineFactAssembler.enrich(merged, run, artifacts);
         return merged;
+    }
+
+    /**
+     * 子会话里工具账本的 parent_tool_call_id 指向父会话的 Agent 卡。
+     * 父卡不在这个 run 的目录里，保留外键会让前端把整组子工具挂进不存在的父节点。
+     */
+    private void detachParentOutsideRun(TimelineItemView view, Set<String> runToolCallIds) {
+        if (view == null || StringUtils.isBlank(view.getParentItemId())) {
+            return;
+        }
+        if (StringUtils.startsWith(view.getParentItemId(), "tool:")) {
+            String parentToolCallId = StringUtils.substringAfter(view.getParentItemId(), "tool:");
+            if (!runToolCallIds.contains(parentToolCallId)) {
+                view.setParentItemId(null);
+            }
+        }
     }
 
     /**
@@ -342,160 +358,6 @@ public class ConversationHistoryReplayService {
             return timelineItemRepository.queryByRunIds(List.of(requestId));
         } catch (Exception e) {
             log.warn("timeline directory query failed, requestId={}", requestId, e);
-            return null;
-        }
-    }
-
-    private void enrichArtifactPayloads(List<TimelineItemView> views, List<ArtifactView> artifacts) {
-        if (CollectionUtils.isEmpty(views) || CollectionUtils.isEmpty(artifacts)) {
-            return;
-        }
-        Map<Long, ArtifactView> byId = new HashMap<>();
-        for (ArtifactView artifact : artifacts) {
-            if (artifact != null && artifact.getId() != null) {
-                byId.put(artifact.getId(), artifact);
-            }
-        }
-        for (TimelineItemView view : views) {
-            if (view == null || !TimelineItemKind.ARTIFACT.name().equals(view.getKind())
-                    || view.getPayload() == null) {
-                continue;
-            }
-            Object rawId = view.getPayload().get("artifactId");
-            Long artifactId = null;
-            if (rawId instanceof Number number) {
-                artifactId = number.longValue();
-            } else if (rawId != null) {
-                try {
-                    artifactId = Long.valueOf(String.valueOf(rawId));
-                } catch (NumberFormatException ignored) {
-                    // 非法目录引用不阻断整段历史回放。
-                }
-            }
-            ArtifactView artifact = byId.get(artifactId);
-            if (artifact == null) {
-                continue;
-            }
-            view.getPayload().put("fileName", artifact.getFileName());
-            view.getPayload().put("downloadUrl", artifact.getDownloadUrl());
-            view.getPayload().put("previewUrl", artifact.getPreviewUrl());
-            view.getPayload().put("mimeType", artifact.getMimeType());
-            view.getPayload().put("fileSize", artifact.getFileSize());
-            view.getPayload().put("storageKey", artifact.getStorageKey());
-            enrichArtifactEventData(view.getPayload(), artifact);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private void enrichArtifactEventData(Map<String, Object> payload, ArtifactView artifact) {
-        Object rawEventData = payload.get("eventData");
-        if (!(rawEventData instanceof Map<?, ?> eventData)) {
-            return;
-        }
-        Object rawTask = eventData.get("resultMap");
-        if (!(rawTask instanceof Map<?, ?> task)) {
-            return;
-        }
-        Map<String, Object> writableTask = (Map<String, Object>) task;
-        putIfBlank(writableTask, "fileName", artifact.getFileName());
-        putIfBlank(writableTask, "downloadUrl", artifact.getDownloadUrl());
-        putIfBlank(writableTask, "previewUrl", artifact.getPreviewUrl());
-        putIfBlank(writableTask, "mimeType", artifact.getMimeType());
-        putIfBlank(writableTask, "fileSize", artifact.getFileSize());
-        putIfBlank(writableTask, "storageKey", artifact.getStorageKey());
-        Object rawNested = writableTask.get("resultMap");
-        if (rawNested instanceof Map<?, ?> nested) {
-            Map<String, Object> writableNested = (Map<String, Object>) nested;
-            putIfBlank(writableNested, "fileName", artifact.getFileName());
-            putIfBlank(writableNested, "downloadUrl", artifact.getDownloadUrl());
-            putIfBlank(writableNested, "previewUrl", artifact.getPreviewUrl());
-            putIfBlank(writableNested, "mimeType", artifact.getMimeType());
-            putIfBlank(writableNested, "fileSize", artifact.getFileSize());
-            putIfBlank(writableNested, "storageKey", artifact.getStorageKey());
-        }
-    }
-
-    private void putIfBlank(Map<String, Object> target, String key, Object value) {
-        Object existing = target.get(key);
-        if (value != null && (existing == null || StringUtils.isBlank(String.valueOf(existing)))) {
-            target.put(key, value);
-        }
-    }
-
-    private void backfillDirectory(DialogueRunView run, List<TimelineItemView> views) {
-        if (timelineItemRepository == null || StringUtils.isBlank(run.getSessionId())) {
-            return;
-        }
-        Map<String, TimelineItem> byItemId = new HashMap<>();
-        for (TimelineItemView view : views) {
-            if (view == null
-                    || StringUtils.isBlank(view.getItemId())
-                    || TimelineItemKind.SYSTEM_NOTICE.name().equals(view.getKind())) {
-                continue;
-            }
-            TimelineItem item = byItemId.get(view.getItemId());
-            if (item == null) {
-                item = TimelineItem.builder()
-                        .sessionId(run.getSessionId())
-                        .runId(run.getRequestId())
-                        .itemId(view.getItemId())
-                        .parentItemId(view.getParentItemId())
-                        .agentId(view.getAgentId())
-                        .kind(view.getKind())
-                        .phase(view.getPhase())
-                        .status(view.getStatus())
-                        .orderKey(view.getOrderKey())
-                        .subOrder(view.getSubOrder())
-                        .updatedSeq(view.getSeq())
-                        .sourceType(TimelineItemProjection.resolveSourceType(
-                                view.getKind(), view.getPhase()))
-                        .llmInvocationId(payloadLong(view.getPayload(), "llmInvocationId"))
-                        .toolInvocationId(payloadLong(view.getPayload(), "toolInvocationId"))
-                        .artifactId(payloadLong(view.getPayload(), "artifactId"))
-                        .build();
-                byItemId.put(view.getItemId(), item);
-            } else {
-                item.setStatus(view.getStatus());
-                item.setUpdatedSeq(Math.max(
-                        item.getUpdatedSeq() == null ? 0L : item.getUpdatedSeq(),
-                        view.getSeq()));
-            }
-        }
-        if (byItemId.isEmpty()) {
-            return;
-        }
-        try {
-            timelineItemRepository.upsertBatch(List.copyOf(byItemId.values()));
-        } catch (Exception e) {
-            log.warn("timeline directory backfill failed, requestId={}, itemCount={}",
-                    run.getRequestId(), byItemId.size(), e);
-        }
-    }
-
-    private boolean isTerminalRun(DialogueRunView run) {
-        if (run == null || run.getStatus() == null) {
-            return false;
-        }
-        return run.getStatus() == ExecutionLedgerConstants.STATUS_SUCCESS
-                || run.getStatus() == ExecutionLedgerConstants.STATUS_FAILED
-                || run.getStatus() == ExecutionLedgerConstants.STATUS_STOPPED
-                || run.getStatus() == ExecutionLedgerConstants.STATUS_TIMEOUT;
-    }
-
-    private Long payloadLong(Map<String, Object> payload, String key) {
-        if (payload == null) {
-            return null;
-        }
-        Object value = payload.get(key);
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value == null || StringUtils.isBlank(String.valueOf(value))) {
-            return null;
-        }
-        try {
-            return Long.valueOf(String.valueOf(value));
-        } catch (NumberFormatException ignored) {
             return null;
         }
     }

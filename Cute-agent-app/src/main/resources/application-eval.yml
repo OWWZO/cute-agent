@@ -25,6 +25,8 @@ llm:
 cute:
   file-artifact:
     local-file-mode: register
+    # WorkBuddy 预检和评测入口会显式传入本次评测根目录；不允许回退到用户主目录或盘符根。
+    allowed-root: "${CUTE_FILE_ARTIFACT_ALLOWED_ROOT:}"
   opencli:
     enabled: false
   host-cli:

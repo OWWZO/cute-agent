@@ -305,6 +305,7 @@ public class TimelineItemProjectionTest {
                 .status(TimelineItemStatus.COMPLETED.name())
                 .orderKey(9L)
                 .artifactId(88L)
+                .toolInvocationId(7L)
                 .build();
 
         List<TimelineItemView> merged = TimelineItemProjection.mergeDirectory(
@@ -318,7 +319,7 @@ public class TimelineItemProjectionTest {
     }
 
     @Test
-    public void directoryOnlyArtifactMustCarryRenderableEventData() {
+    public void directoryOnlyArtifactMustWaitForLedgerPayloadAssembly() {
         TimelineItem directoryArtifact = TimelineItem.builder()
                 .sessionId("session-1")
                 .runId("req-1")
@@ -329,17 +330,54 @@ public class TimelineItemProjectionTest {
                 .status(TimelineItemStatus.COMPLETED.name())
                 .orderKey(9L)
                 .artifactId(88L)
+                .toolInvocationId(7L)
                 .build();
 
         List<TimelineItemView> merged = TimelineItemProjection.mergeDirectory(
                 List.of(), List.of(directoryArtifact));
 
         Assert.assertEquals(1, merged.size());
-        Map<String, Object> eventData = (Map<String, Object>) merged.get(0).getPayload().get("eventData");
-        Assert.assertNotNull(eventData);
-        Map<String, Object> task = (Map<String, Object>) eventData.get("resultMap");
-        Assert.assertEquals("file", task.get("messageType"));
-        Assert.assertEquals(88L, task.get("artifactId"));
+        Assert.assertNull(merged.get(0).getPayload().get("eventData"));
+        Assert.assertEquals(88L, merged.get(0).getPayload().get("artifactId"));
+        Assert.assertEquals(7L, merged.get(0).getPayload().get("toolInvocationId"));
+    }
+
+    @Test
+    public void orphanArtifactDirectoryRowMustNotCreateFileCard() {
+        TimelineItem orphan = TimelineItem.builder()
+                .sessionId("session-1")
+                .runId("req-1")
+                .itemId("artifact:deadbeef-dead-beef-dead-beefdeadbeef")
+                .kind(TimelineItemKind.ARTIFACT.name())
+                .phase(TimelineItemPhase.INTERMEDIATE.name())
+                .status(TimelineItemStatus.COMPLETED.name())
+                .orderKey(9L)
+                .build();
+
+        List<TimelineItemView> merged = TimelineItemProjection.mergeDirectory(
+                List.of(), List.of(orphan));
+
+        Assert.assertTrue(merged.isEmpty());
+    }
+
+    @Test
+    public void artifactDirectoryRowWithoutToolInvocationMustNotCreateFileCard() {
+        TimelineItem orphan = TimelineItem.builder()
+                .sessionId("session-1")
+                .runId("req-1")
+                .itemId("artifact:89")
+                .parentItemId("tool:call-1")
+                .kind(TimelineItemKind.ARTIFACT.name())
+                .phase(TimelineItemPhase.INTERMEDIATE.name())
+                .status(TimelineItemStatus.COMPLETED.name())
+                .orderKey(9L)
+                .artifactId(89L)
+                .build();
+
+        List<TimelineItemView> merged = TimelineItemProjection.mergeDirectory(
+                List.of(), List.of(orphan));
+
+        Assert.assertTrue(merged.isEmpty());
     }
 
     @Test
@@ -595,6 +633,7 @@ public class TimelineItemProjectionTest {
                 .status(TimelineItemStatus.COMPLETED.name())
                 .orderKey(orderKey)
                 .artifactId(artifactId)
+                .toolInvocationId(7L)
                 .build();
     }
 

@@ -115,6 +115,15 @@
           AND finished_at IS NULL
     </update>
 
+    <select id="queryByRunIdAndToolCallId" resultMap="ToolInvocationMap">
+        SELECT <include refid="toolInvocationColumns"/>
+        FROM ai_agent_tool_invocation
+        WHERE run_id = #{runId}
+          AND tool_call_id = #{toolCallId}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
     <select id="queryByRunId" resultMap="ToolInvocationMap">
         SELECT <include refid="toolInvocationColumns"/>
         FROM ai_agent_tool_invocation

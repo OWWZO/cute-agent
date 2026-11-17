@@ -375,4 +375,16 @@
         WHERE session_id = #{sessionId}
           AND deleted = 0
     </update>
+    <!-- committed timeline 的 session-scoped 排序高水位；与 SSE event_seq 职责分离。 -->
+    <update id="allocateTimelineSeq">
+        UPDATE ai_agent_dialogue_session
+        SET timeline_seq = LAST_INSERT_ID(timeline_seq + #{count}),
+            update_time = NOW()
+        WHERE session_id = #{sessionId}
+          AND deleted = 0
+    </update>
+
+    <select id="queryLastInsertId" resultType="long">
+        SELECT LAST_INSERT_ID()
+    </select>
 </mapper>

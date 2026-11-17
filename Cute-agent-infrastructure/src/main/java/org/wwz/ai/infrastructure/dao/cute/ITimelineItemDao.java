@@ -16,5 +16,8 @@ public interface ITimelineItemDao {
 
     int upsertBatch(@Param("items") List<TimelineItem> items);
 
+    TimelineItem queryBySessionAndItemId(@Param("sessionId") String sessionId,
+                                         @Param("itemId") String itemId);
+
     List<TimelineItem> queryByRunIds(@Param("runIds") List<String> runIds);
 }

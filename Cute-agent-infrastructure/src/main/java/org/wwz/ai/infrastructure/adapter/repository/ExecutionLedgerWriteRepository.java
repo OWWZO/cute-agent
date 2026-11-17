@@ -2,6 +2,8 @@ package org.wwz.ai.infrastructure.adapter.repository;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository;
 import org.wwz.ai.domain.agent.ledger.entity.ArtifactRecord;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
@@ -41,6 +43,11 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
     @Override
     public DialogueSession querySessionBySessionId(String sessionId) {
         return dialogueSessionLedgerDao.queryBySessionId(sessionId);
+    }
+
+    @Override
+    public DialogueRun queryRunById(Long runId) {
+        return runId == null ? null : dialogueRunLedgerDao.queryById(runId);
     }
 
     @Override
@@ -127,6 +134,11 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
     }
 
     @Override
+    public LlmInvocation queryLlmInvocationById(Long invocationId) {
+        return invocationId == null ? null : llmInvocationLedgerDao.queryById(invocationId);
+    }
+
+    @Override
     public void updateLlmInvocationFinish(LlmInvocation invocation) {
         llmInvocationLedgerDao.updateLlmInvocationFinish(invocation);
     }
@@ -134,6 +146,18 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
     @Override
     public void insertToolInvocation(ToolInvocation invocation) {
         toolInvocationLedgerDao.insertToolInvocation(invocation);
+    }
+
+    @Override
+    public ToolInvocation queryToolInvocationById(Long invocationId) {
+        return invocationId == null ? null : toolInvocationLedgerDao.queryById(invocationId);
+    }
+
+    @Override
+    public ToolInvocation queryToolInvocation(Long runId, String toolCallId) {
+        return runId == null || toolCallId == null || toolCallId.isBlank()
+                ? null
+                : toolInvocationLedgerDao.queryByRunIdAndToolCallId(runId, toolCallId);
     }
 
     @Override
@@ -157,5 +181,19 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
     @Override
     public void bumpSessionEventSeq(String sessionId, long eventSeq) {
         dialogueSessionLedgerDao.bumpEventSeq(sessionId, eventSeq);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public long allocateTimelineOrder(String sessionId, int count) {
+        if (sessionId == null || sessionId.isBlank() || count <= 0) {
+            throw new IllegalArgumentException("sessionId and positive count are required");
+        }
+        int updated = dialogueSessionLedgerDao.allocateTimelineSeq(sessionId, count);
+        if (updated != 1) {
+            throw new IllegalStateException("timeline sequence allocation failed: " + sessionId);
+        }
+        long lastAllocated = dialogueSessionLedgerDao.queryLastInsertId();
+        return lastAllocated - count + 1;
     }
 }

@@ -41,9 +41,6 @@ cute:
       max-write-bytes: 33554432
       max-csv-rows: 100000
       max-csv-columns: 200
-      allowed-script-prefixes:
-        - scripts/
-        - jobs/
       allowed-output-prefixes:
         - outputs/
         - artifacts/

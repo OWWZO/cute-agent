@@ -16,6 +16,7 @@ import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.FileToolOutput;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolFileRef;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputPersistCommand;
+import org.wwz.ai.domain.agent.ledger.timeline.TimelineItem;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -161,6 +162,87 @@ public class AgentExecutionLedgerRepositoryTest {
         Assert.assertEquals("req-ledger-001", artifacts.get(0).getRequestId());
         Assert.assertEquals(Long.valueOf(toolInvocationId), artifacts.get(0).getToolInvocationId());
         Assert.assertTrue(ctx.toolOutputReader.readByInvocationId("file_tool", toolInvocationId).isEmpty());
+    }
+
+    @Test
+    public void canonicalTimelineMustKeepOneArtifactPerLedgerArtifactUnderItsTool() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx =
+                ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        LocalDateTime now = LocalDateTime.now();
+        Long runId = ctx.recorder.createRun(DialogueRunStartRecord.builder()
+                .runUid("req-ledger-timeline-001")
+                .requestId("req-ledger-timeline-001")
+                .sessionId("session-ledger-timeline-001")
+                .entryAgent(ExecutionLedgerConstants.ENTRY_AGENT_REACT)
+                .queryText("验证 canonical timeline")
+                .startedAt(now)
+                .build());
+        Map<String, Long> toolIds = ctx.recorder.createToolInvocations(
+                ToolInvocationBatchStartRecord.builder()
+                        .runId(runId)
+                        .requestId("req-ledger-timeline-001")
+                        .sessionId("session-ledger-timeline-001")
+                        .items(List.of(ToolInvocationBatchStartRecord.Item.builder()
+                                .toolCallId("tool-call-timeline-001")
+                                .dispatchIndex(1)
+                                .toolName("file_tool")
+                                .toolProvider(ExecutionLedgerConstants.TOOL_PROVIDER_LOCAL)
+                                .inputJson("{\"path\":\"timeline.md\"}")
+                                .startedAt(now)
+                                .build()))
+                        .build());
+        Long toolInvocationId = toolIds.get("tool-call-timeline-001");
+        ctx.recorder.finishToolInvocation(ToolInvocationFinishRecord.builder()
+                .toolInvocationId(toolInvocationId)
+                .runId(runId)
+                .requestId("req-ledger-timeline-001")
+                .sessionId("session-ledger-timeline-001")
+                .toolCallId("tool-call-timeline-001")
+                .toolName("file_tool")
+                .status(ExecutionLedgerConstants.STATUS_SUCCESS)
+                .llmObservation("生成 timeline.md")
+                .finishedAt(now.plusSeconds(1))
+                .build());
+        ctx.recorder.recordArtifacts(List.of(ArtifactRecordCommand.builder()
+                .runId(runId)
+                .requestId("req-ledger-timeline-001")
+                .toolInvocationId(toolInvocationId)
+                .toolCallId("tool-call-timeline-001")
+                .artifactRole(ExecutionLedgerConstants.ARTIFACT_ROLE_OUTPUT)
+                .visibility(ExecutionLedgerConstants.VISIBILITY_VISIBLE)
+                .sourceType(ExecutionLedgerConstants.SOURCE_TYPE_TOOL_OUTPUT)
+                .sourceName("file_tool")
+                .fileName("timeline.md")
+                .storageKey("oss://timeline.md")
+                .downloadUrl("oss://timeline.md")
+                .previewUrl("oss://timeline.md")
+                .build()));
+        ctx.recorder.finishRun(DialogueRunFinishRecord.builder()
+                .runId(runId)
+                .requestId("req-ledger-timeline-001")
+                .status(ExecutionLedgerConstants.STATUS_SUCCESS)
+                .finalSummaryText("时间线验证完成")
+                .finishedAt(now.plusSeconds(2))
+                .build());
+
+        List<ArtifactRecord> artifacts = ctx.artifactDao.queryByRunId(runId);
+        List<TimelineItem> timelineItems =
+                ctx.timelineItemRepository.queryByRunIds(List.of("req-ledger-timeline-001"));
+        List<TimelineItem> artifactItems = timelineItems.stream()
+                .filter(item -> "ARTIFACT".equals(item.getKind()))
+                .toList();
+        Assert.assertEquals(1, artifacts.size());
+        Assert.assertEquals(artifacts.size(), artifactItems.size());
+        TimelineItem artifactItem = artifactItems.get(0);
+        Assert.assertEquals("tool:tool-call-timeline-001", artifactItem.getParentItemId());
+        Assert.assertEquals(Long.valueOf(artifacts.get(0).getId()), artifactItem.getArtifactId());
+        Assert.assertEquals(Long.valueOf(toolInvocationId), artifactItem.getToolInvocationId());
+        Assert.assertEquals(1, timelineItems.stream()
+                .filter(item -> "FINAL".equals(item.getPhase()))
+                .count());
+        Assert.assertTrue(timelineItems.stream()
+                .noneMatch(item -> item.getItemId().startsWith("item:")
+                        || item.getItemId().matches("artifact:[0-9a-f-]{20,}")));
     }
 
     @Test

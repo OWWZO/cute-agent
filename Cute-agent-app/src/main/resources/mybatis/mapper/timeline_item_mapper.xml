@@ -42,7 +42,7 @@
         )
         ON DUPLICATE KEY UPDATE
             parent_item_id = COALESCE(#{parentItemId}, parent_item_id),
-            agent_id = COALESCE(#{agentId}, agent_id),
+            agent_id = COALESCE(agent_id, #{agentId}),
             kind = kind,
             phase = CASE
                 WHEN phase = 'FINAL' OR #{phase} = 'FINAL' THEN 'FINAL'
@@ -84,7 +84,7 @@
         <!-- ON DUPLICATE is outside foreach; VALUES(col) refers to the current inserted row. -->
         ON DUPLICATE KEY UPDATE
             parent_item_id = COALESCE(VALUES(parent_item_id), parent_item_id),
-            agent_id = COALESCE(VALUES(agent_id), agent_id),
+            agent_id = COALESCE(agent_id, VALUES(agent_id)),
             kind = kind,
             phase = CASE
                 WHEN phase = 'FINAL' OR VALUES(phase) = 'FINAL' THEN 'FINAL'
@@ -107,6 +107,15 @@
             update_time = NOW(),
             deleted = 0
     </insert>
+
+    <select id="queryBySessionAndItemId" resultMap="TimelineItemMap">
+        SELECT <include refid="timelineItemColumns"/>
+        FROM ai_agent_timeline_item
+        WHERE session_id = #{sessionId}
+          AND item_id = #{itemId}
+          AND deleted = 0
+        LIMIT 1
+    </select>
 
     <select id="queryByRunIds" resultMap="TimelineItemMap">
         SELECT <include refid="timelineItemColumns"/>

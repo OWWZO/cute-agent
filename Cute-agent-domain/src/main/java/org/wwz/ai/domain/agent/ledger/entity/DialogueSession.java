@@ -111,6 +111,12 @@ public class DialogueSession {
 
     private Long eventSeq;
 
+    /**
+     * 会话级 committed timeline 排序高水位。
+     * <p>与 SSE 的 {@link #eventSeq} 分离，只用于在 Ledger 事务内分配 order_key。</p>
+     */
+    private Long timelineSeq;
+
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;

@@ -182,17 +182,6 @@ public class ReplayProjector {
                         resolvePlannerRoundId(messageType, linkedTools),
                         subagentParentId
                 ));
-            } else if (isSubagentLlm(llmInvocation)
-                    && StringUtils.isNotBlank(llmInvocation.getResponseText())
-                    && (llmInvocation.getToolCallCount() == null || llmInvocation.getToolCallCount() == 0)) {
-                events.add(buildLlmReplayEvent(
-                        bundle,
-                        state,
-                        llmInvocation,
-                        "result",
-                        null,
-                        subagentParentId
-                ));
             }
 
             // 先投影 LLM 过程消息，再投影该轮工具；这样前端折叠状态与实时执行顺序保持一致。
@@ -468,7 +457,9 @@ public class ReplayProjector {
                 continue;
             }
             Object messageType = resultMap.get("messageType");
-            if (!"result".equals(messageType) && !"task_summary".equals(messageType)) {
+            // task_summary 是过程摘要，不是终答。把它当成 result 会阻止 run-final 兜底，
+            // 子 Agent 的内部执行摘要也可能因此被顶到结论区。
+            if (!"result".equals(messageType)) {
                 continue;
             }
             // 子 Agent 嵌套 result 不能冒充主会话终答，否则会跳过 run finalSummary 补齐。

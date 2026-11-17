@@ -89,6 +89,10 @@ public interface IDialogueSessionLedgerDao {
 
     int bumpEventSeq(@Param("sessionId") String sessionId, @Param("eventSeq") long eventSeq);
 
+    int allocateTimelineSeq(@Param("sessionId") String sessionId, @Param("count") int count);
+
+    long queryLastInsertId();
+
     /**
      * 只更新会话偏好四列；{@code null} 表示「不清空已有值」。
      * <p>不用 {@code upsertSession}：那个整行覆盖 title/status/run_count，传 null 会清空。</p>

@@ -42,7 +42,8 @@ public class HistoryReplayPrinter {
                 continue;
             }
             Object messageType = nestedMap.get("messageType");
-            if (!"result".equals(messageType) && !"task_summary".equals(messageType)) {
+            // task_summary 是过程摘要，不是终答；只有 run-final result 才能阻止兜底。
+            if (!"result".equals(messageType)) {
                 continue;
             }
             // 子 Agent 的嵌套 result 不能冒充主会话结论，否则底部的 fallback 会被吞掉。

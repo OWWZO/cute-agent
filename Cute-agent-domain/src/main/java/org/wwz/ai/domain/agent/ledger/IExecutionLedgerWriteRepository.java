@@ -25,6 +25,8 @@ public interface IExecutionLedgerWriteRepository {
     /** 未命中返回 {@code null}。 */
     DialogueSession querySessionBySessionId(String sessionId);
 
+    DialogueRun queryRunById(Long runId);
+
     /** 未命中返回 {@code null}。 */
     DialogueRun queryRunByRequestId(String requestId);
 
@@ -93,9 +95,15 @@ public interface IExecutionLedgerWriteRepository {
 
     void insertLlmInvocation(LlmInvocation invocation);
 
+    LlmInvocation queryLlmInvocationById(Long invocationId);
+
     void updateLlmInvocationFinish(LlmInvocation invocation);
 
     void insertToolInvocation(ToolInvocation invocation);
+
+    ToolInvocation queryToolInvocationById(Long invocationId);
+
+    ToolInvocation queryToolInvocation(Long runId, String toolCallId);
 
     /**
      * 批量写入工具调用预登记行，成功时把生成主键回填到每个 {@link ToolInvocation#getId()}。
@@ -118,4 +126,11 @@ public interface IExecutionLedgerWriteRepository {
     int batchInsertArtifacts(List<ArtifactRecord> records);
 
     void bumpSessionEventSeq(String sessionId, long eventSeq);
+
+    /**
+     * 在会话级 timeline 高水位上原子预留 {@code count} 个排序位置。
+     *
+     * @return 本次预留区间的第一个 order_key
+     */
+    long allocateTimelineOrder(String sessionId, int count);
 }

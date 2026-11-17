@@ -19,7 +19,7 @@ import java.util.Set;
  */
 public final class TimelineItemProjection {
 
-    public static final String PROTOCOL_VERSION = "2";
+    public static final String PROTOCOL_VERSION = "3";
 
     private TimelineItemProjection() {
     }
@@ -133,6 +133,7 @@ public final class TimelineItemProjection {
                 .runId(requestId)
                 .sessionId(sessionId)
                 .seq(seq)
+                .eventSeq(seq)
                 .itemId(itemId)
                 .parentItemId(parentItemId)
                 .agentId(agentId)
@@ -195,6 +196,14 @@ public final class TimelineItemProjection {
         }
         for (TimelineItem item : byItemId.values()) {
             if (TimelineItemKind.ARTIFACT.name().equals(item.getKind())) {
+                // 没有 artifact 主键或父 Tool 的目录行是旧 live projector 留下的孤儿。
+                // 它们不能合成 File 卡，否则一个真实产物会被伪造成多个“文件”。
+                if (StringUtils.isBlank(text(item.getArtifactId()))
+                        || StringUtils.isBlank(parentToolCallId(item.getParentItemId()))
+                        || item.getToolInvocationId() == null
+                        || item.getToolInvocationId() <= 0) {
+                    continue;
+                }
                 if (StringUtils.isNotBlank(text(item.getArtifactId()))
                         && projectedArtifactIds.contains(text(item.getArtifactId()))) {
                     continue;
@@ -227,10 +236,6 @@ public final class TimelineItemProjection {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("artifactId", item.getArtifactId());
         payload.put("toolInvocationId", item.getToolInvocationId());
-        Map<String, Object> eventData = directoryEventData(item);
-        if (!eventData.isEmpty()) {
-            payload.put("eventData", eventData);
-        }
         boolean terminal = TimelineItemStatus.COMPLETED.name().equals(item.getStatus())
                 || TimelineItemStatus.FAILED.name().equals(item.getStatus())
                 || TimelineItemStatus.CANCELLED.name().equals(item.getStatus());
@@ -242,6 +247,7 @@ public final class TimelineItemProjection {
                 .runId(item.getRunId())
                 .sessionId(item.getSessionId())
                 .seq(seq)
+                .eventSeq(0L)
                 .itemId(item.getItemId())
                 .parentItemId(item.getParentItemId())
                 .agentId(item.getAgentId())
@@ -251,6 +257,7 @@ public final class TimelineItemProjection {
                 .orderKey(item.getOrderKey() == null ? 0 : item.getOrderKey())
                 .subOrder(item.getSubOrder() == null ? 0 : item.getSubOrder())
                 .payload(payload)
+                .transientItem(false)
                 .build();
     }
 
@@ -286,7 +293,7 @@ public final class TimelineItemProjection {
         if (item.getOrderKey() != null && item.getOrderKey() > 0) {
             view.setOrderKey(item.getOrderKey());
         }
-        if (item.getSubOrder() != null && item.getSubOrder() > 0) {
+        if (item.getSubOrder() != null && item.getSubOrder() != 0) {
             view.setSubOrder(item.getSubOrder());
         }
         if (item.getUpdatedSeq() != null && item.getUpdatedSeq() > 0) {
@@ -650,37 +657,6 @@ public final class TimelineItemProjection {
         return StringUtils.startsWith(parentItemId, "tool:")
                 ? StringUtils.substringAfter(parentItemId, "tool:")
                 : null;
-    }
-
-    /**
-     * 目录行只保存窄元数据；历史投影仍要产出最小 canonical eventData，
-     * 让现有渲染器能够消费目录兜底项。
-     */
-    private static Map<String, Object> directoryEventData(TimelineItem item) {
-        if (!TimelineItemKind.ARTIFACT.name().equals(item.getKind())) {
-            return Map.of();
-        }
-        String messageType = "file";
-        String itemId = StringUtils.defaultIfBlank(item.getItemId(), "unknown");
-        String requestId = StringUtils.defaultIfBlank(item.getRunId(), "");
-        Map<String, Object> task = new LinkedHashMap<>();
-        task.put("messageId", itemId);
-        task.put("messageType", messageType);
-        task.put("requestId", requestId);
-        task.put("status", item.getStatus());
-        task.put("finish", true);
-        task.put("isFinal", true);
-        task.put("artifactId", item.getArtifactId());
-        task.put("toolCallId", parentToolCallId(item.getParentItemId()));
-
-        Map<String, Object> event = new LinkedHashMap<>();
-        event.put("messageType", "task");
-        event.put("messageId", itemId);
-        event.put("taskId", itemId);
-        event.put("taskOrder", item.getOrderKey() == null ? 0 : item.getOrderKey());
-        event.put("messageOrder", item.getSubOrder() == null ? 0 : item.getSubOrder());
-        event.put("resultMap", task);
-        return event;
     }
 
     /**

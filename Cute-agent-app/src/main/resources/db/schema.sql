@@ -256,6 +256,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_session (
     thinking_effort    VARCHAR(32)    NULL COMMENT '思考强度（low/medium/high）；NULL=默认',
     deep_think         TINYINT(1)     NOT NULL DEFAULT 0 COMMENT 'Deep Think 开关；派生 agentType',
     event_seq          BIGINT         NOT NULL DEFAULT 0 COMMENT '会话内 SSE 高水位，delta 占号但不逐帧回写',
+    timeline_seq       BIGINT         NOT NULL DEFAULT 0 COMMENT '会话级 committed timeline 排序高水位',
     create_time        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建\r\n  时间',
     update_time        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     deleted            TINYINT(1)     NOT NULL DEFAULT 0 COMMENT '软删除',
@@ -626,7 +627,10 @@ CREATE TABLE IF NOT EXISTS ai_agent_timeline_item (
     UNIQUE KEY uk_timeline_session_item (session_id, item_id, deleted),
     KEY idx_timeline_run_order (run_id, deleted, order_key, sub_order, id),
     KEY idx_timeline_session_order (session_id, deleted, order_key, sub_order, id),
-    KEY idx_timeline_parent (session_id, parent_item_id, deleted)
+    KEY idx_timeline_parent (session_id, parent_item_id, deleted),
+    KEY idx_timeline_artifact (artifact_id),
+    KEY idx_timeline_tool (tool_invocation_id),
+    KEY idx_timeline_llm (llm_invocation_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent 时间线目录（非完整事件账本）';
 
 CREATE TABLE IF NOT EXISTS ai_agent_featured_conversation (
