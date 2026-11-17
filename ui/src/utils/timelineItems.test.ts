@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ConversationReplayFrame } from "@/services/agentConversation";
 import {
+  isRunTerminal,
   resolveRunReplayFrames,
   timelineEnvelopeToLegacy,
   timelineItemsToReplayFrames,
 } from "./timelineItems";
+import { TimelineStore } from "./timeline/timelineStore";
 
 function eventData(messageType: string, resultMap: Record<string, unknown>): MESSAGE.EventData {
   return {
@@ -28,6 +30,38 @@ function eventData(messageType: string, resultMap: Record<string, unknown>): MES
 }
 
 describe("timelineItems", () => {
+  it("delta upsert keeps item metadata that the delta frame omitted", () => {
+    const store = new TimelineStore([{
+      eventType: "item.upserted",
+      itemId: "tool:call-1",
+      kind: "TOOL_CALL",
+      phase: "INTERMEDIATE",
+      itemStatus: "RUNNING",
+      orderKey: 12,
+      subOrder: 1,
+      payload: {
+        eventData: eventData("task", {
+          messageType: "deep_search",
+          toolCallId: "call-1",
+        }),
+      },
+    }]);
+    store.upsertMany([{
+      eventType: "item.delta",
+      itemId: "tool:call-1",
+      delta: "下一段",
+      responseAll: "完整输出",
+    }]);
+
+    const updated = store.values()[0];
+    expect(updated.kind).toBe("TOOL_CALL");
+    expect(updated.phase).toBe("INTERMEDIATE");
+    expect(updated.itemStatus).toBe("RUNNING");
+    expect(updated.orderKey).toBe(12);
+    expect(updated.subOrder).toBe(1);
+    expect(updated.responseAll).toBe("完整输出");
+  });
+
   it("maps item.delta back to the existing canonical renderer envelope", () => {
     const event = eventData("task", {
       messageType: "agent_stream",
@@ -44,6 +78,14 @@ describe("timelineItems", () => {
 
     expect(normalized.packageType).toBe("task");
     expect(normalized.resultMap).toMatchObject({ eventData: event });
+  });
+
+  it("only treats completed, failed and stopped as terminal run events", () => {
+    expect(isRunTerminal("run.completed")).toBe(true);
+    expect(isRunTerminal("run.failed")).toBe(true);
+    expect(isRunTerminal("run.stopped")).toBe(true);
+    expect(isRunTerminal("run.wake")).toBe(false);
+    expect(isRunTerminal("run.wake_failed")).toBe(false);
   });
 
   it("maps run.completed to the existing root result envelope", () => {
@@ -123,6 +165,71 @@ describe("timelineItems", () => {
     expect(frames[0].resultMap.eventData?.resultMap.messageType).toBe("result");
   });
 
+  it("committed ARTIFACT without artifact identity never becomes a File card", () => {
+    const frames = timelineItemsToReplayFrames([{
+      eventType: "item.completed",
+      kind: "ARTIFACT",
+      itemId: "artifact:orphan",
+      parentItemId: null,
+      itemStatus: "COMPLETED",
+      transient: false,
+      payload: {
+        eventData: eventData("task", {
+          messageType: "file",
+          fileListOnly: false,
+        }),
+      },
+    }]);
+
+    expect(frames).toEqual([]);
+  });
+
+  it("live transient file frame remains visible before ledger settlement", () => {
+    const frames = timelineItemsToReplayFrames([{
+      eventType: "item.completed",
+      kind: "ARTIFACT",
+      itemId: "artifact:call-1",
+      parentItemId: "tool:call-1",
+      itemStatus: "COMPLETED",
+      transient: true,
+      payload: {
+        eventData: eventData("task", {
+          messageType: "file",
+        }),
+      },
+    }]);
+
+    expect(frames).toHaveLength(1);
+  });
+
+  it("committed ARTIFACT requires both artifact and tool invocation identity", () => {
+    const base = {
+      eventType: "item.completed" as const,
+      kind: "ARTIFACT" as const,
+      itemId: "artifact:23",
+      parentItemId: "tool:call-1",
+      itemStatus: "COMPLETED" as const,
+      transient: false,
+      payload: {
+        artifactId: 23,
+        toolInvocationId: 7,
+        eventData: eventData("task", {
+          messageType: "file",
+          fileName: "report.md",
+        }),
+      },
+    };
+
+    expect(timelineItemsToReplayFrames([base])).toHaveLength(1);
+    expect(timelineItemsToReplayFrames([{
+      ...base,
+      payload: {
+        ...base.payload,
+        toolInvocationId: undefined,
+      },
+    }])).toEqual([]);
+  });
+
   it("falls back to replay frames only when no timeline item is renderable", () => {
     const replayFrame: ConversationReplayFrame = {
       reqId: "req-1",
@@ -145,7 +252,9 @@ describe("timelineItems", () => {
     const frames = timelineItemsToReplayFrames([
       {
         eventType: "item.completed",
+        itemId: "tool:call-1",
         runId: "req-1",
+        orderKey: 1,
         status: "COMPLETED",
         payload: {
           eventData: eventData("task", {
@@ -156,7 +265,9 @@ describe("timelineItems", () => {
       },
       {
         eventType: "run.completed",
+        itemId: "run:req-1:final",
         runId: "req-1",
+        orderKey: 2,
         status: "COMPLETED",
         payload: {
           eventData: eventData("task", {
@@ -176,6 +287,7 @@ describe("timelineItems", () => {
     const frames = timelineItemsToReplayFrames([
       {
         eventType: "run.stopped",
+        itemId: "run:req-1:final",
         runId: "req-1",
         itemStatus: "CANCELLED",
         payload: {
@@ -195,6 +307,7 @@ describe("timelineItems", () => {
     const frames = timelineItemsToReplayFrames([
       {
         eventType: "item.upserted",
+        itemId: "hitl:ask-1",
         runId: "req-1",
         itemStatus: "WAITING_INPUT",
         payload: {
@@ -206,5 +319,22 @@ describe("timelineItems", () => {
     ]);
 
     expect(frames[0].status).toBe("waiting_input");
+  });
+
+  it("live responseAll 覆盖单帧 eventData 的快照正文", () => {
+    const frames = timelineItemsToReplayFrames([{
+      eventType: "item.delta",
+      itemId: "llm:1",
+      runId: "req-1",
+      responseAll: "完整正文",
+      payload: {
+        eventData: eventData("task", {
+          messageType: "agent_stream",
+          result: "第一段",
+        }),
+      },
+    }]);
+
+    expect(frames[0].resultMap.eventData?.resultMap.result).toBe("完整正文");
   });
 });

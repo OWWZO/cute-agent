@@ -835,10 +835,16 @@ export function segmentProcessSteps(
       nowMs: options.nowMs ?? Date.now(),
     });
     groupSerial += 1;
+    // ReAct 会把多个 task 容器合并成同一个执行组。此时容器是“当前最后到达的
+    // 容器”，不能作为 React 身份，否则流式追加新容器会让整组卸载重挂、重播
+    // 入场动画。组内第一个真实步骤只会追加，身份在整个流式过程中保持稳定。
+    const groupIdentity = options.isPlanSolve && options.container
+      ? (options.container.id || options.container.messageId || "work-group")
+      : (executables[0]?.id || ordered[0]?.id || "work-group");
     segments.push({
       type: "group",
       group: {
-        id: `${options.container?.id || options.container?.messageId || "work-group"}:${groupSerial}`,
+        id: `group:${groupIdentity}:${groupSerial}`,
         title: buildGroupTitle(
           options.container,
           displayCount,

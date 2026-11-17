@@ -17,13 +17,14 @@ import {
   isRunReplay,
   resolveRunReplayFrames,
 } from "@/utils/timelineItems";
+import { isRunFinalStatus } from "@/utils/timeline/timelineStore";
 
 import {
   buildConversationTaskData,
   buildTaskFromEventData,
   combineData,
-  settleRootResultConclusion,
 } from "./chat";
+import { applyTimelineSourcesToChat } from "./chat/timelineProjection";
 
 type ConversationHistoryTitleDetail = Pick<
   ConversationHistoryPage,
@@ -108,14 +109,12 @@ export function hydrateRunReplay(
   // 历史 run 先还原为与实时流相同的空状态，再逐帧复用 combineData，确保历史和实时使用同一事件语义。
   const currentChat = createRunShell(detail, run);
 
-  for (const frame of resolveRunReplayFrames(run)) {
-    const eventData = readEventData(frame);
-    if (!eventData) {
-      continue;
-    }
-    combineData(eventData, currentChat);
-    syncConclusionFromEventData(currentChat, eventData);
-  }
+  applyTimelineSourcesToChat(currentChat, {
+    items: run.timelineItems,
+    replayFrames: resolveRunReplayFrames(run),
+    allowLegacyResult: isRunFinalStatus(normalizeRunStatus(run.status)),
+    settleResultMetadata: true,
+  });
 
   applyFallbackConclusion(currentChat, run, true);
   applyRunMetadata(currentChat, run);
@@ -279,7 +278,20 @@ function applyFallbackConclusion(
   const fallbackEventData = buildFallbackConclusionEventData(run, summaryText);
   if (includeTaskData) {
     combineData(fallbackEventData, currentChat);
-    syncConclusionFromEventData(currentChat, fallbackEventData);
+    syncConclusionFromEventData(currentChat, {
+      reqId: run.requestId,
+      status: run.status,
+      finished: true,
+      itemId: `run:${run.requestId}:final`,
+      kind: "ASSISTANT_MESSAGE",
+      phase: "FINAL",
+      eventType: runStatus === "FAILED"
+        ? "run.failed"
+        : runStatus === "STOPPED"
+          ? "run.stopped"
+          : "run.completed",
+      resultMap: { eventData: fallbackEventData },
+    }, fallbackEventData);
     return;
   }
   currentChat.conclusion = buildTaskFromEventData(fallbackEventData) as unknown as CHAT.Task;
@@ -369,31 +381,16 @@ function getRunContextUsage(run: ConversationRunSummary | ConversationRunReplay)
   return isRunReplay(run) ? run.contextUsage : undefined;
 }
 
-function readEventData(frame?: ConversationReplayFrame | null) {
-  if (!frame || !frame.resultMap || typeof frame.resultMap !== "object") {
-    return undefined;
-  }
-  return frame.resultMap.eventData as MESSAGE.EventData | undefined;
-}
-
 function syncConclusionFromEventData(
   currentChat: CHAT.ChatItem,
+  frame: ConversationReplayFrame,
   eventData: MESSAGE.EventData
 ) {
-  const nested = eventData?.resultMap;
-  const nestedType = nested?.messageType;
-  if (nestedType === "result") {
-    // 与实时链路同一套收口语义：结论区已有流式正文（agent_stream）时，
-    // result 只并 fileList / artifactRefs 等元数据，不覆盖正文。
-    // 否则刷新后 result 会把回放到的终轮正文冲掉，最终回复消失。
-    if (!settleRootResultConclusion(currentChat, eventData)) {
-      currentChat.conclusion = buildTaskFromEventData(eventData) as unknown as CHAT.Task;
-    }
-    return;
-  }
-  if (nestedType === "task_summary") {
-    currentChat.conclusion = buildTaskFromEventData(eventData) as unknown as CHAT.Task;
-  }
+  applyTimelineSourcesToChat(currentChat, {
+    replayFrames: [{ ...frame, resultMap: { ...frame.resultMap, eventData } }],
+    allowLegacyResult: false,
+    settleResultMetadata: true,
+  });
 }
 
 function toTimestamp(value?: string | null, fallback = Date.now()) {

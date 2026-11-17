@@ -1,11 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { resolveSubAgentDisplay } from "@/utils/chat/subagent";
-import { chatItemFromSubAgent } from "@/utils/chat/subAgentChat";
-import { buildChildSessionRounds } from "@/utils/chat/subAgentChildSession";
+import { buildSessionTimelineRounds } from "@/utils/chat/sessionTimelineChat";
 import { groupChatsIntoTurns, mergeTurnChats } from "@/lib/turnGroups";
 import { projectAgentMember } from "@/utils/chat/agentRuntimeProjector";
-import { useSubAgentSession } from "./useSubAgentSession";
+import { useSessionTimeline } from "@/hooks/useSessionTimeline";
 import {
   formatAgentElapsed,
   resolveAgentPhaseLabel,
@@ -14,17 +13,18 @@ import {
 import { cn } from "@/lib/utils";
 import { StatusDot } from "./tools/StatusDot";
 import Dialogue from "./index";
-import SubAgentSessionComposer from "./SubAgentSessionComposer";
-import { getTaskFiles } from "@/utils/taskArtifacts";
+import SubAgentSessionComposer, {
+  type SubAgentSubmission,
+} from "./SubAgentSessionComposer";
 
 /**
  * 子会话真实详情面板开关（前端侧，与后端 autobots.agent.subagent-isolated-session 成对）。
  * <p>
- * 关闭时沿用旧合成投影兜底；开启时读真实子会话 history + 子会话流。
- * 环境变量未提供时默认关闭，避免部署漏配把右侧面板打成空白。
+ * 默认开启并只消费真实子会话 canonical timeline；显式设为 0 时仅作为短期回滚。
+ * 不再回退到第二套合成投影。
  */
 export const SUBAGENT_CHILD_SESSION_ENABLED =
-  (import.meta.env?.VITE_SUBAGENT_CHILD_SESSION as string | undefined) === "1";
+  (import.meta.env?.VITE_SUBAGENT_CHILD_SESSION as string | undefined) !== "0";
 
 /** 子会话一次挂载的轮数；更早轮次按需展开，避免长会话把所有 Dialogue 同时挂上。 */
 const CHILD_SESSION_TURN_PAGE_SIZE = 8;
@@ -66,18 +66,14 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
   const sub = useMemo(() => resolveSubAgentDisplay(tool), [tool]);
   const member = useMemo(() => projectAgentMember(tool), [tool]);
   const nested = tool.children || [];
-  const syntheticChat = useMemo(
-    () => chatItemFromSubAgent(tool, chat),
-    [tool, chat]
-  );
   const duration = formatAgentElapsed(sub);
   const phaseLabel = resolveAgentPhaseLabel(member?.phase, sub.status);
   const phaseTone = resolveAgentPhaseTone(member?.phase, sub.status);
 
   // 子会话真实详情：只有开关开启且父卡确实带 childSessionId 时才订阅。
-  // 不具备 childSessionId（旧会话 / 未落库成功）时自动回退合成投影。
+  // 不具备 childSessionId（旧会话 / 未落库成功）时只展示空态，不伪造轨迹。
   const childSessionId = SUBAGENT_CHILD_SESSION_ENABLED ? sub.childSessionId : "";
-  const childSession = useSubAgentSession(childSessionId, Boolean(childSessionId));
+  const childSession = useSessionTimeline(childSessionId, Boolean(childSessionId));
   const useRealChildSession = Boolean(childSessionId);
 
   // 数据源：真实子会话继续由会话级渲染链路消费；本面板在真实模式下
@@ -104,12 +100,10 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
     if (!useRealChildSession || !realSessionReady) {
       return [];
     }
-    return buildChildSessionRounds({
-      childSessionId,
+    return buildSessionTimelineRounds({
+      sessionId: childSessionId,
       history: childSession.history,
-      replays: childSession.replays,
-      frames: childSession.frames,
-      liveRequestId: pendingRun?.requestId,
+      sources: childSession.runs,
       pendingRun,
       fallbackQuery: sub.prompt || sub.description,
     });
@@ -118,8 +112,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
     realSessionReady,
     childSessionId,
     childSession.history,
-    childSession.replays,
-    childSession.frames,
+    childSession.runs,
     pendingRun,
     sub.prompt,
     sub.description,
@@ -145,25 +138,29 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
   const hiddenChildSessionTurnCount =
     childSessionTurns.length - visibleChildSessionTurns.length;
   const reloadChildSession = childSession.reload;
+  const observeChildRun = childSession.observeRun;
+  const childRunCount = Object.keys(childSession.runs).length;
   const handleSubmitted = useCallback(
-    (submitted: { query: string; requestId: string }) => {
+    (submitted: SubAgentSubmission) => {
+      if (submitted.kind === "guidance") {
+        setPendingRun(null);
+        reloadChildSession(submitted.activeRequestId);
+        if (submitted.activeRequestId) {
+          observeChildRun(submitted.activeRequestId);
+        }
+        return;
+      }
       // 乐观轮：新 run 还没落库，先让用户看到自己的提问与「工作中 X」，
       // 历史返回后按 requestId 去重，由真实 run 顶替。
       setPendingRun(submitted);
       reloadChildSession(submitted.requestId);
     },
-    [reloadChildSession]
+    [observeChildRun, reloadChildSession]
   );
 
-  const hasTimeline = syntheticChat.tasks.length > 0;
-  const hasConclusion = Boolean(syntheticChat.conclusion);
-  const hasConclusionFiles = getTaskFiles(syntheticChat.conclusion).length > 0;
-  const hasBody =
-    Boolean(syntheticChat.query) || hasTimeline || hasConclusion || hasConclusionFiles;
-  const showEmpty = useRealChildSession
-    ? childSessionTurns.length === 0 &&
-      (realSessionReady || Boolean(childSession.error))
-    : !hasBody;
+  const showEmpty =
+    childSessionTurns.length === 0 &&
+    (realSessionReady || Boolean(childSession.error) || !useRealChildSession);
 
   const handleChangeActiveChat = useCallback(
     (task: CHAT.Task) => {
@@ -205,8 +202,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
     sub.content,
     sub.status,
     sub.liveText,
-    syntheticChat.loading,
-    childSession.frames.length,
+    childRunCount,
     childSessionTurns.length,
   ]);
 
@@ -268,7 +264,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
 
         {childSession.error ? (
           <div className="mb-2 rounded-lg border border-[var(--color-warning-bd)] bg-[var(--color-warning-soft)] px-3 py-2 text-ui-caption text-[var(--color-warning)]">
-            子会话读取失败，已回退本地投影：{childSession.error}
+            子会话读取失败：{childSession.error}
           </div>
         ) : null}
 
@@ -313,33 +309,18 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
                 onOpenToolDiff={handleOpenToolDiff}
                 onOpenAgent={handleOpenAgent}
                 onOpenWorkspaceFiles={onOpenWorkspaceFiles}
-                onRequestReplay={childSession.loadReplay}
-                replayLoading={childSession.replayLoadingIds.includes(
-                  String(turn.chat.requestId || "")
-                )}
+                onRequestReplay={childSession.loadRun}
+                replayLoading={childSession.loading}
               />
             ))}
           </div>
         ) : null}
 
-        {!useRealChildSession && hasBody ? (
-          <Dialogue
-            key={tool.id || tool.messageId || "subagent-dialogue"}
-            chat={syntheticChat}
-            deepThink={false}
-            sessionArtifactFiles={sessionArtifactFiles}
-            changeTask={handleChangeActiveChat}
-            changeFile={handleChangeFile}
-            changePlan={changePlan}
-            onOpenToolDiff={handleOpenToolDiff}
-            onOpenAgent={handleOpenAgent}
-            onOpenWorkspaceFiles={onOpenWorkspaceFiles}
-          />
-        ) : null}
-
         {showEmpty ? (
           <div className="kimi-detail-panel-empty">
-            暂无详情
+            {!SUBAGENT_CHILD_SESSION_ENABLED
+              ? "子 Agent 详情已关闭"
+              : "该子 Agent 没有可用的独立会话轨迹"}
           </div>
         ) : null}
       </div>

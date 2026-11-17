@@ -39,6 +39,12 @@ import {
   submitAgentQuery,
 } from "@/services/agentRun";
 import {
+  isAgentGuidanceMode,
+  isAgentHeldMode,
+  shouldRetryInjectFailed,
+} from "./agentIngressResult";
+import { isConclusionEligibleLiveFrame } from "@/utils/timeline/timelineStore";
+import {
   ASK_USER_RESUME_EVENT,
   submitAskUserResume,
   type AskUserResumeEventDetail,
@@ -193,6 +199,11 @@ const HELD_MESSAGE_HINT = "消息已保留，发送新消息后继续";
 
 /** inject 应答 new_run 后允许重开新 run 的次数上限，防止后端持续应答时无限递归。 */
 const MESSAGE_INJECT_RETRY_CAP = 3;
+
+type IngressRetry = {
+  requestId: string;
+  count: number;
+};
 
 /** 终态失败提示：按状态查表，避免嵌套三元表达式。 */
 const TERMINAL_FAILURE_TIPS: Record<string, string> = {
@@ -866,7 +877,8 @@ export function useConversationStream(
       ).currentChat;
       const isRootResult =
         eventData.resultMap?.messageType === "result" &&
-        !resolveParentToolUseId(eventData);
+        !resolveParentToolUseId(eventData) &&
+        isConclusionEligibleLiveFrame(data);
       if (isRootResult) {
         chat = {
           ...chat,
@@ -1711,7 +1723,8 @@ export function useConversationStream(
       // 有后台任务时后端会推迟 finished；这里仍收口主对话 loading，SSE 继续接收结算事件。
       const isRootResult =
         eventData.resultMap?.messageType === "result" &&
-        !resolveParentToolUseId(eventData);
+        !resolveParentToolUseId(eventData) &&
+        isConclusionEligibleLiveFrame(data);
       if (isRootResult) {
         if (!settleRootResultConclusion(currentChat, eventData)) {
           currentChat.conclusion = buildTaskFromEventData(eventData) as CHAT.Task;
@@ -2487,7 +2500,8 @@ export function useConversationStream(
         // 但终答已产出，UI 不能一直停在「工作中 X 秒」+ 转圈。
         const isRootResult =
           eventData.resultMap?.messageType === "result" &&
-          !resolveParentToolUseId(eventData);
+          !resolveParentToolUseId(eventData) &&
+          isConclusionEligibleLiveFrame(data);
         if (isRootResult) {
           currentChat.conclusion = buildTaskFromEventData(eventData) as CHAT.Task;
         }
@@ -2772,7 +2786,11 @@ export function useConversationStream(
     }
   });
 
-  const sendMessage = useMemoizedFn((inputInfo: CHAT.TInputInfo, injectRetryDepth = 0) => {
+  const sendMessage = useMemoizedFn((
+    inputInfo: CHAT.TInputInfo,
+    injectRetryDepth = 0,
+    ingressRetry?: IngressRetry
+  ) => {
     const baseConversation = conversationRef.current;
     const conversationId = baseConversation.id;
     const { message, deepThink } = inputInfo;
@@ -2814,8 +2832,8 @@ export function useConversationStream(
       return;
     }
 
-    const requestId = getUniqId();
-    const clientMessageId = getUniqId();
+    const requestId = ingressRetry?.requestId || getUniqId();
+    const clientMessageId = requestId;
     clearFollowReconnectTimer(requestId);
     followReconnectAttemptsRef.current.delete(requestId);
     followReconnectContextsRef.current.delete(requestId);
@@ -3150,7 +3168,8 @@ export function useConversationStream(
       // 有后台任务时后端会推迟 finished；这里仍收口主对话 loading，SSE 继续接收结算事件。
       const isRootResult =
         eventData.resultMap?.messageType === "result" &&
-        !resolveParentToolUseId(eventData);
+        !resolveParentToolUseId(eventData) &&
+        isConclusionEligibleLiveFrame(data);
       if (isRootResult) {
         if (!settleRootResultConclusion(currentChat, eventData)) {
           currentChat.conclusion = buildTaskFromEventData(eventData) as CHAT.Task;
@@ -3442,9 +3461,42 @@ export function useConversationStream(
 
     void (async () => {
       try {
-        await submitAgentQuery(params);
+        const submitted = await submitAgentQuery(params);
+        if (isAgentGuidanceMode(submitted.mode)) {
+          rollbackBeforeStreamOpened();
+          toast.success(
+            submitted.mode === "queued" ? "已作为指导排队" : "已作为指导发送"
+          );
+          if (
+            submitted.activeRequestId &&
+            !hasConversationLiveStream(conversationId)
+          ) {
+            followActiveRun(submitted.activeRequestId);
+          }
+          return;
+        }
+        if (isAgentHeldMode(submitted.mode)) {
+          rollbackBeforeStreamOpened();
+          toast.warning(HELD_MESSAGE_HINT);
+          return;
+        }
       } catch (error) {
         const submitError = error instanceof AgentQuerySubmitError ? error : null;
+        if (
+          shouldRetryInjectFailed({
+            status: submitError?.status,
+            mode: submitError?.mode,
+            retryable: submitError?.retryable,
+            retryCount: ingressRetry?.count ?? 0,
+          })
+        ) {
+          rollbackBeforeStreamOpened();
+          sendMessage(inputInfo, injectRetryDepth + 1, {
+            requestId,
+            count: (ingressRetry?.count ?? 0) + 1,
+          });
+          return;
+        }
         const concurrent = submitError?.concurrent === true;
         const messageText = error instanceof Error ? error.message : CONCURRENT_RUN_HINT;
         const activeRequestId = submitError?.activeRequestId ?? null;

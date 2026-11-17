@@ -315,6 +315,31 @@ type DeepSearchChapterEntry = {
   chapter: MESSAGE.DeepSearchChapterState;
 };
 
+function stableRenderToken(identity: string): string {
+  return `${identity.length}-${hashContent(identity)}`;
+}
+
+function resolveDeepSearchChapterRenderId(
+  baseId: string,
+  key: string,
+  chapter: MESSAGE.DeepSearchChapterState,
+  index: number
+): string {
+  const explicitId = String(chapter.chapterId || "").trim();
+  const stableKey = String(key || "").trim();
+  const firstQuery = (chapter.queries || []).find(Boolean) || "";
+  const title = String(chapter.chapterTitle || "").trim();
+  const identity =
+    explicitId ||
+    (stableKey && !/^chapter-\d+$/.test(stableKey) ? stableKey : "") ||
+    firstQuery ||
+    title ||
+    (chapter.chapterOrder != null ? `order-${chapter.chapterOrder}` : "");
+  return identity
+    ? `${baseId}chapter:${stableRenderToken(identity)}`
+    : `${baseId}chapter:index-${index}`;
+}
+
 function readChapterEntries(
   value:
     | Record<string, MESSAGE.DeepSearchChapterState>
@@ -562,7 +587,7 @@ function processDeepSearchTask(
       };
       const renderTask = createRenderTask(
         task,
-        baseId.concat(String(index)),
+        resolveDeepSearchChapterRenderId(baseId, key, chapter, index),
         chapterSearchResult
       );
 
@@ -604,7 +629,11 @@ function processDeepSearchTask(
     return [fallback];
   }
 
+  const queryOccurrences = new Map<string, number>();
   return queries.map((query: string, index: number) => {
+    const queryIdentity = String(query || "").trim();
+    const occurrence = queryOccurrences.get(queryIdentity) || 0;
+    queryOccurrences.set(queryIdentity, occurrence + 1);
     const chapter = findChapterForQuery(inner?.chapters, query);
     const rawDocs =
       inner?.searchResult?.docs?.[index] ||
@@ -617,7 +646,9 @@ function processDeepSearchTask(
 
     const renderTask = createRenderTask(
       task,
-      baseId.concat(String(index)),
+      queryIdentity
+        ? `${baseId}query:${stableRenderToken(queryIdentity)}:${occurrence}`
+        : `${baseId}query:index-${index}`,
       searchResult
     );
 

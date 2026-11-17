@@ -416,10 +416,10 @@ describe("ChatView layout", () => {
 
       expect(html).toContain('data-workspace-open="false"');
       expect(html).toContain("cute-single-chat-shell");
-      // 单栏不套 Panel（库会给外层硬塞 flexBasis、内层塞 maxWidth:100%，
-      // 把居中的 max-w-[980px] 压坏），所以断言落在会话列自身上。
+      // 工作区实例要跨会话保活，所以即使当前收敛为单栏，面板节点也只折叠、
+      // 不卸载；居中的视觉断言仍落在会话列自身上。
       expect(html).toMatch(/class="[^"]*max-w-\[980px\][^"]*" id="chat-view"/);
-      expect(html).not.toContain("cute-workspace-panel");
+      expect(html).toContain('data-workspace-collapsed="true"');
     } finally {
       workspaceLayoutState.rightCollapsed = false;
       workspaceLayoutState.showAction = false;

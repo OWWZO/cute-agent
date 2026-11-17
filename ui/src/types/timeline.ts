@@ -43,6 +43,8 @@ export interface AgentTimelineItem {
   runId?: string;
   sessionId?: string;
   seq?: number;
+  /** live SSE 传输游标；不参与 committed timeline 排序。 */
+  eventSeq?: number;
   itemId?: string;
   parentItemId?: string | null;
   agentId?: string | null;
@@ -57,6 +59,12 @@ export interface AgentTimelineItem {
   orderKey?: number;
   subOrder?: number;
   delta?: string | null;
+  /** 当前帧新增文本。 */
+  response?: string | null;
+  /** 截至当前帧的累计文本。 */
+  responseAll?: string | null;
   payload?: TimelineItemPayload | null;
   errorMsg?: string | null;
+  /** live 展示帧为 true；committed snapshot 永远为 false。 */
+  transient?: boolean;
 }

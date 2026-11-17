@@ -156,6 +156,8 @@ declare global {
     }
 
     interface ArtifactReference {
+      requestId?: string
+      artifactRole?: string
       artifactType?: string
       displayName?: string
       relativePath?: string

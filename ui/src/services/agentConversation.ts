@@ -1,5 +1,16 @@
 import api from "./index";
-import type { AgentTimelineItem } from "@/types/timeline";
+import type {
+  AgentTimelineItem,
+  TimelineEventType,
+  TimelineItemKind,
+  TimelineItemStatus,
+} from "@/types/timeline";
+import {
+  AGENT_INGRESS_VERSION,
+  AGENT_INGRESS_VERSION_HEADER,
+  type AgentIngressMode,
+  type AgentIngressResponseFields,
+} from "@/services/agentIngressProtocol";
 
 const DEFAULT_DEVICE_ID = "device-default";
 const CONVERSATION_API_PREFIX = "/api/agent/conversation";
@@ -64,6 +75,16 @@ export interface ConversationReplayFrame {
   reqId: string;
   status: string;
   finished: boolean;
+  /** canonical timeline identity；旧 replayFrames 没有该字段。 */
+  itemId?: string;
+  parentItemId?: string | null;
+  agentId?: string | null;
+  kind?: TimelineItemKind;
+  phase?: AgentTimelineItem["phase"];
+  itemStatus?: TimelineItemStatus;
+  orderKey?: number;
+  subOrder?: number;
+  eventType?: TimelineEventType;
   resultMap: {
     agentType?: string;
     multiAgent?: Record<string, unknown>;
@@ -164,9 +185,81 @@ export interface ConversationHistoryDetail
 export interface ConversationHistoryQuery {
   limit?: number;
   after?: string | null;
+  /** 会话切换首屏是否携带右侧工作区文件；false 时由文件接口独立加载。 */
+  includeFiles?: boolean;
+  /** 是否内联末尾 turn 的 run replay；会话切换首屏应关闭，展开过程时再按需加载。 */
+  includeReplays?: boolean;
 }
 
 export type ConversationSessionQuery = ConversationHistoryQuery;
+
+export type AgentSessionQueryResult = AgentIngressResponseFields & {
+  accepted: boolean;
+  sessionId: string;
+  requestId: string;
+};
+
+export class AgentSessionQuerySubmitError extends Error {
+  status: number;
+  concurrent: boolean;
+  activeRequestId: string | null;
+  activeSessionId: string | null;
+  mode: AgentIngressMode | null;
+  retryable: boolean;
+
+  constructor(
+    message: string,
+    status: number,
+    details: {
+      concurrent?: boolean;
+      activeRequestId?: string | null;
+      activeSessionId?: string | null;
+      mode?: AgentIngressMode | null;
+      retryable?: boolean;
+    } = {}
+  ) {
+    super(message);
+    this.name = "AgentSessionQuerySubmitError";
+    this.status = status;
+    this.concurrent = details.concurrent === true;
+    this.activeRequestId = details.activeRequestId ?? null;
+    this.activeSessionId = details.activeSessionId ?? null;
+    this.mode = details.mode ?? null;
+    this.retryable = details.retryable === true;
+  }
+}
+
+function readSessionQuerySubmitError(error: unknown): AgentSessionQuerySubmitError | null {
+  const response = (error as {
+    response?: {
+      status?: number;
+      data?: {
+        info?: string;
+        msg?: string;
+        data?: AgentSessionQueryResult & {
+          activeSessionId?: string | null;
+        };
+      };
+    };
+  })?.response;
+  const status = response?.status;
+  if (!status) {
+    return null;
+  }
+  const body = response?.data;
+  const data = body?.data;
+  return new AgentSessionQuerySubmitError(
+    body?.info || body?.msg || `请求失败，状态码: ${status}`,
+    status,
+    {
+      concurrent: status === 409,
+      activeRequestId: data?.activeRequestId,
+      activeSessionId: data?.activeSessionId,
+      mode: data?.mode,
+      retryable: data?.retryable,
+    }
+  );
+}
 
 export const conversationHistoryApi = {
   listSessions: (params: ConversationSessionQuery = {}) =>
@@ -196,24 +289,31 @@ export const conversationHistoryApi = {
    * 在已有会话（含子会话）上发起新一轮 run。
    * 偏好四项不传即沿用会话已存值；传了就落库。
    */
-  submitSessionQuery: (
+  submitSessionQuery: async (
     sessionId: string,
     body: {
       query: string;
+      requestId: string;
       model?: string;
       thinking?: boolean;
       thinkingEffort?: string;
       deepThink?: number;
     }
-  ) =>
-    api.post<{ accepted: boolean; sessionId: string; requestId: string }>(
-      `${SESSION_API_PREFIX}/${encodeURIComponent(sessionId)}/query`,
-      body
-    ) as unknown as Promise<{
-      accepted: boolean;
-      sessionId: string;
-      requestId: string;
-    }>,
+  ): Promise<AgentSessionQueryResult> => {
+    try {
+      return (await api.post<AgentSessionQueryResult>(
+        `${SESSION_API_PREFIX}/${encodeURIComponent(sessionId)}/query`,
+        body,
+        {
+          headers: {
+            [AGENT_INGRESS_VERSION_HEADER]: AGENT_INGRESS_VERSION,
+          },
+        }
+      )) as unknown as AgentSessionQueryResult;
+    } catch (error) {
+      throw readSessionQuerySubmitError(error) ?? error;
+    }
+  },
   getSessionStatus: (sessionId: string) =>
     api.get<ConversationSessionStatus>(
       `${CONVERSATION_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/status`

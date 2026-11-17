@@ -34,8 +34,13 @@ export type ChatTurnView = {
  *
  * 主判据是 requestId 前缀；`query` 为空作为兜底 —— 续跑没有新的用户提问正文，
  * 但**不能**反过来只看 query（历史数据里首个 run 的 query 也可能被覆盖成空）。
+ * 后台唤醒 run 虽然同样没有用户正文，但它是系统主动开启的新视觉轮次，不能并进
+ * 上一轮，否则空占位会覆盖上一轮已经展示的终答。
  */
 export function isContinuationRun(chat: CHAT.ChatItem): boolean {
+  if (chat.backgroundWake) {
+    return false;
+  }
   const requestId = String(chat.requestId || "");
   if (requestId.startsWith(RESUME_REQUEST_ID_PREFIX)) {
     return true;

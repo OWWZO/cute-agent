@@ -1,4 +1,4 @@
-import { useRef, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { ChevronRight, LoaderCircle } from "lucide-react";
 import { formatWorkDuration } from "@/lib/workDuration";
 import { cn } from "@/lib/utils";
@@ -128,6 +128,7 @@ const ReplayDisclosure: FC<ReplayDisclosureProps> = (props) => {
     onToggle,
   } = props;
   const [requestPending, setRequestPending] = useState(false);
+  const [openAfterHydrate, setOpenAfterHydrate] = useState(false);
   const requestGateRef = useRef<ReplayRequestGate | null>(null);
   /** 已经为哪个 requestId 补过回放（不论成败），避免折叠/展开反复打后端 */
   const attemptedReplayIdRef = useRef<string | null>(null);
@@ -135,6 +136,14 @@ const ReplayDisclosure: FC<ReplayDisclosureProps> = (props) => {
     requestGateRef.current = createReplayRequestGate();
   }
   const requestGate = requestGateRef.current;
+
+  useEffect(() => {
+    if (!openAfterHydrate || !chat.replayLoaded) {
+      return;
+    }
+    setOpenAfterHydrate(false);
+    onToggle?.(true);
+  }, [chat.replayLoaded, onToggle, openAfterHydrate]);
 
   // 注意：这里**不再**因 `chat.replayLoaded` 返回 null。
   // 回放补齐后本组件仍要常驻——它同时是该轮过程区的折叠 trigger
@@ -166,6 +175,9 @@ const ReplayDisclosure: FC<ReplayDisclosureProps> = (props) => {
       })
     ) {
       attemptedReplayIdRef.current = chat.requestId;
+      if (!open) {
+        setOpenAfterHydrate(true);
+      }
       const started = requestGate.request(
         chat.requestId,
         onRequestReplay,

@@ -5,6 +5,7 @@ import type {
 } from "@/services/agentConversation";
 import type { AgentTimelineItem, TimelineEventType } from "@/types/timeline";
 import { normalizeRunStatus } from "@/utils/runStatus";
+import { TimelineStore } from "@/utils/timeline/timelineStore";
 
 const ITEM_EVENT_TYPES = new Set<TimelineEventType>([
   "item.delta",
@@ -33,6 +34,56 @@ const CONTROL_EVENT_TYPES = new Set<TimelineEventType>(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readNestedTimelineField(
+  value: unknown,
+  key: "artifactId" | "toolInvocationId",
+): number | string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const direct = value[key];
+  if (direct !== null && direct !== undefined && String(direct).trim()) {
+    return direct as number | string;
+  }
+  return readNestedTimelineField(value.resultMap, key);
+}
+
+function isPositiveNumericId(value: unknown): boolean {
+  if (value === null || value === undefined || !String(value).trim()) {
+    return false;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0;
+}
+
+/**
+ * committed ARTIFACT 必须能解析到真实 artifact 主键和父 Tool。
+ * 旧目录里的孤儿行只有 itemId/eventData，不是文件事实，不能生成 File 卡。
+ * live transient file 帧仍允许显示，等待 Ledger 结算后再由 canonical 项替换。
+ */
+export function isRenderableTimelineItem(item: AgentTimelineItem): boolean {
+  if (item.kind !== "ARTIFACT" || item.transient === true) {
+    return true;
+  }
+  const itemId = String(item.itemId || "");
+  if (/^artifact:[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(itemId)) {
+    return false;
+  }
+  const artifactId =
+    item.payload?.artifactId
+    ?? readNestedTimelineField(item.payload?.eventData, "artifactId");
+  if (!isPositiveNumericId(artifactId)) {
+    return false;
+  }
+  const toolInvocationId =
+    item.payload?.toolInvocationId
+    ?? readNestedTimelineField(item.payload?.eventData, "toolInvocationId");
+  if (!isPositiveNumericId(toolInvocationId)) {
+    return false;
+  }
+  return String(item.parentItemId || "").startsWith("tool:");
 }
 
 export function isRunTerminal(eventType: TimelineEventType | undefined): boolean {
@@ -140,8 +191,11 @@ export function timelineItemsToReplayFrames(
     return [];
   }
   const frames: ConversationReplayFrame[] = [];
-  for (const item of items) {
-    const eventData = item.payload?.eventData;
+  for (const item of new TimelineStore(items).values()) {
+    if (!isRenderableTimelineItem(item)) {
+      continue;
+    }
+    const eventData = withTimelineResponseText(item);
     if (!eventData) {
       continue;
     }
@@ -150,6 +204,19 @@ export function timelineItemsToReplayFrames(
       reqId: String(item.runId || eventData.resultMap?.requestId || ""),
       status: replayStatus(itemStatus),
       finished: isRunTerminal(item.eventType),
+      itemId: item.itemId,
+      parentItemId: item.parentItemId,
+      agentId: item.agentId,
+      kind: item.kind,
+      phase: item.phase,
+      itemStatus: item.itemStatus ?? (
+        typeof item.status === "string"
+          ? item.status.toUpperCase() as AgentTimelineItem["itemStatus"]
+          : undefined
+      ),
+      orderKey: item.orderKey,
+      subOrder: item.subOrder,
+      eventType: item.eventType,
       resultMap: {
         agentType: "history",
         multiAgent: {},
@@ -158,6 +225,39 @@ export function timelineItemsToReplayFrames(
     });
   }
   return frames;
+}
+
+/**
+ * live timeline 的 payload.eventData 可能是某一帧的快照；累计正文以
+ * responseAll 为准。这里复制后再写入，避免污染 TimelineStore 中的事实对象。
+ */
+function withTimelineResponseText(item: AgentTimelineItem): MESSAGE.EventData | undefined {
+  const source = item.payload?.eventData;
+  if (!source) {
+    return undefined;
+  }
+  const text = item.responseAll || (
+    item.eventType === "item.delta" ? item.delta : undefined
+  );
+  if (!text) {
+    return source;
+  }
+  const eventData = { ...source } as MESSAGE.EventData;
+  const task = eventData.resultMap;
+  if (task && typeof task === "object") {
+    const messageType = String(task.messageType || "");
+    eventData.resultMap = {
+      ...task,
+      ...(messageType === "llm_reasoning" ? { reasoningContent: text } : {}),
+      ...(messageType === "tool_thought" ? { toolThought: text } : {}),
+      ...(messageType === "agent_stream" || messageType === "result" || !messageType
+        ? { result: text, taskSummary: text }
+        : {}),
+    };
+  } else {
+    (eventData as unknown as Record<string, unknown>).result = text;
+  }
+  return eventData;
 }
 
 function replayStatus(status: AgentTimelineItem["itemStatus"] | AgentTimelineItem["status"]): string {

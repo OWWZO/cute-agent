@@ -586,6 +586,49 @@ describe("agentProcessModel", () => {
     }
   });
 
+  it("keeps the merged ReAct group identity stable when a new container arrives", () => {
+    const firstContainer = {
+      id: "container-1",
+      taskId: "task-1",
+      children: [
+        tool({
+          id: "t1",
+          messageType: "tool_call",
+          messageTime: "1714041601000",
+          resultMap: { toolName: "Read", isFinal: true },
+          isFinal: true,
+          finish: true,
+        }),
+      ],
+    } as unknown as CHAT.Task;
+    const secondContainer = {
+      id: "container-2",
+      taskId: "task-2",
+      children: [
+        tool({
+          id: "t2",
+          messageType: "tool_call",
+          messageTime: "1714041602000",
+          resultMap: { toolName: "Edit", isFinal: false },
+          isFinal: false,
+        }),
+      ],
+    } as unknown as CHAT.Task;
+    const readGroupId = (tasks: CHAT.Task[][]) => {
+      const model = deriveAgentProcessModel({
+        chat: createChat({ loading: true, tasks }),
+        isPlanSolve: false,
+        nowMs: 1714041603000,
+      });
+      const group = model.segments.find((segment) => segment.type === "group");
+      return group?.type === "group" ? group.group.id : undefined;
+    };
+
+    expect(readGroupId([[firstContainer]])).toBe(
+      readGroupId([[firstContainer, secondContainer]])
+    );
+  });
+
   it("keeps lone assistant-reply as assistant_reply (终答只走 conclusion)", () => {
     const chat = createChat({
       loading: false,

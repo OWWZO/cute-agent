@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentDetailPanel } from "./AgentDetailPanel";
-import { FrameBuffer } from "@/utils/chat/frameBuffer";
 
 const childSessionTool = {
   id: "agent-1",
@@ -24,7 +23,7 @@ const childSessionChat = {
 } as CHAT.ChatItem;
 
 describe("AgentDetailPanel shared dialogue renderer", () => {
-  it("renders child rich tools through the shared timeline", () => {
+  it("does not synthesize a second renderer when childSessionId is missing", () => {
     const html = renderToStaticMarkup(
       <AgentDetailPanel
         tool={
@@ -74,8 +73,9 @@ describe("AgentDetailPanel shared dialogue renderer", () => {
       />
     );
 
-    expect(html).toContain("搜索完成");
-    expect(html).toContain("query");
+    expect(html).toContain("没有可用的独立会话轨迹");
+    expect(html).not.toContain("搜索完成");
+    expect(html).not.toContain("query");
   });
 });
 
@@ -99,7 +99,7 @@ describe("AgentDetailPanel real child session (flag on)", () => {
     expect(html).not.toContain("搜索完成");
   });
 
-  it("flag 开启但没有 childSessionId 的旧父卡回退合成投影", async () => {
+  it("flag 开启但没有 childSessionId 时不回退合成投影", async () => {
     vi.stubEnv("VITE_SUBAGENT_CHILD_SESSION", "1");
     vi.resetModules();
     const { AgentDetailPanel: Panel } = await import("./AgentDetailPanel");
@@ -139,7 +139,21 @@ describe("AgentDetailPanel real child session (flag on)", () => {
     );
 
     expect(html).not.toContain("加载子会话");
-    expect(html).toContain("query");
+    expect(html).toContain("没有可用的独立会话轨迹");
+    expect(html).not.toContain("query");
+  });
+
+  it("flag 关闭时只显示关闭状态，不重新启用合成投影", async () => {
+    vi.stubEnv("VITE_SUBAGENT_CHILD_SESSION", "0");
+    vi.resetModules();
+    const { AgentDetailPanel: Panel } = await import("./AgentDetailPanel");
+    const html = renderToStaticMarkup(
+      <Panel tool={childSessionTool} chat={childSessionChat} onClose={vi.fn()} />
+    );
+
+    expect(html).toContain("子 Agent 详情已关闭");
+    expect(html).not.toContain("加载子会话");
+    expect(html).not.toContain("query");
   });
 
   it("reconnectExhausted 时展示重连失败提示，而不是静默停在原地", async () => {
@@ -147,20 +161,20 @@ describe("AgentDetailPanel real child session (flag on)", () => {
     vi.resetModules();
 
     // SSR 不跑 effect，hook 的返回值拿不到，直接给订阅钩子喂熔断状态
-    const sessionModule = await import("./useSubAgentSession");
-    vi.spyOn(sessionModule, "useSubAgentSession").mockReturnValue({
+    const sessionModule = await import("@/hooks/useSessionTimeline");
+    vi.spyOn(sessionModule, "useSessionTimeline").mockReturnValue({
       ready: true,
       loading: false,
       error: "",
-      frames: FrameBuffer.empty(),
       history: null,
-      replays: {},
-      replayLoadingIds: [],
+      runs: {},
+      activeRequestId: "",
       source: "live",
       reconnectAttempts: 20,
       reconnectExhausted: true,
-      loadReplay: vi.fn(),
       reload: vi.fn(),
+      loadRun: vi.fn(),
+      observeRun: vi.fn(),
     });
 
     const { AgentDetailPanel: Panel } = await import("./AgentDetailPanel");

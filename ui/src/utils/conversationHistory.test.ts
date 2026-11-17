@@ -432,18 +432,21 @@ describe("conversationHistory hydrate", () => {
       timelineItems: [
         {
           eventType: "item.completed",
+          itemId: "llm:1",
           runId: "req-history-001",
           itemStatus: "COMPLETED",
           payload: { eventData: createToolThoughtEvent("先读取已有资料") },
         },
         {
           eventType: "item.completed",
+          itemId: "tool:1",
           runId: "req-history-001",
           itemStatus: "COMPLETED",
           payload: {},
         },
         {
           eventType: "run.completed",
+          itemId: "run:req-history-001:final",
           runId: "req-history-001",
           itemStatus: "COMPLETED",
           payload: { eventData: createResultEvent("时间线最终结论") },
@@ -454,6 +457,38 @@ describe("conversationHistory hydrate", () => {
     expect(chat.replayLoaded).toBe(true);
     expect(chat.multiAgent.tasks[0]?.[0]?.messageType).toBe("tool_thought");
     expect(resolveTaskSummaryText(chat.conclusion)).toBe("时间线最终结论");
+  });
+
+  it("canonical 非 run-final 的 result 不会进入主 Agent 结论区", () => {
+    const detail: ConversationHistoryDetail = {
+      sessionId: "session-timeline-internal-001",
+      title: "内部 ask",
+      status: "RUNNING",
+      deepThink: false,
+      runCount: 1,
+      finishedRunCount: 0,
+      failedRunCount: 0,
+      runs: [],
+    };
+    const chat = hydrateRunReplay(detail, {
+      requestId: "req-history-internal-001",
+      status: "RUNNING",
+      queryText: "继续检索",
+      replayFrames: [],
+      timelineItems: [{
+        itemId: "llm:15636",
+        eventType: "item.upserted",
+        runId: "req-history-internal-001",
+        kind: "ASSISTANT_MESSAGE",
+        phase: "INTERMEDIATE",
+        itemStatus: "COMPLETED",
+        payload: {
+          eventData: createResultEvent("WebFetch 内部提取结果"),
+        },
+      }],
+    });
+
+    expect(chat.conclusion).toBeUndefined();
   });
 
   it("hydrates derived thought and timeline fields for deep think history", () => {

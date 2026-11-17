@@ -278,6 +278,8 @@ export const normalizeTaskFile = (
     url: previewUrl || downloadUrl || "",
     type: toExtension(name, raw.artifactType || raw.type),
     size: toSize(raw.fileSize ?? raw.size),
+    requestId: firstText(raw.requestId) || undefined,
+    artifactRole: firstText(raw.artifactRole) || undefined,
     previewUrl: previewUrl || undefined,
     downloadUrl: downloadUrl || undefined,
     missing,

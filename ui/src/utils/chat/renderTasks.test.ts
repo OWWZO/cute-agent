@@ -89,6 +89,41 @@ describe("DeepSearch 展示任务拆分", () => {
     expect(rendered).toHaveLength(2);
     expect(rendered.map((item) => item.resultMap?.chapterId)).toEqual(["C1", "C2"]);
   });
+
+  it("章节重排不会改变已有卡片的 React 身份", () => {
+    const makeTask = (c1Order: number, c2Order: number) => ({
+      messageType: "deep_search",
+      messageTime: "1714041600002",
+      resultMap: {
+        messageType: "chapter_summary",
+        chapters: {
+          C1: {
+            chapterId: "C1",
+            chapterTitle: "第一章",
+            chapterOrder: c1Order,
+            queries: ["查询一"],
+            summary: "第一章总结",
+          },
+          C2: {
+            chapterId: "C2",
+            chapterTitle: "第二章",
+            chapterOrder: c2Order,
+            queries: ["查询二"],
+            summary: "第二章总结",
+          },
+        },
+      },
+    }) as unknown as CHAT.Task;
+
+    const before = processTaskForRender(makeTask(1, 2), "deep-search-stable-");
+    const after = processTaskForRender(makeTask(2, 1), "deep-search-stable-");
+    const idOf = (items: CHAT.Task[], chapterId: string) =>
+      items.find((item) => item.resultMap?.chapterId === chapterId)?.id;
+
+    expect(idOf(before, "C1")).toBe(idOf(after, "C1"));
+    expect(idOf(before, "C2")).toBe(idOf(after, "C2"));
+    expect(idOf(before, "C1")).not.toBe(idOf(before, "C2"));
+  });
 });
 
 describe("getTaskRenderSignature 缓存失效契约", () => {

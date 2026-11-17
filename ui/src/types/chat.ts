@@ -90,6 +90,8 @@ declare global {
       url: string;
       type: string;
       size: number;
+      requestId?: string;
+      artifactRole?: string;
       previewUrl?: string;
       downloadUrl?: string;
       missing?: boolean;

@@ -31,6 +31,12 @@ describe("isContinuationRun", () => {
     expect(isContinuationRun(chat({ query: "" }))).toBe(true);
   });
 
+  it("后台唤醒 run 即使没有 query 也独立成轮", () => {
+    expect(
+      isContinuationRun(chat({ query: "", backgroundWake: true }))
+    ).toBe(false);
+  });
+
   it("有 query 的普通 run 不是续跑", () => {
     expect(isContinuationRun(chat())).toBe(false);
   });
@@ -89,6 +95,22 @@ describe("groupChatsIntoTurns", () => {
 
     expect(turns).toHaveLength(2);
     expect(turns[0].chats).toHaveLength(3);
+    expect(turns[1].chats).toHaveLength(1);
+  });
+
+  it("后台唤醒 run 不覆盖上一轮，独立成为新 turn", () => {
+    const turns = groupChatsIntoTurns([
+      chat({ requestId: "req-1", conclusion: { id: "done" } as never }),
+      chat({
+        requestId: "wake-1",
+        query: "",
+        loading: true,
+        backgroundWake: true,
+      }),
+    ]);
+
+    expect(turns.map((turn) => turn.key)).toEqual(["req-1", "wake-1"]);
+    expect(turns[0].chats).toHaveLength(1);
     expect(turns[1].chats).toHaveLength(1);
   });
 });

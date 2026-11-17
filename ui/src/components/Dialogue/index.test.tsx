@@ -18,13 +18,13 @@ function wakeChat(loading: boolean): CHAT.ChatItem {
 }
 
 describe("Dialogue background wake", () => {
-  it("隐藏唤醒消息的用户气泡和撤销入口，完成前不显示完成徽标", () => {
+  it("隐藏唤醒消息的用户气泡和撤销入口，并明确显示继续处理状态", () => {
     const running = renderToStaticMarkup(
       <Dialogue chat={wakeChat(true)} deepThink={false} onUndo={() => undefined} />
     );
 
     expect(running).not.toContain("data-user-message-anchor");
-    expect(running).not.toContain("后台任务已完成");
+    expect(running).toContain("后台任务已完成，正在继续处理");
   });
 
   it("唤醒轮完成后只显示来源徽标", () => {

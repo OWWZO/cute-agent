@@ -246,11 +246,13 @@ const DialogueComponent: FC<Props> = (props) => {
         </div>
       ) : null}
 
-      {/* 后台任务唤醒轮：没有用户提问，只标注来源 */}
-      {chat.backgroundWake && !chat.loading ? (
+      {/* 后台任务唤醒轮独立成轮：没有用户提问，只标注来源与继续处理状态 */}
+      {chat.backgroundWake ? (
         <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
           <Sparkles className="size-4" aria-hidden="true" />
-          <span>后台任务已完成</span>
+          <span>
+            {chat.loading ? "后台任务已完成，正在继续处理" : "后台任务已完成"}
+          </span>
         </div>
       ) : null}
 
@@ -289,8 +291,13 @@ const DialogueComponent: FC<Props> = (props) => {
               onRequestReplay={onRequestReplay}
               replayLoading={replayLoading}
               open={processOpen}
-              // 只有真的存在过程区时才给折叠能力，否则按钮退化为纯回放入口
-              onToggle={showProcessTimeline ? setProcessOpen : undefined}
+              // replay 尚未加载时也允许点击：一次点击既触发按需加载，又记录展开意图。
+              onToggle={
+                showProcessTimeline ||
+                chat.replayLoaded !== true
+                  ? setProcessOpen
+                  : undefined
+              }
             />
           </div>
         ) : null}

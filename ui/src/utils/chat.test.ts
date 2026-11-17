@@ -18,8 +18,7 @@ import {
 } from "./deepSearch";
 import { resolveTaskToolArg } from "@/components/Dialogue/tools/toolTaskAdapter";
 import { deriveAgentProcessModel } from "@/components/Dialogue/agentProcessModel";
-import { getPrimaryTaskFile } from "./taskArtifacts";
-import { chatItemFromSubAgent } from "./chat/subAgentChat";
+import { getPrimaryTaskFile, getTaskFiles } from "./taskArtifacts";
 
 type DeepSearchStage = "extend" | "search" | "report";
 
@@ -638,6 +637,65 @@ describe("workspace file list events", () => {
         segment.group.steps.some((step) => step.tool.messageType === "file")
       )
     ).toBe(false);
+  });
+
+  it("artifact file metadata enriches the existing Tool instead of replacing it", () => {
+    const currentChat = {
+      sessionId: "session-artifact-file",
+      requestId: "req-artifact-file",
+      query: "生成报告",
+      files: [],
+      forceStop: false,
+      loading: false,
+      tasks: [],
+      timeline: [],
+      multiAgent: { tasks: [] },
+    } as CHAT.ChatItem;
+    const toolCallId = "call-artifact-file";
+
+    combineData(createToolCallEvent({
+      taskId: "task-artifact-file",
+      messageId: "workspace-write-call",
+      toolCallId,
+      toolName: "workspace_write",
+      input: { path: "report.md", content: "hello" },
+    }), currentChat);
+    combineData({
+      messageType: "task",
+      messageId: "artifact:23",
+      taskId: "artifact:23",
+      taskOrder: 1,
+      messageOrder: 1,
+      artifactRefs: [{
+        displayName: "report.md",
+        fileName: "report.md",
+        downloadUrl: "https://example.com/report.md",
+        previewUrl: "https://example.com/preview/report.md",
+        resourceKey: "artifact-23",
+      }],
+      resultMap: {
+        requestId: "req-artifact-file",
+        messageId: "artifact:23",
+        messageType: "file",
+        finish: true,
+        isFinal: true,
+        artifactId: 23,
+        toolInvocationId: 7,
+        toolCallId,
+        parentToolCallId: toolCallId,
+        parentToolUseId: toolCallId,
+        fileInfo: [{
+          fileName: "report.md",
+          downloadUrl: "https://example.com/report.md",
+          previewUrl: "https://example.com/preview/report.md",
+        }],
+      },
+    } as unknown as MESSAGE.EventData, currentChat);
+
+    expect(currentChat.multiAgent.tasks).toHaveLength(1);
+    expect(currentChat.multiAgent.tasks[0]).toHaveLength(1);
+    expect(currentChat.multiAgent.tasks[0][0].messageType).toBe("tool_call");
+    expect(getTaskFiles(currentChat.multiAgent.tasks[0][0])[0]?.name).toBe("report.md");
   });
 });
 
@@ -2015,12 +2073,6 @@ describe("chat file task title", () => {
     });
     expect(agent?.children).toHaveLength(1);
     expect(agent?.children?.[0].resultMap?.toolName).toBe("workspace_grep");
-
-    const panelChat = chatItemFromSubAgent(agent as CHAT.Task, renderedChat);
-    expect(panelChat.query).toBe("抓取主流媒体评论并总结");
-    expect(panelChat.tasks[0][0].children?.[0].resultMap?.toolName).toBe(
-      "workspace_grep"
-    );
   });
 
   it("子事件先于父 Agent 时仍应嵌套，不进主时间线", () => {

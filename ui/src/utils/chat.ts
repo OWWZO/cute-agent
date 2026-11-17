@@ -1891,6 +1891,12 @@ function handleNonStreamingMessage(
     }
     return;
   }
+  if (isCommittedArtifactFileTask(nextTask)) {
+    // file 只是既有 Tool 的附件补充，不能命中工具占位卡并把原 Tool 替换掉。
+    // 找不到父 Tool 时直接丢弃，ARTIFACT 不允许成为独立执行步骤。
+    mergeFileIntoParentTool(eventData, currentChat, nextTask);
+    return;
+  }
   if (taskIndex !== -1) {
     const taskGroup = currentChat.multiAgent.tasks[taskIndex];
 
@@ -2006,6 +2012,38 @@ function handleNonStreamingMessage(
     ]);
   }
 
+}
+
+function isCommittedArtifactFileTask(task: MESSAGE.Task): boolean {
+  if (task.messageType !== "file") {
+    return false;
+  }
+  const artifactId = (task as unknown as Record<string, unknown>).artifactId;
+  const toolInvocationId =
+    (task as unknown as Record<string, unknown>).toolInvocationId;
+  return Number(artifactId) > 0 && Number(toolInvocationId) > 0;
+}
+
+function mergeFileIntoParentTool(
+  eventData: MESSAGE.EventData,
+  currentChat: CHAT.ChatItem,
+  fileTask: MESSAGE.Task,
+): boolean {
+  const toolCallId = resolveTaskToolCallId(fileTask);
+  if (!toolCallId) {
+    return false;
+  }
+  for (const taskGroup of currentChat.multiAgent.tasks || []) {
+    const toolIndex = findTaskIndexByToolCallId(taskGroup, toolCallId, {
+      excludeMessageType: "file",
+    });
+    if (toolIndex === -1) {
+      continue;
+    }
+    mergeTaskArtifactRefs(taskGroup[toolIndex], eventData);
+    return true;
+  }
+  return false;
 }
 
 /**

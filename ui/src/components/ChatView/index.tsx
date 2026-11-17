@@ -25,6 +25,7 @@ import ActionView, {
   type OpenDesktopTabPayload,
   type OpenTaskTabPayload,
 } from "@/components/ActionView";
+import { readWorkspaceTabState } from "@/components/ActionView/workspaceTabStateCache";
 import { AgentDetailPanel } from "@/components/Dialogue/AgentDetailPanel";
 import {
   buildToolPreviewSource,
@@ -35,7 +36,10 @@ import SessionTaskComposerBar from "./SessionTaskComposerBar";
 import { VirtualizedTurnList, type VirtualTurnPosition } from "./VirtualizedTurnList";
 import SubAgentsPanel from "./SubAgentsPanel";
 import type { AgentsPanelVariant } from "./subAgentsModel";
-import { collectSubAgentRoster } from "@/utils/chat/subAgentRoster";
+import {
+  collectSubAgentRoster,
+  type SubAgentRosterItem,
+} from "@/utils/chat/subAgentRoster";
 import { resolveSubAgentDisplay } from "@/utils/chat/subagent";
 import FilePreview from "@/components/ActionView/FilePreview";
 import { resolvePreviewTitle } from "@/components/ActionView/filePreviewModel";
@@ -62,7 +66,12 @@ import { hasPendingAskUserQuestion, isParentLoopLive } from "./streamState";
 import { getProductByType } from "@/utils/constants";
 import { useMemoizedFn } from "ahooks";
 import { cn } from "@/lib/utils";
-import { Group, Panel, Separator } from "react-resizable-panels";
+import {
+  Group,
+  Panel,
+  Separator,
+  type PanelImperativeHandle,
+} from "react-resizable-panels";
 import { confirm } from "@/components/ui/confirm-dialog";
 import {
   CHAT_PANEL_DEFAULT_SIZE,
@@ -115,6 +124,13 @@ import {
 import { collectSessionArtifactFiles } from "@/utils/markdownArtifacts";
 import { getPrimaryTaskFile, getTaskFiles } from "@/utils/taskArtifacts";
 import type { PanelItemType } from "@/components/ActionPanel";
+import {
+  shouldObserveRunTimeline,
+  useRunTimeline,
+} from "@/hooks/useRunTimeline";
+import { projectChatWithTimelineSource } from "@/utils/chat/sessionTimelineChat";
+import { timelineItemsToReplayFrames } from "@/utils/timelineItems";
+import { selectLatestTurnPreviewFile } from "@/utils/workspacePreview";
 
 type ChatViewApi = {
   openFile: (file: CHAT.TFile, chat?: CHAT.ChatItem) => void;
@@ -352,7 +368,34 @@ type TaskTabLiveState = {
   workspaceStreamTask?: CHAT.Task;
 };
 
+type WorkspaceSessionSnapshot = {
+  taskList: SessionFileTasks;
+  plan?: CHAT.Plan;
+  agentRoster: SubAgentRosterItem[];
+  workspaceCaption: string;
+  taskTabLiveState: TaskTabLiveState;
+};
+
+const MAX_KEPT_WORKSPACE_SESSIONS = 4;
+
 const TaskTabLiveStateContext = createContext<TaskTabLiveState | null>(null);
+
+const WorkspaceSessionActivity = memo(function WorkspaceSessionActivity({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn("h-full min-h-0 w-full", !active && "hidden")}
+      aria-hidden={!active}
+    >
+      {children}
+    </div>
+  );
+});
 
 const LiveTaskTabView = memo(function LiveTaskTabView({
   tab,
@@ -406,6 +449,64 @@ const ChatView: CuteType.FC<Props> = (props) => {
     onFocusModeChange,
   } = props;
 
+  const activeMainChat = conversation.chatList?.[conversation.chatList.length - 1];
+  const activeMainRequestId = activeMainChat?.requestId || "";
+  const activeMainRunStatus = String(activeMainChat?.metrics?.status || "");
+  const activeMainRequestIdRef = useRef("");
+  const observedLiveMainRunRef = useRef("");
+  if (activeMainRequestIdRef.current !== activeMainRequestId) {
+    activeMainRequestIdRef.current = activeMainRequestId;
+    observedLiveMainRunRef.current = "";
+  }
+  if (shouldObserveRunTimeline(activeMainRequestId, activeMainRunStatus)) {
+    observedLiveMainRunRef.current = activeMainRequestId;
+  }
+  const shouldObserveActiveMainTimeline = shouldObserveRunTimeline(
+    activeMainRequestId,
+    activeMainRunStatus,
+    observedLiveMainRunRef.current === activeMainRequestId
+  );
+  const activeMainTimeline = useRunTimeline(
+    activeMainRequestId,
+    shouldObserveActiveMainTimeline
+  );
+  const canonicalMainSource = useMemo(() => {
+    const items = activeMainTimeline.items.filter(
+      (item) => !item.runId || item.runId === activeMainRequestId
+    );
+    if (!timelineItemsToReplayFrames(items).length) {
+      return undefined;
+    }
+    return {
+      items,
+      status: activeMainRunStatus || activeMainTimeline.status,
+      loaded: true,
+    };
+  }, [
+    activeMainRequestId,
+    activeMainRunStatus,
+    activeMainTimeline.items,
+    activeMainTimeline.status,
+  ]);
+  /**
+   * 控制流仍由 useConversationStream 负责；可见轨迹以 canonical timeline 为准。
+   * run 还没有任何可渲染项时保留控制流快照，避免首帧前闪空。
+   */
+  const visibleChatList = useMemo(() => {
+    const list = conversation.chatList || [];
+    if (!canonicalMainSource || !activeMainRequestId) {
+      return list;
+    }
+    const last = list[list.length - 1];
+    if (!last || last.requestId !== activeMainRequestId) {
+      return list;
+    }
+    return [
+      ...list.slice(0, -1),
+      projectChatWithTimelineSource(last, canonicalMainSource),
+    ];
+  }, [activeMainRequestId, canonicalMainSource, conversation.chatList]);
+
   const [workspaceOpenRequested, setWorkspaceOpenRequested] = useState(false);
   /** 打开工作区前缓存要点的文件，避免 ActionView 未挂载时 setFilePreview 丢失 */
   const [pendingPreviewFile, setPendingPreviewFile] = useState<CHAT.TFile>();
@@ -435,6 +536,38 @@ const ChatView: CuteType.FC<Props> = (props) => {
   /** 待挂载的桌面控制预览 tab（与文件 / 任务 tab 同一套挂载机制） */
   const [pendingDesktopTab, setPendingDesktopTab] =
     useState<OpenDesktopTabPayload | null>(null);
+  const workspaceSessionKey = conversation.sessionId || conversation.id;
+  const pendingWorkspaceOwnerRef = useRef("");
+  const pendingForCurrentWorkspace =
+    pendingWorkspaceOwnerRef.current === workspaceSessionKey;
+  const activePendingPreviewFile = pendingForCurrentWorkspace
+    ? pendingPreviewFile
+    : undefined;
+  const activePendingSourceTab = pendingForCurrentWorkspace
+    ? pendingSourceTab
+    : null;
+  const activePendingAgentTab = pendingForCurrentWorkspace
+    ? pendingAgentTab
+    : null;
+  const activePendingAgentDirectory =
+    pendingForCurrentWorkspace && pendingAgentDirectory;
+  const activePendingTaskTab = pendingForCurrentWorkspace
+    ? pendingTaskTab
+    : null;
+  const activePendingDesktopTab = pendingForCurrentWorkspace
+    ? pendingDesktopTab
+    : null;
+  /**
+   * 最近使用的工作区实例。ActionView 用会话 ID 作为稳定身份，避免切回同一
+   * 会话时重建 HTML iframe；超出上限的旧会话才真正释放内存。
+   */
+  const [workspaceActivityKeys, setWorkspaceActivityKeys] = useState<string[]>(
+    []
+  );
+  const workspaceSnapshotsRef = useRef<Map<string, WorkspaceSessionSnapshot>>(
+    new Map()
+  );
+  const workspacePanelRef = useRef<PanelImperativeHandle | null>(null);
   /**
    * 工作区「最后一个真实 tab 被关掉」的哨兵。
    *
@@ -444,12 +577,16 @@ const ChatView: CuteType.FC<Props> = (props) => {
    */
   const hadWorkspaceTabsRef = useRef(false);
   /**
-   * 工作区当前是否有真实 tab。
-   *
-   * 用 state 而不是 ref：它是 `hasWorkspaceContent` 的输入 —— 只要还有 tab，
-   * 工作区就必须留着（哪怕流式的 `showAction` 已经翻回 false）。
+   * 每个会话最后一次上报的真实 tab 数。会话切换时直接读对应的 key，
+   * 避免沿用上一会话的 true/false 状态，也能在 ActionView 恢复缓存前就决定布局。
    */
-  const [workspaceHasTabs, setWorkspaceHasTabs] = useState(false);
+  const [workspaceTabCounts, setWorkspaceTabCounts] = useState<
+    Record<string, number>
+  >({});
+  const workspaceHasTabs = Boolean(
+    workspaceTabCounts[workspaceSessionKey] ??
+      readWorkspaceTabState(workspaceSessionKey).tabs.length
+  );
   /** 流式「自动跟随」已经为哪个任务自动开过 tab：同一个任务只自动开一次 */
   const lastAutoFollowTaskKeyRef = useRef("");
   /**
@@ -486,9 +623,9 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const conversationListSnapshot = useMemo(
     () => ({
       id: conversation.id,
-      chatList: conversation.chatList
+      chatList: visibleChatList
     }),
-    [conversation.chatList, conversation.id]
+    [visibleChatList, conversation.id]
   );
   const deferredConversationList = useDeferredValue(conversationListSnapshot);
   const deferredChatList =
@@ -506,11 +643,11 @@ const ChatView: CuteType.FC<Props> = (props) => {
   );
   const openTaskReview = useMemoizedFn(
     (sessionId: string, requestIds: string[]) => {
-      if (!sessionId || !requestIds.length) return;
-      const params = new URLSearchParams({
-        sessionId,
-        requestIds: requestIds.join(","),
-      });
+      if (!sessionId) return;
+      const params = new URLSearchParams({ sessionId });
+      if (requestIds.length) {
+        params.set("requestIds", requestIds.join(","));
+      }
       if (typeof window !== "undefined") {
         window.location.assign(`/task-review?${params.toString()}`);
       }
@@ -533,6 +670,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const actionViewRef = ActionView.useActionView();
   const conversationRef = useRef(conversation);
   const lastAutoOpenedCanvasPreviewKeyRef = useRef("");
+  const lastAutoOpenedSessionPreviewRef = useRef("");
   const [dataLoading, setDataLoading] = useState(false);
   const [replayLoadingIds, setReplayLoadingIds] = useState<Set<string>>(
     () => new Set()
@@ -621,6 +759,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
   useEffect(() => {
     // 会话 ID 变化意味着旧的流式草稿、数据加载状态和工作区展开状态都不再
     // 属于当前会话；这里只重置本组件持有的瞬时状态，历史内容由父状态提供。
+    const cachedHasTabs =
+      readWorkspaceTabState(workspaceSessionKey).tabs.length > 0;
     setDataLoading(false);
     setWorkspaceOpenRequested(false);
     setIsRightCollapsed(false);
@@ -631,15 +771,39 @@ const ChatView: CuteType.FC<Props> = (props) => {
     // 「待打开」意图都是**瞬时**的，不跨会话 —— 流式自动跟随会写 pendingPreviewFile，
     // 不清掉的话切会话时可能把上一个会话的文件带过来。
     setPendingPreviewFile(undefined);
-    // ActionView 的 key 是 conversation.id，换会话后 tab 全没了 —— 哨兵必须归零，
-    // 否则新会话首次上报 0 会被误判成「最后一个 tab 被关掉」。
-    hadWorkspaceTabsRef.current = false;
-    setWorkspaceHasTabs(false);
+    pendingWorkspaceOwnerRef.current = "";
+    // ActionView 实例会保活；切回已有工作区的会话时，从 tab 缓存恢复面板状态。
+    hadWorkspaceTabsRef.current = cachedHasTabs;
     userClosedWorkspaceRef.current = false;
     lastAutoFollowTaskKeyRef.current = "";
     lastAutoOpenedCanvasPreviewKeyRef.current = "";
+    lastAutoOpenedSessionPreviewRef.current = "";
     lastAutoOpenedDesktopControlRef.current = "";
-  }, [conversation.id]);
+  }, [setIsRightCollapsed, workspaceSessionKey]);
+
+  useEffect(() => {
+    if (!workspaceSessionKey) return;
+    setWorkspaceActivityKeys((previous) => {
+      if (previous.includes(workspaceSessionKey)) {
+        return previous;
+      }
+      // 保持首次访问顺序稳定。把当前会话移到数组首位会在 DOM 里重排节点，
+      // iframe 一旦被移动就会重新加载，恰好抵消保活效果。
+      return [...previous, workspaceSessionKey].slice(
+        -MAX_KEPT_WORKSPACE_SESSIONS
+      );
+    });
+  }, [workspaceSessionKey]);
+
+  useEffect(() => {
+    const retained = new Set(workspaceActivityKeys);
+    if (workspaceSessionKey) retained.add(workspaceSessionKey);
+    for (const key of workspaceSnapshotsRef.current.keys()) {
+      if (!retained.has(key)) {
+        workspaceSnapshotsRef.current.delete(key);
+      }
+    }
+  }, [workspaceActivityKeys, workspaceSessionKey]);
 
   // 任务预览 tab 不需要在这里「刷新快照」：tab 只存 `taskKey`，实时任务由
   // `renderTaskTab` 在渲染时从最新 chatList / taskList 回找（旧实现靠一段
@@ -729,6 +893,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     setPendingAgentDirectory(false);
     setPendingTaskTab(null);
     setPendingDesktopTab(null);
+    pendingWorkspaceOwnerRef.current = "";
   });
 
   /**
@@ -744,6 +909,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       if (!request) return;
 
       resetPendingOpenIntents();
+      pendingWorkspaceOwnerRef.current = workspaceSessionKey;
       setActiveRunState({
         status: chat?.metrics?.status,
         finishedAt: chat?.finishedAt,
@@ -783,6 +949,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       }
       const display = resolveSubAgentDisplay(task);
       resetPendingOpenIntents();
+      pendingWorkspaceOwnerRef.current = workspaceSessionKey;
       setPendingAgentTab({
         toolCallId,
         title: display.description || display.subagentType || "子智能体",
@@ -803,6 +970,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const openSubAgentDirectory = useMemoizedFn(() => {
     resetPendingOpenIntents();
     openRightWorkspace();
+    pendingWorkspaceOwnerRef.current = workspaceSessionKey;
     setPendingAgentDirectory(true);
   });
 
@@ -822,6 +990,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       return;
     }
     resetPendingOpenIntents();
+    pendingWorkspaceOwnerRef.current = workspaceSessionKey;
     setPendingTaskTab({
       taskKey,
       // 文件类任务的标题取自 primary file（`resolvePreviewTitle` 的 file 分支
@@ -846,11 +1015,11 @@ const ChatView: CuteType.FC<Props> = (props) => {
       status: chat?.metrics?.status,
       finishedAt: chat?.finishedAt,
     });
-    // 先写入父状态：工作区未挂载时 ref 调用会丢；挂载后由 ActionView 消费。
-    // 两条路径同时保留是为了覆盖“首次打开工作区”和“工作区已存在”两种时序。
+    // 只写父级 pending，由当前会话自己的 ActionView 消费。不能在会话切换的
+    // 提交间隙直接调 ref：那一刻 ref 仍可能指向上一个会话的工作区。
     resetPendingOpenIntents();
+    pendingWorkspaceOwnerRef.current = workspaceSessionKey;
     setPendingPreviewFile(file);
-    actionViewRef.current?.setFilePreview(file);
   });
 
   const clearPendingPreviewFile = useMemoizedFn(() => {
@@ -882,6 +1051,49 @@ const ChatView: CuteType.FC<Props> = (props) => {
       conversation.chatList[conversation.chatList.length - 1];
     changeFile(file, liveChat);
   }, [changeFile, conversation.chatList, streamLoading, workspaceStreamTask]);
+
+  /**
+   * 历史会话首次进入时，等文件清单到达后自动打开最新一轮的最终展示文件。
+   *
+   * 文件请求与聊天首屏并行；这里只消费已经到达的清单，不会反向阻塞聊天。
+   * 已恢复旧标签、用户已手动关闭工作区或正在实时跟随时都不抢焦点。
+   */
+  useEffect(() => {
+    if (
+      streamLoading ||
+      !workspaceSessionKey ||
+      !sessionWorkspaceFiles.length ||
+      workspaceHasTabs ||
+      userClosedWorkspaceRef.current
+    ) {
+      return;
+    }
+    const latestTurnRequestIds = chatTurns.at(-1)?.requestIds || [];
+    const file = selectLatestTurnPreviewFile(
+      sessionWorkspaceFiles,
+      latestTurnRequestIds
+    );
+    if (!file) {
+      return;
+    }
+    const fileKey =
+      file.resourceKey || file.relativePath || file.url || file.name;
+    const intentKey = `${workspaceSessionKey}::${fileKey}`;
+    if (lastAutoOpenedSessionPreviewRef.current === intentKey) {
+      return;
+    }
+    lastAutoOpenedSessionPreviewRef.current = intentKey;
+    changeFile(file, conversation.chatList.at(-1));
+  }, [
+    changeFile,
+    chatTurns,
+    conversation.chatList,
+    sessionWorkspaceFiles,
+    streamLoading,
+    userClosedWorkspaceRef,
+    workspaceHasTabs,
+    workspaceSessionKey,
+  ]);
 
   useEffect(() => {
     onRegisterApi?.({ openFile: changeFile });
@@ -1105,8 +1317,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
   });
   const sessionFileTasks = useMemo(() => {
     const cache = sessionFileTasksCacheRef.current;
-    if (cache.conversationId !== conversation.id) {
-      cache.conversationId = conversation.id;
+    if (cache.conversationId !== workspaceSessionKey) {
+      cache.conversationId = workspaceSessionKey;
       cache.chatTasks = new WeakMap();
       cache.taskSnapshots = new WeakMap();
       cache.liveTaskList = undefined;
@@ -1147,7 +1359,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       )
     );
     if (
-      cache.conversationId === conversation.id &&
+      cache.conversationId === workspaceSessionKey &&
       sameStringList(cache.snapshots, nextSnapshots)
     ) {
       return cache.tasks;
@@ -1157,7 +1369,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     return next;
   }, [
     conversation.chatList,
-    conversation.id,
+    workspaceSessionKey,
     sessionFileManifestTask,
     taskList,
   ]);
@@ -1189,8 +1401,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
     const merged: CHAT.TFile[] = [];
     const seen = new Set<string>();
     const cache = sessionArtifactFilesCacheRef.current;
-    if (cache.conversationId !== conversation.id) {
-      cache.conversationId = conversation.id;
+    if (cache.conversationId !== workspaceSessionKey) {
+      cache.conversationId = workspaceSessionKey;
       cache.files = [];
       cache.snapshots = [];
       cache.chatFiles = new WeakMap();
@@ -1214,19 +1426,19 @@ const ChatView: CuteType.FC<Props> = (props) => {
     const next = merged;
     const nextSnapshots = next.map(getFileSnapshot);
     if (
-      cache.conversationId === conversation.id &&
+      cache.conversationId === workspaceSessionKey &&
       sameStringList(cache.snapshots, nextSnapshots)
     ) {
       return cache.files;
     }
     sessionArtifactFilesCacheRef.current = {
-      conversationId: conversation.id,
+      conversationId: workspaceSessionKey,
       files: next,
       snapshots: nextSnapshots,
       chatFiles: cache.chatFiles,
     };
     return next;
-  }, [conversation.id, deferredChatList, sessionFileTasks]);
+  }, [workspaceSessionKey, deferredChatList, sessionFileTasks]);
 
   const activeChat = conversation.chatList?.[conversation.chatList.length - 1];
   const sessionBusy = loading || isParentLoopLive(activeChat);
@@ -1399,6 +1611,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const openDesktopPreview = useMemoizedFn(() => {
     if (!pendingDesktopStreamUrl) return;
     resetPendingOpenIntents();
+    pendingWorkspaceOwnerRef.current = workspaceSessionKey;
     setPendingDesktopTab({
       taskKey: pendingDesktopPreviewKey,
       title: "桌面预览",
@@ -1444,18 +1657,30 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const hasWorkspaceContent = hasWorkspaceSurface({
     workspaceHasTabs,
     hasPendingOpenIntent: Boolean(
-      pendingTaskTab ||
-        pendingAgentTab ||
-        pendingAgentDirectory ||
-        pendingSourceTab ||
-        pendingDesktopTab ||
-        pendingPreviewFile
+      activePendingTaskTab ||
+        activePendingAgentTab ||
+        activePendingAgentDirectory ||
+        activePendingSourceTab ||
+        activePendingDesktopTab ||
+        activePendingPreviewFile
     ),
     workspaceOpenRequested,
     hasOpenRequestedPlan: workspaceOpenRequested && Boolean(plan),
   });
   /** 工作区此刻是否真的占着右侧（收起 / 无内容都算「不可见」）。等价于渲染时的 `hasWorkspaceLayout`。 */
   const workspaceVisible = hasWorkspaceContent && !isRightCollapsed;
+  useEffect(() => {
+    const panel = workspacePanelRef.current;
+    if (!panel) return;
+    if (workspaceVisible) {
+      panel.expand();
+      if (panel.isCollapsed()) {
+        panel.resize("50%");
+      }
+    } else {
+      panel.collapse();
+    }
+  }, [workspaceVisible]);
 
   /**
    * 流式「自动跟随」（原「动态」模式）现在落成一个**真实 tab**。
@@ -1506,6 +1731,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       return;
     }
 
+    pendingWorkspaceOwnerRef.current = workspaceSessionKey;
     setPendingTaskTab({
       taskKey,
       title:
@@ -1521,6 +1747,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     openRightWorkspace,
     showAction,
     workspaceHasTabs,
+    workspaceSessionKey,
     workspaceStreamTask,
     workspaceVisible,
   ]);
@@ -1533,17 +1760,21 @@ const ChatView: CuteType.FC<Props> = (props) => {
    * 并发），也不能收起 —— 否则刚点开的 tab 会被立刻连带关掉。
    */
   const handleWorkspaceTabsChange = useMemoizedFn((count: number) => {
-    setWorkspaceHasTabs(count > 0);
+    setWorkspaceTabCounts((previous) =>
+      previous[workspaceSessionKey] === count
+        ? previous
+        : { ...previous, [workspaceSessionKey]: count }
+    );
     const decision = decideWorkspaceTabCountChange({
       hadTabs: hadWorkspaceTabsRef.current,
       count,
       hasPendingOpenIntent: Boolean(
-        pendingTaskTab ||
-          pendingAgentTab ||
-          pendingAgentDirectory ||
-          pendingSourceTab ||
-          pendingPreviewFile ||
-          pendingDesktopTab
+        activePendingTaskTab ||
+        activePendingAgentTab ||
+        activePendingAgentDirectory ||
+        activePendingSourceTab ||
+        activePendingPreviewFile ||
+        activePendingDesktopTab
       ),
     });
     hadWorkspaceTabsRef.current = decision.hadTabs;
@@ -1585,20 +1816,10 @@ const ChatView: CuteType.FC<Props> = (props) => {
     return currentProduct?.name || "新任务";
   }, [conversation.chatTitle, conversation.title, currentProduct?.name]);
 
-  const latestReviewTurn = useMemo(() => {
-    const turn = chatTurns[chatTurns.length - 1];
-    if (
-      !turn ||
-      turn.chat.loading ||
-      ["RUNNING", "WAITING_INPUT"].includes(
-        String(turn.chat.metrics?.status || "").toUpperCase()
-      ) ||
-      turn.requestIds.length === 0
-    ) {
-      return null;
-    }
-    return turn;
-  }, [chatTurns]);
+  const hasReviewEntry = useMemo(
+    () => chatTurns.some((turn) => turn.requestIds.length > 0),
+    [chatTurns]
+  );
 
   /** Composer 堆栈：任务条常驻；pending HITL 替换 Composer（后台子 Agent 入口在右上角面板 + 输入框徽标） */
   const renderComposerStack = (inputKey: string) => (
@@ -1871,9 +2092,83 @@ const ChatView: CuteType.FC<Props> = (props) => {
     );
   };
 
+  workspaceSnapshotsRef.current.set(workspaceSessionKey, {
+    taskList: sessionFileTasks,
+    plan,
+    agentRoster: subAgentRoster,
+    workspaceCaption: workspaceCaption || "",
+    taskTabLiveState,
+  });
+
+  const workspaceRenderKeys = workspaceSessionKey
+    ? (
+        workspaceActivityKeys.includes(workspaceSessionKey)
+          ? workspaceActivityKeys
+          : [...workspaceActivityKeys, workspaceSessionKey]
+      ).slice(-MAX_KEPT_WORKSPACE_SESSIONS)
+    : workspaceActivityKeys;
+
+  const renderWorkspaceActivities = () =>
+    workspaceRenderKeys.map((key) => {
+      const active = key === workspaceSessionKey;
+      const snapshot = workspaceSnapshotsRef.current.get(key);
+      if (!snapshot) return null;
+      return (
+        <WorkspaceSessionActivity key={key} active={active}>
+          <TaskTabLiveStateContext.Provider value={snapshot.taskTabLiveState}>
+            <ActionView
+              key={key}
+              pendingPreviewFile={
+                active ? activePendingPreviewFile : undefined
+              }
+              onPendingPreviewFileConsumed={
+                active ? clearPendingPreviewFile : undefined
+              }
+              pendingSourceTab={active ? activePendingSourceTab : null}
+              onPendingSourceTabConsumed={
+                active ? () => setPendingSourceTab(null) : undefined
+              }
+              pendingAgentTab={active ? activePendingAgentTab : null}
+              onPendingAgentTabConsumed={
+                active ? () => setPendingAgentTab(null) : undefined
+              }
+              pendingAgentDirectoryTab={
+                active ? activePendingAgentDirectory : false
+              }
+              onPendingAgentDirectoryTabConsumed={
+                active ? () => setPendingAgentDirectory(false) : undefined
+              }
+              pendingTaskTab={active ? activePendingTaskTab : null}
+              onPendingTaskTabConsumed={
+                active ? () => setPendingTaskTab(null) : undefined
+              }
+              pendingDesktopTab={active ? activePendingDesktopTab : null}
+              onPendingDesktopTabConsumed={
+                active ? () => setPendingDesktopTab(null) : undefined
+              }
+              workspaceStateKey={key}
+              agentRoster={snapshot.agentRoster}
+              onOpenAgent={active ? openAgentPanel : undefined}
+              renderAgentTab={active ? renderAgentTab : undefined}
+              renderTaskTab={active ? renderTaskTab : undefined}
+              onTabsChange={active ? handleWorkspaceTabsChange : undefined}
+              workspaceCaption={snapshot.workspaceCaption}
+              taskList={snapshot.taskList}
+              plan={snapshot.plan}
+              isFocusMode={active ? isFocusMode : false}
+              onToggleFocusMode={active ? toggleFocusMode : undefined}
+              ref={active ? actionViewRef : undefined}
+              onClose={active ? closeActionView : undefined}
+            />
+          </TaskTabLiveStateContext.Provider>
+        </WorkspaceSessionActivity>
+      );
+    });
+
   const renderMultAgent = () => {
     // 右侧关闭后回到居中单栏；仅展开时才占用双栏布局，避免留下窄条把主会话拉长。
     const hasWorkspaceLayout = hasWorkspaceContent && !isRightCollapsed;
+    const workspaceKeepAliveMounted = workspaceRenderKeys.length > 0;
 
     // 左栏内容。单栏 / 双栏共用，但外层容器不同：
     // 双栏交给 `react-resizable-panels` 的 Panel，单栏必须用普通 div ——
@@ -1913,18 +2208,15 @@ const ChatView: CuteType.FC<Props> = (props) => {
               {(!hasWorkspaceLayout || !isFocusMode) ? (
                 <div className="flex shrink-0 items-center gap-1">
                   {renderWorkspaceReopenTrigger()}
-                  {!readOnly && latestReviewTurn ? (
+                  {!readOnly && hasReviewEntry ? (
                     <button
                       type="button"
                       onClick={() =>
-                        openTaskReview(
-                          conversation.sessionId || conversation.id,
-                          latestReviewTurn.requestIds
-                        )
+                        openTaskReview(conversation.sessionId || conversation.id, [])
                       }
                       className="flex h-8 items-center gap-1 rounded-full px-2 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-                      title="复盘最近一轮任务"
-                      aria-label="复盘最近一轮任务"
+                      title="选择要复盘的请求"
+                      aria-label="选择要复盘的请求"
                     >
                       <ClipboardCheck className="h-4 w-4" />
                       <span>复盘</span>
@@ -2025,8 +2317,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
       </div>
     );
 
-    // 单栏：不套 Group / Panel，保持原来的居中布局。
-    if (!hasWorkspaceLayout) {
+    // 还没有任何需要保活的工作区时保留最初的轻量单栏结构。
+    if (!workspaceKeepAliveMounted) {
       return (
         <div
           className="cute-chat-workspace-layout cute-single-chat-shell flex h-full w-full justify-center overflow-hidden bg-background px-4 pt-4 md:px-6"
@@ -2047,11 +2339,14 @@ const ChatView: CuteType.FC<Props> = (props) => {
         groupRef={groupRef}
         className={cn(
           "cute-chat-workspace-layout flex h-full w-full",
+          !hasWorkspaceLayout && "cute-single-chat-shell",
           // 双栏：外壳铺一层浅底（与左侧会话栏同色），两个面板保持纯白圆角、**不描边**。
           // 分栏靠这层底色差表达，而不是靠 border —— 这样「面板边框」这条线就不存在了。
-          "gap-0 bg-[var(--chat-nav)] p-1"
+          hasWorkspaceLayout
+            ? "gap-0 bg-[var(--chat-nav)] p-1"
+            : "gap-0 bg-background"
         )}
-        data-workspace-open="true"
+        data-workspace-open={hasWorkspaceLayout ? "true" : "false"}
         data-workspace-empty={hasWorkspaceContent ? "false" : "true"}
         data-chat-read-only={readOnly ? "true" : "false"}
         onLayoutChange={handleLayoutChange}
@@ -2062,8 +2357,9 @@ const ChatView: CuteType.FC<Props> = (props) => {
           id="chat"
           className={cn(
             "cute-chat-panel-left flex min-h-0 flex-col overflow-hidden bg-background",
+            !hasWorkspaceLayout && "items-center",
             // 双栏时只保留圆角，不加描边 —— 与预览面板的分界由外壳底色差表达。
-            "rounded-[var(--workspace-panel-radius)]",
+            hasWorkspaceLayout && "rounded-[var(--workspace-panel-radius)]",
             isLeftCollapsed && !isFocusMode && "w-14 min-w-14",
             (!isLeftCollapsed || isFocusMode) && "shrink-0"
           )}
@@ -2075,13 +2371,15 @@ const ChatView: CuteType.FC<Props> = (props) => {
           // 约束始终用常规区间：沉浸模式只走 setLayout(24%)，不再同步改 min/max。
           // 否则退出沉浸的那一帧，宽度恢复会先被旧的 maxSize(28%) 夹住，导致对话区变小。
           minSize={panelPercent(MIN_LEFT_WIDTH)}
-          maxSize={panelPercent(MAX_LEFT_WIDTH)}
+          maxSize={panelPercent(
+            hasWorkspaceLayout ? MAX_LEFT_WIDTH : 100
+          )}
           defaultSize={CHAT_PANEL_DEFAULT_SIZE}
         >
           {chatColumn}
         </Panel>
 
-        {!isFocusMode && !isLeftCollapsed ? (
+        {hasWorkspaceLayout && !isFocusMode && !isLeftCollapsed ? (
           <Separator
             aria-label="调整对话区和工作区宽度"
             className={cn(
@@ -2103,51 +2401,26 @@ const ChatView: CuteType.FC<Props> = (props) => {
           />
         ) : null}
 
-        <button
-          type="button"
-          className="cute-workspace-scrim lg:hidden"
-          aria-label="关闭工作区"
-          onClick={closeMobileWorkspace}
-        />
+        {hasWorkspaceLayout ? (
+          <button
+            type="button"
+            className="cute-workspace-scrim lg:hidden"
+            aria-label="关闭工作区"
+            onClick={closeMobileWorkspace}
+          />
+        ) : null}
 
         <Panel
           id="workspace"
           className="cute-workspace-panel relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--workspace-panel-radius)] bg-background"
-          data-workspace-collapsed="false"
+          data-workspace-collapsed={hasWorkspaceLayout ? "false" : "true"}
+          collapsible
+          collapsedSize={0}
+          minSize={panelPercent(24)}
+          panelRef={workspacePanelRef}
         >
-          {/* ActionView 常驻挂载；文件、任务、子智能体与桌面预览共用同一套 tab。 */}
-          <TaskTabLiveStateContext.Provider value={taskTabLiveState}>
-            <ActionView
-              key={conversation.id}
-              pendingPreviewFile={pendingPreviewFile}
-              onPendingPreviewFileConsumed={clearPendingPreviewFile}
-              pendingSourceTab={pendingSourceTab}
-              onPendingSourceTabConsumed={() => setPendingSourceTab(null)}
-              pendingAgentTab={pendingAgentTab}
-              onPendingAgentTabConsumed={() => setPendingAgentTab(null)}
-              pendingAgentDirectoryTab={pendingAgentDirectory}
-              onPendingAgentDirectoryTabConsumed={() =>
-                setPendingAgentDirectory(false)
-              }
-              pendingTaskTab={pendingTaskTab}
-              onPendingTaskTabConsumed={() => setPendingTaskTab(null)}
-              pendingDesktopTab={pendingDesktopTab}
-              onPendingDesktopTabConsumed={() => setPendingDesktopTab(null)}
-              workspaceStateKey={conversation.id}
-              agentRoster={subAgentRoster}
-              onOpenAgent={openAgentPanel}
-              renderAgentTab={renderAgentTab}
-              renderTaskTab={renderTaskTab}
-              onTabsChange={handleWorkspaceTabsChange}
-              workspaceCaption={workspaceCaption}
-              taskList={sessionFileTasks}
-              plan={plan}
-              isFocusMode={isFocusMode}
-              onToggleFocusMode={toggleFocusMode}
-              ref={actionViewRef}
-              onClose={closeActionView}
-            />
-          </TaskTabLiveStateContext.Provider>
+          {/* 会话级 ActionView 常驻挂载；隐藏会话用 hidden 容器保留 DOM 与 iframe。 */}
+          {renderWorkspaceActivities()}
         </Panel>
       </Group>
     );
