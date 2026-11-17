@@ -25,6 +25,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * 会话级 SSE 总线：订阅、回放闸门、心跳。
@@ -45,6 +46,8 @@ public class AgentSessionStreamHub implements AgentSessionEventBus {
 
     private final Map<String, CopyOnWriteArrayList<Conn>> bySession = new ConcurrentHashMap<>();
     private final Map<SseEmitter, Conn> byEmitter = new ConcurrentHashMap<>();
+    private final Map<String, CopyOnWriteArrayList<SessionSubscriber>> subscribers =
+            new ConcurrentHashMap<>();
 
     @Resource
     private AgentRunFollowApplicationService agentRunFollowApplicationService;
@@ -61,13 +64,39 @@ public class AgentSessionStreamHub implements AgentSessionEventBus {
         if (StringUtils.isBlank(sessionId) || frame == null) {
             return;
         }
+        CopyOnWriteArrayList<SessionSubscriber> sessionSubscribers = subscribers.get(sessionId);
+        if (sessionSubscribers != null) {
+            for (SessionSubscriber subscriber : sessionSubscribers) {
+                subscriber.accept(frame);
+            }
+        }
         CopyOnWriteArrayList<Conn> conns = bySession.get(sessionId);
-        if (conns == null || conns.isEmpty()) {
-            return;
+        if (conns != null) {
+            for (Conn conn : conns) {
+                conn.offer(frame);
+            }
         }
-        for (Conn conn : conns) {
-            conn.offer(frame);
+    }
+
+    @Override
+    public AutoCloseable subscribe(String sessionId,
+                                   Consumer<AgentSessionStreamFrame> subscriber) {
+        return subscribe(sessionId, subscriber, null);
+    }
+
+    @Override
+    public AutoCloseable subscribe(String sessionId,
+                                   Consumer<AgentSessionStreamFrame> subscriber,
+                                   Runnable onComplete) {
+        if (StringUtils.isBlank(sessionId) || subscriber == null) {
+            return () -> {
+            };
         }
+        SessionSubscriber registration =
+                new SessionSubscriber(sessionId, subscriber, onComplete);
+        subscribers.computeIfAbsent(sessionId, ignored -> new CopyOnWriteArrayList<>())
+                .add(registration);
+        return registration;
     }
 
     @Override
@@ -76,6 +105,12 @@ public class AgentSessionStreamHub implements AgentSessionEventBus {
             return;
         }
         CopyOnWriteArrayList<Conn> conns = bySession.get(sessionId);
+        CopyOnWriteArrayList<SessionSubscriber> sessionSubscribers = subscribers.get(sessionId);
+        if (sessionSubscribers != null) {
+            for (SessionSubscriber subscriber : sessionSubscribers) {
+                subscriber.complete();
+            }
+        }
         if (conns == null) {
             return;
         }
@@ -294,5 +329,64 @@ public class AgentSessionStreamHub implements AgentSessionEventBus {
             return result.getEventSeq();
         }
         return 0L;
+    }
+
+    private final class SessionSubscriber implements AutoCloseable {
+        private final String sessionId;
+        private final Consumer<AgentSessionStreamFrame> delegate;
+        private final Runnable onComplete;
+        private final AtomicBoolean closed = new AtomicBoolean(false);
+        private final AtomicBoolean completionNotified = new AtomicBoolean(false);
+
+        private SessionSubscriber(String sessionId,
+                                  Consumer<AgentSessionStreamFrame> delegate,
+                                  Runnable onComplete) {
+            this.sessionId = sessionId;
+            this.delegate = delegate;
+            this.onComplete = onComplete;
+        }
+
+        private void accept(AgentSessionStreamFrame frame) {
+            if (closed.get()) {
+                return;
+            }
+            try {
+                delegate.accept(frame);
+            } catch (RuntimeException e) {
+                log.warn("session timeline subscriber failed sessionId={}", sessionId, e);
+                close();
+            }
+        }
+
+        private void complete() {
+            if (closed.get() || !completionNotified.compareAndSet(false, true)) {
+                return;
+            }
+            try {
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+            } catch (RuntimeException e) {
+                log.warn("session timeline completion failed sessionId={}", sessionId, e);
+            } finally {
+                // 会话完成后不保留空订阅；RunTimelineStreamService 的 close 仍可幂等调用。
+                close();
+            }
+        }
+
+        @Override
+        public void close() {
+            if (!closed.compareAndSet(false, true)) {
+                return;
+            }
+            CopyOnWriteArrayList<SessionSubscriber> current = subscribers.get(sessionId);
+            if (current == null) {
+                return;
+            }
+            current.remove(this);
+            if (current.isEmpty()) {
+                subscribers.remove(sessionId, current);
+            }
+        }
     }
 }

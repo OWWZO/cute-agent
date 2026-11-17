@@ -79,7 +79,9 @@ public class AgentConversationHistoryController {
     public Response<ConversationSessionBootstrapRespVO> bootstrap(
             @PathVariable("sessionId") String sessionId,
             @RequestParam(name = "limit", defaultValue = "20") Integer limit,
-            @RequestParam(name = "after", required = false) String after) {
+            @RequestParam(name = "after", required = false) String after,
+            @RequestParam(name = "includeFiles", defaultValue = "true") boolean includeFiles,
+            @RequestParam(name = "includeReplays", defaultValue = "true") boolean includeReplays) {
         try {
             // 鉴权统一在聚合入口完成：detail / files 原有接口各自校验，三个 pending 原先没有校验。
             conversationSessionAuthorizationService.ensureExistingSessionAccessible(
@@ -87,7 +89,14 @@ public class AgentConversationHistoryController {
                     sessionId
             );
             ConversationSessionBootstrap bootstrap = conversationSessionBootstrapApplicationService
-                    .queryBootstrap(UserRequestContext.requireUserId(), sessionId, limit, after);
+                    .queryBootstrap(
+                            UserRequestContext.requireUserId(),
+                            sessionId,
+                            limit,
+                            after,
+                            includeFiles,
+                            includeReplays
+                    );
             return Response.<ConversationSessionBootstrapRespVO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -432,6 +441,8 @@ public class AgentConversationHistoryController {
         String previewUrl = artifact == null ? null : artifact.getPreviewUrl();
         boolean missing = StringUtils.isBlank(downloadUrl) && StringUtils.isBlank(previewUrl);
         return ArtifactReferenceRespVO.builder()
+                .requestId(artifact == null ? null : artifact.getRequestId())
+                .artifactRole(artifact == null ? null : artifact.getArtifactRole())
                 .artifactType(artifact == null ? null : artifact.getMimeType())
                 .displayName(artifact == null ? null : artifact.getFileName())
                 .relativePath(ArtifactRelativePath.resolve(artifact))

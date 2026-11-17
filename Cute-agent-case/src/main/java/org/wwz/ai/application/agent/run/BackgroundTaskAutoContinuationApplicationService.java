@@ -11,7 +11,7 @@ import org.wwz.ai.application.agent.query.GptQueryApplicationService;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
 import org.wwz.ai.application.agent.stream.AgentSessionStreamFrame;
 import org.wwz.ai.application.agent.stream.AgentStreamProjection;
-import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
+import org.wwz.ai.application.agent.stream.AgentTimelineFrameEnricher;
 import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
@@ -64,7 +64,7 @@ public class BackgroundTaskAutoContinuationApplicationService {
     private Executor dispatchExecutor;
 
     @Resource
-    private AgentTimelineEventProjector agentTimelineEventProjector;
+    private AgentTimelineFrameEnricher agentTimelineFrameEnricher;
 
     @Autowired(required = false)
     private SessionInboxPort sessionInboxPort;
@@ -107,7 +107,7 @@ public class BackgroundTaskAutoContinuationApplicationService {
 
         AgentStreamProjection projectingStream =
                 new AgentStreamProjection(null, request, handlerMap, agentSessionEventBus,
-                        sessionEventClock, agentTimelineEventProjector)
+                        sessionEventClock, agentTimelineFrameEnricher)
                         .bindRegistry(sessionProjectionRegistry);
         // 先发控制帧，前端据此建占位 chat 并重新订阅；再结束旧投影的观察流。
         publishWakeFrame(sessionId, request.getRequestId(), taskId, triggerSource, displayQuery);

@@ -11,7 +11,7 @@ import org.wwz.ai.application.agent.run.BackgroundTaskAutoContinuationApplicatio
 import org.wwz.ai.application.agent.run.BackgroundTaskWakeAdapter;
 import org.wwz.ai.application.agent.run.SessionYieldGate;
 import org.wwz.ai.application.agent.stream.AgentSessionEventBus;
-import org.wwz.ai.application.agent.stream.AgentTimelineEventProjector;
+import org.wwz.ai.application.agent.stream.AgentTimelineFrameEnricher;
 import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskCompletionEvent;
@@ -85,8 +85,8 @@ public class BackgroundTaskAutoContinuationSettlementTest {
                         config);
         ReflectionTestUtils.setField(continuation, "handlerMap", Collections.emptyMap());
         ReflectionTestUtils.setField(continuation, "dispatchExecutor", (Executor) Runnable::run);
-        ReflectionTestUtils.setField(continuation, "agentTimelineEventProjector",
-                Mockito.mock(AgentTimelineEventProjector.class));
+        ReflectionTestUtils.setField(continuation, "agentTimelineFrameEnricher",
+                Mockito.mock(AgentTimelineFrameEnricher.class));
 
         BackgroundTaskWakeAdapter adapter = new BackgroundTaskWakeAdapter(
                 activeRuns,
@@ -141,8 +141,8 @@ public class BackgroundTaskAutoContinuationSettlementTest {
                         config);
         ReflectionTestUtils.setField(continuation, "handlerMap", Collections.emptyMap());
         ReflectionTestUtils.setField(continuation, "dispatchExecutor", (Executor) Runnable::run);
-        ReflectionTestUtils.setField(continuation, "agentTimelineEventProjector",
-                Mockito.mock(AgentTimelineEventProjector.class));
+        ReflectionTestUtils.setField(continuation, "agentTimelineFrameEnricher",
+                Mockito.mock(AgentTimelineFrameEnricher.class));
 
         Assert.assertTrue(continuation.dispatchWake(
                 sessionId, null, "user_inbox", "继续处理", ignored -> {
@@ -182,8 +182,8 @@ public class BackgroundTaskAutoContinuationSettlementTest {
         ReflectionTestUtils.setField(continuation, "dispatchExecutor", (Executor) command -> {
             throw new RejectedExecutionException("busy");
         });
-        ReflectionTestUtils.setField(continuation, "agentTimelineEventProjector",
-                Mockito.mock(AgentTimelineEventProjector.class));
+        ReflectionTestUtils.setField(continuation, "agentTimelineFrameEnricher",
+                Mockito.mock(AgentTimelineFrameEnricher.class));
         AtomicInteger settleCount = new AtomicInteger();
 
         boolean accepted = continuation.dispatchWake(

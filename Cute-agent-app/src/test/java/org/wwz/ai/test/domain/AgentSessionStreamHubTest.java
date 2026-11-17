@@ -17,6 +17,8 @@ import org.wwz.ai.types.agent.config.AgentExecutorProperties;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ScheduledFuture;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -129,6 +131,47 @@ public class AgentSessionStreamHubTest {
         }
 
         Assert.assertEquals("连接数不应再受上限约束", beyondOldLimit, hub.connectionCount());
+    }
+
+    @Test
+    public void shouldDeliverPublishedFramesToRegisteredSubscriberAndStopAfterClose() throws Exception {
+        AgentSessionStreamHub hub = new AgentSessionStreamHub();
+        ReflectionTestUtils.setField(hub, "agentExecutorProperties", new AgentExecutorProperties());
+        AtomicReference<String> received = new AtomicReference<>();
+
+        AutoCloseable subscription = hub.subscribe("session-timeline", frame ->
+                received.set(frame.getItemId()));
+
+        hub.publish("session-timeline",
+                org.wwz.ai.application.agent.stream.AgentSessionStreamFrame.builder()
+                        .itemId("tool:call-1")
+                        .build());
+        Assert.assertEquals("tool:call-1", received.get());
+
+        subscription.close();
+        hub.publish("session-timeline",
+                org.wwz.ai.application.agent.stream.AgentSessionStreamFrame.builder()
+                        .itemId("tool:call-2")
+                        .build());
+        Assert.assertEquals("tool:call-1", received.get());
+    }
+
+    @Test
+    public void shouldNotifyTimelineSubscriberWhenSessionProjectionCompletes() throws Exception {
+        AgentSessionStreamHub hub = new AgentSessionStreamHub();
+        ReflectionTestUtils.setField(hub, "agentExecutorProperties", new AgentExecutorProperties());
+        AtomicInteger completions = new AtomicInteger();
+        AutoCloseable subscription = hub.subscribe(
+                "session-timeline",
+                frame -> {
+                },
+                completions::incrementAndGet);
+
+        hub.completeSession("session-timeline");
+        hub.completeSession("session-timeline");
+
+        Assert.assertEquals(1, completions.get());
+        subscription.close();
     }
 
     @SuppressWarnings("unchecked")

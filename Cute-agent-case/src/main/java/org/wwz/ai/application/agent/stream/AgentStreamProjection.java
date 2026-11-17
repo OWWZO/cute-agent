@@ -3,7 +3,6 @@ package org.wwz.ai.application.agent.stream;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
-import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemView;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamEvent;
@@ -21,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -74,12 +72,7 @@ public class AgentStreamProjection implements AgentSessionStream {
     private SessionProjectionRegistry projectionRegistry;
     private final AgentExecutionCommand request;
     private final Map<AgentType, AgentStreamEventHandler> handlerMap;
-    private final AgentTimelineEventProjector timelineEventProjector;
-    private final Set<String> timelineWrittenItems = ConcurrentHashMap.newKeySet();
-    /** 目录写入按投影实例串行；不占用 projectionLock，避免慢 DB 卡住 SSE。 */
-    private final Object timelinePersistLock = new Object();
-    private long nextTimelinePersistTicket; // guarded by projectionLock
-    private long timelinePersistTicketInProgress; // guarded by timelinePersistLock
+    private final AgentTimelineFrameEnricher timelineFrameEnricher;
     private final AgentStreamAccumulator eventResult = new AgentStreamAccumulator();
     private final List<Runnable> abortHandlers = new CopyOnWriteArrayList<>();
     private final AtomicBoolean closed = new AtomicBoolean(false);
@@ -117,12 +110,12 @@ public class AgentStreamProjection implements AgentSessionStream {
                                  Map<AgentType, AgentStreamEventHandler> handlerMap,
                                  AgentSessionEventBus eventBus,
                                  SessionEventClock eventClock,
-                                 AgentTimelineEventProjector timelineEventProjector) {
+                                 AgentTimelineFrameEnricher timelineFrameEnricher) {
         this.request = request;
         this.handlerMap = handlerMap == null ? Map.of() : handlerMap;
         this.eventBus = eventBus;
         this.eventClock = eventClock;
-        this.timelineEventProjector = timelineEventProjector;
+        this.timelineFrameEnricher = timelineFrameEnricher;
         if (downstream != null) {
             addDownstream(downstream, 0L);
         }
@@ -190,86 +183,46 @@ public class AgentStreamProjection implements AgentSessionStream {
         }
 
         AgentSessionStreamFrame frame = null;
-        TimelineItemView timelineItem = null;
-        long timelinePersistTicket = -1L;
-        try {
-            synchronized (projectionLock) {
-                if (closed.get()) {
-                    return;
-                }
-                AgentType agentType = AgentType.fromCode(request.getAgentType());
-                AgentStreamEventHandler handler = handlerMap.get(agentType);
-                if (handler == null) {
-                    log.error("{} no AgentStreamEventHandler found for agentType: {}",
-                            request.getRequestId(), agentType);
-                    AgentSessionStreamFrame failed = buildDefaultResult(
-                            request, "Agent 执行失败，请稍后重试");
-                    assignSeq(failed);
-                    enrichRunFailed(failed);
-                    offerReplayBuffer(failed);
-                    forwardIfLive(failed);
-                    return;
-                }
-
-                // 断流期间仍推进投影状态，避免 rebind 后状态机落后。
-                AgentStreamResult result = handler.handle(request, agentResponse, eventResult);
-                frame = frameMapper.toFrame(result);
-                assignSeq(frame);
-                if (timelineEventProjector != null) {
-                    try {
-                        timelineItem = timelineEventProjector.enrich(
-                                frame, request, timelineWrittenItems);
-                        if (timelineItem != null) {
-                            timelinePersistTicket = nextTimelinePersistTicket++;
-                        }
-                    } catch (RuntimeException e) {
-                        // 时间线是展示增强，不能让投影异常吞掉本帧或打断 Agent 主循环。
-                        log.warn("{} timeline projection failed, seq={}",
-                                request.getRequestId(), frame == null ? null : frame.getEventSeq(), e);
-                    }
-                }
-                offerReplayBuffer(frame);
-                forwardIfLive(frame);
-                // 根 result 的 finished 只表示业务终态（前端收口 loading），不在此关传输层。
-                // 关流留给：1) GptQuery / HITL resume 在 finishRun、markStatus(ANSWERED) 之后的显式 complete；
-                // 2) 后台空闲时的 stream_settle。避免 SSE 在 ledger/approval 落库前被掐断。
-                if (frame != null && frame.isFinished() && isStreamSettle(agentResponse)) {
-                    log.info("{} task total cost time:{}ms",
-                            request.getRequestId(), System.currentTimeMillis() - startTime);
-                    complete();
-                }
+        synchronized (projectionLock) {
+            if (closed.get()) {
+                return;
             }
-        } finally {
-            if (timelineItem != null) {
-                persistTimelineItem(frame, timelineItem, timelinePersistTicket);
+            AgentType agentType = AgentType.fromCode(request.getAgentType());
+            AgentStreamEventHandler handler = handlerMap.get(agentType);
+            if (handler == null) {
+                log.error("{} no AgentStreamEventHandler found for agentType: {}",
+                        request.getRequestId(), agentType);
+                AgentSessionStreamFrame failed = buildDefaultResult(
+                        request, "Agent 执行失败，请稍后重试");
+                assignSeq(failed);
+                enrichRunFailed(failed);
+                offerReplayBuffer(failed);
+                forwardIfLive(failed);
+                return;
             }
-        }
-    }
 
-    private void persistTimelineItem(AgentSessionStreamFrame frame,
-                                     TimelineItemView item,
-                                     long ticket) {
-        boolean interrupted = false;
-        synchronized (timelinePersistLock) {
-            while (timelinePersistTicketInProgress < ticket) {
+            // 断流期间仍推进投影状态，避免 rebind 后状态机落后。
+            AgentStreamResult result = handler.handle(request, agentResponse, eventResult);
+            frame = frameMapper.toFrame(result);
+            assignSeq(frame);
+            if (timelineFrameEnricher != null) {
                 try {
-                    timelinePersistLock.wait();
-                } catch (InterruptedException e) {
-                    interrupted = true;
+                    timelineFrameEnricher.enrich(frame, request);
+                } catch (RuntimeException e) {
+                    // 时间线信封是展示增强，不能让投影异常吞掉本帧或打断 Agent 主循环。
+                    log.warn("{} timeline envelope failed, seq={}",
+                            request.getRequestId(), frame == null ? null : frame.getEventSeq(), e);
                 }
             }
-            try {
-                timelineEventProjector.persist(item, timelineWrittenItems);
-            } catch (RuntimeException e) {
-                // 时间线是展示增强，不能让 DB 异常冒泡到 Agent 主循环。
-                log.warn("{} timeline projection failed, seq={}",
-                        request.getRequestId(), frame == null ? null : frame.getEventSeq(), e);
-            } finally {
-                timelinePersistTicketInProgress++;
-                timelinePersistLock.notifyAll();
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
+            offerReplayBuffer(frame);
+            forwardIfLive(frame);
+            // 根 result 的 finished 只表示业务终态（前端收口 loading），不在此关传输层。
+            // 关流留给：1) GptQuery / HITL resume 在 finishRun、markStatus(ANSWERED) 之后的显式 complete；
+            // 2) 后台空闲时的 stream_settle。避免 SSE 在 ledger/approval 落库前被掐断。
+            if (frame != null && frame.isFinished() && isStreamSettle(agentResponse)) {
+                log.info("{} task total cost time:{}ms",
+                        request.getRequestId(), System.currentTimeMillis() - startTime);
+                complete();
             }
         }
     }

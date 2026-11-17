@@ -30,6 +30,7 @@ public class AgentStreamResponseMapper {
                 .subOrder(frame.getSubOrder())
                 .delta(frame.getDelta())
                 .payload(frame.getPayload())
+                .transientItem(frame.isTransientItem())
                 .status(frame.getStatus())
                 .response(frame.getResponse())
                 .responseAll(frame.getResponseAll())

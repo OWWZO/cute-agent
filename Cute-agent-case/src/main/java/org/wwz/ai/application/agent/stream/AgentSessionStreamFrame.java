@@ -1,5 +1,6 @@
 package org.wwz.ai.application.agent.stream;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -59,6 +60,10 @@ public class AgentSessionStreamFrame {
 
     /** Ledger 事实按请求即时组装的完整内容。 */
     private Map<String, Object> payload;
+
+    /** live SSE 帧为 true；committed snapshot 永远为 false。 */
+    @JsonProperty("transient")
+    private boolean transientItem;
 
     /** 运行状态，当前取值为 {@code running}、{@code success}、{@code failed}。 */
     private String status;

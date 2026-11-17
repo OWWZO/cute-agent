@@ -1,48 +1,27 @@
 package org.wwz.ai.application.agent.stream;
 
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.wwz.ai.domain.agent.ledger.timeline.ITimelineItemRepository;
-import org.wwz.ai.domain.agent.ledger.timeline.TimelineItem;
-import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemKind;
 import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemView;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 
 import java.util.Map;
-import java.util.Set;
 
 /**
- * 把 Case SSE 帧补齐成稳定时间线事件，并分阶段更新窄目录表。
+ * 把 Case SSE 帧补齐成稳定时间线信封。
  *
- * <p>流式 delta 只在首次出现时写一次目录；后续 delta 只走 SSE，不逐帧写数据库。</p>
+ * <p>Live SSE 是瞬态传输层，只负责增强当前帧；持久化时间线只能由
+ * Execution Ledger 写事务产生。</p>
  */
-@Slf4j
 @Component
-public class AgentTimelineEventProjector {
-
-    private final ITimelineItemRepository timelineItemRepository;
-
-    public AgentTimelineEventProjector(ITimelineItemRepository timelineItemRepository) {
-        this.timelineItemRepository = timelineItemRepository;
-    }
-
-    @Autowired
-    public AgentTimelineEventProjector(ObjectProvider<ITimelineItemRepository> timelineItemRepositoryProvider) {
-        this.timelineItemRepository = timelineItemRepositoryProvider == null
-                ? null
-                : timelineItemRepositoryProvider.getIfAvailable();
-    }
+public class AgentTimelineFrameEnricher {
 
     /**
      * 只做内存增强；调用方必须在帧发布前、且按投影实例串行调用。
      */
     public TimelineItemView enrich(AgentSessionStreamFrame frame,
-                                   AgentExecutionCommand request,
-                                   Set<String> writtenItems) {
+                                   AgentExecutionCommand request) {
         if (frame == null || request == null) {
             return null;
         }
@@ -56,7 +35,8 @@ public class AgentTimelineEventProjector {
         if (eventData.isEmpty()) {
             return null;
         }
-        if (TimelineItemProjection.isNestedSubAgentDetail(eventData)) {
+        if (!request.isTimelineRootSession()
+                && TimelineItemProjection.isNestedSubAgentDetail(eventData)) {
             // 子 Agent 明细只属于自己的 session timeline；父流仍保留旧 SSE 字段供右侧工作区消费。
             return null;
         }
@@ -69,59 +49,7 @@ public class AgentTimelineEventProjector {
                 frame.isFinished()
         );
         applyItem(frame, item);
-        return canPersist(item, writtenItems) ? item : null;
-    }
-
-    /**
-     * 写入窄目录；调用方负责按投影实例串行调用，失败时保留重试机会。
-     */
-    public void persist(TimelineItemView item, Set<String> writtenItems) {
-        if (!canPersist(item, writtenItems)) {
-            return;
-        }
-        boolean firstTouch = writtenItems.add(item.getItemId());
-        boolean stateChange = !"item.delta".equals(item.getEventType());
-        if (!firstTouch && !stateChange) {
-            return;
-        }
-        try {
-            timelineItemRepository.upsert(TimelineItem.builder()
-                    .sessionId(item.getSessionId())
-                    .runId(item.getRunId())
-                    .itemId(item.getItemId())
-                    .parentItemId(item.getParentItemId())
-                    .agentId(item.getAgentId())
-                    .kind(item.getKind())
-                    .phase(item.getPhase())
-                    .status(item.getStatus())
-                    .orderKey(item.getOrderKey())
-                    .subOrder(item.getSubOrder())
-                    .updatedSeq(item.getSeq())
-                    .sourceType(TimelineItemProjection.resolveSourceType(
-                            item.getKind(), item.getPhase()))
-                    .llmInvocationId(payloadLong(item.getPayload(), "llmInvocationId"))
-                    .toolInvocationId(payloadLong(item.getPayload(), "toolInvocationId"))
-                    .artifactId(payloadLong(item.getPayload(), "artifactId"))
-                    .build());
-        } catch (Exception e) {
-            writtenItems.remove(item.getItemId());
-            log.warn("timeline directory update failed, runId={}, itemId={}",
-                    item.getRunId(), item.getItemId(), e);
-        }
-    }
-
-    private boolean canPersist(TimelineItemView item, Set<String> writtenItems) {
-        if (timelineItemRepository == null
-                || item == null || StringUtils.isBlank(item.getItemId())
-                || StringUtils.isBlank(item.getSessionId())
-                || StringUtils.isBlank(item.getRunId())
-                || TimelineItemKind.SYSTEM_NOTICE.name().equals(item.getKind())) {
-            return false;
-        }
-        if (writtenItems == null) {
-            return false;
-        }
-        return true;
+        return item;
     }
 
     private String resolveControlEventType(AgentSessionStreamFrame frame,
@@ -187,6 +115,7 @@ public class AgentTimelineEventProjector {
         frame.setOrderKey(item.getOrderKey());
         frame.setSubOrder(item.getSubOrder());
         frame.setDelta(item.getDelta());
+        frame.setTransientItem(true);
         frame.setPayload(compactPayload(item.getPayload(), frame.getResultMap()));
         if (StringUtils.isNotBlank(item.getErrorMsg())
                 && ("run.failed".equals(item.getEventType()) || "run.stopped".equals(item.getEventType()))) {
@@ -225,24 +154,6 @@ public class AgentTimelineEventProjector {
         Map<String, Object> compact = new java.util.LinkedHashMap<>(payload);
         compact.remove("eventData");
         return compact.isEmpty() ? null : compact;
-    }
-
-    private Long payloadLong(Map<String, Object> payload, String key) {
-        if (payload == null) {
-            return null;
-        }
-        Object value = payload.get(key);
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value == null || StringUtils.isBlank(String.valueOf(value))) {
-            return null;
-        }
-        try {
-            return Long.valueOf(String.valueOf(value));
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
     }
 
 }
