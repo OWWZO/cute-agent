@@ -124,6 +124,14 @@
         LIMIT 1
     </select>
 
+    <select id="queryById" resultMap="ToolInvocationMap">
+        SELECT <include refid="toolInvocationColumns"/>
+        FROM ai_agent_tool_invocation
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
     <select id="queryByRunId" resultMap="ToolInvocationMap">
         SELECT <include refid="toolInvocationColumns"/>
         FROM ai_agent_tool_invocation

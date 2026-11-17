@@ -116,6 +116,14 @@
         ORDER BY invocation_seq ASC, id ASC
     </select>
 
+    <select id="queryById" resultMap="LlmInvocationMap">
+        SELECT <include refid="llmInvocationColumns"/>
+        FROM ai_agent_llm_invocation
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
     <select id="queryByRunIds" resultMap="LlmInvocationMap">
         SELECT <include refid="llmInvocationColumns"/>
         FROM ai_agent_llm_invocation

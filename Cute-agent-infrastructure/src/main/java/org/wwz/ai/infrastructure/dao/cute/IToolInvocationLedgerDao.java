@@ -24,6 +24,8 @@ public interface IToolInvocationLedgerDao {
 
     int updateToolInvocationFinish(ToolInvocation invocation);
 
+    ToolInvocation queryById(@Param("id") Long id);
+
     ToolInvocation queryByRunIdAndToolCallId(@Param("runId") Long runId,
                                              @Param("toolCallId") String toolCallId);
 

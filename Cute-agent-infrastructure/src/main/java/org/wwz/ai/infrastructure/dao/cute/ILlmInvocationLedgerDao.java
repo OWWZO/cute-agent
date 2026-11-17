@@ -17,6 +17,8 @@ public interface ILlmInvocationLedgerDao {
 
     int updateLlmInvocationFinish(LlmInvocation invocation);
 
+    LlmInvocation queryById(@Param("id") Long id);
+
     List<LlmInvocation> queryByRunId(@Param("runId") Long runId);
 
     List<LlmInvocation> queryByRunIds(@Param("runIds") List<Long> runIds);

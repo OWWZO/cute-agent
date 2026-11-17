@@ -20,6 +20,8 @@ public interface IDialogueRunLedgerDao {
 
     DialogueRun queryByRequestId(@Param("requestId") String requestId);
 
+    DialogueRun queryById(@Param("id") Long id);
+
     /**
      * 只读取会话列表所需的摘要列；queryText/finalSummaryText 最长 241 字符，
      * token、错误、updated/deleted 等未投影字段保持 null。
