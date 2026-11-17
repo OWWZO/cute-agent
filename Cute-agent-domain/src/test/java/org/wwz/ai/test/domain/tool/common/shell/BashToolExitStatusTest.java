@@ -84,6 +84,7 @@ public class BashToolExitStatusTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-bash")
                 .sessionId("sess-bash")
+                .userId("user-bash")
                 .workspaceRoot("C:/tmp/bash-ws")
                 .runtimeDependencies(dependencies)
                 .build();

@@ -5,8 +5,6 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpRequest;
-import org.wwz.ai.domain.agent.memory.ltm.LtmOwner;
-import org.wwz.ai.domain.agent.memory.ltm.LtmOwnerResolver;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.dto.CodeInterpreterResponse;
@@ -103,7 +101,7 @@ public class CodeExecutionTool implements BaseTool {
             }
             ToolArtifactSource artifactSource = context.requireCurrentToolArtifactSource(getName());
             CuteConfig config = context.getRuntimeDependencies().requireCuteConfig();
-            String ownerKey = resolveOwnerKey(context);
+            String ownerKey = SandboxOwnerResolver.resolve(context);
             if (ownerKey == null) {
                 return ToolResultPayload.failureFrom("缺少用户身份，无法执行代码", null);
             }
@@ -279,13 +277,5 @@ public class CodeExecutionTool implements BaseTool {
 
     private static String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
-    }
-
-    private String resolveOwnerKey(AgentContext context) {
-        LtmOwner owner = context.getLtmOwner();
-        if (owner == null) {
-            owner = LtmOwnerResolver.resolve(context.getUserId(), null, context.getSessionId());
-        }
-        return owner == null ? null : owner.asOwnerKey();
     }
 }

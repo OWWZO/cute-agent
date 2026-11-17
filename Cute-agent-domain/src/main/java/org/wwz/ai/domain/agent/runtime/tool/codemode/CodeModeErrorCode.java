@@ -15,7 +15,7 @@ public enum CodeModeErrorCode {
     CODE_MODE_INVALID_SOURCE,
     /** workspaceFile 不存在。 */
     CODE_MODE_WORKSPACE_FILE_NOT_FOUND,
-    /** workspaceFile 越出脚本目录白名单或路径不合法。 */
+    /** workspaceFile 路径不合法、越出 workspace 或不是 .js。 */
     CODE_MODE_WORKSPACE_FILE_DENIED,
     /** 整体 wall-clock 超时。 */
     CODE_MODE_TIMEOUT,

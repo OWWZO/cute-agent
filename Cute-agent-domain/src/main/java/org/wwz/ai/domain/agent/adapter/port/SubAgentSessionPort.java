@@ -25,4 +25,14 @@ public interface SubAgentSessionPort {
      * @throws RuntimeException 落库失败时抛出，调用方据此中止子 Agent 启动
      */
     void ensureChildSession(SubAgentSessionIdentity identity);
+
+    /**
+     * 按 sessionId 读取会话已持久化的用户归属。
+     *
+     * <p>沙箱等跨执行资源不能依赖某个父 AgentContext 是否仍在内存中；独立子会话续聊时，
+     * 必须以账本中的 {@code user_id} 作为稳定归属。未找到行或未绑定用户时返回 {@code null}。</p>
+     */
+    default String findSessionUserId(String sessionId) {
+        return null;
+    }
 }

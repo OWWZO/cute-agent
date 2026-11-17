@@ -6,8 +6,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.RemoteHttpRequest;
-import org.wwz.ai.domain.agent.memory.ltm.LtmOwner;
-import org.wwz.ai.domain.agent.memory.ltm.LtmOwnerResolver;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
@@ -15,6 +13,7 @@ import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
+import org.wwz.ai.domain.agent.runtime.tool.common.SandboxOwnerResolver;
 import org.wwz.ai.domain.agent.runtime.tool.common.SandboxRemoteEndpoint;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillRuntimeOptions;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillVirtualPaths;
@@ -118,7 +117,7 @@ public class BashTool implements BaseTool {
                 }
             }
 
-            String ownerKey = resolveOwnerKey(context);
+            String ownerKey = SandboxOwnerResolver.resolve(context);
             if (ownerKey == null) {
                 return ToolResultPayload.failureFrom("缺少用户身份，无法执行命令", null);
             }
@@ -287,14 +286,6 @@ public class BashTool implements BaseTool {
                     "bash 执行失败: " + e.getMessage(),
                     null);
         }
-    }
-
-    private String resolveOwnerKey(AgentContext context) {
-        LtmOwner owner = context.getLtmOwner();
-        if (owner == null) {
-            owner = LtmOwnerResolver.resolve(context.getUserId(), null, context.getSessionId());
-        }
-        return owner == null ? null : owner.asOwnerKey();
     }
 
     private List<String> disabledSkillNames(AgentContext context) {

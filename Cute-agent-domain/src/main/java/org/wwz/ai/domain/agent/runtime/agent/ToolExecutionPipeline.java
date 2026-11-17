@@ -532,20 +532,21 @@ final class ToolExecutionPipeline {
             String toolResult = StringUtils.defaultString(payload.getToolResult());
             String llmObservation = payload.getLlmObservation();
             if (StringUtils.isBlank(llmObservation)) {
-                String compact = failed ? null : ToolObservationFormatter.format(toolName, payload.getLlmData());
+                // 失败也先尝试状态感知投影；只有未登记 failure projector 的工具才回退完整 JSON。
+                String compact = ToolObservationFormatter.format(toolName, payload.getLlmData(), failed);
                 if (compact != null) {
-                    // 投影后仍可能超大（大仓库 grep / 长文件 read）：完整内容落工作区，模型拿到可续读的信封。
-                    llmObservation = ToolObservationBudget.apply(context, toolName, compact);
+                    llmObservation = compact;
                 } else if (payload.getLlmData() != null || failed) {
                     // 未登记投影器的工具（MCP / Python / legacy）同样要过预算：
                     // 否则它们只能靠全局 maxObserve 兜底，单次几十 KB 的结果照样反复重放进上下文。
-                    llmObservation = ToolObservationBudget.apply(
-                            context, toolName, ToolObservationSerializer.serializePayload(payload));
+                    llmObservation = ToolObservationSerializer.serializePayload(payload);
                 } else {
                     // 只有 toolResult、没有 llmData 的 payload 同样可能很大，不能绕过预算。
-                    llmObservation = ToolObservationBudget.apply(context, toolName, toolResult);
+                    llmObservation = toolResult;
                 }
             }
+            // 预填的紧凑文本也必须走同一个预算；这里集中执行一次，避免工具和 pipeline 双重落盘。
+            llmObservation = ToolObservationBudget.apply(context, toolName, llmObservation);
             if (StringUtils.isBlank(toolResult)) {
                 // 完整结果落 tool_result 列：优先结构化 JSON，绝不落到紧凑投影文本。
                 toolResult = payload.getLlmData() != null || failed

@@ -29,6 +29,7 @@ public class CodeExecutionToolRequestTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-code-workspace-file")
                 .sessionId("session-code-workspace-file")
+                .userId("user-code-workspace-file")
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()

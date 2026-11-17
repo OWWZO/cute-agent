@@ -3,7 +3,6 @@ package org.wwz.ai.domain.agent.runtime.tool.codemode;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -39,8 +38,7 @@ public final class CodeModeRequestValidator {
      */
     public static Validation validateSourceTarget(String source,
                                                   String workspaceFile,
-                                                  int maxSourceChars,
-                                                  List<String> allowedScriptPrefixes) {
+                                                  int maxSourceChars) {
         boolean hasSource = StringUtils.isNotBlank(source);
         boolean hasFile = StringUtils.isNotBlank(workspaceFile);
         if (hasSource && hasFile) {
@@ -59,13 +57,13 @@ public final class CodeModeRequestValidator {
             }
             return Validation.ok();
         }
-        return validateWorkspaceScriptPath(workspaceFile.trim(), allowedScriptPrefixes);
+        return validateWorkspaceScriptPath(workspaceFile.trim());
     }
 
     /**
-     * workspaceFile 只能是相对路径、必须是 .js、必须落在脚本目录白名单内。
+     * workspaceFile 只能是 workspace 内的相对路径，且必须是 .js。
      */
-    public static Validation validateWorkspaceScriptPath(String workspaceFile, List<String> allowedScriptPrefixes) {
+    public static Validation validateWorkspaceScriptPath(String workspaceFile) {
         if (StringUtils.isBlank(workspaceFile)) {
             return Validation.fail(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT, "workspaceFile 不能为空");
         }
@@ -81,27 +79,6 @@ public final class CodeModeRequestValidator {
         if (!path.toLowerCase(Locale.ROOT).endsWith(".js")) {
             return Validation.fail(CodeModeErrorCode.CODE_MODE_WORKSPACE_FILE_DENIED,
                     "workspaceFile 必须是 .js 文件");
-        }
-        List<String> prefixes = allowedScriptPrefixes == null || allowedScriptPrefixes.isEmpty()
-                ? List.of("scripts/", "jobs/")
-                : allowedScriptPrefixes;
-        boolean allowed = false;
-        for (String prefix : prefixes) {
-            if (StringUtils.isBlank(prefix)) {
-                continue;
-            }
-            String normalized = prefix.trim().replace('\\', '/');
-            if (!normalized.endsWith("/")) {
-                normalized = normalized + "/";
-            }
-            if (path.startsWith(normalized)) {
-                allowed = true;
-                break;
-            }
-        }
-        if (!allowed) {
-            return Validation.fail(CodeModeErrorCode.CODE_MODE_WORKSPACE_FILE_DENIED,
-                    "workspaceFile 只允许位于 " + String.join(", ", prefixes));
         }
         return Validation.ok();
     }

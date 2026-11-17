@@ -93,13 +93,17 @@ public final class BrowserCliSupport {
     public static ToolResultPayload captureFailure(CliArtifactCapturePlan plan) {
         CliArtifactCaptureCoordinator.ToolCaptureFailure failure =
                 CliArtifactCaptureCoordinator.failure(plan);
-        return ToolResultPayload.failureFrom(failure.code(), Map.of("message", failure.message()));
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("code", failure.code());
+        detail.put("message", failure.message());
+        return ToolResultPayload.failureFrom(failure.code(), detail);
     }
 
     /** CLI 非零退出：产物与产物失败仍要带到观察里，否则下载结果会被静默丢弃。 */
     public static ToolResultPayload cliFailure(CliArtifactMaterialization materialization) {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("error", CLI_FAILED_TEXT);
+        detail.put("error_code", CLI_FAILED_CODE);
         if (materialization != null && !materialization.getArtifacts().isEmpty()) {
             detail.put("artifacts", materialization.artifactMaps());
         }
@@ -108,7 +112,6 @@ public final class BrowserCliSupport {
         }
         return ToolResultPayload.builder()
                 .toolResult(CLI_FAILED_TEXT)
-                .llmObservation(JSON.toJSONString(detail))
                 .llmData(detail)
                 .failed(Boolean.TRUE)
                 .errorMsg(CLI_FAILED_CODE)

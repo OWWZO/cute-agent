@@ -174,6 +174,7 @@ public class HostCliTool implements BaseTool {
     private static ToolResultPayload cliFailure(CliArtifactMaterialization materialization) {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("error", "opencli 执行失败");
+        detail.put("error_code", "opencli_execution_failed");
         if (materialization != null && !materialization.getArtifacts().isEmpty()) {
             detail.put("artifacts", materialization.artifactMaps());
         }

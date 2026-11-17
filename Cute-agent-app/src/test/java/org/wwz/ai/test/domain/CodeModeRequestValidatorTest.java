@@ -9,56 +9,57 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Code Mode 入参校验：source / workspaceFile 互斥、脚本路径白名单、超时收敛。
+ * Code Mode 入参校验：source / workspaceFile 互斥、脚本路径约束、超时收敛。
  */
 public class CodeModeRequestValidatorTest {
-
-    private static final List<String> PREFIXES = List.of("scripts/", "jobs/");
 
     @Test
     public void sourceAndWorkspaceFileAreMutuallyExclusive() {
         CodeModeRequestValidator.Validation both = CodeModeRequestValidator.validateSourceTarget(
-                "async function main(){}", "scripts/a.js", 1000, PREFIXES);
+                "async function main(){}", "scripts/a.js", 1000);
         Assert.assertFalse(both.isValid());
         Assert.assertEquals("CODE_MODE_INVALID_ARGUMENT", both.errorCode());
 
         CodeModeRequestValidator.Validation neither = CodeModeRequestValidator.validateSourceTarget(
-                null, "  ", 1000, PREFIXES);
+                null, "  ", 1000);
         Assert.assertFalse(neither.isValid());
         Assert.assertEquals("CODE_MODE_INVALID_ARGUMENT", neither.errorCode());
 
         Assert.assertTrue(CodeModeRequestValidator.validateSourceTarget(
-                "async function main(){}", null, 1000, PREFIXES).isValid());
+                "async function main(){}", null, 1000).isValid());
         Assert.assertTrue(CodeModeRequestValidator.validateSourceTarget(
-                null, "scripts/a.js", 1000, PREFIXES).isValid());
+                null, "scripts/a.js", 1000).isValid());
     }
 
     @Test
     public void sourceOverLimitIsRejected() {
         CodeModeRequestValidator.Validation validation = CodeModeRequestValidator.validateSourceTarget(
-                "x".repeat(50), null, 10, PREFIXES);
+                "x".repeat(50), null, 10);
         Assert.assertFalse(validation.isValid());
         Assert.assertEquals("CODE_MODE_INVALID_SOURCE", validation.errorCode());
     }
 
     @Test
-    public void workspaceFileMustBeRelativeJsUnderScriptPrefixes() {
+    public void workspaceFileMustBeRelativeJs() {
         Assert.assertTrue(CodeModeRequestValidator.validateSourceTarget(
-                null, "scripts/scrape.js", 1000, PREFIXES).isValid());
+                null, "scripts/scrape.js", 1000).isValid());
         Assert.assertTrue(CodeModeRequestValidator.validateSourceTarget(
-                null, "jobs\\merge.js", 1000, PREFIXES).isValid());
+                null, "jobs\\merge.js", 1000).isValid());
+        Assert.assertTrue(CodeModeRequestValidator.validateSourceTarget(
+                null, "outputs/run.js", 1000).isValid());
+        Assert.assertTrue(CodeModeRequestValidator.validateSourceTarget(
+                null, "run.js", 1000).isValid());
 
-        assertDenied("outputs/run.js");
         assertDenied("scripts/../../etc/passwd.js");
         assertDenied("scripts/run.txt");
         assertDenied("/abs/path/run.js");
         assertDenied("C:/tmp/run.js");
-        assertDenied("other/run.js");
+        assertDenied("../run.js");
     }
 
     private void assertDenied(String workspaceFile) {
         CodeModeRequestValidator.Validation validation =
-                CodeModeRequestValidator.validateSourceTarget(null, workspaceFile, 1000, PREFIXES);
+                CodeModeRequestValidator.validateSourceTarget(null, workspaceFile, 1000);
         Assert.assertFalse(workspaceFile, validation.isValid());
         Assert.assertEquals(workspaceFile, "CODE_MODE_WORKSPACE_FILE_DENIED", validation.errorCode());
     }

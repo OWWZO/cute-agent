@@ -55,4 +55,10 @@ public class AgentExecutionCommand {
     /** 触发来源（user / background_task / ...），仅观测用，不参与执行语义。 */
     private String triggerSource;
 
+    /**
+     * 当前投影是否就是隔离子 Agent 自己的 session 根。
+     * <p>父会话必须过滤子 Agent 明细；子会话本身则要保留这些明细。</p>
+     */
+    private boolean timelineRootSession;
+
 }

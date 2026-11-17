@@ -128,12 +128,33 @@ public class BrowserToolBskSurfaceTest {
                 Map.of("args", List.of("click", "@e3")), context);
 
         Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
+        Assert.assertEquals("cdp_failed", payload.getErrorMsg());
         Map<?, ?> data = (Map<?, ?>) payload.getLlmData();
         // agent 直接读结构化字段，不必再解析自由文本。
         Assert.assertEquals("unsafe_to_retry", data.get("retry"));
         Assert.assertTrue(String.valueOf(data.get("error_hint")).contains("Inspect the page state"));
         // 原文仍然保留，便于排查。
         Assert.assertTrue(String.valueOf(data.get("stderr")).contains("Error: cdp_failed"));
+    }
+
+    @Test
+    public void shouldExtractErrorCodeFromBskJsonStderr() {
+        CliExecutionPort cli = failingCli("""
+                {
+                  "error": {
+                    "code": "cdp_failed",
+                    "message": "fill could not verify the expected value"
+                  }
+                }
+                """);
+        BrowserTool tool = new BrowserTool();
+        AgentContext context = context(cli, bskSurfaceProperties());
+
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(
+                Map.of("args", List.of("fill", "@e3")), context);
+
+        Assert.assertTrue(Boolean.TRUE.equals(payload.getFailed()));
+        Assert.assertEquals("cdp_failed", payload.getErrorMsg());
     }
 
     @Test
@@ -146,6 +167,7 @@ public class BrowserToolBskSurfaceTest {
                 Map.of("args", List.of("click", "@e3")), context);
 
         Map<?, ?> data = (Map<?, ?>) payload.getLlmData();
+        Assert.assertEquals("opencli_execution_failed", payload.getErrorMsg());
         Assert.assertFalse(data.containsKey("retry"));
         Assert.assertFalse(data.containsKey("error_hint"));
     }

@@ -101,4 +101,18 @@ public class SubAgentSessionPortAdapterTest {
         // 侧栏据此决定是否显示展开箭头：没有子会话时不显示。
         Assert.assertEquals(Integer.valueOf(1), listed.get(0).getSubSessionCount());
     }
+
+    @Test
+    public void shouldResolveUserIdFromPersistedSession() {
+        ExecutionLedgerFixtureFactory.LedgerTestContext ctx =
+                ExecutionLedgerFixtureFactory.newLedgerTestContext();
+        SubAgentSessionPortAdapter adapter = new SubAgentSessionPortAdapter(ctx.writeRepository);
+
+        adapter.ensureChildSession(SubAgentSessionIdentity.builder()
+                .childSessionId("sub_agent-owner").parentSessionId("parent-owner")
+                .userId("user-owner").title("owner").subAgentType("general-purpose").build());
+
+        Assert.assertEquals("user-owner", adapter.findSessionUserId("sub_agent-owner"));
+        Assert.assertNull(adapter.findSessionUserId("missing-session"));
+    }
 }

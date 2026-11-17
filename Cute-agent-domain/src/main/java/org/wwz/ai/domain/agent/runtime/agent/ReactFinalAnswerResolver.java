@@ -80,7 +80,16 @@ public final class ReactFinalAnswerResolver {
         }
         for (int i = messages.size() - 1; i >= 0; i--) {
             Message message = messages.get(i);
-            if (message == null || message.getRole() != RoleType.ASSISTANT) {
+            if (message == null) {
+                continue;
+            }
+            // 当前轮从最后一条真实用户消息开始。找不到本轮终答时，
+            // 不能把上一轮助手回复误当成本轮结论。
+            if (message.getRole() == RoleType.USER
+                    && !Boolean.TRUE.equals(message.getModelOnly())) {
+                break;
+            }
+            if (message.getRole() != RoleType.ASSISTANT) {
                 continue;
             }
             if (message.getToolCalls() != null && !message.getToolCalls().isEmpty()) {

@@ -41,7 +41,7 @@ description: Use when driving the user's already-connected browser through the b
 
 ## Verified quirks and failures
 
-- `wait-ms <duration>` → `unknown_method: tool.wait_ms not implemented in extension`. Use `evaluate` polling or `wait-for-navigation` instead.
+- `wait-ms <duration>` is handled by the BSK daemon and does not need a session or extension hop. Use it between `evaluate` polls, for example `wait-ms 500ms`; it only pauses and does not prove the page has settled.
 - `tab create <url>` → `too many arguments for 'create'. Expected 0 arguments`. Create empty, then `navigate`.
 - `tab select <id>` (positional) → `requires a tab id (positional or --tab-id)` even though one was passed. Use `--tab-id <id>`.
 - `navigate data:text/html,...` → `cdp_failed: Page.navigate rejected: net::ERR_ABORTED`. Use a real http(s) page for local HTML fixtures (or a file:// URL).
@@ -49,9 +49,20 @@ description: Use when driving the user's already-connected browser through the b
 - `observe` and `snapshot` are indistinguishable — don't burn a call on both.
 - `click` success only means the coordinate was clicked. Verify postcondition with `evaluate` / fresh `observe` / `final_url`.
 
+## X / twitter.com 发回复与关注（已验证）
+
+- 回复框：点 `article` 内 `[data-testid=reply]` 后会同时存在**两个** `div[data-testid=tweetTextarea_0]`（第二个在 `aria-hidden=true` 的容器里）。取 `querySelectorAll(...)[0]`。
+- `fill --selector` 对该框返回 `fill_value_mismatch`，**不可用**。可靠做法：`focus()` → Range `selectNodeContents` → `execCommand('delete')` → `execCommand('insertText', false, 文本)`。同一个框连写两次会得到双倍文本，发送前必须断言 `innerText === 期望文本`。
+- evaluate 源码里不要用 `\uXXXX` 转义中文，会触发 `too many arguments for 'evaluate'`；直接写原文字符串。
+- 发送：`[...document.querySelectorAll('[role=dialog] [data-testid=tweetButton]')].pop()`；`aria-disabled=true` 说明还没内容。点击后轮询 `[role=dialog]` 归 0 视为发出。
+- **核验**：重开原帖 URL，遍历 `article` 找「作者为本人且 tweetText 等于刚发文本」。弹窗关闭不等于发出成功。
+- 关注：个人页 `[data-testid$="-follow"]` → 点后出现 `[data-testid$="-unfollow"]` 即成功；原本就是 `-unfollow` 说明已关注。
+- 回复框有残留草稿时，后续 `navigate` 抛 `dialog_pending`（beforeunload，url=/compose/post）：`dialog status` 取 id → `dialog accept <id>` → 重新 navigate。批量脚本每轮开头先清残留弹窗（`[data-testid=app-bar-close]`，出现确认再点 `confirmationSheetConfirm`）。
+- 删错回复：该条 `[data-testid=caret]` → 菜单 `Delete` → `[data-testid=confirmationSheetConfirm]`。
+
 ## Orchestration
 
-Use `code_mode` with `browser.command({ args: [...] })` — note the object wrapper; a bare array argument throws `browser.command 需要非空 args 数组`.
+Use `code_mode` with `browser.command({ args: [...] })` — note the object wrapper; a bare array argument throws `browser.command 需要对象参数`.
 
 ```js
 async function main(ctx) {
@@ -59,7 +70,15 @@ async function main(ctx) {
   const run = async (k, args) => {
     try {
       const r = await ctx.browser.command({ args });
-      let s = r.stdout || "", p = null; try { p = JSON.parse(s); } catch (e) {}
+      if (!r.ok) {
+        out[k] = { ok: false, error: r.error || r.stderr || "browser command failed" };
+        return;
+      }
+      const s = typeof r.stdout === "string" ? r.stdout.trim() : "";
+      let p = null;
+      if (s) {
+        try { p = JSON.parse(s); } catch (e) {}
+      }
       let summary = p ? { ...p } : s.slice(0, 300);
       for (const key of ["image_base64", "html", "text"])
         if (typeof summary[key] === "string") summary[key] = `<len ${summary[key].length}>`;
@@ -73,6 +92,41 @@ async function main(ctx) {
 ```
 
 Always truncate `html` / `text` / `image_base64` before returning — otherwise a single call floods the conversation.
+
+### Script-file workflow
+
+For multi-step, batch, or reusable browser work, write the complete JavaScript
+file first and then execute that file; do not keep rebuilding a large script in
+`source`.
+
+1. Use `workspace_write` to create a `.js` file in the session workspace, for
+   example `scripts/bsk-task.js`.
+2. Pass task parameters through `inputs`; the file must define
+   `async function main({ browser, host, workspace, input })`.
+3. Execute it with `code_mode` using `workspaceFile`. `source` and
+   `workspaceFile` are mutually exclusive.
+
+```json
+{
+  "path": "scripts/bsk-task.js",
+  "content": "async function main({ browser, input }) { ... }"
+}
+```
+
+```json
+{
+  "intent": "批量读取目标页面并整理结果",
+  "workspaceFile": "scripts/bsk-task.js",
+  "inputs": {
+    "url": "https://example.com"
+  }
+}
+```
+
+`workspaceFile` must be a relative `.js` path inside the session workspace.
+Any workspace subdirectory is allowed; `scripts/` is only a recommended
+convention. Use inline `source` for a short one-off sequence that does not need
+to be revised or reused.
 
 ## Command-surface test recipe
 

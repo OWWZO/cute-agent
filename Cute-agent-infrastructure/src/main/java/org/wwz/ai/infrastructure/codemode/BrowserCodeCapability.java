@@ -46,6 +46,10 @@ public final class BrowserCodeCapability {
         Map<String, Object> params = args == null ? new LinkedHashMap<>() : new LinkedHashMap<>(args);
         List<String> argv = toStringList(params.get("args"));
         if (argv.isEmpty()) {
+            if (params.size() == 1 && params.get("value") instanceof List<?>) {
+                throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
+                        "browser.command 需要对象参数：{ args: [\"navigate\", \"...\"] }");
+            }
             throw new CodeModeExecutionException(CodeModeErrorCode.CODE_MODE_INVALID_ARGUMENT,
                     "browser.command 需要非空 args 数组");
         }

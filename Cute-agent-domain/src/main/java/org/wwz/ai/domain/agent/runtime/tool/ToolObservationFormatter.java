@@ -20,6 +20,7 @@ import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadTool;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -31,7 +32,8 @@ import java.util.function.Function;
  *   <li>{@code llm_oberserve} ← 本类产出（模型实际看到的文本，与 working_memory 一致）</li>
  *   <li>{@code tool_result} ← {@code llmData} 的完整 JSON（历史回放 / 前端卡片）</li>
  * </ul>
- * 未注册的工具、失败结果、ok=false、缺键、异常一律返回 {@code null}，由调用方回落 JSON 序列化。
+ * 未注册的工具、未接入失败投影的 ok=false、缺键或异常返回 {@code null}，由调用方回落 JSON 序列化；
+ * Bash / Code Execution / CLI / 浏览器这些代码型工具的失败结果继续走紧凑 failure projector。
  */
 @Slf4j
 public final class ToolObservationFormatter {
@@ -46,8 +48,8 @@ public final class ToolObservationFormatter {
             Map.entry(TaskToolNames.TASK_OUTPUT, ToolObservationFormatter::projectTaskOutput),
             Map.entry(SessionSearchTool.TOOL_NAME, ToolObservationFormatter::projectSessionSearch),
             Map.entry("host_cli", ToolObservationFormatter::projectCli),
-            Map.entry("browser", ToolObservationFormatter::projectCli),
-            Map.entry("agent_browser", ToolObservationFormatter::projectCli),
+            Map.entry("browser", ToolObservationFormatter::projectBrowser),
+            Map.entry("agent_browser", ToolObservationFormatter::projectBrowser),
             // 检索类：命中列表是候选集，snippet 截断后仍是模型判断相关性的依据。
             Map.entry(WebSearchTool.TOOL_NAME, ToolObservationFormatter::projectWebSearch),
             Map.entry(WebFetchTool.TOOL_NAME, ToolObservationFormatter::projectWebFetch),
@@ -75,15 +77,34 @@ public final class ToolObservationFormatter {
             Map.entry("bash", ToolObservationFormatter::projectBash)
     );
 
+    /**
+     * 这些工具的成功/失败都属于正常业务结果，failure projector 必须继续工作；
+     * 其他工具保持原有契约：ok=false 或 failed=true 时回退完整 JSON。
+     */
+    private static final Set<String> STATE_AWARE_TOOLS = Set.of(
+            "bash", "code_execution", "host_cli", "browser", "agent_browser");
+
+    private static final String[] BINARY_JSON_KEYS = {
+            "\"imageBase64\"", "\"image_base64\"", "\"base64Image\"", "\"base64_image\""
+    };
+
     private ToolObservationFormatter() {
     }
 
     /**
-     * 命中返回紧凑文本；未注册、ok=false、缺键或异常一律返回 {@code null}。
+     * 命中返回紧凑文本；未注册、非白名单 ok=false、缺键或异常返回 {@code null}。
      * <p>
      * {@code llmData} 不一定是 Map：deep_search 等工具传的是 POJO，这里统一归一化后再投影。
      */
     public static String format(String toolName, Object llmData) {
+        return format(toolName, llmData, false);
+    }
+
+    /**
+     * 状态感知投影。只有本轮计划覆盖的五个代码型工具会在失败时继续投影，
+     * 避免把 ok=false 的完整 JSON 重新塞回模型；其他工具行为保持不变。
+     */
+    public static String format(String toolName, Object llmData, boolean failed) {
         if (toolName == null || llmData == null) {
             return null;
         }
@@ -91,12 +112,29 @@ public final class ToolObservationFormatter {
         if (projector == null) {
             return null;
         }
+        boolean stateAware = STATE_AWARE_TOOLS.contains(toolName);
+        if ((failed || Boolean.FALSE.equals(llmData instanceof Map<?, ?> map ? map.get("ok") : null))
+                && !stateAware) {
+            return null;
+        }
         Map<?, ?> data = asMap(llmData);
         if (data == null) {
             return null;
         }
-        // softFail 的 ok=false 承载真语义（业务否决 / 未找到），保留 JSON 让模型看清结构。
-        if (Boolean.FALSE.equals(data.get("ok"))) {
+        if (failed && isSimpleFailureDetail(data)) {
+            String code = text(data.get("code"));
+            String message = StringUtils.firstNonBlank(
+                    text(data.get("message")), text(data.get("error")),
+                    text(data.get("detail")), code);
+            if (StringUtils.isBlank(message)) {
+                return null;
+            }
+            return StringUtils.isBlank(code) || message.contains(code)
+                    ? "Error: " + message.strip()
+                    : "Error: " + code + ": " + message.strip();
+        }
+        // 非白名单工具保留 softFail JSON 语义；白名单工具直接进入 failure projector。
+        if (Boolean.FALSE.equals(data.get("ok")) && !stateAware) {
             return null;
         }
         try {
@@ -970,7 +1008,19 @@ public final class ToolObservationFormatter {
             }
             out.append("Error: ").append(error.stripTrailing());
         }
-        appendPaths(out, data.get("produced_files"), "files");
+        if (StringUtils.isBlank(error) && !Boolean.TRUE.equals(data.get("ok"))) {
+            String status = text(data.get("status"));
+            if (StringUtils.isNotBlank(status) && !"ok".equalsIgnoreCase(status)) {
+                out.append(out.length() == 0 ? "" : "\n\n")
+                        .append("status: ").append(status);
+            }
+        }
+        appendDistinctResult(out, data, stdout);
+        appendDeletedPaths(out, data.get("deleted_files"));
+        appendWorkspaceSyncIssues(out, data.get("workspace_sync"));
+        // code_execution 的 url 是 document_generate / image block 的既有兼容契约：
+        // 只保留 produced_files 上的一个规范 url，其他文件元数据仍只留在 toolResult。
+        appendPaths(out, data.get("produced_files"), "files", true);
         return out.length() == 0 ? "(no output)" : out.toString();
     }
 
@@ -994,6 +1044,9 @@ public final class ToolObservationFormatter {
         if (Boolean.TRUE.equals(data.get("truncated"))) {
             out.append("\n[output truncated]");
         }
+        appendError(out, data.get("error"));
+        appendDeletedPaths(out, data.get("deleted_files"));
+        appendWorkspaceSyncIssues(out, data.get("workspace_sync"));
         appendPaths(out, data.get("produced_files"), "files");
         return out.length() == 0 ? "(no output)" : out.toString();
     }
@@ -1007,9 +1060,17 @@ public final class ToolObservationFormatter {
 
     // ---- host_cli / browser ----
 
+    private static String projectBrowser(Map<?, ?> data) {
+        String stdout = sanitizeBrowserStdout(text(data.get("stdout")));
+        return projectCli(data, stdout);
+    }
+
     private static String projectCli(Map<?, ?> data) {
+        return projectCli(data, text(data.get("stdout")));
+    }
+
+    private static String projectCli(Map<?, ?> data, String stdout) {
         StringBuilder out = new StringBuilder();
-        String stdout = text(data.get("stdout"));
         String stderr = text(data.get("stderr"));
         if (StringUtils.isNotBlank(stdout)) {
             out.append(stdout.stripTrailing());
@@ -1028,24 +1089,49 @@ public final class ToolObservationFormatter {
         if (Boolean.TRUE.equals(data.get("truncated"))) {
             out.append("\n[output truncated]");
         }
+        appendError(out, data.get("error"));
+        String errorCode = text(data.get("error_code"));
+        if (StringUtils.isNotBlank(errorCode)
+                && (out.length() == 0 || !out.toString().contains(errorCode))) {
+            out.append(out.length() == 0 ? "" : "\n")
+                    .append("error_code: ").append(errorCode);
+        }
         String hint = text(data.get("error_hint"));
         if (StringUtils.isNotBlank(hint)) {
             out.append("\nhint: ").append(hint);
+        }
+        String retry = text(data.get("retry"));
+        if (StringUtils.isNotBlank(retry)) {
+            out.append("\nretry: ").append(retry);
         }
         // 会话重建提示（agent_browser）：模型据此知道 CDP 会话是重建的，需要重新导航。
         String notice = text(data.get("notice"));
         if (StringUtils.isNotBlank(notice)) {
             out.append("\nnotice: ").append(notice);
         }
+        if (Boolean.TRUE.equals(data.get("image_upload_failed"))) {
+            String message = text(data.get("message"));
+            out.append("\n[image upload failed]");
+            if (StringUtils.isNotBlank(message)) {
+                out.append(' ').append(message.strip());
+            }
+        }
         // 产物引用必须保留：browser 的 screenshot 把 PNG 写进工作区，工具描述让模型用
         // workspace_read 读相对路径 —— 吞掉 artifacts 就等于让模型看不了截的图。
         appendPaths(out, data.get("artifacts"), "files");
-        appendPaths(out, data.get("artifact_failures"), "failed files");
+        appendArtifactFailures(out, data.get("artifact_failures"));
         return out.length() == 0 ? "(no output)" : out.toString();
     }
 
     /** 产物列表只把相对路径摊给模型，URL / size 等留在 toolResult 给前端用。 */
     private static void appendPaths(StringBuilder out, Object artifacts, String label) {
+        appendPaths(out, artifacts, label, false);
+    }
+
+    private static void appendPaths(StringBuilder out,
+                                    Object artifacts,
+                                    String label,
+                                    boolean includeUrl) {
         if (!(artifacts instanceof List<?> items) || items.isEmpty()) {
             return;
         }
@@ -1055,13 +1141,269 @@ public final class ToolObservationFormatter {
                 // code_execution / image_generation 用 snake_case 的 file_name，workspace 产物用驼峰。
                 String path = StringUtils.firstNonBlank(
                         text(row.get("relativePath")),
+                        text(row.get("relative_path")),
                         text(row.get("fileName")),
                         text(row.get("file_name")));
                 if (StringUtils.isNotBlank(path)) {
                     out.append("\n- ").append(path);
+                    String url = includeUrl ? text(row.get("url")) : null;
+                    if (StringUtils.isNotBlank(url) && !out.toString().contains(url)) {
+                        out.append(" (url: ").append(url).append(')');
+                    }
                 }
             }
         }
+    }
+
+    private static void appendArtifactFailures(StringBuilder out, Object failures) {
+        if (!(failures instanceof List<?> items) || items.isEmpty()) {
+            return;
+        }
+        out.append("\nfailed files:");
+        for (Object item : items) {
+            if (!(item instanceof Map<?, ?> row)) {
+                continue;
+            }
+            String path = StringUtils.firstNonBlank(
+                    text(row.get("relativePath")),
+                    text(row.get("relative_path")),
+                    text(row.get("fileName")),
+                    text(row.get("file_name")));
+            String reason = text(row.get("reason"));
+            String message = text(row.get("message"));
+            if (StringUtils.isAllBlank(path, reason, message)) {
+                continue;
+            }
+            out.append("\n- ").append(StringUtils.defaultIfBlank(path, "(unlocated artifact)"));
+            if (StringUtils.isNotBlank(reason)) {
+                out.append(": ").append(reason);
+            }
+            if (StringUtils.isNotBlank(message) && !message.equals(reason)) {
+                out.append(StringUtils.isBlank(reason) ? ": " : " - ")
+                        .append(truncate(message.strip(), 300));
+            }
+        }
+    }
+
+    private static void appendDeletedPaths(StringBuilder out, Object deletedFiles) {
+        if (!(deletedFiles instanceof List<?> items) || items.isEmpty()) {
+            return;
+        }
+        out.append("\ndeleted:");
+        for (Object item : items) {
+            String path = item instanceof Map<?, ?> row
+                    ? StringUtils.firstNonBlank(
+                    text(row.get("relativePath")),
+                    text(row.get("relative_path")),
+                    text(row.get("path")))
+                    : text(item);
+            if (StringUtils.isNotBlank(path)) {
+                out.append("\n- ").append(path);
+            }
+        }
+    }
+
+    private static void appendDistinctResult(StringBuilder out, Map<?, ?> data, String stdout) {
+        Object rawResult = data.get("result");
+        if (rawResult == null) {
+            return;
+        }
+        String result = rawResult instanceof String text ? text : JSON.toJSONString(rawResult);
+        if (StringUtils.isBlank(result)
+                || StringUtils.equals(result.strip(), StringUtils.defaultString(stdout).strip())
+                || (StringUtils.isNotBlank(stdout) && stdout.contains(result.strip()))) {
+            return;
+        }
+        out.append(out.length() == 0 ? "" : "\n\n")
+                .append("result: ").append(result.stripTrailing());
+    }
+
+    private static void appendWorkspaceSyncIssues(StringBuilder out, Object rawSync) {
+        if (!(rawSync instanceof Map<?, ?> sync)) {
+            return;
+        }
+        String status = text(sync.get("status"));
+        List<?> conflicts = list(sync.get("conflicts"));
+        boolean abnormal = (StringUtils.isNotBlank(status) && !"ok".equalsIgnoreCase(status))
+                || !conflicts.isEmpty();
+        if (abnormal) {
+            out.append("\nworkspace_sync: ")
+                    .append(StringUtils.defaultIfBlank(status, "failed"));
+            String errorCode = text(sync.get("errorCode"));
+            if (StringUtils.isNotBlank(errorCode)) {
+                out.append(" errorCode=").append(errorCode);
+            }
+            int count = 0;
+            for (Object conflict : conflicts) {
+                if (!(conflict instanceof Map<?, ?> row) || count++ >= 5) {
+                    continue;
+                }
+                String code = text(row.get("code"));
+                String path = text(row.get("path"));
+                String message = text(row.get("message"));
+                out.append("\n- ")
+                        .append(StringUtils.defaultIfBlank(code, "workspace_conflict"));
+                if (StringUtils.isNotBlank(path)) {
+                    out.append(": ").append(path);
+                }
+                if (StringUtils.isNotBlank(message)) {
+                    out.append(" - ").append(truncate(message, 300));
+                }
+            }
+            List<?> warnings = list(sync.get("warnings"));
+            for (int index = 0; index < Math.min(warnings.size(), 5); index++) {
+                String warning = text(warnings.get(index));
+                if (StringUtils.isNotBlank(warning)) {
+                    out.append("\nsync warning: ").append(truncate(warning, 300));
+                }
+            }
+            return;
+        }
+        List<?> skipped = list(sync.get("skippedLargeFiles"));
+        if (!skipped.isEmpty()) {
+            out.append("\nworkspace_sync skipped large files:");
+            for (int index = 0; index < Math.min(skipped.size(), 10); index++) {
+                out.append("\n- ").append(skipped.get(index));
+            }
+        }
+    }
+
+    private static void appendError(StringBuilder out, Object rawError) {
+        String error = text(rawError);
+        if (StringUtils.isBlank(error) || out.toString().contains(error.strip())) {
+            return;
+        }
+        out.append(out.length() == 0 ? "" : "\n\n")
+                .append("Error: ").append(error.stripTrailing());
+    }
+
+    private static boolean isSimpleFailureDetail(Map<?, ?> data) {
+        return data.get("stdout") == null
+                && data.get("stderr") == null
+                && data.get("error") == null
+                && data.get("exit_code") == null
+                && data.get("timed_out") == null
+                && data.get("artifacts") == null
+                && data.get("artifact_failures") == null
+                && data.get("produced_files") == null
+                && data.get("result") == null;
+    }
+
+    private static String sanitizeBrowserStdout(String stdout) {
+        if (StringUtils.isBlank(stdout)) {
+            return stdout;
+        }
+        StringBuilder out = new StringBuilder(stdout.length());
+        int cursor = 0;
+        while (cursor < stdout.length()) {
+            int keyStart = indexOfBinaryKey(stdout, cursor);
+            int dataUrlStart = indexOfIgnoreCase(stdout, "data:image/", cursor);
+            int start = firstNonNegative(keyStart, dataUrlStart);
+            if (start < 0) {
+                out.append(stdout, cursor, stdout.length());
+                break;
+            }
+            out.append(stdout, cursor, start);
+            if (start == keyStart) {
+                int valueStart = jsonValueStart(stdout, keyStart);
+                if (valueStart >= 0 && stdout.charAt(valueStart) == '"') {
+                    int valueEnd = jsonStringEnd(stdout, valueStart + 1);
+                    if (valueEnd >= 0) {
+                        out.append(stdout, keyStart, valueStart + 1).append("[omitted]");
+                        cursor = valueEnd;
+                        continue;
+                    }
+                }
+            } else {
+                int marker = indexOfIgnoreCase(stdout, ";base64,", dataUrlStart + 10);
+                if (marker >= 0) {
+                    int valueStart = marker + ";base64,".length();
+                    int valueEnd = base64End(stdout, valueStart);
+                    out.append(stdout, dataUrlStart, valueStart).append("[omitted]");
+                    cursor = valueEnd;
+                    continue;
+                }
+            }
+            // 只是长得像 key / data URL 的普通文本：保留一个字符后继续扫描。
+            out.append(stdout.charAt(start));
+            cursor = start + 1;
+        }
+        return out.toString();
+    }
+
+    private static int indexOfBinaryKey(String text, int from) {
+        int found = -1;
+        for (String key : BINARY_JSON_KEYS) {
+            int index = indexOfIgnoreCase(text, key, from);
+            if (index >= 0 && (found < 0 || index < found)) {
+                found = index;
+            }
+        }
+        return found;
+    }
+
+    private static int jsonValueStart(String text, int keyStart) {
+        int colon = text.indexOf(':', keyStart + 1);
+        if (colon < 0) {
+            return -1;
+        }
+        int cursor = colon + 1;
+        while (cursor < text.length() && Character.isWhitespace(text.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor < text.length() ? cursor : -1;
+    }
+
+    private static int jsonStringEnd(String text, int from) {
+        boolean escaped = false;
+        for (int index = from; index < text.length(); index++) {
+            char current = text.charAt(index);
+            if (escaped) {
+                escaped = false;
+            } else if (current == '\\') {
+                escaped = true;
+            } else if (current == '"') {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static int base64End(String text, int from) {
+        int cursor = from;
+        while (cursor < text.length()) {
+            char current = text.charAt(cursor);
+            if ((current >= 'A' && current <= 'Z')
+                    || (current >= 'a' && current <= 'z')
+                    || (current >= '0' && current <= '9')
+                    || current == '+' || current == '/' || current == '='
+                    || current == '\r' || current == '\n') {
+                cursor++;
+                continue;
+            }
+            break;
+        }
+        return cursor;
+    }
+
+    private static int indexOfIgnoreCase(String text, String needle, int from) {
+        int max = text.length() - needle.length();
+        for (int index = Math.max(0, from); index <= max; index++) {
+            if (text.regionMatches(true, index, needle, 0, needle.length())) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static int firstNonNegative(int first, int second) {
+        if (first < 0) {
+            return second;
+        }
+        if (second < 0) {
+            return first;
+        }
+        return Math.min(first, second);
     }
 
     private static void appendIfNotZero(StringBuilder out, Map<?, ?> data, String key, String label) {

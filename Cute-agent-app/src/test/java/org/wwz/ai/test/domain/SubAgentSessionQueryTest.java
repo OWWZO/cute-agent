@@ -78,6 +78,25 @@ public class SubAgentSessionQueryTest {
     }
 
     @Test
+    public void explicitRequestIdIsPreservedForIngressIdempotency() {
+        DialogueSession session = baseSession();
+        GptQueryApplicationService service = newService();
+        IExecutionLedgerReadRepository ledger = Mockito.mock(IExecutionLedgerReadRepository.class);
+        Mockito.when(ledger.querySessionEntity(session.getSessionId())).thenReturn(session);
+        ReflectionTestUtils.setField(service, "executionLedgerReadRepository", ledger);
+
+        UserRequestContext.bind("user-1");
+        AgentQuerySubmitResult result;
+        try {
+            result = service.submitSessionQuery(session.getSessionId(), "继续", null, "client-req-1");
+        } finally {
+            UserRequestContext.clear();
+        }
+
+        Assert.assertEquals("client-req-1", result.getRequestId());
+    }
+
+    @Test
     public void explicitPreferenceOverridesStoredValueAndIsPersisted() {
         DialogueSession session = baseSession();
         session.setModel("gpt-5");

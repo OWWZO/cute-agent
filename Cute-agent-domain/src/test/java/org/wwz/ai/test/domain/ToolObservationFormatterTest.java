@@ -623,6 +623,119 @@ public class ToolObservationFormatterTest {
         Assert.assertFalse(projected.contains("produced_files.url as image.url"));
     }
 
+    @Test
+    public void stateAwareFailureProjectionDropsEnvelopeMetadata() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.FALSE);
+        data.put("tool", "host_cli");
+        data.put("stdout", "partial");
+        data.put("stderr", "boom");
+        data.put("exit_code", 2);
+        data.put("duration_ms", 1234);
+        data.put("error_hint", "Fix the input and retry.");
+        data.put("retry", "safe");
+
+        String projected = ToolObservationFormatter.format("host_cli", data, true);
+
+        Assert.assertTrue(projected.contains("partial"));
+        Assert.assertTrue(projected.contains("stderr:\nboom"));
+        Assert.assertTrue(projected.contains("exit_code: 2"));
+        Assert.assertTrue(projected.contains("hint: Fix the input and retry."));
+        Assert.assertTrue(projected.contains("retry: safe"));
+        Assert.assertFalse(projected.contains("duration_ms"));
+        Assert.assertFalse(projected.contains("\"tool\""));
+    }
+
+    @Test
+    public void stateAwareSimpleFailureDetailBecomesOneLineError() {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("type", "tool_error");
+        detail.put("message", "缺少用户身份，无法执行命令");
+
+        Assert.assertEquals("Error: 缺少用户身份，无法执行命令",
+                ToolObservationFormatter.format("bash", detail, true));
+        Assert.assertNull("白名单外的工具仍保留原 JSON 回退契约",
+                ToolObservationFormatter.format("workspace_write", detail, true));
+    }
+
+    @Test
+    public void browserProjectionDropsImageBase64ButKeepsTreeAndUrl() {
+        String base64 = "iVBORw0KGgo" + "A".repeat(20_000);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("stdout", "{\"url\":\"https://example.com\","
+                + "\"tree\":\"page tree\",\"imageBase64\":\"" + base64 + "\"}");
+        data.put("stderr", "");
+        data.put("exit_code", 0);
+
+        String projected = ToolObservationFormatter.format("browser", data);
+
+        Assert.assertTrue(projected.contains("https://example.com"));
+        Assert.assertTrue(projected.contains("page tree"));
+        Assert.assertFalse(projected.contains(base64));
+        Assert.assertTrue(projected.contains("\"imageBase64\":\"[omitted]\""));
+    }
+
+    @Test
+    public void browserProjectionKeepsFailedArtifactReasonAndUploadFailure() {
+        Map<String, Object> failed = new LinkedHashMap<>();
+        failed.put("relativePath", "downloads/partial.pdf");
+        failed.put("reason", "artifact_upload_failed");
+        failed.put("message", "upload timed out");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.FALSE);
+        data.put("stdout", "");
+        data.put("stderr", "capture failed");
+        data.put("exit_code", 1);
+        data.put("artifact_failures", List.of(failed));
+        data.put("image_upload_failed", Boolean.TRUE);
+        data.put("message", "Viewport screenshot upload failed.");
+
+        String projected = ToolObservationFormatter.format("browser", data, true);
+
+        Assert.assertTrue(projected.contains("downloads/partial.pdf"));
+        Assert.assertTrue(projected.contains("artifact_upload_failed"));
+        Assert.assertTrue(projected.contains("upload timed out"));
+        Assert.assertTrue(projected.contains("[image upload failed]"));
+    }
+
+    @Test
+    public void codeExecutionDropsDuplicateResultAndSyncSuccessButKeepsIssues() {
+        Map<String, Object> sync = new LinkedHashMap<>();
+        sync.put("status", "conflict");
+        sync.put("errorCode", "WORKSPACE_WRITE_CONFLICT");
+        sync.put("conflicts", List.of(Map.of(
+                "code", "WORKSPACE_WRITE_CONFLICT",
+                "path", "output/report.csv",
+                "message", "both sides changed")));
+        Map<String, Object> file = new LinkedHashMap<>();
+        file.put("file_name", "chart.png");
+        file.put("relative_path", "output/chart.png");
+        file.put("url", "https://files.example/preview/chart.png");
+        file.put("file_size", 42);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.FALSE);
+        data.put("status", "error");
+        data.put("stdout", "same result");
+        data.put("stderr", "");
+        data.put("result", "same result");
+        data.put("error", "execution failed");
+        data.put("produced_files", List.of(file));
+        data.put("deleted_files", List.of(Map.of("relativePath", "tmp/stale.csv")));
+        data.put("workspace_sync", sync);
+
+        String projected = ToolObservationFormatter.format("code_execution", data, true);
+
+        Assert.assertEquals(1, countOccurrences(projected, "same result"));
+        Assert.assertFalse(projected.contains("result: same result"));
+        Assert.assertTrue(projected.contains("output/chart.png"));
+        Assert.assertTrue(projected.contains("https://files.example/preview/chart.png"));
+        Assert.assertFalse(projected.contains("file_size"));
+        Assert.assertTrue(projected.contains("deleted:\n- tmp/stale.csv"));
+        Assert.assertTrue(projected.contains("workspace_sync: conflict"));
+        Assert.assertTrue(projected.contains("WORKSPACE_WRITE_CONFLICT"));
+    }
+
     // ---- 新增覆盖：任务 / 画布 / 检索元工具 ----
 
     @Test

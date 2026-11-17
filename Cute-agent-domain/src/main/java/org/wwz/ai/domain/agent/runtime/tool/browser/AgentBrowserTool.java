@@ -12,6 +12,7 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
+import org.wwz.ai.domain.agent.runtime.tool.ToolObservationFormatter;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.tool.cli.CliArtifactCaptureCoordinator;
 import org.wwz.ai.domain.agent.runtime.tool.cli.CliArtifactCaptureLease;
@@ -98,6 +99,7 @@ public class AgentBrowserTool implements BaseTool {
         BrowserCliSupport.appendArtifacts(fields, execution.materialization);
 
         boolean sensitive = OpenCliArgv.isSensitive(rewritten);
+        String observation = ToolObservationFormatter.format(TOOL_NAME, fields, !result.isOk());
         if (sensitive) {
             Map<String, Object> redacted = new LinkedHashMap<>();
             redacted.put("redacted", OpenCliArgv.sensitiveKind(rewritten));
@@ -114,15 +116,19 @@ public class AgentBrowserTool implements BaseTool {
             }
             return ToolResultPayload.builder()
                     .toolResult(JSON.toJSONString(redacted))
-                    .llmObservation(JSON.toJSONString(fields))
+                    .llmObservation(observation)
                     .llmData(fields)
                     .failed(Boolean.FALSE)
                     .build();
         }
         if (!result.isOk()) {
-            return ToolResultPayload.fromData(fields);
+            ToolResultPayload payload = ToolResultPayload.fromData(fields);
+            payload.setLlmObservation(observation);
+            return payload;
         }
-        return ToolResultPayload.okData(TOOL_NAME, fields);
+        ToolResultPayload payload = ToolResultPayload.okData(TOOL_NAME, fields);
+        payload.setLlmObservation(observation);
+        return payload;
     }
 
     private Execution executeForUser(AgentContext context,

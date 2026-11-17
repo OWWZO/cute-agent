@@ -263,13 +263,14 @@ public class GraalJsCodeModeExecutorTest {
     }
 
     @Test
-    public void rejectsWorkspaceFileOutsideScriptDirectories() {
+    public void executesWorkspaceFileOutsideScriptDirectories() {
         writeRaw("outputs/not-a-script.js", "async function main(){ return 1; }");
         CodeModeResult result = executor.execute(CodeModeRequest.builder()
                 .workspaceFile("outputs/not-a-script.js")
                 .timeoutMs(30_000L)
                 .build(), agentContext);
-        assertFailure(result, "CODE_MODE_WORKSPACE_FILE_DENIED");
+        Assert.assertTrue(String.valueOf(result.getErrorMessage()), result.isSuccess());
+        Assert.assertEquals(1L, ((Number) result.getResult()).longValue());
     }
 
     @Test
@@ -304,6 +305,18 @@ public class GraalJsCodeModeExecutorTest {
         Map<?, ?> value = (Map<?, ?>) result.getResult();
         Assert.assertEquals(Boolean.FALSE, value.get("ok"));
         Assert.assertTrue(String.valueOf(value.get("error")).contains("runtime_unavailable"));
+    }
+
+    @Test
+    public void reportsBrowserCommandObjectContractForBareArray() {
+        CodeModeResult result = run("""
+                async function main({ browser }) {
+                  return await browser.command(["navigate", "https://example.com"]);
+                }
+                """);
+        assertFailure(result, "CODE_MODE_INVALID_ARGUMENT");
+        Assert.assertTrue(String.valueOf(result.getErrorMessage()),
+                result.getErrorMessage().contains("browser.command 需要对象参数"));
     }
 
     @Test

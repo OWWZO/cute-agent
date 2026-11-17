@@ -28,6 +28,7 @@ public class CodeExecutionToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-code-001")
                 .sessionId("session-code-001")
+                .userId("user-code-001")
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()
@@ -70,6 +71,7 @@ public class CodeExecutionToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-code-paths")
                 .sessionId("session-code-paths")
+                .userId("user-code-paths")
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         ToolArtifactSource artifactSource = ToolArtifactSource.builder()
@@ -116,6 +118,7 @@ public class CodeExecutionToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-code-001")
                 .sessionId("session-code-001")
+                .userId("user-code-001")
                 .workspaceRoot(workspaceRoot)
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
@@ -137,6 +140,6 @@ public class CodeExecutionToolTest {
         com.alibaba.fastjson.JSONObject request = JSON.parseObject(capturedBody.get());
         Assert.assertEquals(workspaceRoot, request.getString("workspaceRoot"));
         Assert.assertEquals("session-code-001", request.getString("sessionId"));
-        Assert.assertEquals("user:anonymous", request.getString("ownerKey"));
+        Assert.assertEquals("user:user-code-001", request.getString("ownerKey"));
     }
 }

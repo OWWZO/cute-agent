@@ -94,6 +94,8 @@ public class BrowserToolTest {
         Assert.assertFalse(Boolean.TRUE.equals(payload.getFailed()));
         // 敏感命令：模型需要完整输出才能继续推理，落库/回放/前端只保留脱敏版。
         Assert.assertTrue(payload.getLlmObservation().contains("secret-cookie"));
+        Assert.assertFalse(payload.getLlmObservation().contains("\"duration_ms\""));
+        Assert.assertFalse(payload.getLlmObservation().contains("\"tool\":"));
         Assert.assertFalse(payload.getToolResult().contains("secret-cookie"));
         Assert.assertTrue(payload.getToolResult().contains("redacted"));
         ArgumentCaptor<CliInvocation> captor = ArgumentCaptor.forClass(CliInvocation.class);
@@ -102,6 +104,34 @@ public class BrowserToolTest {
         Assert.assertTrue(captor.getValue().getEnv().get("OPENCLI_CACHE_DIR").replace('\\', '/').endsWith("vis_cache/user-1"));
         Assert.assertEquals("http://127.0.0.1:8100/internal/browser/rpc", captor.getValue().getEnv().get("OPENCLI_RELAY_URL"));
         Assert.assertFalse(captor.getValue().getEnv().containsKey("OPENCLI_SITE_SESSION"));
+    }
+
+    @Test
+    public void shouldDropViewportBase64FromObservationButKeepFullPayload() {
+        String base64 = "iVBORw0KGgo" + "A".repeat(20_000);
+        CliExecutionPort cli = Mockito.mock(CliExecutionPort.class);
+        Mockito.when(cli.exec(Mockito.any())).thenReturn(CliResult.builder()
+                .ok(true)
+                .tool("opencli")
+                .exitCode(0)
+                .stdout("{\"url\":\"https://example.com\",\"tree\":\"page tree\","
+                        + "\"imageBase64\":\"" + base64 + "\"}")
+                .stderr("")
+                .durationMs(12)
+                .timedOut(false)
+                .truncated(false)
+                .artifacts(List.of())
+                .build());
+        BrowserTool tool = new BrowserTool();
+        AgentContext context = onlineContext(cli);
+
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(
+                Map.of("args", List.of("browser", "snapshot")), context);
+
+        Assert.assertFalse(payload.getLlmObservation().contains(base64));
+        Assert.assertTrue(payload.getLlmObservation().contains("https://example.com"));
+        Assert.assertTrue(payload.getLlmObservation().contains("page tree"));
+        Assert.assertTrue(String.valueOf(payload.getLlmData()).contains(base64));
     }
 
     @Test

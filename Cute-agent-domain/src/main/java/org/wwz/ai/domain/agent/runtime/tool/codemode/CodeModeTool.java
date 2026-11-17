@@ -41,7 +41,7 @@ public class CodeModeTool implements BaseTool {
     public String getDescription() {
         return "在当前 JVM 内执行一段 JavaScript，用于把 browser、host、workspace 的多步调用编排成一次执行。"
                 + "入口固定为 async function main({ browser, host, workspace, input })。"
-                + "source 与 workspaceFile 二选一：source 直接传源码，workspaceFile 执行会话 workspace 内已存在的 .js 脚本（只允许 scripts/ 与 jobs/）。"
+                + "source 与 workspaceFile 二选一：source 直接传源码，workspaceFile 执行会话 workspace 内已存在的 .js 脚本。"
                 + "脚本内不能 require / import，不能访问 Java 类、文件系统和进程；"
                 + "浏览器和 CLI 只能经由 browser.command / host.exec 调用，host 只接受白名单 CLI 的 argv。"
                 + "workspace 文件接口统一接收对象：writeText({ path, content })、readText({ path })、"
@@ -60,7 +60,7 @@ public class CodeModeTool implements BaseTool {
         ));
         properties.put("workspaceFile", Map.of(
                 "type", "string",
-                "description", "会话 workspace 内的 .js 脚本相对路径，只允许 scripts/ 或 jobs/ 下。与 source 二选一。"
+                "description", "会话 workspace 内的 .js 脚本相对路径。与 source 二选一。"
         ));
         properties.put("inputs", Map.of(
                 "type", "object",
@@ -106,8 +106,7 @@ public class CodeModeTool implements BaseTool {
         CodeModeRequestValidator.Validation validation = CodeModeRequestValidator.validateSourceTarget(
                 source,
                 workspaceFile,
-                maxSourceChars(),
-                scriptPrefixes());
+                maxSourceChars());
         if (!validation.isValid()) {
             return fail(validation.errorCode(), validation.message());
         }
@@ -202,12 +201,4 @@ public class CodeModeTool implements BaseTool {
                 : properties.getMaxSourceChars();
     }
 
-    private List<String> scriptPrefixes() {
-        if (properties == null || properties.getWorkspace() == null
-                || properties.getWorkspace().getAllowedScriptPrefixes() == null
-                || properties.getWorkspace().getAllowedScriptPrefixes().isEmpty()) {
-            return List.of("scripts/", "jobs/");
-        }
-        return properties.getWorkspace().getAllowedScriptPrefixes();
-    }
 }

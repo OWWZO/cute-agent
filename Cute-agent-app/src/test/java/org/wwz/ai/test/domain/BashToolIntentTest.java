@@ -32,6 +32,7 @@ public class BashToolIntentTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-bash-intent")
                 .sessionId("session-bash-intent")
+                .userId("user-bash-intent")
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         SkillRuntimeOptions skillOptions = SkillRuntimeOptions.builder().enabled(false).build();

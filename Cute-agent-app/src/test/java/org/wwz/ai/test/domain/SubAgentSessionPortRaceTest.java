@@ -70,6 +70,11 @@ public class SubAgentSessionPortRaceTest {
         }
 
         @Override
+        public org.wwz.ai.domain.agent.ledger.entity.DialogueRun queryRunById(Long runId) {
+            return null;
+        }
+
+        @Override
         public org.wwz.ai.domain.agent.ledger.entity.DialogueRun queryRunByRequestId(String requestId) {
             throw new UnsupportedOperationException();
         }
@@ -156,6 +161,11 @@ public class SubAgentSessionPortRaceTest {
         }
 
         @Override
+        public org.wwz.ai.domain.agent.ledger.entity.LlmInvocation queryLlmInvocationById(Long invocationId) {
+            return null;
+        }
+
+        @Override
         public void updateLlmInvocationFinish(org.wwz.ai.domain.agent.ledger.entity.LlmInvocation invocation) {
             throw new UnsupportedOperationException();
         }
@@ -163,6 +173,17 @@ public class SubAgentSessionPortRaceTest {
         @Override
         public void insertToolInvocation(org.wwz.ai.domain.agent.ledger.entity.ToolInvocation invocation) {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public org.wwz.ai.domain.agent.ledger.entity.ToolInvocation queryToolInvocationById(Long invocationId) {
+            return null;
+        }
+
+        @Override
+        public org.wwz.ai.domain.agent.ledger.entity.ToolInvocation queryToolInvocation(
+                Long runId, String toolCallId) {
+            return null;
         }
 
         @Override
@@ -185,6 +206,11 @@ public class SubAgentSessionPortRaceTest {
 
         @Override
         public void bumpSessionEventSeq(String sessionId, long eventSeq) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public long allocateTimelineOrder(String sessionId, int count) {
             throw new UnsupportedOperationException();
         }
     }

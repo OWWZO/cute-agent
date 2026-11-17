@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.runtime.tool.browser;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.BrowserRelayPort;
 import org.wwz.ai.domain.agent.adapter.port.BrowserBskConnectionPort;
@@ -11,6 +12,7 @@ import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCallIntentSchema;
+import org.wwz.ai.domain.agent.runtime.tool.ToolObservationFormatter;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.tool.cli.CliArtifactCaptureCoordinator;
@@ -134,6 +136,7 @@ public class BrowserTool implements BaseTool {
         BrowserCliSupport.appendArtifacts(fields, execution.materialization);
         BrowserCliSupport.publishViewport(context, result.getStdout(), fields);
         boolean sensitive = OpenCliArgv.isSensitive(rewritten);
+        String observation = ToolObservationFormatter.format(TOOL_NAME, fields, !result.isOk());
         if (sensitive) {
             Map<String, Object> redacted = new LinkedHashMap<>();
             redacted.put("redacted", OpenCliArgv.sensitiveKind(rewritten));
@@ -151,7 +154,7 @@ public class BrowserTool implements BaseTool {
             }
             return ToolResultPayload.builder()
                     .toolResult(JSON.toJSONString(redacted))
-                    .llmObservation(JSON.toJSONString(fields))
+                    .llmObservation(observation)
                     .llmData(fields)
                     .failed(Boolean.FALSE)
                     .build();
@@ -161,12 +164,14 @@ public class BrowserTool implements BaseTool {
             // 这里显式标记，agent 才能从 failed 标志上判断这次调用没成功。
             return ToolResultPayload.builder()
                     .llmData(fields)
-                    .llmObservation(JSON.toJSONString(fields))
+                    .llmObservation(observation)
                     .failed(Boolean.TRUE)
                     .errorMsg(executionErrorCode(fields))
                     .build();
         }
-        return ToolResultPayload.okData(TOOL_NAME, fields);
+        ToolResultPayload payload = ToolResultPayload.okData(TOOL_NAME, fields);
+        payload.setLlmObservation(observation);
+        return payload;
     }
 
     private Execution executeCli(AgentContext context,
@@ -345,14 +350,16 @@ public class BrowserTool implements BaseTool {
         }
     }
 
-    /**
-     * 失败时给 agent 的错误码：优先取 bsk CLI 首行 {@code Error: <code>: <message>}
-     * 里的 code，取不到则退回原有的固定值。
-     */
+    /** 失败时优先保留 bsk CLI 返回的结构化错误码，最后才退回通用错误码。 */
     private static String executionErrorCode(Map<String, Object> fields) {
         Object stderr = fields.get("stderr");
         if (stderr != null) {
-            String first = BrowserCliSupport.stderrLine(String.valueOf(stderr), "Error: ");
+            String text = String.valueOf(stderr);
+            String jsonCode = jsonErrorCode(text);
+            if (jsonCode != null) {
+                return jsonCode;
+            }
+            String first = BrowserCliSupport.stderrLine(text, "Error: ");
             if (first != null) {
                 int colon = first.indexOf(':');
                 if (colon > 0) {
@@ -364,6 +371,19 @@ public class BrowserTool implements BaseTool {
             }
         }
         return "opencli_execution_failed";
+    }
+
+    private static String jsonErrorCode(String stderr) {
+        String text = StringUtils.trimToNull(stderr);
+        if (text == null || !text.startsWith("{")) {
+            return null;
+        }
+        try {
+            JSONObject error = JSON.parseObject(text).getJSONObject("error");
+            return error == null ? null : StringUtils.trimToNull(error.getString("code"));
+        } catch (RuntimeException ignore) {
+            return null;
+        }
     }
 
     private static String resolveRelayUrl(OpenCliProperties properties, CuteRuntimeDependencies deps) {

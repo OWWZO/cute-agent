@@ -59,6 +59,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-bash-output")
                 .sessionId("session-bash-output")
+                .userId("user-bash-output")
                 .printer(printer)
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
@@ -116,6 +117,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-bash-paths")
                 .sessionId("session-bash-paths")
+                .userId("user-bash-paths")
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
         SkillRuntimeOptions skillOptions = SkillRuntimeOptions.builder().enabled(false).build();
@@ -147,6 +149,7 @@ public class ShellAndWebSearchToolTest {
         AgentContext context = AgentContext.builder()
                 .requestId("req-bash-align")
                 .sessionId("session-bash-align")
+                .userId("user-bash-align")
                 .workspaceRoot(workspaceRoot)
                 .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
                 .build();
@@ -158,7 +161,7 @@ public class ShellAndWebSearchToolTest {
         com.alibaba.fastjson.JSONObject request = JSON.parseObject(capturedBody.get());
         Assert.assertEquals(workspaceRoot, request.getString("workspaceRoot"));
         Assert.assertEquals("session-bash-align", request.getString("sessionId"));
-        Assert.assertEquals("user:anonymous", request.getString("ownerKey"));
+        Assert.assertEquals("user:user-bash-align", request.getString("ownerKey"));
     }
 
     @Test

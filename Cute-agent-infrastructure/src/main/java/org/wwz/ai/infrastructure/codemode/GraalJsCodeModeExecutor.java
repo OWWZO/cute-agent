@@ -97,8 +97,7 @@ public class GraalJsCodeModeExecutor implements CodeModeExecutorPort {
         CodeModeRequestValidator.Validation validation = CodeModeRequestValidator.validateSourceTarget(
                 request.source(),
                 request.workspaceFile(),
-                maxSourceChars(),
-                this.properties.getWorkspace().getAllowedScriptPrefixes());
+                maxSourceChars());
         if (!validation.isValid()) {
             return failure(validation.errorCode(), validation.message(), budget, null);
         }
@@ -223,11 +222,11 @@ public class GraalJsCodeModeExecutor implements CodeModeExecutorPort {
     }
 
     /**
-     * 读取 workspace 内的 .js 脚本。只接受相对路径，只允许 scripts/ 与 jobs/。
+     * 读取 workspace 内的 .js 脚本。只接受相对路径。
      */
     private String readWorkspaceScript(AgentContext agentContext, String workspaceFile) {
         CodeModeRequestValidator.Validation validation = CodeModeRequestValidator.validateWorkspaceScriptPath(
-                workspaceFile, this.properties.getWorkspace().getAllowedScriptPrefixes());
+                workspaceFile);
         if (!validation.isValid()) {
             throw new CodeModeExecutionException(
                     CodeModeErrorCode.valueOf(validation.errorCode()), validation.message());

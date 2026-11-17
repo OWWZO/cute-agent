@@ -57,9 +57,6 @@ public class CodeModeProperties {
 
         private int maxCsvColumns = 200;
 
-        /** workspaceFile 只允许落在这些前缀下。 */
-        private List<String> allowedScriptPrefixes = new ArrayList<>(List.of("scripts/", "jobs/"));
-
         /** 写操作默认前缀；不在其中时仍允许写会话 workspace，但必须由调用方显式声明。 */
         private List<String> allowedOutputPrefixes = new ArrayList<>(List.of("outputs/", "artifacts/"));
     }

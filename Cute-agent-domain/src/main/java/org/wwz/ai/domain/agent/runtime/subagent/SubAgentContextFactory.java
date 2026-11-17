@@ -93,6 +93,8 @@ public final class SubAgentContextFactory {
         AgentContext child = AgentContext.builder()
                 .requestId(effectiveChildRequestId)
                 .sessionId(childSessionId)
+                // 子会话是独立会话，但资源归属必须与父会话用户一致；记忆归属仍由下面的 ltmOwner=null 隔离。
+                .userId(parent.getUserId())
                 .query(prompt)
                 .task(description)
                 .model(parent.getModel())
