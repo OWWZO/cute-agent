@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
+
 /**
  * Run summary used by history pages.
  *
@@ -30,6 +32,9 @@ public class ConversationRunSummary {
     private String finalSummaryPreview;
 
     private String finalSummaryText;
+
+    /** 本轮最后一次 LLM 调用的上下文占用快照，轻量历史页也会携带。 */
+    private ContextUsagePayload contextUsage;
 
     private Integer llmCallCount;
 

@@ -1054,4 +1054,32 @@ describe("conversationHistory hydrate", () => {
       promptTokens: 13100,
     });
   });
+
+  it("restores context usage from a lightweight run summary", () => {
+    const history = hydrateConversationFromSummaryPage({
+      sessionId: "session-context-usage-002",
+      title: "旧会话上下文恢复",
+      status: "SUCCESS",
+      deepThink: false,
+      runCount: 1,
+      finishedRunCount: 1,
+      failedRunCount: 0,
+      runs: [
+        {
+          requestId: "req-context-usage-002",
+          status: "SUCCESS",
+          hasReplay: true,
+          contextUsage: {
+            max: 128000,
+            promptTokens: 13100,
+          },
+        },
+      ],
+    });
+
+    expect(history.chatList[0].contextUsage).toEqual({
+      max: 128000,
+      promptTokens: 13100,
+    });
+  });
 });

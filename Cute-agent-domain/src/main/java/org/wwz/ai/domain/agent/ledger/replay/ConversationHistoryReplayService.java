@@ -138,6 +138,12 @@ public class ConversationHistoryReplayService {
             pageRuns = new ArrayList<>(pageRuns.subList(0, pageSize));
         }
 
+        List<Long> runIds = pageRuns.stream()
+                .filter(run -> run != null && run.getId() != null)
+                .map(DialogueRunView::getId)
+                .toList();
+        Map<Long, ContextUsagePayload> contextUsageByRunId =
+                executionLedgerQueryService.queryRunContextUsage(runIds);
         DialogueRunView latestRun = resolveLatestRun(session, pageRuns);
         return ConversationHistoryPage.builder()
                 .sessionId(session.getSessionId())
@@ -155,7 +161,9 @@ public class ConversationHistoryReplayService {
                 .failedRunCount(session.getFailedRunCount())
                 .startedAt(session.getStartedAt())
                 .lastActiveAt(session.getLastActiveAt())
-                .runs(pageRuns.stream().map(this::toRunSummary).toList())
+                .runs(pageRuns.stream()
+                        .map(run -> toRunSummary(run, contextUsageByRunId.get(run.getId())))
+                        .toList())
                 .nextCursor(hasMore && !pageRuns.isEmpty()
                         ? RunCursor.from(pageRuns.get(pageRuns.size() - 1)).encode()
                         : null)
@@ -480,6 +488,10 @@ public class ConversationHistoryReplayService {
     }
 
     private ConversationRunSummary toRunSummary(DialogueRunView run) {
+        return toRunSummary(run, null);
+    }
+
+    private ConversationRunSummary toRunSummary(DialogueRunView run, ContextUsagePayload contextUsage) {
         if (run == null) {
             return null;
         }
@@ -490,6 +502,7 @@ public class ConversationHistoryReplayService {
                 .queryPreview(preview(run.getQueryText()))
                 .finalSummaryPreview(preview(run.getFinalSummaryText()))
                 .finalSummaryText(run.getFinalSummaryText())
+                .contextUsage(contextUsage)
                 .llmCallCount(run.getLlmCallCount())
                 .toolCallCount(run.getToolCallCount())
                 .artifactCount(run.getArtifactCount())

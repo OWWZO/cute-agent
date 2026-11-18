@@ -2,6 +2,17 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="org.wwz.ai.infrastructure.dao.cute.ILlmInvocationLedgerDao">
 
+    <resultMap id="LlmUsageSummaryMap" type="org.wwz.ai.domain.agent.ledger.entity.LlmUsageSummary">
+        <result column="run_id" property="runId"/>
+        <result column="model_name" property="modelName"/>
+        <result column="prompt_tokens" property="promptTokens"/>
+        <result column="completion_tokens" property="completionTokens"/>
+        <result column="est_total_tokens" property="estTotalTokens"/>
+        <result column="est_system_tokens" property="estSystemTokens"/>
+        <result column="est_message_tokens" property="estMessageTokens"/>
+        <result column="est_tool_tokens" property="estToolTokens"/>
+    </resultMap>
+
     <resultMap id="LlmInvocationMap" type="org.wwz.ai.domain.agent.ledger.entity.LlmInvocation">
         <id column="id" property="id"/>
         <result column="run_id" property="runId"/>
@@ -133,6 +144,25 @@
             #{runId}
         </foreach>
         ORDER BY run_id ASC, invocation_seq ASC, id ASC
+    </select>
+
+    <!-- 每个 run 只取最后一次 LLM 调用的 usage；摘要页不加载响应正文和过程事实。 -->
+    <select id="queryUsageSummariesByRunIds" resultMap="LlmUsageSummaryMap">
+        SELECT s.run_id, s.model_name, s.prompt_tokens, s.completion_tokens,
+               s.est_total_tokens, s.est_system_tokens, s.est_message_tokens, s.est_tool_tokens
+        FROM ai_agent_llm_invocation s
+        INNER JOIN (
+            SELECT run_id, MAX(id) AS usage_id
+            FROM ai_agent_llm_invocation
+            WHERE deleted = 0
+              AND run_id IN
+            <foreach collection="runIds" item="runId" open="(" separator="," close=")">
+                #{runId}
+            </foreach>
+            GROUP BY run_id
+        ) latest ON latest.usage_id = s.id
+        WHERE s.deleted = 0
+        ORDER BY s.run_id ASC
     </select>
 
 </mapper>

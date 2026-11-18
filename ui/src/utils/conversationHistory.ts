@@ -378,7 +378,7 @@ function getRunSummary(run: ConversationRunSummary | ConversationRunReplay) {
 }
 
 function getRunContextUsage(run: ConversationRunSummary | ConversationRunReplay) {
-  return isRunReplay(run) ? run.contextUsage : undefined;
+  return run.contextUsage;
 }
 
 function syncConclusionFromEventData(

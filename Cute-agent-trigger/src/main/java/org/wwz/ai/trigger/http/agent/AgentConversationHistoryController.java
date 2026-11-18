@@ -356,6 +356,7 @@ public class AgentConversationHistoryController {
                 .queryPreview(run.getQueryPreview())
                 .finalSummaryPreview(run.getFinalSummaryPreview())
                 .finalSummaryText(run.getFinalSummaryText())
+                .contextUsage(run.getContextUsage())
                 .llmCallCount(run.getLlmCallCount())
                 .toolCallCount(run.getToolCallCount())
                 .artifactCount(run.getArtifactCount())

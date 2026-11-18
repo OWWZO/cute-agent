@@ -10,6 +10,7 @@ import org.wwz.ai.domain.agent.ledger.entity.ArtifactRecord;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.entity.LlmInvocation;
+import org.wwz.ai.domain.agent.ledger.entity.LlmUsageSummary;
 import org.wwz.ai.domain.agent.ledger.entity.ToolInvocation;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 import org.wwz.ai.domain.agent.ledger.model.ConversationSessionCursor;
@@ -1230,6 +1231,29 @@ public final class ExecutionLedgerFixtureFactory {
                             .thenComparing(LlmInvocation::getInvocationSeq)
                             .thenComparing(LlmInvocation::getId))
                     .map(ExecutionLedgerFixtureFactory::cloneLlm)
+                    .toList();
+        }
+
+        @Override
+        public List<LlmUsageSummary> queryUsageSummariesByRunIds(List<Long> runIds) {
+            Map<Long, LlmInvocation> latestByRunId = new LinkedHashMap<>();
+            for (LlmInvocation invocation : store.llmInvocations.values()) {
+                if (invocation.getDeleted() == 0 && runIds.contains(invocation.getRunId())) {
+                    latestByRunId.merge(invocation.getRunId(), invocation,
+                            (current, candidate) -> candidate.getId() > current.getId() ? candidate : current);
+                }
+            }
+            return latestByRunId.values().stream()
+                    .map(invocation -> LlmUsageSummary.builder()
+                            .runId(invocation.getRunId())
+                            .modelName(invocation.getModelName())
+                            .promptTokens(invocation.getPromptTokens())
+                            .completionTokens(invocation.getCompletionTokens())
+                            .estTotalTokens(invocation.getEstTotalTokens())
+                            .estSystemTokens(invocation.getEstSystemTokens())
+                            .estMessageTokens(invocation.getEstMessageTokens())
+                            .estToolTokens(invocation.getEstToolTokens())
+                            .build())
                     .toList();
         }
     }

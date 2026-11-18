@@ -8,6 +8,7 @@ import org.wwz.ai.domain.agent.ledger.entity.ArtifactRecord;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.entity.LlmInvocation;
+import org.wwz.ai.domain.agent.ledger.entity.LlmUsageSummary;
 import org.wwz.ai.domain.agent.ledger.entity.ToolInvocation;
 import org.wwz.ai.domain.agent.ledger.model.ConversationSessionCursor;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
@@ -69,6 +70,14 @@ public class ExecutionLedgerReadRepository implements IExecutionLedgerReadReposi
     @Override
     public List<LlmInvocation> queryLlmInvocationsByRunIds(List<Long> runIds) {
         return llmInvocationLedgerDao.queryByRunIds(runIds);
+    }
+
+    @Override
+    public List<LlmUsageSummary> queryUsageSummariesByRunIds(List<Long> runIds) {
+        if (runIds == null || runIds.isEmpty()) {
+            return List.of();
+        }
+        return llmInvocationLedgerDao.queryUsageSummariesByRunIds(runIds);
     }
 
     @Override

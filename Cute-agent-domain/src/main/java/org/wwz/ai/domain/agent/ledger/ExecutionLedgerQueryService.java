@@ -8,9 +8,11 @@ import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
 import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
+import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 执行账本内部查询契约。
@@ -73,6 +75,13 @@ public interface ExecutionLedgerQueryService {
      * 入参为 {@code null} 或空时返回空列表。</p>
      */
     List<ExecutionRunDetail> queryRunDetails(List<DialogueRunView> runs);
+
+    /**
+     * 按 runId 批量读取最后一次 LLM 的上下文用量快照，供会话摘要页恢复 ContextRing。
+     * <p>只查询 usage 相关列，不加载响应正文、工具调用、产物或会话消息；
+     * {@code runIds} 为空时返回空 Map。</p>
+     */
+    Map<Long, ContextUsagePayload> queryRunContextUsage(List<Long> runIds);
 
     /**
      * 按工具名查询当前用户最近的调用（倒序：{@code create_time DESC, id DESC}）。

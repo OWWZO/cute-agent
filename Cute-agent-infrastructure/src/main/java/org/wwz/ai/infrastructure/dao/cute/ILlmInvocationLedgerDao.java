@@ -2,6 +2,7 @@ package org.wwz.ai.infrastructure.dao.cute;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.wwz.ai.domain.agent.ledger.entity.LlmUsageSummary;
 import org.wwz.ai.domain.agent.ledger.entity.LlmInvocation;
 
 import java.util.List;
@@ -22,4 +23,6 @@ public interface ILlmInvocationLedgerDao {
     List<LlmInvocation> queryByRunId(@Param("runId") Long runId);
 
     List<LlmInvocation> queryByRunIds(@Param("runIds") List<Long> runIds);
+
+    List<LlmUsageSummary> queryUsageSummariesByRunIds(@Param("runIds") List<Long> runIds);
 }

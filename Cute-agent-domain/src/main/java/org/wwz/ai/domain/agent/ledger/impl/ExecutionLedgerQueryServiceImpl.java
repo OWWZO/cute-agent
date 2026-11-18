@@ -13,6 +13,7 @@ import org.wwz.ai.domain.agent.ledger.entity.ArtifactRecord;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.entity.LlmInvocation;
+import org.wwz.ai.domain.agent.ledger.entity.LlmUsageSummary;
 import org.wwz.ai.domain.agent.ledger.entity.ToolInvocation;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
 import org.wwz.ai.domain.agent.ledger.model.ConversationMessageView;
@@ -32,6 +33,9 @@ import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputNames;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolStructuredOutput;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.domain.agent.ledger.tooloutput.ToolOutputReader;
+import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
+import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
+import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
 import org.wwz.ai.domain.agent.memory.WorkingMemoryCompactionEvent;
 import org.wwz.ai.domain.agent.memory.ltm.LtmForkExecutionEvent;
 
@@ -57,6 +61,9 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
 
     private final IExecutionLedgerReadRepository executionLedgerReadRepository;
     private final ToolOutputReader toolOutputReader;
+
+    @Autowired(required = false)
+    private LlmModelCatalog llmModelCatalog;
 
     /**
      * 渠道 owner 判定端口：会话归属可能是绑定的 owner 而不是会话行上的 userId。
@@ -159,6 +166,61 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
     @Override
     public DialogueRunView queryRunSummary(String userId, String requestId) {
         return toRunView(requireReadableRun(userId, requestId));
+    }
+
+    @Override
+    public Map<Long, ContextUsagePayload> queryRunContextUsage(List<Long> runIds) {
+        Map<Long, ContextUsagePayload> result = new LinkedHashMap<>();
+        if (CollectionUtils.isEmpty(runIds)) {
+            return result;
+        }
+        for (LlmUsageSummary usage : executionLedgerReadRepository.queryUsageSummariesByRunIds(runIds)) {
+            if (usage == null || usage.getRunId() == null) {
+                continue;
+            }
+            int sys = Math.max(0, nullToZero(usage.getEstSystemTokens()));
+            int tools = Math.max(0, nullToZero(usage.getEstToolTokens()));
+            int history = Math.max(0, nullToZero(usage.getEstMessageTokens()));
+            int estimated = Math.max(0, nullToZero(usage.getEstTotalTokens()));
+            Integer promptTokens = usage.getPromptTokens() != null && usage.getPromptTokens() > 0
+                    ? usage.getPromptTokens()
+                    : null;
+            // 摘要页只显示实测 prompt_tokens；没有实测值时保持未测量，不伪造估算值。
+            if (promptTokens == null) {
+                continue;
+            }
+            result.put(usage.getRunId(), ContextUsagePayload.builder()
+                    .sys(sys)
+                    .tools(tools)
+                    .history(history)
+                    .files(0)
+                    .max(resolveContextWindow(usage.getModelName()))
+                    .used(promptTokens)
+                    .estimatedTotal(estimated > 0 ? estimated : sys + tools + history)
+                    .promptTokens(promptTokens)
+                    .completionTokens(usage.getCompletionTokens())
+                    .source("measured")
+                    .build());
+        }
+        return result;
+    }
+
+    private int nullToZero(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private int resolveContextWindow(String modelName) {
+        if (StringUtils.isNotBlank(modelName) && llmModelCatalog != null) {
+            try {
+                LLMSettings settings = llmModelCatalog.resolve(modelName).orElse(null);
+                if (settings != null && settings.getMaxInputTokens() > 0) {
+                    return settings.getMaxInputTokens();
+                }
+            } catch (Exception ignored) {
+                // 摘要页不能因模型目录暂时不可用而失败。
+            }
+        }
+        return 100_000;
     }
 
     @Override

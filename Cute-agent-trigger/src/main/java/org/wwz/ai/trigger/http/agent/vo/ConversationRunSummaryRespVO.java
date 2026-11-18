@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
 
 import java.time.LocalDateTime;
 
@@ -27,6 +28,8 @@ public class ConversationRunSummaryRespVO {
     private String finalSummaryPreview;
 
     private String finalSummaryText;
+
+    private ContextUsagePayload contextUsage;
 
     private Integer llmCallCount;
 

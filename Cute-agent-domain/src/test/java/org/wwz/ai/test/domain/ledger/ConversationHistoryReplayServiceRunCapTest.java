@@ -4,12 +4,16 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryDetail;
+import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryPage;
+import org.wwz.ai.domain.agent.ledger.model.ConversationRunSummary;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
+import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
 import org.wwz.ai.domain.agent.ledger.replay.ConversationHistoryReplayService;
 import org.wwz.ai.domain.agent.ledger.replay.ReplayProjector;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.IntStream;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -55,5 +59,34 @@ public class ConversationHistoryReplayServiceRunCapTest {
 
         Assert.assertEquals(ConversationHistoryReplayService.MAX_HISTORY_RUN_COUNT,
                 detail.getRuns().size());
+    }
+
+    @Test
+    public void historySummaryCarriesLatestMeasuredPromptTokens() {
+        ExecutionLedgerQueryService ledger = mock(ExecutionLedgerQueryService.class);
+        DialogueSessionView session = DialogueSessionView.builder()
+                .sessionId("s-context")
+                .status(1)
+                .runCount(1)
+                .build();
+        DialogueRunView run = DialogueRunView.builder()
+                .id(1L)
+                .requestId("request-context")
+                .status(1)
+                .queryText("query")
+                .build();
+        when(ledger.querySessionHistorySummary("s-context")).thenReturn(session);
+        when(ledger.querySessionRuns(eq("s-context"), any(), anyInt()))
+                .thenReturn(List.of(run));
+        when(ledger.queryRunContextUsage(anyList())).thenReturn(Map.of(
+                1L, ContextUsagePayload.builder().max(128000).promptTokens(13100).used(13100).build()));
+
+        ConversationHistoryReplayService service =
+                new ConversationHistoryReplayService(ledger, null, null, null);
+        ConversationHistoryPage page = service.queryConversationHistoryPage("s-context", 20, null);
+        ConversationRunSummary summary = page.getRuns().get(0);
+
+        Assert.assertNotNull(summary.getContextUsage());
+        Assert.assertEquals(Integer.valueOf(13100), summary.getContextUsage().getPromptTokens());
     }
 }

@@ -104,6 +104,7 @@ export interface ConversationRunSummary {
   finalSummaryPreview?: string;
   finalSummaryText?: string;
   entryAgent?: string;
+  contextUsage?: ConversationContextUsage;
   llmCallCount?: number;
   toolCallCount?: number;
   artifactCount?: number;

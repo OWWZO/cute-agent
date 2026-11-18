@@ -4,6 +4,7 @@ import org.wwz.ai.domain.agent.ledger.entity.ArtifactRecord;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.entity.LlmInvocation;
+import org.wwz.ai.domain.agent.ledger.entity.LlmUsageSummary;
 import org.wwz.ai.domain.agent.ledger.entity.ToolInvocation;
 import org.wwz.ai.domain.agent.memory.WorkingMemoryCompactionEvent;
 import org.wwz.ai.domain.agent.memory.ltm.LtmForkExecutionEvent;
@@ -51,6 +52,9 @@ public interface IExecutionLedgerReadRepository {
      * 不得退化为按 id 逐个查询。</p>
      */
     List<LlmInvocation> queryLlmInvocationsByRunIds(List<Long> runIds);
+
+    /** 按 runId 批量读取最后一次 LLM 的轻量 usage 行，不加载响应正文。 */
+    List<LlmUsageSummary> queryUsageSummariesByRunIds(List<Long> runIds);
 
     List<ToolInvocation> queryToolInvocationsByRunId(Long runId);
 
