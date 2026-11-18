@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { X } from "lucide-react";
 import { resolveSubAgentDisplay } from "@/utils/chat/subagent";
 import { buildSessionTimelineRounds } from "@/utils/chat/sessionTimelineChat";
@@ -16,6 +24,15 @@ import Dialogue from "./index";
 import SubAgentSessionComposer, {
   type SubAgentSubmission,
 } from "./SubAgentSessionComposer";
+import {
+  type WorkspaceTabScrollSnapshot,
+  readWorkspaceTabScroll,
+  writeWorkspaceTabScroll,
+} from "@/components/ActionView/workspaceTabScrollCache";
+import {
+  createScrollSnapshot,
+  resolveRestoreScrollTop,
+} from "@/components/ActionView/workspaceTabScrollRestore";
 
 /**
  * 子会话真实详情面板开关（前端侧，与后端 autobots.agent.subagent-isolated-session 成对）。
@@ -28,6 +45,10 @@ export const SUBAGENT_CHILD_SESSION_ENABLED =
 
 /** 子会话一次挂载的轮数；更早轮次按需展开，避免长会话把所有 Dialogue 同时挂上。 */
 const CHILD_SESSION_TURN_PAGE_SIZE = 8;
+const SCROLL_ANCHOR_IDLE_MS = 100;
+const SCROLL_CORRECTION_WINDOW_MS = 400;
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 type AgentDetailPanelProps = {
   tool: CHAT.Task;
@@ -47,6 +68,9 @@ type AgentDetailPanelProps = {
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
   onOpenWorkspaceFiles?: () => void;
+  /** ActionView 工作区的阅读现场身份；不传时保持独立面板原行为。 */
+  scrollRestoreKey?: string;
+  scrollScope?: string;
 };
 
 export const AgentDetailPanel = memo(function AgentDetailPanel({
@@ -61,8 +85,24 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
   changeFile,
   sessionArtifactFiles,
   onOpenWorkspaceFiles,
+  scrollRestoreKey,
+  scrollScope,
 }: AgentDetailPanelProps) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [initialScrollSnapshot] = useState(() =>
+    readWorkspaceTabScroll(scrollScope, scrollRestoreKey)
+  );
+  const restoredRef = useRef(!initialScrollSnapshot);
+  const processOpenByAnchorIdRef = useRef<Record<string, boolean>>({
+    ...(initialScrollSnapshot?.processOpenByAnchorId || {}),
+  });
+  const scrollRafRef = useRef(0);
+  const anchorTimerRef = useRef<number | undefined>(undefined);
+  const processSnapshotRafRef = useRef(0);
+  const processSnapshotPendingRef = useRef(false);
+  const restoreObserverRef = useRef<ResizeObserver | null>(null);
+  const restoreObserverTimerRef = useRef<number | undefined>(undefined);
+  const lastRestoreScrollTopRef = useRef<number | null>(null);
   const sub = useMemo(() => resolveSubAgentDisplay(tool), [tool]);
   const member = useMemo(() => projectAgentMember(tool), [tool]);
   const nested = tool.children || [];
@@ -78,16 +118,25 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
 
   // 数据源：真实子会话继续由会话级渲染链路消费；本面板在真实模式下
   // 以「历史已就绪 + 实时帧已到达」作为渲染准入，避免打开瞬间空白。
-  const [realSessionReady, setRealSessionReady] = useState(false);
+  const [readySessionId, setReadySessionId] = useState(() =>
+    childSession.ready ? childSessionId : ""
+  );
+  const realSessionReady =
+    Boolean(childSessionId) && readySessionId === childSessionId;
   useEffect(() => {
     if (!useRealChildSession) {
-      setRealSessionReady(false);
+      setReadySessionId("");
       return;
     }
-    if (childSession.ready) {
-      setRealSessionReady(true);
+    if (childSession.ready && readySessionId !== childSessionId) {
+      setReadySessionId(childSessionId);
     }
-  }, [useRealChildSession, childSession.ready]);
+  }, [
+    useRealChildSession,
+    childSession.ready,
+    childSessionId,
+    readySessionId,
+  ]);
 
   // 真实子会话：history / 按 run 的回放 / 实时帧 → 走与主会话同构的渲染链路。
   // 每轮一个 ChatItem，先切 turn 再合并，最后交给同一个 `Dialogue`。
@@ -126,9 +175,14 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
       })),
     [childSessionRounds]
   );
-  const [visibleTurnCount, setVisibleTurnCount] = useState({
-    sessionId: childSessionId,
-    count: CHILD_SESSION_TURN_PAGE_SIZE,
+  const [visibleTurnCount, setVisibleTurnCount] = useState(() => {
+    return {
+      sessionId: childSessionId,
+      count: Math.max(
+        CHILD_SESSION_TURN_PAGE_SIZE,
+        initialScrollSnapshot?.visibleTurnCount || CHILD_SESSION_TURN_PAGE_SIZE
+      ),
+    };
   });
   const visibleCount =
     visibleTurnCount.sessionId === childSessionId
@@ -187,12 +241,188 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
     [changeFile, chat]
   );
 
+  const rememberScroll = useCallback((includeAnchor = true) => {
+    const el = bodyRef.current;
+    if (!el || !scrollRestoreKey || !restoredRef.current) {
+      return;
+    }
+    writeWorkspaceTabScroll(
+      scrollScope,
+      scrollRestoreKey,
+      createScrollSnapshot(el, visibleCount, processOpenByAnchorIdRef.current, {
+        includeAnchor,
+        includeProcessState: includeAnchor,
+      })
+    );
+  }, [scrollRestoreKey, scrollScope, visibleCount]);
+  const rememberScrollRef = useRef(rememberScroll);
+  rememberScrollRef.current = rememberScroll;
+  const scheduleProcessSnapshot = useCallback(() => {
+    if (
+      !scrollRestoreKey ||
+      !restoredRef.current ||
+      processSnapshotRafRef.current
+    ) {
+      return;
+    }
+    processSnapshotPendingRef.current = true;
+    processSnapshotRafRef.current = requestAnimationFrame(() => {
+      processSnapshotRafRef.current = 0;
+      processSnapshotPendingRef.current = false;
+      rememberScrollRef.current();
+    });
+  }, [scrollRestoreKey]);
+  const scheduleProcessSnapshotRef = useRef(scheduleProcessSnapshot);
+  scheduleProcessSnapshotRef.current = scheduleProcessSnapshot;
+
+  const stopRestoreCorrection = useCallback(() => {
+    restoreObserverRef.current?.disconnect();
+    restoreObserverRef.current = null;
+    if (restoreObserverTimerRef.current !== undefined) {
+      window.clearTimeout(restoreObserverTimerRef.current);
+      restoreObserverTimerRef.current = undefined;
+    }
+  }, []);
+
+  const applyRestoreScroll = useCallback(
+    (el: HTMLDivElement, snapshot: WorkspaceTabScrollSnapshot) => {
+      el.scrollTop = snapshot.atBottom
+        ? el.scrollHeight
+        : resolveRestoreScrollTop(el, snapshot);
+      lastRestoreScrollTopRef.current = el.scrollTop;
+    },
+    []
+  );
+
+  const startRestoreCorrection = useCallback(
+    (el: HTMLDivElement, snapshot: WorkspaceTabScrollSnapshot) => {
+      stopRestoreCorrection();
+      if (typeof ResizeObserver === "undefined") {
+        return;
+      }
+      const observer = new ResizeObserver(() => {
+        applyRestoreScroll(el, snapshot);
+      });
+      const observed = Array.from(el.children);
+      if (observed.length) {
+        observed.forEach((child) => observer.observe(child));
+      } else {
+        observer.observe(el);
+      }
+      restoreObserverRef.current = observer;
+      restoreObserverTimerRef.current = window.setTimeout(
+        stopRestoreCorrection,
+        SCROLL_CORRECTION_WINDOW_MS
+      );
+    },
+    [applyRestoreScroll, stopRestoreCorrection]
+  );
+
+  const processOpenHandlersRef = useRef(
+    new Map<string, (open: boolean) => void>()
+  );
+  const processOpenHandlerFor = (anchorId: string) => {
+    const existing = processOpenHandlersRef.current.get(anchorId);
+    if (existing) {
+      return existing;
+    }
+    const handler = (open: boolean) => {
+      processOpenByAnchorIdRef.current[anchorId] = open;
+      scheduleProcessSnapshotRef.current();
+    };
+    processOpenHandlersRef.current.set(anchorId, handler);
+    return handler;
+  };
+
+  const handleScroll = useCallback(() => {
+    if (!scrollRestoreKey || !restoredRef.current) {
+      return;
+    }
+    const el = bodyRef.current;
+    if (
+      el &&
+      restoreObserverRef.current &&
+      lastRestoreScrollTopRef.current !== null &&
+      Math.abs(el.scrollTop - lastRestoreScrollTopRef.current) > 1
+    ) {
+      stopRestoreCorrection();
+    }
+    if (!scrollRafRef.current) {
+      scrollRafRef.current = requestAnimationFrame(() => {
+        scrollRafRef.current = 0;
+        // 过程区状态变化会安排一次完整快照；避免轻量快照把它覆盖掉。
+        if (!processSnapshotPendingRef.current) {
+          rememberScrollRef.current(false);
+        }
+      });
+    }
+    // 已经有一帧待处理时仍要重置空闲计时器，滚动结束后才能补算锚点。
+    if (anchorTimerRef.current !== undefined) {
+      window.clearTimeout(anchorTimerRef.current);
+    }
+    anchorTimerRef.current = window.setTimeout(() => {
+      anchorTimerRef.current = undefined;
+      rememberScrollRef.current();
+    }, SCROLL_ANCHOR_IDLE_MS);
+  }, [scrollRestoreKey, stopRestoreCorrection]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = 0;
+      }
+      if (anchorTimerRef.current !== undefined) {
+        window.clearTimeout(anchorTimerRef.current);
+        anchorTimerRef.current = undefined;
+      }
+      if (processSnapshotRafRef.current) {
+        cancelAnimationFrame(processSnapshotRafRef.current);
+        processSnapshotRafRef.current = 0;
+      }
+      processSnapshotPendingRef.current = false;
+      stopRestoreCorrection();
+      rememberScroll();
+    };
+  }, [rememberScroll, stopRestoreCorrection]);
+
+  useIsomorphicLayoutEffect(() => {
+    if (
+      !scrollRestoreKey ||
+      restoredRef.current ||
+      !initialScrollSnapshot ||
+      !realSessionReady ||
+      childSessionTurns.length === 0
+    ) {
+      return;
+    }
+    const el = bodyRef.current;
+    if (!el || el.scrollHeight <= el.clientHeight) {
+      if (initialScrollSnapshot?.atBottom) {
+        restoredRef.current = true;
+      }
+      return;
+    }
+    // 内容已经挂载后再恢复，并且用 layout effect 在下一帧绘制前完成定位。
+    applyRestoreScroll(el, initialScrollSnapshot);
+    restoredRef.current = true;
+    startRestoreCorrection(el, initialScrollSnapshot);
+  }, [
+    scrollRestoreKey,
+    realSessionReady,
+    childSessionTurns.length,
+    initialScrollSnapshot,
+    applyRestoreScroll,
+    startRestoreCorrection,
+  ]);
+
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
     const frame = requestAnimationFrame(() => {
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
-      if (atBottom) {
+      const saved = readWorkspaceTabScroll(scrollScope, scrollRestoreKey);
+      if (atBottom && (!saved || saved.atBottom)) {
         el.scrollTop = el.scrollHeight;
       }
     });
@@ -204,6 +434,8 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
     sub.liveText,
     childRunCount,
     childSessionTurns.length,
+    scrollRestoreKey,
+    scrollScope,
   ]);
 
   return (
@@ -255,7 +487,11 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
           </button>
         )}
       </div>
-      <div ref={bodyRef} className="kimi-detail-panel-body px-3 py-2">
+      <div
+        ref={bodyRef}
+        onScroll={handleScroll}
+        className="kimi-detail-panel-body px-3 py-2"
+      >
         {sub.errorMsg ? (
           <div className="mb-2 rounded-lg border border-[var(--color-danger-soft)] bg-[var(--color-danger-soft)] px-3 py-2 text-ui-caption text-[var(--color-danger)]">
             {sub.errorMsg}
@@ -297,22 +533,30 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
                 显示更早的 {hiddenChildSessionTurnCount} 轮
               </button>
             ) : null}
-            {visibleChildSessionTurns.map((turn) => (
-              <Dialogue
-                key={turn.key || `child-session-${childSessionId}`}
-                chat={turn.chat}
-                deepThink={false}
-                sessionArtifactFiles={sessionArtifactFiles}
-                changeTask={handleChangeActiveChat}
-                changeFile={handleChangeFile}
-                changePlan={changePlan}
-                onOpenToolDiff={handleOpenToolDiff}
-                onOpenAgent={handleOpenAgent}
-                onOpenWorkspaceFiles={onOpenWorkspaceFiles}
-                onRequestReplay={childSession.loadRun}
-                replayLoading={childSession.loading}
-              />
-            ))}
+            {visibleChildSessionTurns.map((turn) => {
+              const anchorId = `turn:${turn.key || childSessionId}`;
+              return (
+                <Dialogue
+                  key={turn.key || `child-session-${childSessionId}`}
+                  scrollAnchorId={anchorId}
+                  initialProcessOpen={
+                    processOpenByAnchorIdRef.current[anchorId]
+                  }
+                  onProcessOpenChange={processOpenHandlerFor(anchorId)}
+                  chat={turn.chat}
+                  deepThink={false}
+                  sessionArtifactFiles={sessionArtifactFiles}
+                  changeTask={handleChangeActiveChat}
+                  changeFile={handleChangeFile}
+                  changePlan={changePlan}
+                  onOpenToolDiff={handleOpenToolDiff}
+                  onOpenAgent={handleOpenAgent}
+                  onOpenWorkspaceFiles={onOpenWorkspaceFiles}
+                  onRequestReplay={childSession.loadRun}
+                  replayLoading={childSession.loading}
+                />
+              );
+            })}
           </div>
         ) : null}
 

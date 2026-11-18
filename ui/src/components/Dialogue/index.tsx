@@ -43,6 +43,9 @@ type Props = {
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
   onOpenWorkspaceFiles?: () => void;
+  scrollAnchorId?: string;
+  initialProcessOpen?: boolean;
+  onProcessOpenChange?: (open: boolean) => void;
   onRequestReplay?: ReplayRequestHandler;
   replayLoading?: boolean;
   onReview?: (sessionId: string, requestIds: string[]) => void;
@@ -82,6 +85,9 @@ const DialogueComponent: FC<Props> = (props) => {
     onOpenToolDiff,
     onOpenAgent,
     onOpenWorkspaceFiles,
+    scrollAnchorId,
+    initialProcessOpen,
+    onProcessOpenChange,
     onRequestReplay,
     replayLoading = false,
     onReview,
@@ -120,9 +126,26 @@ const DialogueComponent: FC<Props> = (props) => {
    * 初始值对齐 ZCode `conversationTurnRenderUnits.ts` 的 `assistantHistoryDefaultOpen`：
    * 异常态 / 运行中 / 还没产出最终回复 → 展开；正常完成且已有回复 → 折叠。
    */
-  const [processOpen, setProcessOpen] = useState(() =>
-    resolveProcessDefaultOpen(chat)
+  const [processOpen, setProcessOpenState] = useState(() =>
+    typeof initialProcessOpen === "boolean"
+      ? initialProcessOpen
+      : resolveProcessDefaultOpen(chat)
   );
+  const setProcessOpen = useCallback(
+    (open: boolean) => {
+      setProcessOpenState(open);
+      onProcessOpenChange?.(open);
+    },
+    [onProcessOpenChange]
+  );
+  const processOpenReportedRef = useRef(false);
+  useEffect(() => {
+    if (processOpenReportedRef.current) {
+      return;
+    }
+    processOpenReportedRef.current = true;
+    onProcessOpenChange?.(processOpen);
+  }, [onProcessOpenChange, processOpen]);
   const [thoughtVersionIndex, setThoughtVersionIndex] = useState(() =>
     Math.max(plannerRounds.length - 1, 0)
   );
@@ -333,7 +356,10 @@ const DialogueComponent: FC<Props> = (props) => {
       {showProcessTimeline ? (
         <Collapsible open={processOpen} onOpenChange={setProcessOpen}>
           <CollapsibleContent className="chat-process-collapse">
-            <div className="mt-5 w-full max-w-[min(960px,100%)]">
+            <div
+              className="mt-5 w-full max-w-[min(960px,100%)]"
+              data-scroll-anchor-id={scrollAnchorId}
+            >
               <AgentStepTimeline
                 chat={timelineChat}
                 isPlanSolveMessage={isPlanSolveMessage}
@@ -395,6 +421,9 @@ const Dialogue = memo(
     prev.onOpenToolDiff === next.onOpenToolDiff &&
     prev.onOpenAgent === next.onOpenAgent &&
     prev.onOpenWorkspaceFiles === next.onOpenWorkspaceFiles &&
+    prev.scrollAnchorId === next.scrollAnchorId &&
+    prev.initialProcessOpen === next.initialProcessOpen &&
+    prev.onProcessOpenChange === next.onProcessOpenChange &&
     prev.onRequestReplay === next.onRequestReplay &&
     prev.replayLoading === next.replayLoading
 );

@@ -3663,17 +3663,22 @@ ol {
   font: var(--text-base) / var(--leading-relaxed) var(--font-ui);
   font-weight: 500;
   color: var(--chat-text-muted);
+  flex: none;
+  white-space: nowrap;
 }
 
 .kimi-think-duration {
   font-size: 12px;
   line-height: 1;
   color: var(--chat-text-faint);
+  flex: none;
+  white-space: nowrap;
 }
 
 .kimi-think-dot {
   flex: none;
   color: var(--chat-text-faint);
+  white-space: nowrap;
 }
 
 /*
@@ -3684,7 +3689,7 @@ ol {
  */
 .kimi-think-summary {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   justify-content: flex-end;
   overflow: hidden;

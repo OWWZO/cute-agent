@@ -7,6 +7,10 @@ import type {
 import type { AgentTimelineItem } from "@/types/timeline";
 import { isRunTimelineTerminal } from "@/utils/timeline/timelineStore";
 import { useRunTimeline } from "./useRunTimeline";
+import {
+  readSessionTimelineCache,
+  writeSessionTimelineCache,
+} from "./sessionTimelineCache";
 
 export type SessionRunTimelineSource = {
   items: AgentTimelineItem[];
@@ -46,6 +50,18 @@ const IDLE_STATE: SessionTimelineState = {
   reconnectExhausted: false,
 };
 
+const CACHE_WRITE_INTERVAL_MS = 400;
+
+function initialState(sessionId: string): SessionTimelineState {
+  const cached = readSessionTimelineCache(sessionId);
+  return cached
+    ? {
+        ...cached,
+        loading: true,
+      }
+    : IDLE_STATE;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -63,14 +79,33 @@ export function useSessionTimeline(
   enabled = true,
   requestIdOverride = ""
 ): SessionTimelineController {
-  const [state, setState] = useState<SessionTimelineState>(IDLE_STATE);
+  const [state, setState] = useState<SessionTimelineState>(() =>
+    initialState(sessionId)
+  );
   const [reloadSeq, setReloadSeq] = useState(0);
-  const [activeRequestId, setActiveRequestId] = useState(requestIdOverride);
+  const [activeRequestId, setActiveRequestId] = useState(
+    () => requestIdOverride || readSessionTimelineCache(sessionId)?.activeRequestId || ""
+  );
   const activeRequestIdRef = useRef(activeRequestId);
   const attemptedRunsRef = useRef(new Set<string>());
   const loadingRunsRef = useRef(new Set<string>());
   const refreshedTerminalRef = useRef("");
   const sessionIdRef = useRef(sessionId);
+  const latestStateRef = useRef(state);
+  const cacheSessionIdRef = useRef(sessionId);
+  const cacheEnabledRef = useRef(enabled);
+  const cacheFlushTimerRef = useRef<number | undefined>(undefined);
+
+  const flushTimelineCache = useCallback(() => {
+    if (cacheFlushTimerRef.current !== undefined) {
+      window.clearTimeout(cacheFlushTimerRef.current);
+      cacheFlushTimerRef.current = undefined;
+    }
+    if (!cacheEnabledRef.current) {
+      return;
+    }
+    writeSessionTimelineCache(cacheSessionIdRef.current, latestStateRef.current);
+  }, []);
 
   sessionIdRef.current = sessionId;
   activeRequestIdRef.current = requestIdOverride || activeRequestId;
@@ -123,13 +158,45 @@ export function useSessionTimeline(
     attemptedRunsRef.current.clear();
     loadingRunsRef.current.clear();
     refreshedTerminalRef.current = "";
-    setActiveRequestId("");
-    setState({
-      ...IDLE_STATE,
-      activeRequestId: "",
-      loading: true,
-    });
+    const cached = readSessionTimelineCache(sessionId);
+    if (cached) {
+      setActiveRequestId(cached.activeRequestId || "");
+      setState({
+        ...cached,
+        loading: true,
+      });
+    } else {
+      setActiveRequestId("");
+      setState({
+        ...IDLE_STATE,
+        activeRequestId: "",
+        loading: true,
+      });
+    }
   }, [enabled, sessionId]);
+
+  useEffect(() => {
+    latestStateRef.current = state;
+    cacheSessionIdRef.current = sessionId;
+    cacheEnabledRef.current = enabled;
+    if (!enabled || !sessionId || !state.ready) {
+      return;
+    }
+    if (cacheFlushTimerRef.current !== undefined) {
+      return;
+    }
+    cacheFlushTimerRef.current = window.setTimeout(() => {
+      cacheFlushTimerRef.current = undefined;
+      flushTimelineCache();
+    }, CACHE_WRITE_INTERVAL_MS);
+  }, [enabled, sessionId, state, flushTimelineCache]);
+
+  // 切 session / 关闭订阅 / 卸载前，把最后一次状态同步写入缓存。
+  useEffect(() => {
+    return () => {
+      flushTimelineCache();
+    };
+  }, [enabled, sessionId, flushTimelineCache]);
 
   useEffect(() => {
     if (!enabled || !sessionId) {
@@ -197,8 +264,15 @@ export function useSessionTimeline(
       return;
     }
     refreshedTerminalRef.current = `${liveRequestId}:${live.status}`;
-    void fetchHistory().catch(() => undefined);
-  }, [enabled, liveRequestId, live.status, fetchHistory]);
+    flushTimelineCache();
+    void fetchHistory().catch(() => undefined).finally(flushTimelineCache);
+  }, [
+    enabled,
+    liveRequestId,
+    live.status,
+    fetchHistory,
+    flushTimelineCache,
+  ]);
 
   const loadRun = useCallback(async (requestId: string) => {
     const id = String(requestId || "").trim();
@@ -246,11 +320,12 @@ export function useSessionTimeline(
 
   const reload = useCallback((pendingRequestId?: string | null) => {
     const nextRequestId = String(pendingRequestId || "").trim();
+    flushTimelineCache();
     if (nextRequestId) {
       setActiveRequestId(nextRequestId);
     }
     setReloadSeq((value) => value + 1);
-  }, []);
+  }, [flushTimelineCache]);
 
   const observeRun = useCallback((requestId: string) => {
     const id = String(requestId || "").trim();

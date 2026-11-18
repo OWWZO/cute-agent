@@ -1508,6 +1508,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
           tool={resolved.tool}
           chat={resolved.chat}
           embedded
+          scrollRestoreKey={tab.key}
+          scrollScope={conversation.id}
           sessionArtifactFiles={sessionArtifactFiles}
           changeActiveChat={(task, chat) => changeTask(task, chat)}
           changePlan={changePlan}
@@ -1524,6 +1526,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       changeFile,
       changePlan,
       changeTask,
+      conversation.id,
       conversation.chatList,
       conversation.deepThink,
       onOpenTaskFiles,

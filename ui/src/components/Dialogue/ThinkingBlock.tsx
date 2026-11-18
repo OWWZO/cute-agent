@@ -35,6 +35,8 @@ type ThinkingBlockProps = {
  * 仍能读到真实内容高度（对齐 ZCode `REASONING_CONTENT_COLLAPSE_UNMOUNT_DELAY_MS`）。
  */
 const COLLAPSE_UNMOUNT_DELAY_MS = 300;
+/** 流式状态边界可能抖动；结束态稳定一小段时间后再收起，避免整块内容反复开合。 */
+const STREAM_END_SETTLE_MS = 220;
 
 function hasTextSelection(): boolean {
   if (typeof window === "undefined") {
@@ -49,6 +51,26 @@ export function isThinkingAtBottom(element: {
   clientHeight: number;
 }): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight < 48;
+}
+
+/**
+ * 流式思考块只需要「跟随最新内容」这一种自动滚动。
+ * 正文高度变化时统一用 rAF 合并，避免每个 token 都同步改 scrollTop 造成画面抖动。
+ */
+function scheduleThinkingScrollToBottom(
+  element: HTMLElement,
+  frameRef: { current: number | null },
+  shouldFollow: () => boolean
+): void {
+  if (frameRef.current !== null) {
+    return;
+  }
+  frameRef.current = requestAnimationFrame(() => {
+    frameRef.current = null;
+    if (shouldFollow()) {
+      element.scrollTop = element.scrollHeight;
+    }
+  });
 }
 
 /** 收起 + 流式时，标题右侧滚动显示思考的最后一行（图3 的核心观感）。 */
@@ -70,17 +92,12 @@ export function resolveStreamingSummary(text: string): string | undefined {
 }
 
 /**
- * 时长文案：数字优先（「持续了 5 秒」），其次原样透传已格式化的文本，
- * 都没有且已结束则退回「持续了几秒」——与 ZCode `ReasoningTrigger` 三分支一致。
+ * 时长文案：数字在调用处统一换算成整秒；这里只处理已格式化文本和结束态兜底。
  */
 function resolveDurationText(
-  durationMs: number | undefined,
   durationLabel: string | undefined,
   streaming: boolean
 ): string | undefined {
-  if (typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0) {
-    return `持续了 ${Math.max(1, Math.ceil(durationMs / 1000))} 秒`;
-  }
   if (durationLabel) {
     return durationLabel;
   }
@@ -102,6 +119,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
 }: ThinkingBlockProps) {
   const bodyRef = useRef<HTMLPreElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
+  const streamEndTimerRef = useRef<number | null>(null);
   const stickToBottomRef = useRef(true);
   const wasStreamingRef = useRef(streaming);
   /** 用户手动点过折叠后，流式过程中不再被强制拉开 */
@@ -113,15 +131,41 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   );
 
   useEffect(() => {
-    if (streaming && !wasStreamingRef.current) {
-      userToggledRef.current = false;
-      setOpen(true);
-    } else if (!streaming && wasStreamingRef.current) {
-      userToggledRef.current = false;
-      setOpen(false);
-    }
+    const wasStreaming = wasStreamingRef.current;
     wasStreamingRef.current = streaming;
-  }, [streaming]);
+    if (streaming) {
+      if (streamEndTimerRef.current !== null) {
+        window.clearTimeout(streamEndTimerRef.current);
+        streamEndTimerRef.current = null;
+      }
+      if (!wasStreaming) {
+        stickToBottomRef.current = true;
+        if (!userToggledRef.current) {
+          setOpen(true);
+        }
+      }
+      return;
+    }
+    if (userToggledRef.current) {
+      return;
+    }
+    if (streamEndTimerRef.current !== null) {
+      window.clearTimeout(streamEndTimerRef.current);
+    }
+    streamEndTimerRef.current = window.setTimeout(() => {
+      streamEndTimerRef.current = null;
+      setOpen(false);
+    }, STREAM_END_SETTLE_MS);
+  }, [streaming, text]);
+
+  useEffect(() => {
+    return () => {
+      if (streamEndTimerRef.current !== null) {
+        window.clearTimeout(streamEndTimerRef.current);
+        streamEndTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // 收起后延迟卸载：让收起动画先跑完，再拆掉重 DOM。
   useEffect(() => {
@@ -142,12 +186,11 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   useEffect(() => {
     const el = bodyRef.current;
     if (!el || !open) return;
-    scrollFrameRef.current = requestAnimationFrame(() => {
-      scrollFrameRef.current = null;
-      if (stickToBottomRef.current) {
-        el.scrollTop = el.scrollHeight;
-      }
-    });
+    scheduleThinkingScrollToBottom(
+      el,
+      scrollFrameRef,
+      () => stickToBottomRef.current
+    );
     return () => {
       if (scrollFrameRef.current !== null) {
         cancelAnimationFrame(scrollFrameRef.current);
@@ -168,6 +211,10 @@ export const ThinkingBlock = memo(function ThinkingBlock({
     if (hasTextSelection()) {
       return;
     }
+    if (streamEndTimerRef.current !== null) {
+      window.clearTimeout(streamEndTimerRef.current);
+      streamEndTimerRef.current = null;
+    }
     userToggledRef.current = true;
     setOpen(next);
   }, []);
@@ -182,10 +229,17 @@ export const ThinkingBlock = memo(function ThinkingBlock({
     event.stopPropagation();
   };
 
-  const durationText = useMemo(
-    () => resolveDurationText(durationMs, durationLabel, streaming),
-    [durationMs, durationLabel, streaming]
-  );
+  const durationText = useMemo(() => {
+    const seconds =
+      typeof durationMs === "number" &&
+      Number.isFinite(durationMs) &&
+      durationMs >= 0
+        ? Math.max(1, Math.ceil(durationMs / 1000))
+        : undefined;
+    return seconds === undefined
+      ? resolveDurationText(durationLabel, streaming)
+      : `持续了 ${seconds} 秒`;
+  }, [durationMs, durationLabel, streaming]);
   const streamingSummary = useMemo(
     () => (!open && streaming ? resolveStreamingSummary(text) : undefined),
     [open, streaming, text]

@@ -73,6 +73,7 @@ import {
   pushTabHistory,
   takeTabBack,
 } from "./workspaceTabHistory";
+import { clearWorkspaceTabScroll } from "./workspaceTabScrollCache";
 import type { SubAgentRosterItem } from "@/utils/chat/subAgentRoster";
 import {
   resolveFilePreviewKind,
@@ -524,6 +525,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       });
       return next;
     });
+    clearWorkspaceTabScroll(workspaceStateKey, key);
   });
 
   /**
@@ -536,6 +538,11 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     setOpenTabs((prev) =>
       prev.filter((item) => workspaceTabKey(item) === keepKey)
     );
+    if (workspaceStateKey) {
+      const keys = new Set(openTabs.map((tab) => workspaceTabKey(tab)));
+      keys.delete(keepKey);
+      keys.forEach((key) => clearWorkspaceTabScroll(workspaceStateKey, key));
+    }
     setSelectedKey(keepKey);
     setBackStack([]);
   });
@@ -545,6 +552,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     setOpenTabs([]);
     setSelectedKey("");
     setBackStack([]);
+    clearWorkspaceTabScroll(workspaceStateKey);
   });
 
   const goBack = useMemoizedFn(() => {
