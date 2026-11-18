@@ -26,7 +26,9 @@ public class WorkspaceGlobTool extends AbstractWorkspacePathTool {
 
     @Override
     public String getDescription() {
-        return withWorkspaceHint("在会话工作区内按 glob 模式查找文件，例如 **/*.java 或 src/**/*.ts。path 为搜索起点目录，可省略则从工作区根开始。不要用 find/ls 代替本工具。");
+        return withWorkspaceHint("在会话工作区内按 glob 模式查找文件，例如 **/*.java 或 src/**/*.ts。path 为搜索起点目录，可省略则从工作区根开始。"
+                + "示例：workspace_glob(path=\"src\", pattern=\"*.py\")；读单个文件请用 workspace_read(path=\"src/a.py\")。"
+                + "不要用 find/ls 代替本工具。");
     }
 
     @Override
@@ -54,11 +56,20 @@ public class WorkspaceGlobTool extends AbstractWorkspacePathTool {
                 basePath = requireAllowedPath(params, context);
             }
             if (!Files.isDirectory(basePath)) {
-                return failResult("workspace_glob 只支持目录路径: " + toAgentPath(basePath, context));
+                String message = "workspace_glob 只支持目录路径: " + toAgentPath(basePath, context);
+                return argumentError(
+                        "WORKSPACE_GLOB_PATH_NOT_DIR",
+                        message,
+                        "Use workspace_read(path=...) for files; workspace_glob path must be a directory."
+                );
             }
             Object patternValue = params.get("pattern");
             if (patternValue == null || String.valueOf(patternValue).isBlank()) {
-                return failResult("pattern is required");
+                return argumentError(
+                        "WORKSPACE_GLOB_PATTERN_REQUIRED",
+                        "pattern is required",
+                        "Pass a glob pattern, for example pattern=\"*.py\"."
+                );
             }
 
             String pattern = String.valueOf(patternValue).trim();

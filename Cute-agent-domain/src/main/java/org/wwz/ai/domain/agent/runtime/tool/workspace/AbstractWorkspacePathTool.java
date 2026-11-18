@@ -8,6 +8,7 @@ import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -73,6 +74,17 @@ public abstract class AbstractWorkspacePathTool implements BaseTool {
         detail.put("type", "tool_error");
         detail.put("tool", getName());
         detail.put("message", message);
+        return ToolResultPayload.failureFrom(message, detail);
+    }
+
+    /** 参数误用：保留错误码和建议动作，让 Agent 下一步直接换工具/换参数。 */
+    protected ToolResultPayload argumentError(String errorCode, String message, String suggestion) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("type", "tool_error");
+        detail.put("tool", getName());
+        detail.put("errorCode", errorCode);
+        detail.put("message", message);
+        detail.put("suggestion", suggestion);
         return ToolResultPayload.failureFrom(message, detail);
     }
 

@@ -4,6 +4,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceGlobTool;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceGrepTool;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceListTool;
@@ -135,5 +136,39 @@ public class WorkspaceFileAccessToolTest {
         Assert.assertTrue(result.contains("truncated"));
         Assert.assertTrue(result.contains("1 | 0123456789"));
         Assert.assertFalse(result.contains("abcdefghijklmnopqrstuvwxyz"));
+    }
+
+    @Test
+    public void shouldReturnStructuredErrorsForWorkspaceArgumentMistakes() {
+        WorkspaceReadTool readTool = new WorkspaceReadTool(workspaceService, options);
+        WorkspaceGlobTool globTool = new WorkspaceGlobTool(workspaceService, options);
+        WorkspaceGrepTool grepTool = new WorkspaceGrepTool(workspaceService, options);
+
+        ToolResultPayload readDir = (ToolResultPayload) readTool.execute(
+                Map.of("path", "docs"), agentContext);
+        Map<?, ?> readDetail = (Map<?, ?>) readDir.getLlmData();
+        Assert.assertEquals("WORKSPACE_READ_PATH_IS_DIR", readDetail.get("errorCode"));
+        Assert.assertEquals("Use workspace_list(path=...) to inspect directories.", readDetail.get("suggestion"));
+
+        ToolResultPayload globFile = (ToolResultPayload) globTool.execute(
+                Map.of("path", "notes.md", "pattern", "*.md"), agentContext);
+        Map<?, ?> globDetail = (Map<?, ?>) globFile.getLlmData();
+        Assert.assertEquals("WORKSPACE_GLOB_PATH_NOT_DIR", globDetail.get("errorCode"));
+        Assert.assertEquals("Use workspace_read(path=...) for files; workspace_glob path must be a directory.",
+                globDetail.get("suggestion"));
+
+        ToolResultPayload grepMissingPattern = (ToolResultPayload) grepTool.execute(
+                Map.of("path", "notes.md"), agentContext);
+        Map<?, ?> grepDetail = (Map<?, ?>) grepMissingPattern.getLlmData();
+        Assert.assertEquals("WORKSPACE_GREP_PATTERN_REQUIRED", grepDetail.get("errorCode"));
+        Assert.assertNotNull(grepDetail.get("suggestion"));
+    }
+
+    @Test
+    public void workspaceDescriptionsIncludeUsageExamples() {
+        Assert.assertTrue(new WorkspaceReadTool(workspaceService, options).getDescription()
+                .contains("workspace_read(path=\"src/a.py\")"));
+        Assert.assertTrue(new WorkspaceGlobTool(workspaceService, options).getDescription()
+                .contains("workspace_glob(path=\"src\", pattern=\"*.py\")"));
     }
 }

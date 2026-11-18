@@ -60,7 +60,11 @@ public class WorkspaceGrepTool extends AbstractWorkspacePathTool {
             }
             Object patternValue = params.get("pattern");
             if (patternValue == null || String.valueOf(patternValue).isBlank()) {
-                return failResult("pattern is required");
+                return argumentError(
+                        "WORKSPACE_GREP_PATTERN_REQUIRED",
+                        "pattern is required",
+                        "Pass a keyword or regex, for example pattern=\"Settings already configured\"."
+                );
             }
 
             String searchPattern = String.valueOf(patternValue).trim();

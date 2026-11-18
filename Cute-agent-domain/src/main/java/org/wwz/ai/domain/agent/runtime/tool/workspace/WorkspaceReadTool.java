@@ -43,6 +43,8 @@ public class WorkspaceReadTool extends AbstractWorkspacePathTool {
     public String getDescription() {
         return withWorkspaceHint(
                 "读取会话工作区内的文件。path 可为绝对路径或相对工作区根的相对路径。"
+                        + "示例：workspace_read(path=\"src/a.py\") 读文件；列目录请用 workspace_list(path=\"src\")；"
+                        + "按模式找文件请用 workspace_glob(path=\"src\", pattern=\"*.py\")。"
                         + "需要查看截图/图片内容时，必须调用 workspace_read 读取图片路径；不要用 shell 代替。"
                         + "文本：默认从第 1 行起读取，可用 start_line/line_count 截取；"
                         + "若文件自上次同范围读取后未变化（含跨轮），将返回 unchanged stub，请复用更早的读取结果。"
@@ -70,7 +72,12 @@ public class WorkspaceReadTool extends AbstractWorkspacePathTool {
             Map<String, Object> params = requireInputMap(input);
             Path filePath = requireAllowedPath(params, context);
             if (!isReadableFile(filePath)) {
-                return failResult("workspace_read 只支持读取文件路径: " + toAgentPath(filePath, context));
+                String message = "workspace_read 只支持读取文件路径: " + toAgentPath(filePath, context);
+                return argumentError(
+                        "WORKSPACE_READ_PATH_IS_DIR",
+                        message,
+                        "Use workspace_list(path=...) to inspect directories."
+                );
             }
 
             if (isImage(filePath)) {
