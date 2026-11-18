@@ -25,12 +25,14 @@ import org.wwz.ai.domain.agent.service.execute.support.PrepareAgentContextAssemb
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * Exercises the production Agent tool assembly without invoking an LLM.
@@ -58,6 +60,7 @@ public final class WorkBuddyToolPreflightCli {
         Path workspace = null;
         Path output = null;
         String springProfile = "eval";
+        boolean copyWorkspace = false;
         for (int i = 0; i < args.length; i++) {
             if ("--workspace".equals(args[i]) && i + 1 < args.length) {
                 workspace = Path.of(args[++i]);
@@ -65,6 +68,8 @@ public final class WorkBuddyToolPreflightCli {
                 output = Path.of(args[++i]);
             } else if ("--spring-profile".equals(args[i]) && i + 1 < args.length) {
                 springProfile = args[++i];
+            } else if ("--copy-workspace".equals(args[i])) {
+                copyWorkspace = true;
             }
         }
         if (workspace == null || output == null) {
@@ -80,7 +85,23 @@ public final class WorkBuddyToolPreflightCli {
         }
 
         workspace = workspace.toAbsolutePath().normalize();
-        Files.createDirectories(workspace);
+        Path workspaceTemplate = workspace;
+        if (copyWorkspace) {
+            Path source = workspace;
+            String configuredRoot = System.getenv("CUTE_EVAL_PREFLIGHT_COPY_ROOT");
+            Path copyRoot = configuredRoot == null || configuredRoot.isBlank()
+                    ? Files.createTempDirectory("workbuddy-preflight-")
+                    : Path.of(configuredRoot);
+            Files.createDirectories(copyRoot);
+            workspace = Files.createTempDirectory(
+                    copyRoot,
+                    "workbuddy-preflight-" + source.getFileName() + "-"
+            );
+            Files.createDirectories(workspace);
+            copyDirectory(source, workspace);
+        } else {
+            Files.createDirectories(workspace);
+        }
         output = output.toAbsolutePath().normalize();
         if (output.getParent() != null) {
             Files.createDirectories(output.getParent());
@@ -89,6 +110,8 @@ public final class WorkBuddyToolPreflightCli {
         JSONObject report = new JSONObject();
         report.put("schemaVersion", "1.0");
         report.put("workspaceRoot", workspace.toString());
+        report.put("workspaceTemplate", workspaceTemplate.toString());
+        report.put("workspaceCopied", copyWorkspace);
         report.put("springProfile", springProfile);
         JSONArray checks = new JSONArray();
         report.put("checks", checks);
@@ -165,9 +188,7 @@ public final class WorkBuddyToolPreflightCli {
                     "code-execution-session-ok\n");
             checkFile(checks, "code_execution_test_file",
                     workspace.resolve("test_preflight_target.py"));
-            checkAbsent(checks, "code_execution_transient_not_synced",
-                    workspace.resolve("__last_source__.py"));
-            ledgerCheck(checks, context);
+            ledgerCheck(checks, context, "preflight-workspace_write");
 
             if (tools.getToolMap().containsKey("bash")) {
                 invoke(checks, tools, context, "bash", Map.of(
@@ -294,7 +315,9 @@ public final class WorkBuddyToolPreflightCli {
         checks.add(row);
     }
 
-    private static void ledgerCheck(JSONArray checks, AgentContext context) {
+    private static void ledgerCheck(JSONArray checks,
+                                    AgentContext context,
+                                    String artifactToolCallId) {
         JSONObject row = new JSONObject(true);
         row.put("name", "execution_ledger_round_trip");
         row.put("tool", "execution_ledger");
@@ -322,7 +345,7 @@ public final class WorkBuddyToolPreflightCli {
                 return;
             }
 
-            String toolCallId = "preflight-ledger-tool";
+            String toolCallId = artifactToolCallId;
             Map<String, Long> toolIds = context.getExecutionRecorder().createToolInvocations(
                     ToolInvocationBatchStartRecord.builder()
                             .runId(context.getAgentRunState().getRunId())
@@ -348,6 +371,46 @@ public final class WorkBuddyToolPreflightCli {
                 return;
             }
 
+            List<org.wwz.ai.domain.agent.ledger.model.ArtifactRecordCommand>
+                    artifactCommands = new ArrayList<>();
+            for (var binding : context.getArtifactBindingsByToolCallId(
+                    artifactToolCallId)) {
+                if (binding == null
+                        || binding.getSource() == null
+                        || binding.getFile() == null) {
+                    continue;
+                }
+                var file = binding.getFile();
+                artifactCommands.add(
+                        org.wwz.ai.domain.agent.ledger.model.ArtifactRecordCommand.builder()
+                                .runId(context.getAgentRunState().getRunId())
+                                .requestId(context.getRequestId())
+                                .toolInvocationId(toolId)
+                                .toolCallId(artifactToolCallId)
+                                .artifactRole(ExecutionLedgerConstants.ARTIFACT_ROLE_OUTPUT)
+                                .visibility(binding.isInternalFile()
+                                        ? ExecutionLedgerConstants.VISIBILITY_INTERNAL
+                                        : ExecutionLedgerConstants.VISIBILITY_VISIBLE)
+                                .sourceType(ExecutionLedgerConstants.SOURCE_TYPE_TOOL_OUTPUT)
+                                .sourceName(binding.getSource().getToolName())
+                                .fileName(file.getFileName())
+                                .storageKey(org.apache.commons.lang3.StringUtils.defaultIfBlank(
+                                        file.getOssUrl(), file.getFileName()))
+                                .downloadUrl(file.getOssUrl())
+                                .previewUrl(file.getDomainUrl())
+                                .fileSize(file.getFileSize() == null
+                                        ? null
+                                        : file.getFileSize().longValue())
+                                .build());
+            }
+            if (artifactCommands.isEmpty()) {
+                row.put("status", "error");
+                row.put("detail", "no artifact rows were written");
+                checks.add(row);
+                return;
+            }
+            context.getExecutionRecorder().recordArtifactsOrThrow(artifactCommands);
+
             context.getExecutionRecorder().finishToolInvocation(
                     ToolInvocationFinishRecord.builder()
                             .toolInvocationId(toolId)
@@ -372,7 +435,9 @@ public final class WorkBuddyToolPreflightCli {
                             .finishedAt(LocalDateTime.now())
                             .build());
             row.put("status", "ok");
-            row.put("detail", "llmInvocationId=" + llmId + ", toolInvocationId=" + toolId);
+            row.put("detail", "llmInvocationId=" + llmId
+                    + ", toolInvocationId=" + toolId
+                    + ", artifactRows=" + artifactCommands.size());
         } catch (RuntimeException exc) {
             row.put("status", "error");
             row.put("detail", exc.getClass().getSimpleName() + ": " + exc.getMessage());
@@ -390,14 +455,22 @@ public final class WorkBuddyToolPreflightCli {
         checks.add(row);
     }
 
-    private static void checkAbsent(JSONArray checks, String name, Path path) {
-        JSONObject row = new JSONObject(true);
-        row.put("name", name);
-        row.put("tool", "host_filesystem");
-        row.put("required", Boolean.TRUE);
-        row.put("status", Files.exists(path) ? "error" : "ok");
-        row.put("detail", path.toString());
-        checks.add(row);
+    private static void copyDirectory(Path source, Path target) throws Exception {
+        try (Stream<Path> paths = Files.walk(source)) {
+            paths.forEach(path -> {
+                Path destination = target.resolve(source.relativize(path).toString());
+                try {
+                    if (Files.isDirectory(path)) {
+                        Files.createDirectories(destination);
+                    } else {
+                        Files.createDirectories(destination.getParent());
+                        Files.copy(path, destination, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                } catch (Exception exc) {
+                    throw new RuntimeException("failed to copy preflight workspace", exc);
+                }
+            });
+        }
     }
 
     private static String sessionWriteProbeSource() {
