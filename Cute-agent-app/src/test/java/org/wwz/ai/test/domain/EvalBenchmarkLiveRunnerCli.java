@@ -242,6 +242,7 @@ public final class EvalBenchmarkLiveRunnerCli {
                     ExecutionLedgerConstants.ENTRY_AGENT_REACT,
                     PrepareAgentContextAssembly.ToolScope.SINGLE);
             AgentContext context = assembled.context();
+            context.getAgentRunState().setStrictLedgerWrites(true);
 
             if (!"production".equalsIgnoreCase(toolMode)) {
                 ToolCollection ephemeral = new ToolCollection();

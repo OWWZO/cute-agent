@@ -83,6 +83,10 @@ final class LlmInvocationLedger {
         } catch (RuntimeException e) {
             log.warn("{} llm invocation ledger start failed, model={}, callKind={}",
                     context.getRequestId(), model, callKind, e);
+            if (context.getAgentRunState().isStrictLedgerWrites()) {
+                throw new IllegalStateException(
+                        "strict ledger write failed: createLlmInvocation", e);
+            }
             context.getAgentRunState().bindCurrentLlmInvocationId(null);
             return Handle.disabled(runtimeTiming);
         }

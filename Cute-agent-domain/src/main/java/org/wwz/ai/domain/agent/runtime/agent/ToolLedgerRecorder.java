@@ -137,6 +137,10 @@ final class ToolLedgerRecorder {
             // 目录写失败会通过事务代理抛出；账本失败不能阻断后续工具执行与 SSE 收口。
             log.warn("tool ledger start failed, requestId={}, toolCount={}",
                     ExecutionLedgerRunSupport.ledgerRequestId(context), items.size(), e);
+            if (context.getAgentRunState().isStrictLedgerWrites()) {
+                throw new IllegalStateException(
+                        "strict ledger write failed: createToolInvocations", e);
+            }
             try {
                 return context.getExecutionRecorder().createToolInvocationsWithoutTimeline(record);
             } catch (RuntimeException fallbackError) {
@@ -199,6 +203,10 @@ final class ToolLedgerRecorder {
         } catch (RuntimeException e) {
             log.warn("tool ledger finish failed, requestId={}, toolCallId={}",
                     ExecutionLedgerRunSupport.ledgerRequestId(context), command.getId(), e);
+            if (context.getAgentRunState().isStrictLedgerWrites()) {
+                throw new IllegalStateException(
+                        "strict ledger write failed: finishToolInvocation", e);
+            }
             try {
                 context.getExecutionRecorder().finishToolInvocationWithoutTimeline(record);
             } catch (RuntimeException fallbackError) {

@@ -56,6 +56,13 @@ public class AgentRunState {
     private ThreadLocal<Long> currentLlmInvocationIdHolder = new ThreadLocal<>();
 
     /**
+     * 评测模式下账本写入失败必须中止当前 run，不能静默返回“成功但没有证据”。
+     * 默认关闭以保持线上 fail-open；仅 benchmark runner 显式开启。
+     */
+    @Builder.Default
+    private boolean strictLedgerWrites = false;
+
+    /**
      * 申请下一个全局递增的 LLM 顺序号。
      */
     public int nextInvocationSeq() {
