@@ -258,16 +258,30 @@ class E2BPythonSandboxExecutor:
             require_e2b_api_key()
         with stage_timer("code_execution", "acquire", self._session_id):
             lease = self._manager.acquire(
-                self._owner_key, max(1, int(self._timeout_seconds))
+                self._owner_key,
+                max(1, int(self._timeout_seconds)),
+                ensure_desktop=False,
             )
         try:
             with stage_timer(
                 "code_execution", "jupyter_ready", self._session_id
             ):
                 ensure_e2b_code_interpreter_ready(lease.sandbox)
-        except Exception:
+        except Exception as exc:
             self._manager.release(self._owner_key)
-            raise
+            if not self._manager.discard_if_gone(self._owner_key, exc):
+                raise
+            with stage_timer("code_execution", "reacquire", self._session_id):
+                lease = self._manager.acquire(
+                    self._owner_key,
+                    max(1, int(self._timeout_seconds)),
+                    ensure_desktop=False,
+                )
+            try:
+                ensure_e2b_code_interpreter_ready(lease.sandbox)
+            except Exception:
+                self._manager.release(self._owner_key)
+                raise
         self._lease = lease
         self._sandbox = lease.sandbox
         self._sandbox_id = lease.sandbox_id

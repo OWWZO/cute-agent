@@ -77,7 +77,7 @@ class ScriptRunnerTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("脚本执行超时", response.summary)
             self.assertIn("timed out", response.stderr)
 
-    async def test_should_keep_success_when_upload_generated_file_failed(self):
+    async def test_should_fail_when_upload_generated_file_failed(self):
         with tempfile.TemporaryDirectory(prefix="skill-script-upload-warning-") as temp_dir:
             skill_dir = self._create_python_skill(Path(temp_dir), """
                 from pathlib import Path
@@ -102,9 +102,9 @@ class ScriptRunnerTest(unittest.IsolatedAsyncioTestCase):
             with patch("cute_tool.tool.script_runner.upload_file_by_path", new=async_upload):
                 response = await run_script_request(request)
 
-            self.assertTrue(response.success)
-            self.assertEqual(0, response.exit_code)
-            self.assertEqual("脚本执行成功（产物上传失败）", response.summary)
+            self.assertFalse(response.success)
+            self.assertEqual(-1, response.exit_code)
+            self.assertEqual("产物上传失败", response.summary)
             self.assertIn("upload unavailable", response.stderr)
             self.assertEqual(0, len(response.file_info))
 

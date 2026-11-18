@@ -149,6 +149,7 @@ class UserSandboxManager:
         timeout_sec: int = 120,
         *,
         update_timeout: bool = True,
+        ensure_desktop: bool = True,
     ) -> SandboxLease:
         owner = _normalize_owner(owner_key)
         lock = self._owner_lock(owner)
@@ -198,7 +199,36 @@ class UserSandboxManager:
                 sandbox_id = _sandbox_id(sandbox)
                 generation = generation if row else 1
 
-            ensure_e2b_desktop_chromium_ready(sandbox)
+            if ensure_desktop:
+                try:
+                    ensure_e2b_desktop_chromium_ready(sandbox)
+                except Exception as exc:
+                    # E2B may return a handle for a sandbox that has already timed out.
+                    # Treat that as a stale handle and recreate instead of failing the
+                    # first tool call after an idle period.
+                    if not _is_gone(exc):
+                        raise
+                    logger.warning(
+                        "[user_sandbox] sandbox gone during startup owner={} id={}: {}",
+                        owner,
+                        sandbox_id,
+                        exc,
+                    )
+                    self._live.pop(owner, None)
+                    generation += 1
+                    sandbox_id = ""
+                    self._upsert(
+                        owner,
+                        sandbox_id="",
+                        state=STATE_CREATING,
+                        keep_memory=1,
+                        last_used_at=self._time(),
+                        in_flight=int(row["in_flight"]) if row else 0,
+                        generation=generation,
+                    )
+                    sandbox = self._create(timeout_sec)
+                    sandbox_id = _sandbox_id(sandbox)
+                    ensure_e2b_desktop_chromium_ready(sandbox)
 
             if update_timeout:
                 try:
@@ -226,6 +256,28 @@ class UserSandboxManager:
                 sandbox_id=sandbox_id,
                 generation=generation,
             )
+
+    def discard_if_gone(self, owner_key: str, exc: BaseException) -> bool:
+        """Forget a stale sandbox handle after a readiness check fails."""
+        if not _is_gone(exc):
+            return False
+        owner = _normalize_owner(owner_key)
+        with self._owner_lock(owner):
+            row = self._load(owner)
+            if row is None:
+                return True
+            self._live.pop(owner, None)
+            self._pending_pause_at.pop(owner, None)
+            self._upsert(
+                owner,
+                sandbox_id="",
+                state=STATE_MISSING,
+                keep_memory=1,
+                last_used_at=self._time(),
+                in_flight=0,
+                generation=int(row["generation"] or 1) + 1,
+            )
+        return True
 
     def release(self, owner_key: str) -> None:
         owner = _normalize_owner(owner_key)

@@ -212,6 +212,83 @@ def test_new_manager_reconnects_persisted_sandbox(tmp_path):
         second.shutdown()
 
 
+def test_acquire_recreates_sandbox_when_connected_handle_is_gone(
+    tmp_path,
+    monkeypatch,
+):
+    clock = [100.0]
+    stale = _FakeSandbox("stale-id")
+    replacement = _FakeSandbox("replacement-id")
+    creates = []
+
+    def create(*args, **kwargs):
+        creates.append(kwargs)
+        return stale if len(creates) == 1 else replacement
+
+    def ensure(sandbox):
+        if sandbox is stale:
+            raise RuntimeError("The sandbox was not found")
+
+    monkeypatch.setattr(
+        "cute_tool.tool.user_sandbox_manager.ensure_e2b_desktop_chromium_ready",
+        ensure,
+    )
+    manager = UserSandboxManager(
+        db_path=str(tmp_path / "sandbox.db"),
+        create_fn=create,
+        connect_fn=lambda sandbox_id, **kwargs: stale,
+        pause_fn=lambda value, keep_memory: value.pause(keep_memory),
+        debounce_sec=3,
+        idle_sec=1200,
+        hold_sec=600,
+        time_fn=lambda: clock[0],
+        start_reaper=False,
+    )
+    try:
+        lease = manager.acquire("user:one")
+        assert lease.sandbox is replacement
+        assert lease.sandbox_id == "replacement-id"
+        assert lease.generation == 2
+        assert len(creates) == 2
+        with sqlite3.connect(tmp_path / "sandbox.db") as connection:
+            row = connection.execute(
+                """
+                SELECT sandbox_id, state, generation
+                FROM e2b_user_sandbox WHERE owner_key = ?
+                """,
+                ("user:one",),
+            ).fetchone()
+        assert row == ("replacement-id", "RUNNING", 2)
+        manager.release("user:one")
+    finally:
+        manager.shutdown()
+
+
+def test_acquire_can_skip_desktop_chromium_for_code_execution(
+    tmp_path,
+    monkeypatch,
+):
+    clock = [100.0]
+    sandbox = _FakeSandbox()
+    calls = []
+
+    def ensure(_sandbox):
+        calls.append(_sandbox)
+
+    monkeypatch.setattr(
+        "cute_tool.tool.user_sandbox_manager.ensure_e2b_desktop_chromium_ready",
+        ensure,
+    )
+    manager = _make_manager(tmp_path / "sandbox.db", sandbox, clock)
+    try:
+        lease = manager.acquire("user:one", ensure_desktop=False)
+        assert lease.sandbox is sandbox
+        assert calls == []
+        manager.release("user:one")
+    finally:
+        manager.shutdown()
+
+
 def test_debounce_pause_can_be_cancelled_then_runs_once(tmp_path):
     clock = [100.0]
     sandbox = _FakeSandbox()

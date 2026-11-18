@@ -112,6 +112,13 @@ def _allowed_local_file_roots() -> list[str]:
         root = os.path.join(os.getcwd(), root)
     roots.append(root)
     roots.append(os.path.join(os.getcwd(), "skilloutput"))
+    # Eval workspaces may live outside the file service's own save root. Reuse
+    # the explicit code-execution allow-list instead of widening to a drive root.
+    for item in (os.getenv("CODE_EXECUTION_WORKSPACE_ROOTS") or "").split(
+        os.pathsep
+    ):
+        if item.strip():
+            roots.append(os.path.expanduser(item.strip()))
     for env_name in ("CUTE_DOCGEN_OUTPUT_DIR", "CUTE_DOCGEN_UPLOAD_DIR"):
         value = os.getenv(env_name)
         if value:

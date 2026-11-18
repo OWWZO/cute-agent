@@ -67,20 +67,20 @@ async def run_script_request(body: ScriptRunnerRequest) -> ScriptRunnerResponse:
 
         response_stderr = execution_result.stderr
         response_summary = execution_result.summary
+        success = execution_result.success and not upload_errors
         if upload_errors:
             # 上传产物属于附加能力，不应该覆盖脚本本身的执行结果。
             upload_warning = "产物上传失败: " + "; ".join(upload_errors)
             response_stderr = _merge_messages(response_stderr, upload_warning)
-            if execution_result.success:
-                response_summary = "脚本执行成功（产物上传失败）"
+            response_summary = "产物上传失败"
 
         response = ScriptRunnerResponse(
             request_id=body.request_id,
             skill_name=body.skill_name,
             script_name=body.script_name,
             runtime=body.runtime,
-            success=execution_result.success,
-            exit_code=execution_result.exit_code,
+            success=success,
+            exit_code=0 if success else -1,
             stdout=execution_result.stdout,
             stderr=response_stderr,
             summary=response_summary,

@@ -518,7 +518,11 @@ def _exec_e2b(
     sid = (session_id or "").strip() or "anonymous"
     manager = get_user_sandbox_manager()
     with stage_timer("bash", "acquire", sid):
-        lease = manager.acquire(owner, timeout_sec=timeout_sec)
+        lease = manager.acquire(
+            owner,
+            timeout_sec=timeout_sec,
+            ensure_desktop=False,
+        )
     try:
         with manager.session_gate(owner, sid):
             sandbox = lease.sandbox

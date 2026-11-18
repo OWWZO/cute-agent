@@ -40,6 +40,36 @@ _FILE_REGISTER_TIMEOUT = aiohttp.ClientTimeout(
     connect=10,
     sock_read=20,
 )
+_FILE_VERIFY_TIMEOUT = aiohttp.ClientTimeout(
+    total=20,
+    connect=10,
+    sock_read=15,
+)
+
+
+async def verify_uploaded_file_url(operation: str, url: str) -> None:
+    """读回上传后的预览/下载链接，确认产物真的可达。"""
+    if not url or not _is_http_endpoint(url):
+        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=_FILE_VERIFY_TIMEOUT) as response:
+                if response.status < 200 or response.status >= 300:
+                    raise RuntimeError(
+                        f"{operation} URL verification failed with HTTP {response.status}: {url}"
+                    )
+    except asyncio.TimeoutError as exc:
+        raise TimeoutError(f"{operation} URL verification timed out: {url}") from exc
+
+
+async def verify_uploaded_file(file_info: Dict[str, Any]) -> None:
+    """校验一个上传结果里的预览和下载链接。"""
+    download_url = file_info.get("downloadUrl") or file_info.get("ossUrl")
+    preview_url = file_info.get("domainUrl") or file_info.get("previewUrl")
+    if download_url:
+        await verify_uploaded_file_url("download", str(download_url))
+    if preview_url and preview_url != download_url:
+        await verify_uploaded_file_url("preview", str(preview_url))
 
 
 @timer()
@@ -110,13 +140,15 @@ async def upload_file(
                 f"{storage_target}/upload_file", json=body, timeout=99999
             ) as response:
                 result = await _parse_upload_response(response, "text file upload")
-        return {
+        file_info = {
             "fileName": file_name,
             "ossUrl": result["downloadUrl"],
             "domainUrl": result["domainUrl"],
             "downloadUrl": result["downloadUrl"],
             "fileSize": len(content),
         }
+        await verify_uploaded_file(file_info)
+        return file_info
 
     target_file = _write_local_text_file(
         storage_root=storage_target,
@@ -156,7 +188,7 @@ async def upload_file_by_path(
                 request_id=request_id,
                 relative_path=logical_name,
             )
-            return {
+            file_info = {
                 "fileName": file_name,
                 "relativePath": logical_name,
                 "ossUrl": result["ossUrl"],
@@ -164,6 +196,8 @@ async def upload_file_by_path(
                 "downloadUrl": result["downloadUrl"],
                 "fileSize": file_size,
             }
+            await verify_uploaded_file(file_info)
+            return file_info
 
         # 非共享存储仍走 multipart，由文件服务接收内容并返回前端可消费的地址。
         data = aiohttp.FormData()
@@ -191,7 +225,7 @@ async def upload_file_by_path(
                     f"binary file upload timed out after "
                     f"{_FILE_UPLOAD_TIMEOUT_SECONDS}s"
                 ) from exc
-        return {
+        file_info = {
             "fileName": file_name,
             "relativePath": result.get("relativePath") or logical_name,
             "ossUrl": result["downloadUrl"],
@@ -199,6 +233,8 @@ async def upload_file_by_path(
             "downloadUrl": result["downloadUrl"],
             "fileSize": file_size,
         }
+        await verify_uploaded_file(file_info)
+        return file_info
 
     target_file = _copy_file_to_local_storage(
         storage_root=storage_target,

@@ -412,6 +412,41 @@ class E2BSandboxBackendTest(unittest.TestCase):
             finally:
                 self._close_test_executor(executor)
 
+    def test_executor_recreates_stale_sandbox_after_readiness_failure(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            workspace_root = Path(workspace)
+            output_dir = workspace_root / "output"
+            output_dir.mkdir()
+            policy = build_permission_policy(
+                profile="analysis",
+                workspace_root=str(workspace_root),
+                output_dir=str(output_dir),
+                input_files=[],
+            )
+            created = []
+
+            def factory(**kwargs):
+                sandbox = _FakeSandbox(**kwargs)
+                created.append(sandbox)
+                if len(created) == 1:
+                    def gone(*_args, **_kwargs):
+                        raise RuntimeError("The sandbox was not found")
+
+                    sandbox.commands.run = gone
+                return sandbox
+
+            executor = E2BPythonSandboxExecutor(
+                policy,
+                timeout_seconds=15,
+                sandbox_factory=factory,
+            )
+            try:
+                result = executor.execute("print('recovered')\n")
+                self.assertEqual(0, result.returncode)
+                self.assertEqual(2, len(created))
+            finally:
+                self._close_test_executor(executor)
+
     def test_jupyter_png_result_is_not_materialized_as_artifact(self):
         with tempfile.TemporaryDirectory() as workspace:
             workspace_root = Path(workspace)

@@ -48,6 +48,7 @@ def open_desktop_session(body: DesktopSessionOpenRequest) -> DesktopSessionOpenR
         owner,
         timeout_sec=max(120, ttl),
         update_timeout=False,
+        ensure_desktop=True,
     )
     hold_set = False
     try:
