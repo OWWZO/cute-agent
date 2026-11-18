@@ -6,6 +6,7 @@ import org.wwz.ai.domain.agent.ledger.model.tooloutput.CanvasPublishToolOutput;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolFileRefMapper;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.adapter.port.FileArtifactPort;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.dto.CodeInterpreterResponse;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
@@ -118,6 +119,13 @@ public class CanvasPublishTool implements BaseTool {
             String fileName = Path.of(relativePath).getFileName().toString();
             String previewUrl = buildFileUrl(cuteConfig, "preview", relativePath, context);
             String downloadUrl = buildFileUrl(cuteConfig, "download", relativePath, context);
+            FileArtifactPort fileArtifactPort = context.getRuntimeDependencies().getFileArtifactPort();
+            if (fileArtifactPort == null) {
+                return failure(title, "canvas_publish URL verification is unavailable");
+            }
+            // 发布链接必须现场读回一次，避免"生成了链接但 404"被当成成功。
+            fileArtifactPort.readBytes(previewUrl, 10L);
+            fileArtifactPort.readBytes(downloadUrl, 10L);
 
             List<CodeInterpreterResponse.FileInfo> fileInfo = new ArrayList<>();
             fileInfo.add(CodeInterpreterResponse.FileInfo.builder()

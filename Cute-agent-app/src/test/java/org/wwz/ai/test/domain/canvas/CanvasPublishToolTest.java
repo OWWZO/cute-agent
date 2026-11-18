@@ -18,6 +18,7 @@ import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspacePaths;
 import org.wwz.ai.test.domain.support.CuteRuntimeTestSupport;
 
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -79,6 +80,8 @@ public class CanvasPublishToolTest {
         );
         Mockito.verify(fileArtifactPort, Mockito.never()).upload(Mockito.anyString(), Mockito.any());
         Mockito.verify(fileArtifactPort, Mockito.never()).register(Mockito.anyString(), Mockito.any());
+        Mockito.verify(fileArtifactPort, Mockito.times(2))
+                .readBytes(Mockito.anyString(), Mockito.any());
         Assert.assertTrue(agentContext.getVisibleArtifactFiles().isEmpty());
     }
 
@@ -110,6 +113,20 @@ public class CanvasPublishToolTest {
 
         Assert.assertTrue(result.getFailed());
         Mockito.verifyNoInteractions(fileArtifactPort);
+    }
+
+    @Test
+    public void shouldFailWhenPreviewOrDownloadUrlCannotBeReadBack() throws Exception {
+        FileArtifactPort fileArtifactPort = Mockito.mock(FileArtifactPort.class);
+        Mockito.when(fileArtifactPort.readBytes(Mockito.anyString(), Mockito.any()))
+                .thenThrow(new IOException("HTTP 404"));
+        AgentContext agentContext = createAgentContext(fileArtifactPort);
+
+        ToolResultPayload result = execute(agentContext);
+
+        Assert.assertTrue(result.getFailed());
+        Mockito.verify(fileArtifactPort, Mockito.atLeastOnce())
+                .readBytes(Mockito.anyString(), Mockito.any());
     }
 
     private AgentContext createAgentContext(FileArtifactPort fileArtifactPort) {

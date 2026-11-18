@@ -25,6 +25,7 @@ import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspacePaths;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Proxy;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -154,6 +155,7 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
                 .readTimeout(300L, TimeUnit.SECONDS)
                 .writeTimeout(300L, TimeUnit.SECONDS)
                 .callTimeout(360L, TimeUnit.SECONDS)
+                .proxy(Proxy.NO_PROXY)
                 .build();
         Request httpRequest = new Request.Builder()
                 .url(normalizeBaseUrl(serviceBaseUrl) + "/v1/file_tool/upload_file_data")
@@ -167,7 +169,24 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
                 throw new IOException("file upload failed, code=" + response.code()
                         + ", url=" + httpRequest.url() + ", body=" + responseText);
             }
-            return toFileResponse(responseText, fileName, normalizedRequest.getRequestId());
+            FileResponse fileResponse = toFileResponse(
+                    responseText, fileName, normalizedRequest.getRequestId());
+            verifyArtifactUrls(fileResponse, client);
+            return fileResponse;
+        }
+    }
+
+    /** 上传成功后必须能读回预览/下载链接，否则产物仍然等于丢失。 */
+    private void verifyArtifactUrls(FileResponse fileResponse, OkHttpClient client) throws IOException {
+        if (fileResponse == null) {
+            throw new IOException("file upload returned an empty response");
+        }
+        if (StringUtils.isNotBlank(fileResponse.getOssUrl())) {
+            readBytes(client, fileResponse.getOssUrl(), 10L, 64L * 1024L);
+        }
+        if (StringUtils.isNotBlank(fileResponse.getDomainUrl())
+                && !fileResponse.getDomainUrl().equals(fileResponse.getOssUrl())) {
+            readBytes(client, fileResponse.getDomainUrl(), 10L, 64L * 1024L);
         }
     }
 
@@ -205,6 +224,33 @@ public class CuteToolFileArtifactAdapter implements FileArtifactPort {
     @Override
     public byte[] readBytes(String url, Long timeoutSeconds) throws IOException {
         return readBytes(url, timeoutSeconds, DEFAULT_MAX_RESPONSE_BYTES);
+    }
+
+    private byte[] readBytes(OkHttpClient client, String url, Long timeoutSeconds, long maxBytes) throws IOException {
+        if (StringUtils.isBlank(url)) {
+            throw new IllegalArgumentException("url must not be blank");
+        }
+        if (maxBytes <= 0) {
+            throw new IllegalArgumentException("maxBytes must be greater than zero");
+        }
+        long timeout = timeoutSeconds == null || timeoutSeconds <= 0 ? 60L : timeoutSeconds;
+        OkHttpClient boundedClient = client.newBuilder()
+                .connectTimeout(timeout, TimeUnit.SECONDS)
+                .readTimeout(timeout, TimeUnit.SECONDS)
+                .writeTimeout(timeout, TimeUnit.SECONDS)
+                .callTimeout(timeout + 30L, TimeUnit.SECONDS)
+                .build();
+        Request request = new Request.Builder().url(url).get().build();
+        try (Response response = boundedClient.newCall(request).execute()) {
+            ResponseBody body = response.body();
+            if (!response.isSuccessful()) {
+                throw new IOException("URL verification failed, code=" + response.code() + ", url=" + url);
+            }
+            if (body == null) {
+                return new byte[0];
+            }
+            return readBody(body, maxBytes);
+        }
     }
 
     @Override
