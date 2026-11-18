@@ -16,6 +16,7 @@ import org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.tool.factory.AgentToolCollectionFactory;
+import org.wwz.ai.domain.agent.runtime.tool.common.openui.OpenUiCatalogLoadStateStore;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceService;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceSessionFileMaterializer;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadStateStore;
@@ -58,6 +59,9 @@ public class PrepareAgentContextAssembly {
 
     @Resource
     private WorkspaceReadStateStore workspaceReadStateStore;
+
+    @Resource
+    private OpenUiCatalogLoadStateStore openUiCatalogLoadStateStore;
 
     @Resource
     private CuteRuntimeDependencies cuteRuntimeDependencies;
@@ -124,6 +128,7 @@ public class PrepareAgentContextAssembly {
 
         materializeSessionFiles(agentContext, request.getSessionFiles());
         hydrateWorkspaceReadState(agentContext);
+        hydrateOpenUiCatalogState(agentContext);
         boolean resumedApprovedPlan = restoreResumePlanMode(agentContext, request);
         LtmRuntimeBootstrap.bootstrap(agentContext, request);
 
@@ -214,6 +219,17 @@ public class PrepareAgentContextAssembly {
             workspaceReadStateStore.hydrate(agentContext);
         } catch (Exception e) {
             log.warn("hydrate workspace read-state failed, requestId={}", agentContext.getRequestId(), e);
+        }
+    }
+
+    private void hydrateOpenUiCatalogState(AgentContext agentContext) {
+        if (openUiCatalogLoadStateStore == null || agentContext == null) {
+            return;
+        }
+        try {
+            openUiCatalogLoadStateStore.hydrate(agentContext);
+        } catch (Exception e) {
+            log.warn("hydrate OpenUI catalog load-state failed, requestId={}", agentContext.getRequestId(), e);
         }
     }
 

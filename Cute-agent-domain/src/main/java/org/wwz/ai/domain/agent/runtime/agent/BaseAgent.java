@@ -44,6 +44,7 @@ import org.wwz.ai.domain.agent.runtime.tasklist.TaskNotification;
 import org.wwz.ai.domain.agent.runtime.tool.deferred.DeferredToolCall;
 import org.wwz.ai.domain.agent.runtime.tool.skill.SkillPromptIndexBuilder;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadStateStore;
+import org.wwz.ai.domain.agent.runtime.tool.common.openui.OpenUiCatalogLoadStateStore;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -924,8 +925,8 @@ public abstract class BaseAgent {
             memory.replaceMessages(new ArrayList<>(compacted));
             context.setWorkingMemoryMessages(new ArrayList<>(compacted));
             context.contextTokenTracker().reset();
-            // cc-haha 对齐：压缩后清 read-state，避免正文已不在上下文仍返回 unchanged stub。
-            clearWorkspaceReadStateAfterCompaction();
+            // 压缩后清重复读取围栏：正文/目录已不在上下文时，下一次调用必须能重新拿到完整内容。
+            clearReloadGuardsAfterCompaction();
             log.info("{} {} mid-run compact phase={} beforeMsgs={} afterMsgs={}",
                     context.getRequestId(), getName(), phase, current.size(), compacted.size());
         } catch (Exception e) {
@@ -934,7 +935,7 @@ public abstract class BaseAgent {
         }
     }
 
-    private void clearWorkspaceReadStateAfterCompaction() {
+    private void clearReloadGuardsAfterCompaction() {
         if (context == null) {
             return;
         }
@@ -943,6 +944,13 @@ public abstract class BaseAgent {
         } catch (Exception e) {
             context.clearWorkspaceReadState();
             log.warn("{} clear workspace read-state after compact failed: {}",
+                    context.getRequestId(), e.getMessage());
+        }
+        try {
+            new OpenUiCatalogLoadStateStore().clear(context);
+        } catch (Exception e) {
+            context.setLoadedOpenUiCatalogVersion(null);
+            log.warn("{} clear OpenUI catalog load-state after compact failed: {}",
                     context.getRequestId(), e.getMessage());
         }
     }

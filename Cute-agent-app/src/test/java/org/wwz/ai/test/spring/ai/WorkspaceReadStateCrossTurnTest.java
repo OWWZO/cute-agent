@@ -168,4 +168,24 @@ public class WorkspaceReadStateCrossTurnTest {
         Assert.assertEquals(2000, mainReload.getWorkspaceFileReadState(
                 targetFile.toAbsolutePath().normalize().toString()).getLineCount());
     }
+
+    @Test
+    public void subAgentStartsWithoutOpenUiCatalogMarker() {
+        AgentContext parent = AgentContext.builder()
+                .requestId("req-parent-openui")
+                .sessionId("session-x")
+                .workspaceRoot(workspaceRoot.toString())
+                .loadedOpenUiCatalogVersion("main-catalog-version")
+                .build();
+
+        AgentContext child = SubAgentContextFactory.create(
+                parent,
+                "inspect openui",
+                "inspect catalog",
+                new ToolCollection(),
+                "child-openui",
+                SubAgentRegistry.TYPE_GENERAL_PURPOSE);
+
+        Assert.assertNull(child.getLoadedOpenUiCatalogVersion());
+    }
 }

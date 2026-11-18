@@ -167,6 +167,13 @@ public class AgentContext {
     volatile Map<String, WorkspaceFileReadState> workspaceReadStateByPath = new ConcurrentHashMap<>();
 
     /**
+     * 当前 Agent 已加载的 OpenUI 组件目录版本（目录内容 hash）。
+     * null 表示尚未加载；子 Agent 与并行 fork 必须保持独立。
+     */
+    @JSONField(serialize = false)
+    volatile String loadedOpenUiCatalogVersion;
+
+    /**
      * Cute 运行时依赖包。
      * 所有 Agent / Tool / LLM 必须通过这里读取运行时协作者，禁止自行回 Spring 容器查找。
      */
@@ -686,6 +693,14 @@ public class AgentContext {
         }
     }
 
+    public String getLoadedOpenUiCatalogVersion() {
+        return loadedOpenUiCatalogVersion;
+    }
+
+    public void setLoadedOpenUiCatalogVersion(String loadedOpenUiCatalogVersion) {
+        this.loadedOpenUiCatalogVersion = loadedOpenUiCatalogVersion;
+    }
+
 
     public ToolArtifactBinding registerGeneratedArtifact(ToolArtifactSource source, File file) {
         // 工具产物登记到唯一 registry；前端可见列表由 ledger/toolCall 绑定派生，
@@ -760,6 +775,8 @@ public class AgentContext {
                 .thinkingEffort(thinkingEffort)
                 .subAgentToolCollection(subAgentToolCollection)
                 .workspaceReadStateByPath(new ConcurrentHashMap<>())
+                // 并行 fork 与父 context 共用 workspace，但模型上下文独立，不能继承目录已加载标记。
+                .loadedOpenUiCatalogVersion(null)
                 .isStream(isStream)
                 .streamMessageType(streamMessageType)
                 .basePrompt(basePrompt)

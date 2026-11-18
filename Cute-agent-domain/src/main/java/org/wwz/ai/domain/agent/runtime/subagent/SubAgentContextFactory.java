@@ -124,6 +124,8 @@ public final class SubAgentContextFactory {
                 .workspaceRoot(parent.getWorkspaceRoot())
                 // 子 Agent 必须自己读取文件，不能复用主 Agent 的 unchanged 判定。
                 .workspaceReadStateByPath(new ConcurrentHashMap<>())
+                // 子 Agent 是独立会话上下文，不能继承主 Agent 的 OpenUI 目录已加载标记。
+                .loadedOpenUiCatalogVersion(null)
                 // 日期每次现算，不继承父的陈旧值：子会话可能隔天才被用户从会话树点进来续聊，
                 // 沿用 spawn 那天的日期会写进 working memory 并一直错下去。
                 .dateInfo(DateUtil.CurrentDateInfo())

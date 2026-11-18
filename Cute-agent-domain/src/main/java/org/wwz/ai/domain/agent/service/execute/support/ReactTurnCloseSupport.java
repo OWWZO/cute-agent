@@ -12,6 +12,7 @@ import org.wwz.ai.domain.agent.runtime.agent.ReActAgent;
 import org.wwz.ai.domain.agent.runtime.artifact.TaskSummaryArtifactProtocol;
 import org.wwz.ai.domain.agent.runtime.dto.TaskSummaryResult;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
+import org.wwz.ai.domain.agent.runtime.tool.common.openui.OpenUiCatalogLoadStateStore;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadStateStore;
 
 import jakarta.annotation.Resource;
@@ -30,6 +31,9 @@ public class ReactTurnCloseSupport {
 
     @Resource
     private WorkspaceReadStateStore workspaceReadStateStore;
+
+    @Resource
+    private OpenUiCatalogLoadStateStore openUiCatalogLoadStateStore;
 
     /**
      * 两个 Close 节点的公共收口入口。
@@ -60,6 +64,7 @@ public class ReactTurnCloseSupport {
             throw new IllegalStateException("agentContext is null");
         }
         persistWorkspaceReadState(agentContext);
+        persistOpenUiCatalogState(agentContext);
 
         TaskSummaryResult result = TaskSummaryArtifactProtocol.resolveForDelivery(
                 StringUtils.defaultString(rawFinalAnswer),
@@ -146,6 +151,20 @@ public class ReactTurnCloseSupport {
             workspaceReadStateStore.persist(agentContext);
         } catch (Exception e) {
             log.warn("persist workspace read-state failed, requestId={}", agentContext.getRequestId(), e);
+        }
+    }
+
+    private void persistOpenUiCatalogState(AgentContext agentContext) {
+        if (openUiCatalogLoadStateStore == null || agentContext == null
+                || StringUtils.isBlank(agentContext.getLoadedOpenUiCatalogVersion())) {
+            return;
+        }
+        try {
+            openUiCatalogLoadStateStore.persist(
+                    agentContext, agentContext.getLoadedOpenUiCatalogVersion());
+        } catch (Exception e) {
+            log.warn("persist OpenUI catalog load-state failed, requestId={}",
+                    agentContext.getRequestId(), e);
         }
     }
 }
