@@ -76,4 +76,24 @@ public class ToolExecutionPipelineObservationTest {
         Assert.assertTrue(normalized.getLlmObservation().contains("\"tool_ok\":false"));
         Assert.assertTrue(normalized.getLlmObservation().contains("boom"));
     }
+
+    @Test
+    public void phaseTwoFailedToolKeepsCompactObservationAndFullToolResult() {
+        AgentContext context = AgentContext.builder().build();
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.FALSE);
+        data.put("message", "parse failed");
+        data.put("data", "partial body");
+        data.put("file_size", 4096);
+
+        ToolResultPayload normalized = ToolExecutionPipeline.normalizeToolResultPayload(
+                context,
+                "pdf_reader",
+                ToolResultPayload.builder().failed(Boolean.TRUE).llmData(data).build());
+
+        Assert.assertTrue(normalized.getLlmObservation().contains("parse failed"));
+        Assert.assertTrue(normalized.getLlmObservation().contains("partial body"));
+        Assert.assertFalse(normalized.getLlmObservation().contains("file_size"));
+        Assert.assertTrue(normalized.getToolResult().contains("\"file_size\":4096"));
+    }
 }

@@ -18,7 +18,9 @@ import org.wwz.ai.domain.agent.runtime.tool.common.skill.SkillViewTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.skill.SkillsSearchTool;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadTool;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -74,7 +76,40 @@ public final class ToolObservationFormatter {
             Map.entry(McpToolNames.TOOL_DESCRIBE, ToolObservationFormatter::projectToolDescribe),
             Map.entry(MemoryTool.TOOL_NAME, ToolObservationFormatter::projectMemory),
             Map.entry("code_execution", ToolObservationFormatter::projectCodeExecution),
-            Map.entry("bash", ToolObservationFormatter::projectBash)
+            Map.entry("bash", ToolObservationFormatter::projectBash),
+            Map.entry("code_mode", ToolObservationFormatter::projectCodeMode),
+            // 文档生成类：产物清单统一由 BaseAgent 的 artifact 摘要提供，投影器不再重复输出文件。
+            Map.entry("document_generate", ToolObservationFormatter::projectDocGenerate),
+            Map.entry("slides_generate", ToolObservationFormatter::projectDocGenerate),
+            Map.entry("excel_generator", ToolObservationFormatter::projectDocGenerate),
+            Map.entry("checklist_generate", ToolObservationFormatter::projectDocGenerate),
+            Map.entry("chart_generator", ToolObservationFormatter::projectDocGenerate),
+            // 模板/主题类：rendered 可能本身就是主要业务输出，保留截断后的正文。
+            Map.entry("template_filler", ToolObservationFormatter::projectDocTemplate),
+            Map.entry("document_template", ToolObservationFormatter::projectDocTemplate),
+            Map.entry("theme_designer", ToolObservationFormatter::projectDocTemplate),
+            // 文档读取 / 数据处理：data 是正文，必须保留；外层 JSON 元数据丢弃。
+            Map.entry("csv_processor", ToolObservationFormatter::projectDocRead),
+            Map.entry("excel_reader", ToolObservationFormatter::projectDocRead),
+            Map.entry("html_processor", ToolObservationFormatter::projectDocRead),
+            Map.entry("markdown_processor", ToolObservationFormatter::projectDocRead),
+            Map.entry("text_processor", ToolObservationFormatter::projectDocRead),
+            Map.entry("word_reader", ToolObservationFormatter::projectDocRead),
+            Map.entry("pdf_reader", ToolObservationFormatter::projectDocRead),
+            Map.entry("pdf_structure", ToolObservationFormatter::projectDocRead),
+            Map.entry("citation_extractor", ToolObservationFormatter::projectDocRead),
+            Map.entry("image_ocr", ToolObservationFormatter::projectDocRead),
+            Map.entry("data_aggregate", ToolObservationFormatter::projectDocRead),
+            Map.entry("data_clean", ToolObservationFormatter::projectDocRead),
+            Map.entry("data_merge", ToolObservationFormatter::projectDocRead),
+            Map.entry("data_transform", ToolObservationFormatter::projectDocRead),
+            Map.entry("data_validate", ToolObservationFormatter::projectDocRead),
+            Map.entry("sql_query", ToolObservationFormatter::projectDocRead),
+            Map.entry("data_analysis", ToolObservationFormatter::projectDataAnalysis),
+            Map.entry("image_generation", ToolObservationFormatter::projectImageGeneration),
+            Map.entry("image_generation_tool", ToolObservationFormatter::projectImageGeneration),
+            Map.entry(McpToolNames.LIST_MCP_RESOURCES, ToolObservationFormatter::projectListMcpResources),
+            Map.entry(McpToolNames.READ_MCP_RESOURCE, ToolObservationFormatter::projectReadMcpResource)
     );
 
     /**
@@ -82,7 +117,19 @@ public final class ToolObservationFormatter {
      * 其他工具保持原有契约：ok=false 或 failed=true 时回退完整 JSON。
      */
     private static final Set<String> STATE_AWARE_TOOLS = Set.of(
-            "bash", "code_execution", "host_cli", "browser", "agent_browser");
+            "bash", "code_execution", "host_cli", "browser", "agent_browser",
+            "code_mode",
+            "document_generate", "slides_generate", "excel_generator", "checklist_generate",
+            "template_filler", "document_template", "theme_designer", "chart_generator",
+            "csv_processor", "excel_reader", "html_processor", "markdown_processor",
+            "text_processor", "word_reader", "pdf_reader", "pdf_structure",
+            "citation_extractor", "image_ocr",
+            "data_aggregate", "data_clean", "data_merge", "data_transform",
+            "data_validate", "sql_query",
+            "data_analysis", "image_generation",
+            "image_generation_tool",
+            McpToolNames.LIST_MCP_RESOURCES, McpToolNames.READ_MCP_RESOURCE,
+            AgentDispatchTool.NAME, MemoryTool.TOOL_NAME);
 
     private static final String[] BINARY_JSON_KEYS = {
             "\"imageBase64\"", "\"image_base64\"", "\"base64Image\"", "\"base64_image\""
@@ -101,7 +148,7 @@ public final class ToolObservationFormatter {
     }
 
     /**
-     * 状态感知投影。只有本轮计划覆盖的五个代码型工具会在失败时继续投影，
+     * 状态感知投影。已登记专用失败投影的工具继续输出紧凑文本，
      * 避免把 ok=false 的完整 JSON 重新塞回模型；其他工具行为保持不变。
      */
     public static String format(String toolName, Object llmData, boolean failed) {
@@ -650,7 +697,8 @@ public final class ToolObservationFormatter {
                     if (!(doc instanceof Map<?, ?> d)) {
                         continue;
                     }
-                    String url = text(d.get("url"));
+                    // 结构化结果写入 link；旧回放数据仍可能是 url。
+                    String url = StringUtils.firstNonBlank(text(d.get("link")), text(d.get("url")));
                     if (StringUtils.isBlank(url)) {
                         continue;
                     }
@@ -730,20 +778,15 @@ public final class ToolObservationFormatter {
                     .append("' to continue this agent)");
         }
         String status = text(data.get("status"));
-        if (StringUtils.isNotBlank(status)) {
+        if (StringUtils.isNotBlank(status) && !"completed".equalsIgnoreCase(status)) {
             out.append("\nstatus: ").append(status);
-        }
-        Object toolUses = data.get("totalToolUseCount");
-        if (toolUses != null) {
-            out.append("\ntool_uses: ").append(toolUses);
         }
         if (Boolean.TRUE.equals(data.get("run_in_background"))) {
             out.append("\nrun_in_background: true");
-            // 后台派发时 agentId 是后续 SendMessage/TaskStop 的句柄；结果会自动回传。
-            if (StringUtils.isNotBlank(agentId)) {
-                out.append("\n(agent_id: '").append(agentId)
-                        .append("'; result will be returned automatically when the task completes)");
-            }
+        }
+        String hint = text(data.get("hint"));
+        if (StringUtils.isNotBlank(hint)) {
+            out.append("\nhint: ").append(hint.strip());
         }
         return out.toString();
     }
@@ -974,13 +1017,45 @@ public final class ToolObservationFormatter {
             if (out.length() > 0) {
                 out.append("\n\n");
             }
-            out.append(JSON.toJSONString(items));
+            for (int index = 0; index < items.size(); index++) {
+                if (!(items.get(index) instanceof Map<?, ?> row)) {
+                    continue;
+                }
+                if (index > 0) {
+                    out.append('\n');
+                }
+                out.append("- op ").append(index + 1).append(": ")
+                        .append(Boolean.TRUE.equals(row.get("success")) ? "success" : "failed");
+                String itemMessage = text(row.get("message"));
+                if (StringUtils.isNotBlank(itemMessage)) {
+                    out.append("; ").append(itemMessage.strip());
+                }
+                if (Boolean.TRUE.equals(row.get("staged"))) {
+                    out.append(" [staged]");
+                }
+                if (Boolean.TRUE.equals(row.get("no_change"))) {
+                    out.append(" [no change]");
+                }
+            }
         }
         if (Boolean.TRUE.equals(data.get("staged"))) {
             out.append("\n[staged]");
         }
         if (Boolean.TRUE.equals(data.get("no_change"))) {
             out.append("\n[no change]");
+        }
+        int used = intOf(data.get("used_chars"), 0);
+        int limit = intOf(data.get("limit_chars"), 0);
+        if (results instanceof List<?> items) {
+            for (Object item : items) {
+                if (item instanceof Map<?, ?> row) {
+                    used = Math.max(used, intOf(row.get("used_chars"), 0));
+                    limit = Math.max(limit, intOf(row.get("limit_chars"), 0));
+                }
+            }
+        }
+        if (limit > 0 && (used * 10 >= limit * 8 || !Boolean.TRUE.equals(data.get("success")))) {
+            out.append("\nusage: ").append(used).append('/').append(limit);
         }
         return out.length() == 0 ? null : out.toString();
     }
@@ -1049,6 +1124,266 @@ public final class ToolObservationFormatter {
         appendWorkspaceSyncIssues(out, data.get("workspace_sync"));
         appendPaths(out, data.get("produced_files"), "files");
         return out.length() == 0 ? "(no output)" : out.toString();
+    }
+
+    // ---- code_mode ----
+
+    private static String projectCodeMode(Map<?, ?> data) {
+        StringBuilder out = new StringBuilder();
+        String errorCode = text(data.get("error_code"));
+        String message = text(data.get("message"));
+        if (StringUtils.isNotBlank(errorCode) || StringUtils.isNotBlank(message)) {
+            out.append("Error: ");
+            if (StringUtils.isNotBlank(errorCode)) {
+                out.append(errorCode);
+                if (StringUtils.isNotBlank(message) && !message.contains(errorCode)) {
+                    out.append(": ");
+                }
+            }
+            if (StringUtils.isNotBlank(message) && !out.toString().contains(message)) {
+                out.append(message.strip());
+            }
+        }
+        Object rawResult = data.get("result");
+        if (rawResult != null) {
+            String result = rawResult instanceof String value ? value : JSON.toJSONString(rawResult);
+            if (StringUtils.isNotBlank(result) && !out.toString().contains(result.strip())) {
+                out.append(out.length() == 0 ? "" : "\n\n").append(result.stripTrailing());
+            }
+        }
+        appendCodeModeLogs(out, data.get("logs"));
+        appendPaths(out, data.get("produced_files"), "files");
+        return out.length() == 0 ? "(no output)" : out.toString();
+    }
+
+    private static void appendCodeModeLogs(StringBuilder out, Object rawLogs) {
+        if (!(rawLogs instanceof List<?> logs) || logs.isEmpty()) {
+            return;
+        }
+        List<String> diagnostics = new ArrayList<>();
+        int totalChars = 0;
+        for (Object item : logs) {
+            String line = text(item);
+            if (StringUtils.isBlank(line)) {
+                continue;
+            }
+            String normalized = line.strip();
+            String lower = normalized.toLowerCase(Locale.ROOT);
+            if (!lower.contains("[warn]") && !lower.contains("[error]")
+                    && !lower.contains("warning") && !lower.contains("error:")) {
+                continue;
+            }
+            String bounded = truncate(normalized, 500);
+            if (totalChars + bounded.length() > 8_000 || diagnostics.size() >= 20) {
+                break;
+            }
+            diagnostics.add(bounded);
+            totalChars += bounded.length();
+        }
+        if (diagnostics.isEmpty()) {
+            return;
+        }
+        out.append("\n\nlogs (warnings/errors):");
+        for (String line : diagnostics) {
+            out.append("\n").append(line);
+        }
+    }
+
+    // ---- 文档生成 ----
+
+    private static String projectDocGenerate(Map<?, ?> data) {
+        StringBuilder out = new StringBuilder();
+        appendFailureMessage(out, data);
+        appendWarnings(out, data);
+        // 正常路径由 BaseAgent 的“关联文件”统一追加；失败明细没有 artifact 绑定，
+        // 只能在这里补一次产物路径，避免部分成功文件对模型不可见。
+        if (isFailureData(data)) {
+            appendPaths(out, data.get("produced_files"), "files");
+        }
+        return out.length() == 0 ? "(completed)" : out.toString();
+    }
+
+    private static String projectDocTemplate(Map<?, ?> data) {
+        StringBuilder out = new StringBuilder();
+        appendFailureMessage(out, data);
+        if (Boolean.TRUE.equals(data.get("ok"))) {
+            String message = text(data.get("message"));
+            if (StringUtils.isNotBlank(message)) {
+                out.append(message.strip());
+            }
+        }
+        appendField(out, "name", text(data.get("name")));
+        appendField(out, "kind", text(data.get("kind")));
+        appendField(out, "path", text(data.get("path")));
+        String rendered = text(data.get("rendered"));
+        if (StringUtils.isNotBlank(rendered)) {
+            if (out.length() > 0) {
+                out.append("\n\n");
+            }
+            out.append(truncate(rendered.stripTrailing(), 2_000));
+        }
+        appendWarnings(out, data);
+        return out.length() == 0 ? "(completed)" : out.toString();
+    }
+
+    private static void appendFailureMessage(StringBuilder out, Map<?, ?> data) {
+        String message = text(data.get("message"));
+        if (StringUtils.isNotBlank(message) && isFailureData(data)) {
+            out.append("Error: ").append(message.strip());
+        }
+    }
+
+    private static boolean isFailureData(Map<?, ?> data) {
+        return Boolean.FALSE.equals(data.get("ok"))
+                || "tool_error".equalsIgnoreCase(text(data.get("type")));
+    }
+
+    private static void appendWarnings(StringBuilder out, Map<?, ?> data) {
+        appendWarningList(out, "warnings", data.get("warnings"));
+        appendWarningList(out, "lint_warnings", data.get("lint_warnings"));
+    }
+
+    private static void appendWarningList(StringBuilder out, String label, Object rawWarnings) {
+        if (!(rawWarnings instanceof List<?> warnings) || warnings.isEmpty()) {
+            return;
+        }
+        StringBuilder section = new StringBuilder();
+        for (Object item : warnings) {
+            String warning = text(item);
+            if (StringUtils.isNotBlank(warning)) {
+                section.append("\n- ").append(truncate(warning.strip(), 500));
+            }
+        }
+        if (section.length() > 0) {
+            out.append(out.length() == 0 ? "" : "\n\n")
+                    .append(label).append(':').append(section);
+        }
+    }
+
+    private static void appendField(StringBuilder out, String label, String value) {
+        if (StringUtils.isBlank(value)) {
+            return;
+        }
+        if (out.length() > 0) {
+            out.append('\n');
+        }
+        out.append(label).append(": ").append(value);
+    }
+
+    // ---- 文档读取 / 数据处理 ----
+
+    private static String projectDocRead(Map<?, ?> data) {
+        StringBuilder out = new StringBuilder();
+        appendFailureMessage(out, data);
+        if (Boolean.TRUE.equals(data.get("ok")) && StringUtils.isBlank(text(data.get("data")))
+                && StringUtils.isBlank(text(data.get("content")))) {
+            String message = text(data.get("message"));
+            if (StringUtils.isNotBlank(message)) {
+                out.append(message.strip());
+            }
+        }
+        Object payload = data.get("data");
+        if (payload == null) {
+            // 失败载荷只有 message 时，不能把同一句错误再输出一遍。
+            payload = data.get("content");
+        }
+        if (payload != null) {
+            String body = payload instanceof String value ? value : JSON.toJSONString(payload);
+            if (StringUtils.isNotBlank(body) && !out.toString().contains(body.strip())) {
+                out.append(out.length() == 0 ? "" : "\n\n").append(body.stripTrailing());
+            }
+        }
+        appendPaths(out, data.get("produced_files"), "files");
+        if (out.length() == 0) {
+            String message = text(data.get("message"));
+            return StringUtils.isBlank(message) ? "(no output)" : message;
+        }
+        return out.toString();
+    }
+
+    // ---- data_analysis ----
+
+    private static String projectDataAnalysis(Map<?, ?> data) {
+        StringBuilder out = new StringBuilder();
+        appendFailureMessage(out, data);
+        String content = text(data.get("content"));
+        if (StringUtils.isNotBlank(content) && !out.toString().contains(content.strip())) {
+            out.append(out.length() == 0 ? "" : "\n\n").append(content.stripTrailing());
+        }
+        appendPaths(out, data.get("produced_files"), "files", true);
+        if (out.length() == 0) {
+            String message = text(data.get("message"));
+            return StringUtils.isBlank(message) ? "(no output)" : message;
+        }
+        return out.toString();
+    }
+
+    // ---- image_generation ----
+
+    private static String projectImageGeneration(Map<?, ?> data) {
+        StringBuilder out = new StringBuilder();
+        appendFailureMessage(out, data);
+        String summary = text(data.get("summary"));
+        if (StringUtils.isNotBlank(summary) && !out.toString().contains(summary.strip())) {
+            out.append(out.length() == 0 ? "" : "\n\n").append(summary.strip());
+        }
+        appendPaths(out, data.get("produced_files"), "files", true);
+        if (out.length() == 0) {
+            String message = text(data.get("message"));
+            return StringUtils.isBlank(message) ? "(no output)" : message;
+        }
+        return out.toString();
+    }
+
+    // ---- MCP resources ----
+
+    private static String projectListMcpResources(Map<?, ?> data) {
+        List<?> resources = list(data.get("resources"));
+        StringBuilder out = new StringBuilder("resources (")
+                .append(intOf(data.get("count"), resources.size())).append("):");
+        for (Object item : resources) {
+            if (!(item instanceof Map<?, ?> row)) {
+                continue;
+            }
+            String uri = text(row.get("uri"));
+            if (StringUtils.isBlank(uri)) {
+                continue;
+            }
+            String name = StringUtils.firstNonBlank(text(row.get("name")), text(row.get("title")));
+            String server = text(row.get("server"));
+            out.append("\n- ");
+            if (StringUtils.isNotBlank(server)) {
+                out.append('[').append(server).append("] ");
+            }
+            out.append(StringUtils.defaultString(name)).append(" — ").append(uri);
+            String description = text(row.get("description"));
+            if (StringUtils.isNotBlank(description)) {
+                out.append("\n  description: ").append(truncate(description.strip(), 300));
+            }
+        }
+        if (Boolean.TRUE.equals(data.get("truncated"))) {
+            out.append("\n\n[truncated: showing ").append(intOf(data.get("count"), resources.size()))
+                    .append(" of ").append(intOf(data.get("total"), resources.size())).append(']');
+        }
+        return out.toString();
+    }
+
+    private static String projectReadMcpResource(Map<?, ?> data) {
+        StringBuilder out = new StringBuilder();
+        appendFailureMessage(out, data);
+        String content = text(data.get("content"));
+        if (StringUtils.isNotBlank(content) && !out.toString().contains(content.strip())) {
+            out.append(out.length() == 0 ? "" : "\n\n").append(content.stripTrailing());
+        }
+        if (Boolean.TRUE.equals(data.get("truncated"))) {
+            out.append("\n\n[content truncated at 40000 chars; "
+                    + "use a narrower resource or pagination if available]");
+        }
+        if (out.length() == 0) {
+            String message = text(data.get("message"));
+            return StringUtils.isBlank(message) ? "(no content)" : message;
+        }
+        return out.toString();
     }
 
     private static String truncate(String value, int max) {
@@ -1144,9 +1479,12 @@ public final class ToolObservationFormatter {
                         text(row.get("relative_path")),
                         text(row.get("fileName")),
                         text(row.get("file_name")));
+                String url = includeUrl ? text(row.get("url")) : null;
+                if (StringUtils.isBlank(path) && StringUtils.isNotBlank(url)) {
+                    path = url;
+                }
                 if (StringUtils.isNotBlank(path)) {
                     out.append("\n- ").append(path);
-                    String url = includeUrl ? text(row.get("url")) : null;
                     if (StringUtils.isNotBlank(url) && !out.toString().contains(url)) {
                         out.append(" (url: ").append(url).append(')');
                     }
@@ -1286,7 +1624,19 @@ public final class ToolObservationFormatter {
                 && data.get("artifacts") == null
                 && data.get("artifact_failures") == null
                 && data.get("produced_files") == null
-                && data.get("result") == null;
+                && data.get("result") == null
+                && data.get("logs") == null
+                && data.get("results") == null
+                && data.get("resources") == null
+                && data.get("content") == null
+                && data.get("data") == null
+                && data.get("status") == null
+                && data.get("agentId") == null
+                && data.get("run_in_background") == null
+                && data.get("staged") == null
+                && data.get("no_change") == null
+                && data.get("hint") == null
+                && data.get("errorMsg") == null;
     }
 
     private static String sanitizeBrowserStdout(String stdout) {

@@ -516,6 +516,27 @@ public class ToolObservationFormatterTest {
         Assert.assertFalse(projected.contains("原始查询回显"));
     }
 
+    @Test
+    public void deepSearchReadsLinkAndLegacyUrl() {
+        Map<String, Object> linked = new LinkedHashMap<>();
+        linked.put("title", "Linked doc");
+        linked.put("link", "https://linked.example");
+        Map<String, Object> legacy = new LinkedHashMap<>();
+        legacy.put("title", "Legacy doc");
+        legacy.put("url", "https://legacy.example");
+        Map<String, Object> queryResult = new LinkedHashMap<>();
+        queryResult.put("query", "query");
+        queryResult.put("docs", List.of(linked, legacy));
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("answerSummary", "answer");
+        data.put("results", List.of(queryResult));
+
+        String projected = ToolObservationFormatter.format("deep_search", data);
+
+        Assert.assertTrue(projected.contains("https://linked.example"));
+        Assert.assertTrue(projected.contains("https://legacy.example"));
+    }
+
     // ---- 新增覆盖：子 Agent ----
 
     @Test
@@ -536,6 +557,8 @@ public class ToolObservationFormatterTest {
         Assert.assertTrue(projected.contains("agentId: b968e75b"));
         Assert.assertTrue(projected.contains("SendMessage with to: 'b968e75b'"));
         Assert.assertFalse(projected.contains("sub_b968e75b"));
+        Assert.assertFalse(projected.contains("tool_uses"));
+        Assert.assertFalse(projected.contains("status: completed"));
     }
 
     @Test
@@ -548,6 +571,300 @@ public class ToolObservationFormatterTest {
 
         Assert.assertTrue(ToolObservationFormatter.format("Agent", data)
                 .contains("Subagent completed but returned no output"));
+    }
+
+    @Test
+    public void agentBackgroundKeepsOneAgentIdAndBackgroundMarker() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("status", "running");
+        data.put("agentId", "bg-1");
+        data.put("content", "");
+        data.put("run_in_background", Boolean.TRUE);
+
+        String projected = ToolObservationFormatter.format("Agent", data);
+
+        Assert.assertEquals(1, countOccurrences(projected, "agentId: bg-1"));
+        Assert.assertTrue(projected.contains("run_in_background: true"));
+        Assert.assertTrue(projected.contains("status: running"));
+    }
+
+    @Test
+    public void agentFailureKeepsActionableHint() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.FALSE);
+        data.put("errorMsg", "resume_agent_id removed");
+        data.put("hint", "SendMessage(to=\"a1\", message=\"continue\")");
+
+        String projected = ToolObservationFormatter.format("Agent", data, true);
+
+        Assert.assertTrue(projected.contains("Error: resume_agent_id removed"));
+        Assert.assertTrue(projected.contains("hint: SendMessage"));
+    }
+
+    @Test
+    public void memoryBatchUsesCompactRowsAndOnlyShowsCapacityWhenNeeded() {
+        Map<String, Object> first = new LinkedHashMap<>();
+        first.put("success", Boolean.TRUE);
+        first.put("message", "saved");
+        first.put("used_chars", 500);
+        first.put("limit_chars", 10_000);
+        Map<String, Object> second = new LinkedHashMap<>();
+        second.put("success", Boolean.FALSE);
+        second.put("message", "limit reached");
+        second.put("used_chars", 9_500);
+        second.put("limit_chars", 10_000);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.FALSE);
+        data.put("results", List.of(first, second));
+
+        String projected = ToolObservationFormatter.format("memory", data, true);
+
+        Assert.assertTrue(projected.contains("- op 1: success; saved"));
+        Assert.assertTrue(projected.contains("- op 2: failed; limit reached"));
+        Assert.assertFalse(projected.contains("\"used_chars\""));
+        Assert.assertFalse(projected.contains("usage: 500/10000"));
+        Assert.assertTrue(projected.contains("usage: 9500/10000"));
+    }
+
+    @Test
+    public void codeModeKeepsResultAndOnlyDiagnosticLogs() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("duration_ms", 1500);
+        data.put("tool_calls", 9);
+        data.put("source_hash", "abc123");
+        data.put("result", "rows: 12");
+        data.put("logs", List.of("[info] started", "[warn] slow request", "[error] retry used"));
+
+        String projected = ToolObservationFormatter.format("code_mode", data);
+
+        Assert.assertTrue(projected.contains("rows: 12"));
+        Assert.assertTrue(projected.contains("[warn] slow request"));
+        Assert.assertTrue(projected.contains("[error] retry used"));
+        Assert.assertFalse(projected.contains("[info] started"));
+        Assert.assertFalse(projected.contains("duration_ms"));
+        Assert.assertFalse(projected.contains("tool_calls"));
+        Assert.assertFalse(projected.contains("source_hash"));
+    }
+
+    @Test
+    public void codeModeFailureKeepsErrorCodeMessageAndFiles() {
+        Map<String, Object> file = new LinkedHashMap<>();
+        file.put("relative_path", "outputs/partial.csv");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.FALSE);
+        data.put("error_code", "CODE_MODE_TIMEOUT");
+        data.put("message", "script timed out");
+        data.put("logs", List.of("[info] started", "[error] timeout at step 2"));
+        data.put("produced_files", List.of(file));
+
+        String projected = ToolObservationFormatter.format("code_mode", data, true);
+
+        Assert.assertTrue(projected.contains("Error: CODE_MODE_TIMEOUT: script timed out"));
+        Assert.assertTrue(projected.contains("[error] timeout at step 2"));
+        Assert.assertTrue(projected.contains("outputs/partial.csv"));
+        Assert.assertFalse(projected.contains("\"error_code\""));
+    }
+
+    @Test
+    public void docGenerateDropsInternalPayloadAndDoesNotRepeatFiles() {
+        Map<String, Object> file = new LinkedHashMap<>();
+        file.put("file_name", "report.docx");
+        file.put("file_size", 4096);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("message", "生成完成");
+        data.put("warnings", List.of("missing chart alt text"));
+        data.put("lint_warnings", List.of("font fallback"));
+        data.put("payload", "internal request payload");
+        data.put("resolved", "resolved config");
+        data.put("colors", List.of("#fff"));
+        data.put("usage", Map.of("tokens", 10));
+        data.put("stats", Map.of("duration", 3));
+        data.put("rendered", "internal render");
+        data.put("produced_files", List.of(file));
+
+        String projected = ToolObservationFormatter.format("document_generate", data);
+
+        Assert.assertTrue(projected.contains("missing chart alt text"));
+        Assert.assertTrue(projected.contains("font fallback"));
+        Assert.assertFalse(projected.contains("生成完成"));
+        Assert.assertFalse(projected.contains("report.docx"));
+        Assert.assertFalse(projected.contains("internal request payload"));
+        Assert.assertFalse(projected.contains("resolved config"));
+        Assert.assertFalse(projected.contains("internal render"));
+    }
+
+    @Test
+    public void docGenerateFailureKeepsWarningsAndPartialFilesWithoutEnvelope() {
+        Map<String, Object> file = new LinkedHashMap<>();
+        file.put("file_name", "partial.docx");
+        file.put("file_size", 4096);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.FALSE);
+        data.put("message", "lint failed");
+        data.put("lint_warnings", List.of("missing title"));
+        data.put("payload", "internal payload");
+        data.put("produced_files", List.of(file));
+
+        String projected = ToolObservationFormatter.format("document_generate", data, true);
+
+        Assert.assertTrue(projected.contains("Error: lint failed"));
+        Assert.assertTrue(projected.contains("missing title"));
+        Assert.assertTrue(projected.contains("partial.docx"));
+        Assert.assertFalse(projected.contains("internal payload"));
+        Assert.assertFalse(projected.contains("file_size"));
+    }
+
+    @Test
+    public void docTemplateKeepsRenderedAsPrimaryOutputButDropsInternalConfig() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("message", "template ready");
+        data.put("name", "quarterly");
+        data.put("kind", "docx");
+        data.put("path", "templates/quarterly.docx");
+        data.put("rendered", "Rendered template body");
+        data.put("variables", List.of("title", "owner"));
+        data.put("resolved", "resolved config");
+        data.put("usage", Map.of("tokens", 42));
+
+        String projected = ToolObservationFormatter.format("document_template", data);
+
+        Assert.assertTrue(projected.contains("template ready"));
+        Assert.assertTrue(projected.contains("name: quarterly"));
+        Assert.assertTrue(projected.contains("Rendered template body"));
+        Assert.assertFalse(projected.contains("variables"));
+        Assert.assertFalse(projected.contains("resolved config"));
+        Assert.assertFalse(projected.contains("tokens"));
+    }
+
+    @Test
+    public void docReadKeepsBodyAndPathsButDropsEnvelopeMetadata() {
+        Map<String, Object> file = new LinkedHashMap<>();
+        file.put("file_name", "clean.csv");
+        file.put("file_size", 99);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("tool", "data_clean");
+        data.put("ok", Boolean.TRUE);
+        data.put("message", "处理完成");
+        data.put("data", "id,name\n1,Ada");
+        data.put("produced_files", List.of(file));
+
+        String projected = ToolObservationFormatter.format("data_clean", data);
+
+        Assert.assertTrue(projected.startsWith("id,name\n1,Ada"));
+        Assert.assertTrue(projected.contains("clean.csv"));
+        Assert.assertFalse(projected.contains("处理完成"));
+        Assert.assertFalse(projected.contains("file_size"));
+        Assert.assertFalse(projected.contains("\"tool\""));
+    }
+
+    @Test
+    public void docReadKeepsStructuredData() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("data", Map.of("rows", List.of(Map.of("a", 1)), "columns", List.of("a")));
+
+        String projected = ToolObservationFormatter.format("excel_reader", data);
+
+        Assert.assertTrue(projected.contains("\"columns\":[\"a\"]"));
+        Assert.assertFalse(projected.contains("\"ok\""));
+    }
+
+    @Test
+    public void dataAnalysisDropsTaskEchoAndKeepsContentAndCanonicalFile() {
+        Map<String, Object> file = new LinkedHashMap<>();
+        file.put("file_name", "analysis.xlsx");
+        file.put("url", "https://files.example/analysis.xlsx");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("tool", "data_analysis");
+        data.put("ok", Boolean.TRUE);
+        data.put("task", "分析销售趋势");
+        data.put("content", "收入持续增长。");
+        data.put("produced_files", List.of(file));
+
+        String projected = ToolObservationFormatter.format("data_analysis", data);
+
+        Assert.assertTrue(projected.contains("收入持续增长。"));
+        Assert.assertTrue(projected.contains("analysis.xlsx"));
+        Assert.assertTrue(projected.contains("https://files.example/analysis.xlsx"));
+        Assert.assertFalse(projected.contains("分析销售趋势"));
+    }
+
+    @Test
+    public void imageGenerationDropsPromptAndParametersButKeepsCanonicalUrl() {
+        Map<String, Object> file = new LinkedHashMap<>();
+        file.put("file_name", "poster.png");
+        file.put("mimeType", "image/png");
+        file.put("url", "https://files.example/poster.png");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("summary", "已生成海报");
+        data.put("prompt", "生成活动海报");
+        data.put("mode", "text-to-image");
+        data.put("size", "1536x1024");
+        data.put("batchCount", 2);
+        data.put("hint", "Use produced_files.url as image.url");
+        data.put("produced_files", List.of(file));
+
+        String projected = ToolObservationFormatter.format("image_generation_tool", data);
+
+        Assert.assertTrue(projected.contains("已生成海报"));
+        Assert.assertTrue(projected.contains("https://files.example/poster.png"));
+        Assert.assertFalse(projected.contains("生成活动海报"));
+        Assert.assertFalse(projected.contains("text-to-image"));
+        Assert.assertFalse(projected.contains("1536x1024"));
+        Assert.assertFalse(projected.contains("batchCount"));
+        Assert.assertFalse(projected.contains("image/png"));
+        Assert.assertFalse(projected.contains("Use produced_files.url"));
+    }
+
+    @Test
+    public void mcpResourceListUsesOneCompactRowPerResource() {
+        Map<String, Object> resource = new LinkedHashMap<>();
+        resource.put("uri", "docs://guide");
+        resource.put("name", "Guide");
+        resource.put("title", "Guide");
+        resource.put("description", "Usage guide");
+        resource.put("mimeType", "text/markdown");
+        resource.put("size", 1024);
+        resource.put("server", "docs");
+        resource.put("mcpId", "mcp-1");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("resources", List.of(resource));
+        data.put("count", 1);
+        data.put("total", 3);
+        data.put("truncated", Boolean.TRUE);
+
+        String projected = ToolObservationFormatter.format("ListMcpResources", data);
+
+        Assert.assertTrue(projected.contains("[docs] Guide — docs://guide"));
+        Assert.assertTrue(projected.contains("description: Usage guide"));
+        Assert.assertTrue(projected.contains("showing 1 of 3"));
+        Assert.assertFalse(projected.contains("text/markdown"));
+        Assert.assertFalse(projected.contains("mcp-1"));
+        Assert.assertFalse(projected.contains("1024"));
+    }
+
+    @Test
+    public void mcpResourceReadKeepsContentAndTruncationButDropsEcho() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ok", Boolean.TRUE);
+        data.put("server", "docs");
+        data.put("uri", "docs://guide");
+        data.put("content", "Guide body");
+        data.put("truncated", Boolean.TRUE);
+        data.put("originalChars", 50_000);
+
+        String projected = ToolObservationFormatter.format("ReadMcpResource", data);
+
+        Assert.assertTrue(projected.startsWith("Guide body"));
+        Assert.assertTrue(projected.contains("content truncated at 40000 chars"));
+        Assert.assertFalse(projected.contains("docs://guide"));
+        Assert.assertFalse(projected.contains("originalChars"));
     }
 
     // ---- 新增覆盖：Plan Mode ----

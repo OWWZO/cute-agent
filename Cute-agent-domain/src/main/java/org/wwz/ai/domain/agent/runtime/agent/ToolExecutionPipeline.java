@@ -26,6 +26,7 @@ import org.wwz.ai.domain.agent.runtime.tool.deferred.DeferredToolCall;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -529,6 +530,10 @@ final class ToolExecutionPipeline {
     static ToolResultPayload normalizeToolResultPayload(AgentContext context, String toolName, Object rawResult) {
         if (rawResult instanceof ToolResultPayload payload) {
             boolean failed = Boolean.TRUE.equals(payload.getFailed());
+            String failure = failed ? null : toolFailureSignal(payload.getLlmData(), payload.getToolResult());
+            if (failure != null) {
+                failed = true;
+            }
             String toolResult = StringUtils.defaultString(payload.getToolResult());
             String llmObservation = payload.getLlmObservation();
             if (StringUtils.isBlank(llmObservation)) {
@@ -561,25 +566,73 @@ final class ToolExecutionPipeline {
                     .base64Image(payload.getBase64Image())
                     .imageMimeType(payload.getImageMimeType())
                     .failed(failed)
-                    .errorMsg(payload.getErrorMsg())
+                    .errorMsg(StringUtils.defaultIfBlank(payload.getErrorMsg(), failure))
                     .build();
         }
         if (rawResult instanceof String textResult) {
+            String failure = toolFailureSignal(textResult, textResult);
             return ToolResultPayload.builder()
                     .toolResult(textResult)
                     .llmObservation(ToolObservationBudget.apply(
                             context, toolName, ToolObservationSerializer.serializeSuccess(textResult)))
                     .llmData(textResult)
-                    .failed(Boolean.FALSE)
+                    .failed(failure != null)
+                    .errorMsg(failure)
                     .build();
         }
         String serialized = ToolObservationSerializer.serializeSuccess(rawResult);
+        String failure = toolFailureSignal(rawResult, serialized);
         return ToolResultPayload.builder()
                 .toolResult(serialized)
                 .llmObservation(ToolObservationBudget.apply(context, toolName, serialized))
                 .llmData(rawResult)
-                .failed(Boolean.FALSE)
+                .failed(failure != null)
+                .errorMsg(failure)
                 .build();
+    }
+
+    /** 正文已经承认失败时，status=SUCCESS 不能继续把工具洗白。 */
+    static String toolFailureSignal(Object data, String rawText) {
+        if (data instanceof Map<?, ?> map) {
+            if (Boolean.FALSE.equals(map.get("ok"))) {
+                return "tool result ok=false";
+            }
+            for (Object value : map.values()) {
+                String nested = toolFailureSignal(value, null);
+                if (nested != null) {
+                    return nested;
+                }
+            }
+            return null;
+        }
+        if (data instanceof Iterable<?> values) {
+            for (Object value : values) {
+                String nested = toolFailureSignal(value, null);
+                if (nested != null) {
+                    return nested;
+                }
+            }
+            return null;
+        }
+        String text = data == null ? rawText : String.valueOf(data);
+        if (StringUtils.isBlank(text)) {
+            return null;
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        if (lower.contains("\"ok\":false") || lower.contains("'ok':false")) {
+            return "tool result ok=false";
+        }
+        if (lower.contains("403") || lower.contains("forbidden")) {
+            return "tool result reports HTTP 403";
+        }
+        if (lower.contains("connection failed") || text.contains("连接失败")) {
+            return "tool result reports connection failure";
+        }
+        if ((lower.contains("pytest") || text.contains("pytest"))
+                && (lower.contains("not executed") || text.contains("未执行"))) {
+            return "tool result reports pytest was not executed";
+        }
+        return null;
     }
 
     private ToolExecutionOutcome finalizeOutcome(ToolCall command, ToolExecutionOutcome outcome) {

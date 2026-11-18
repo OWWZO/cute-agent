@@ -34,4 +34,41 @@ public class ToolArtifactFormatterTest {
         String summary = ToolArtifactFormatter.formatToolArtifactSummary(List.of(binding));
         Assert.assertFalse(summary.contains("\n"));
     }
+
+    @Test
+    public void docGenerateObservationAndArtifactSummaryContainOneFileList() {
+        org.wwz.ai.domain.agent.runtime.agent.AgentContext context =
+                org.wwz.ai.domain.agent.runtime.agent.AgentContext.builder().build();
+        ToolArtifactSource source = ToolArtifactSource.builder()
+                .toolCallId("call-doc")
+                .toolName("document_generate")
+                .build();
+        context.bindCurrentToolArtifactSource(source);
+        context.registerGeneratedArtifact(source, File.builder()
+                .fileName("report.docx")
+                .relativePath("outputs/report.docx")
+                .description("生成文件")
+                .build());
+
+        String observation = org.wwz.ai.domain.agent.runtime.tool.ToolObservationFormatter.format(
+                "document_generate",
+                java.util.Map.of(
+                        "ok", Boolean.TRUE,
+                        "produced_files", List.of(java.util.Map.of("file_name", "report.docx"))));
+        String finalObservation = ToolArtifactFormatter.appendToolArtifactSummary(
+                observation, context.getArtifactBindingsByToolCallId("call-doc"));
+
+        Assert.assertEquals(1, countOccurrences(finalObservation, "outputs/report.docx"));
+        Assert.assertEquals(1, countOccurrences(finalObservation, "关联文件"));
+    }
+
+    private static int countOccurrences(String haystack, String needle) {
+        int count = 0;
+        int index = haystack.indexOf(needle);
+        while (index >= 0) {
+            count++;
+            index = haystack.indexOf(needle, index + needle.length());
+        }
+        return count;
+    }
 }
