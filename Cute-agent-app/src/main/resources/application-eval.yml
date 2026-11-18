@@ -8,7 +8,7 @@ spring:
     mysql:
       username: ${CUTE_EVAL_DB_USER:root}
       password: ${CUTE_EVAL_DB_PASSWORD:}
-      url: ${CUTE_EVAL_DB_URL:jdbc:mysql://127.0.0.1:3306/ai-agent-eval?useUnicode=true&characterEncoding=utf8&autoReconnect=true&zeroDateTimeBehavior=convertToNull&serverTimezone=Asia/Shanghai&useSSL=false}
+      url: ${CUTE_EVAL_DB_URL:jdbc:mysql://127.0.0.1:3306/ai-agent-eval?useUnicode=true&characterEncoding=utf8&autoReconnect=true&zeroDateTimeBehavior=convertToNull&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
       driver-class-name: com.mysql.cj.jdbc.Driver
       hikari:
         minimum-idle: 1
@@ -53,6 +53,8 @@ autobots:
     # eval 专用 cute-tool 地址：默认指向本机评测服务，允许通过环境变量替换。
     # 不复用 dev/prod 的私有配置，避免评测误连开发环境。
     code_interpreter_url: "${AUTOBOTS_AUTOAGENT_CODE_INTERPRETER_URL:http://127.0.0.1:1601}"
+    # WorkBuddy Code 题目信息都在本地工作区；Web 工具只会制造 502/timeout/未配置噪音。
+    tool_list: '{"default":"search,code_execution,docgen,docread,dataprep,canvas,image_generation,data_analysis,openui"}'
     skill:
       enabled: false
     web_search:

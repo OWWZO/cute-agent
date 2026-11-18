@@ -35,7 +35,7 @@ public final class ToolAccessPolicy {
                     false,
                     counter == null ? 0 : counter.get(),
                     "network_circuit_open",
-                    "WebFetch 网络链路已连续失败，禁止继续抓网页。请改用 WebSearch 或基于已有证据输出最终答案。"
+                    "WebFetch 网络链路已连续失败，禁止继续抓网页。请停止外联，改用本地工作区信息或基于已有证据收尾。"
             );
         }
         String key = normalizeUrl(url);

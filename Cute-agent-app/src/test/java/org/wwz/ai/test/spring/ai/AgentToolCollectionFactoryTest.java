@@ -113,6 +113,8 @@ public class AgentToolCollectionFactoryTest {
                         || name.contains("remote_tool")));
         Assert.assertTrue(toolCollection.getToolMap().containsKey("ListMcpResources"));
         Assert.assertTrue(toolCollection.getToolMap().containsKey("ReadMcpResource"));
+        Assert.assertFalse(toolCollection.getToolMap().containsKey("code_interpreter"));
+        Assert.assertFalse(toolCollection.getToolMap().containsKey("multimodalagent_tool"));
     }
 
     /**
@@ -518,6 +520,38 @@ public class AgentToolCollectionFactoryTest {
             // code_mode 是主 Agent 的编排工具：白名单漏了它，开关打开也调用不到
             Assert.assertTrue(profile + " missing code_mode", line.contains("code_mode"));
         }
+    }
+
+    @Test
+    public void evalProfileToolListExcludesWebTools() throws Exception {
+        String yaml = new String(new ClassPathResource("application-eval.yml").getInputStream().readAllBytes(),
+                StandardCharsets.UTF_8);
+        int idx = yaml.indexOf("tool_list:");
+        Assert.assertTrue("application-eval.yml missing tool_list", idx >= 0);
+        int end = yaml.indexOf('\n', idx);
+        String line = end < 0 ? yaml.substring(idx) : yaml.substring(idx, end);
+        Assert.assertFalse(line.contains("web_fetch"));
+        Assert.assertFalse(line.contains("web_search"));
+
+        CuteConfig cuteConfig = buildCuteConfig();
+        cuteConfig.setMultiAgentToolList("{\"default\":\"code_execution,docread\"}");
+
+        McpToolExecutor mcpToolExecutor = Mockito.mock(McpToolExecutor.class);
+        Mockito.when(mcpToolExecutor.discoverConfiguredTools()).thenReturn(List.of());
+        AgentToolCollectionFactory factory = newFactory(
+                cuteConfig,
+                mcpToolExecutor,
+                Mockito.mock(DefaultSkillRegistry.class),
+                SkillRuntimeOptions.builder().enabled(false).build(),
+                disabledWorkspaceService(),
+                disabledWorkspaceOptions()
+        );
+
+        ToolCollection toolCollection = factory.buildForReact(buildAgentContext(), buildAgentExecutionCommand("html"));
+
+        Assert.assertTrue(toolCollection.getToolMap().containsKey("code_execution"));
+        Assert.assertFalse(toolCollection.getToolMap().containsKey("WebFetch"));
+        Assert.assertFalse(toolCollection.getToolMap().containsKey("WebSearch"));
     }
 
     /**

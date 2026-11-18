@@ -97,6 +97,7 @@ import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceEditTool;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceWriteTool;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.types.agent.config.CodeModeProperties;
+import org.wwz.ai.types.agent.config.ImageGenerationProperties;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 
@@ -298,8 +299,18 @@ public class AgentToolCollectionFactory {
                 toolCollection.addTool(codeExecutionTool);
             }
             if (agentToolList.contains("image_generation")) {
-                ImageGenerationTool imageGenerationTool = new ImageGenerationTool();
-                toolCollection.addTool(imageGenerationTool);
+                // 未配置上游地址/密钥时不要暴露工具，否则模型只会拿到一个必然失败的能力入口。
+                ImageGenerationProperties imageGeneration = runtimeDependencies.getOptionalImageGenerationProperties();
+                boolean configured = imageGeneration != null
+                        && (StringUtils.isNotBlank(imageGeneration.getBaseUrl())
+                        || StringUtils.isNotBlank(imageGeneration.getGrokBaseUrl())
+                        || StringUtils.isNotBlank(imageGeneration.getUrl()))
+                        && (StringUtils.isNotBlank(imageGeneration.getApiKey())
+                        || StringUtils.isNotBlank(imageGeneration.getGrokApiKey()));
+                if (configured) {
+                    ImageGenerationTool imageGenerationTool = new ImageGenerationTool();
+                    toolCollection.addTool(imageGenerationTool);
+                }
             }
             if (agentToolList.contains("data_analysis")) {
                 DataAnalysisTool dataAnalysisTool = new DataAnalysisTool();

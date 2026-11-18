@@ -39,6 +39,10 @@ public class CodeExecutionTool implements BaseTool {
                 + "plt.savefig('chart.png')；df.to_excel('结果.xlsx')。\n"
                 + "本次新增或修改的工作区文件会自动采集上传，前端可预览/下载。\n"
                 + "结果里的 produced_files[].url 可直接作为 document_generate 的 image.url。\n"
+                + "同一会话的 code_execution 复用同一个 Jupyter 内核：上一次脚本定义或 import 的变量、函数、模块状态会保留到下一次调用。"
+                + "文件改动会同步回工作区，但 Python 进程状态不会因为文件回写自动重置。"
+                + "不要把每个诊断脚本当成干净进程；重复配置 Django settings 会触发 RuntimeError: Settings already configured。"
+                + "需要隔离时，在该次脚本里显式清理变量、重新 import，或用 subprocess 启动独立子进程。\n"
                 + "输入数据确定后，多个图表/表格复用同一批输入时，应在一次脚本中生成全部派生列和最终结构，"
                 + "并做一次关键断言；探索源数据或修复失败脚本允许必要迭代。"
                 + "禁止用 print(\"ok\")、echo 或重复打印同一数据结构来试探语法。\n"
@@ -54,6 +58,8 @@ public class CodeExecutionTool implements BaseTool {
                 "type", "string",
                 "description", "完整 Python 源码。cwd 为会话工作区；生成文件用相对路径，例如 Path('chart.png')、"
                         + "plt.savefig('chart.png')。禁止硬编码 skilloutput/盘符绝对路径。"
+                        + "诊断脚本不要假设是干净 Python 进程；Jupyter 会话会保留上一次执行的变量和 import，"
+                        + "重复 settings.configure(...) 会失败，需要干净进程时请在脚本内部用 subprocess。"
                         + "与 workspaceFile 二选一：至少提供一个。"
         ));
         Map<String, Object> freeformObject = new LinkedHashMap<>();

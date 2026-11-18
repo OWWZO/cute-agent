@@ -104,4 +104,18 @@ public class ToolAccessPolicyTest {
         assertFalse(policy.beforeWebFetch("http://example.com:8080/doc").allowed());
         assertTrue(policy.beforeWebFetch("http://example.com:9090/doc").allowed());
     }
+
+    @Test
+    public void webFetchCircuitHintPointsToLocalWorkspace() {
+        ToolAccessPolicy policy = new ToolAccessPolicy();
+        policy.recordWebFetchFailure(true);
+        policy.recordWebFetchFailure(true);
+
+        ToolAccessPolicy.WebFetchDecision denied =
+                policy.beforeWebFetch("https://example.com/circuit");
+
+        assertFalse(denied.allowed());
+        assertTrue(denied.hint(), denied.hint().contains("本地工作区"));
+        assertFalse(denied.hint(), denied.hint().contains("WebSearch"));
+    }
 }
