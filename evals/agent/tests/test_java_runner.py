@@ -154,6 +154,72 @@ def test_workbuddy_tool_preflight_passes_artifact_root_and_report(
     )
 
 
+def test_workbuddy_tool_preflight_checks_real_workspace_copy(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    captured: dict = {}
+
+    def fake_run(command, timeout, *, env_overrides=None):
+        captured["command"] = command
+        captured["env"] = env_overrides
+        exec_args = next(
+            item.removeprefix("-Dexec.args=")
+            for item in command
+            if item.startswith("-Dexec.args=")
+        )
+        report_path = Path(
+            exec_args.split("--out ", 1)[1].split(" --spring-profile ", 1)[0]
+        )
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(
+                {
+                    "requiredPassed": True,
+                    "workspaceCopied": True,
+                    "checks": [
+                        {
+                            "name": "code_execution_test_file",
+                            "required": True,
+                            "status": "ok",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(java_runner, "_run", fake_run)
+    workspace = tmp_path / "eval-root" / "attempts" / "01" / "case" / "workspace" / "case"
+    allowed_root = tmp_path / "eval-root"
+    copy_root = tmp_path / "eval-root" / "preflight-copies"
+    report_path = tmp_path / "case-preflight.json"
+
+    report = run_workbuddy_tool_preflight(
+        workspace,
+        report_path,
+        allowed_root=allowed_root,
+        copy_workspace=True,
+        copy_root=copy_root,
+        build=False,
+    )
+
+    exec_args = next(
+        item.removeprefix("-Dexec.args=")
+        for item in captured["command"]
+        if item.startswith("-Dexec.args=")
+    )
+    assert "--copy-workspace" in exec_args
+    assert captured["env"]["CUTE_FILE_ARTIFACT_ALLOWED_ROOT"] == str(
+        allowed_root.resolve()
+    )
+    assert captured["env"]["CUTE_EVAL_PREFLIGHT_COPY_ROOT"] == str(
+        copy_root.resolve()
+    )
+    assert report["workspaceCopied"] is True
+
+
 def test_workbuddy_tool_preflight_fails_closed_on_required_check(
     tmp_path: Path,
     monkeypatch,

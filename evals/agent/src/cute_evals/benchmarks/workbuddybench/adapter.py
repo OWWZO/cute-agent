@@ -26,6 +26,14 @@ from .docker_runner import DockerEnvironmentError, WorkBuddyDockerVerifier
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 DEFAULT_MANIFEST = PACKAGE_ROOT / "manifest.yaml"
+CODE_WORK_CONSTRAINTS = """WorkBuddy Code 工作约束：
+1. 必须修改源文件；不要只写临时诊断脚本替代修复。
+2. 修改前后检查 workspace diff，确认关键文件确实被改。
+3. 如果题目涉及异常，要区分“不抛异常”和“仍然完成必要清理/状态维护”。
+4. 如果测试校验错误文案，必须逐字匹配大小写、标点和类别名。
+5. 不要调用 WebSearch/WebFetch；题目信息都在本地工作区。
+6. code_execution 的 Jupyter 会话会保留变量和 import；诊断脚本不要假设是干净进程。
+"""
 
 
 def _sha256_file(path: Path) -> str:
@@ -495,7 +503,7 @@ class WorkBuddyBenchAdapter:
             suite=f"workbuddybench-{split}",
             version=1,
             hard_gate=True,
-            query=task.question,
+            query=CODE_WORK_CONSTRAINTS + "\n" + task.question,
             expected=ExpectedSpec(max_steps=int(budgets["maxSteps"])),
             budgets=BudgetSpec(
                 max_total_tokens=int(budgets["maxTokens"]),

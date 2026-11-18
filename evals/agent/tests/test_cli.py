@@ -1,4 +1,6 @@
 import copy
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -211,6 +213,27 @@ def test_workbuddybench_is_registered_for_internal_split() -> None:
     assert args.func.__name__ == "benchmark_command"
 
 
+def test_workbuddybench_accepts_codex_agent() -> None:
+    args = build_parser().parse_args(
+        [
+            "benchmark",
+            "--name",
+            "workbuddybench",
+            "--split",
+            "internal",
+            "--java-mode",
+            "live",
+            "--agent",
+            "codex",
+            "--codex-command",
+            "codex-test",
+        ]
+    )
+
+    assert args.agent == "codex"
+    assert args.codex_command == "codex-test"
+
+
 def test_workbuddybench_isolates_attempt_dirs_per_task(
     tmp_path,
     monkeypatch,
@@ -234,13 +257,19 @@ def test_workbuddybench_isolates_attempt_dirs_per_task(
     run_output_dirs = []
     preflight_calls = []
     case_env_overrides = []
+    codex_calls = []
 
     class Adapter:
         name = "workbuddybench"
         version = "test"
         upstream = "workbuddy"
         score_label = "compatibility-subset"
-        docker_verifier = object()
+
+        class DockerVerifier:
+            def check_environment(self):
+                return "linux", "1.51"
+
+        docker_verifier = DockerVerifier()
 
         def __init__(self, *args, **kwargs):
             pass
@@ -299,10 +328,20 @@ def test_workbuddybench_isolates_attempt_dirs_per_task(
         lambda *args, **kwargs: adapter,
     )
     monkeypatch.setattr(cli, "compile_java_fixture_runner", lambda: None)
+    monkeypatch.setattr(cli, "codex_version", lambda command: "0.166.0")
 
     def fake_preflight(workspace, report_path, **kwargs):
         preflight_calls.append((workspace, report_path, kwargs))
-        return {"requiredPassed": True, "checks": []}
+        return {
+            "requiredPassed": True,
+            "workspaceCopied": kwargs.get("copy_workspace", False),
+            "checks": [
+                {
+                    "name": "code_execution_test_file",
+                    "status": "ok" if kwargs.get("copy_workspace") else "unavailable",
+                }
+            ],
+        }
 
     monkeypatch.setattr(
         cli,
@@ -328,7 +367,14 @@ def test_workbuddybench_isolates_attempt_dirs_per_task(
                         "finalSummaryText": "done",
                     },
                     "llmInvocations": [],
-                    "toolInvocations": [],
+                    "toolInvocations": [
+                        {
+                            "id": 1,
+                            "toolCallId": "call-1",
+                            "toolName": "workspace_read",
+                            "status": 1,
+                        }
+                    ],
                     "artifacts": [],
                     "environment": {},
                 }
@@ -336,6 +382,26 @@ def test_workbuddybench_isolates_attempt_dirs_per_task(
         }
 
     monkeypatch.setattr(cli, "run_java_cases", fake_run_java_cases)
+    def fake_run_codex(case, workspace, case_root, *, options, environment, **kwargs):
+        codex_calls.append((case.id, workspace, case_root, options, environment))
+        return RunTrace.from_dict(
+            {
+                "run": {
+                    "caseId": case.id,
+                    "status": "SUCCESS",
+                    "finalSummaryText": "done",
+                },
+                "toolInvocations": [
+                    {
+                        "id": 1,
+                        "toolName": "shell",
+                        "status": "SUCCESS",
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(cli, "run_codex_case", fake_run_codex)
     reported = {}
 
     def fake_report(**kwargs):
@@ -362,6 +428,20 @@ def test_workbuddybench_isolates_attempt_dirs_per_task(
         capability_tool_multiplier=4.0,
         capability_step_multiplier=4.0,
     )
+    args.cut = None
+    for attr in (
+        "codex_command",
+        "codex_model",
+        "codex_sandbox",
+        "codex_approval",
+    ):
+        if not hasattr(args, attr):
+            setattr(args, attr, {
+                "codex_command": "codex",
+                "codex_model": None,
+                "codex_sandbox": "workspace-write",
+                "codex_approval": "never",
+            }[attr])
 
     assert cli._run_workbuddybench_benchmark(args) == 0
 
@@ -374,8 +454,19 @@ def test_workbuddybench_isolates_attempt_dirs_per_task(
         attempt_dir / "task-1",
         attempt_dir / "task-2",
     ]
-    assert len(preflight_calls) == 1
-    assert preflight_calls[0][2]["build"] is False
+    assert len(preflight_calls) == 3
+    assert all(call[2]["build"] is False for call in preflight_calls)
+    assert preflight_calls[0][0] == (
+        tmp_path / "out" / "_tool_preflight" / preflight_calls[0][0].parent.name / "workspace"
+    )
+    assert [call[0] for call in preflight_calls[1:]] == [
+        attempt_dir / "task-1" / "workspace" / "task-1",
+        attempt_dir / "task-2" / "workspace" / "task-2",
+    ]
+    assert all(call[2]["allowed_root"] == (tmp_path / "out").resolve() for call in preflight_calls)
+    assert all(call[2]["copy_workspace"] is True for call in preflight_calls[1:])
+    workspaces = reported["environment_extras"]["preflight"]["workspaces"]
+    assert set(workspaces) == {"task-1", "task-2"}
     assert case_env_overrides == [
         {"CUTE_FILE_ARTIFACT_ALLOWED_ROOT": str((tmp_path / "out").resolve())},
         {"CUTE_FILE_ARTIFACT_ALLOWED_ROOT": str((tmp_path / "out").resolve())},
@@ -386,6 +477,238 @@ def test_workbuddybench_isolates_attempt_dirs_per_task(
         "attempts/01/task-1/traces/task-1/trace.json",
         "attempts/01/task-2/traces/task-2/trace.json",
     ]
+    assert codex_calls == []
+
+
+def test_workbuddybench_codex_uses_codex_runner_and_same_verifier(tmp_path, monkeypatch):
+    monkeypatch.setenv("CODE_EXECUTION_WORKSPACE_ROOTS", str(tmp_path))
+    tasks = [
+        BenchmarkTask(
+            id="task-codex",
+            category="bug-fix",
+            question="Fix it.",
+            functions=[],
+            ground_truth=None,
+            raw={},
+        )
+    ]
+    codex_calls = []
+    scored = []
+
+    class Adapter:
+        name = "workbuddybench"
+        version = "test"
+        upstream = "workbuddy"
+        score_label = "compatibility-subset"
+
+        class DockerVerifier:
+            def check_environment(self):
+                return "linux", "1.51"
+
+        docker_verifier = DockerVerifier()
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def tasks(self, split):
+            return tasks
+
+        def dataset_hash(self):
+            return "sha256:test"
+
+        def prepare(self, task, workspace):
+            workspace.mkdir(parents=True, exist_ok=True)
+            return PreparedTask(task, workspace, {"workspaceRoot": str(workspace)})
+
+        def case_for_task(self, task):
+            return EvalCase(
+                id=task.id,
+                suite="workbuddybench-internal",
+                version=1,
+                hard_gate=True,
+                query=task.question,
+                expected=ExpectedSpec(),
+                budgets=BudgetSpec(),
+                script=[],
+                source_path="task.toml",
+            )
+
+        def collect(self, task, trace, trace_path, *, prepared):
+            return BenchmarkRun(
+                task=task,
+                trace=trace,
+                trace_path=trace_path,
+                calls=[],
+                metadata=dict(prepared.metadata),
+            )
+
+        def score(self, run, *, case=None):
+            producer = run.trace.raw.get("producer") or {}
+            scored.append((run.task.id, producer.get("agent")))
+            return CaseResult(
+                case=case,
+                trace=run.trace,
+                scores=[],
+                trace_path=run.trace_path,
+            )
+
+        def report_metadata(self):
+            return {
+                "split": "internal",
+                "datasetHash": "sha256:test",
+                "scoreLabel": "compatibility-subset",
+                "version": "test",
+            }
+
+    monkeypatch.setattr(cli, "WorkBuddyBenchAdapter", lambda *args, **kwargs: Adapter())
+    monkeypatch.setattr(cli, "compile_java_fixture_runner", lambda: None)
+    monkeypatch.setattr(cli, "run_workbuddy_tool_preflight", lambda *args, **kwargs: {})
+    monkeypatch.setattr(cli, "codex_version", lambda command: "0.166.0")
+    monkeypatch.setattr(
+        cli,
+        "run_java_cases",
+        lambda *args, **kwargs: pytest.fail("Cute Java runner must not run in codex mode"),
+    )
+
+    def fake_run_codex(case, workspace, case_root, *, options, environment, **kwargs):
+        codex_calls.append((case.id, workspace, environment))
+        return RunTrace.from_dict(
+            {
+                "run": {
+                    "caseId": case.id,
+                    "status": "SUCCESS",
+                    "finalSummaryText": "done",
+                },
+                "producer": {"agent": "codex-cli"},
+                "toolInvocations": [
+                    {"id": 1, "toolName": "shell", "status": "SUCCESS"}
+                ],
+            }
+        )
+
+    monkeypatch.setattr(cli, "run_codex_case", fake_run_codex)
+    reported = {}
+    monkeypatch.setattr(cli, "_report_benchmark", lambda **kwargs: reported.update(kwargs) or 0)
+    args = SimpleNamespace(
+        agent="codex",
+        name="workbuddybench",
+        split="internal",
+        source_dir=str(tmp_path / "source"),
+        manifest=None,
+        limit=None,
+        java_mode="live",
+        repeat=1,
+        out=str(tmp_path / "out"),
+        skip_build=True,
+        profile="nightly",
+        timeout=10,
+        budget_mode="product",
+        capability_token_multiplier=8.0,
+        capability_wall_multiplier=4.0,
+        capability_tool_multiplier=4.0,
+        capability_step_multiplier=4.0,
+        codex_command="codex-test",
+        codex_model=None,
+        codex_sandbox="workspace-write",
+        codex_approval="never",
+    )
+
+    assert cli._run_workbuddybench_benchmark(args) == 0
+    assert len(codex_calls) == 1
+    assert codex_calls[0][2]["agent"] == "codex-cli"
+    assert scored == [("task-codex", "codex-cli")]
+    assert reported["agent"] == "codex-cli"
+    assert reported["mode"] == "codex-cli"
+    assert reported["environment_extras"]["dockerPreflight"] == {
+        "status": "ok",
+        "os": "linux",
+        "apiVersion": "1.51",
+    }
+
+
+def test_workbuddybench_docker_preflight_stops_batch_before_agent(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CODE_EXECUTION_WORKSPACE_ROOTS", str(tmp_path))
+
+    class Adapter:
+        name = "workbuddybench"
+        version = "test"
+        upstream = "workbuddy"
+        score_label = "compatibility-subset"
+
+        class DockerVerifier:
+            def check_environment(self):
+                from cute_evals.benchmarks.workbuddybench import DockerEnvironmentError
+                raise DockerEnvironmentError(
+                    "WorkBuddy Bench verifier requires a Docker Linux engine; got windows"
+                )
+
+        docker_verifier = DockerVerifier()
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def tasks(self, split):
+            return []
+
+        def report_metadata(self):
+            return {
+                "split": "internal",
+                "datasetHash": "sha256:test",
+                "scoreLabel": "compatibility-subset",
+                "version": "test",
+            }
+
+    monkeypatch.setattr(cli, "WorkBuddyBenchAdapter", lambda *args, **kwargs: Adapter())
+    monkeypatch.setattr(cli, "compile_java_fixture_runner", lambda: None)
+    monkeypatch.setattr(cli, "run_workbuddy_tool_preflight", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        cli,
+        "run_java_cases",
+        lambda *args, **kwargs: pytest.fail("agent should not run after Docker preflight failure"),
+    )
+    reported = {}
+    real_report_benchmark = cli._report_benchmark
+    monkeypatch.setattr(
+        cli,
+        "_report_benchmark",
+        lambda **kwargs: (
+            reported.update(kwargs)
+            or real_report_benchmark(**kwargs)
+        ),
+    )
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (output_dir / "report.json").write_text("{}", encoding="utf-8")
+    (output_dir / "report.html").write_text("", encoding="utf-8")
+    args = SimpleNamespace(
+        agent="cute",
+        name="workbuddybench",
+        split="internal",
+        source_dir=str(tmp_path / "source"),
+        manifest=None,
+        limit=None,
+        java_mode="live",
+        repeat=1,
+        out=str(output_dir),
+        skip_build=True,
+        profile="nightly",
+        timeout=10,
+        budget_mode="product",
+        capability_token_multiplier=8.0,
+        capability_wall_multiplier=4.0,
+        capability_tool_multiplier=4.0,
+        capability_step_multiplier=4.0,
+    )
+
+    with pytest.raises(Exception, match="Docker Linux engine"):
+        cli._run_workbuddybench_benchmark(args)
+
+    assert reported["environment_extras"]["dockerPreflight"]["status"] == "failed"
+    report = json.loads((output_dir / "report.json").read_text(encoding="utf-8"))
+    assert report["environment"]["dockerPreflight"]["status"] == "failed"
 
 
 def test_workbuddybench_requires_code_execution_workspace_root(
@@ -407,6 +730,39 @@ def test_workbuddybench_requires_code_execution_workspace_root(
         match="outside the Code Execution allowed roots",
     ):
         cli._validate_workbuddy_execution_roots(outside)
+
+
+def test_report_benchmark_writes_environment_extras_once(tmp_path: Path) -> None:
+    class Adapter:
+        name = "workbuddybench"
+        version = "test"
+        upstream = "workbuddy"
+        score_label = "compatibility-subset"
+
+        def report_metadata(self):
+            return {
+                "split": "internal",
+                "datasetHash": "sha256:test",
+                "scoreLabel": self.score_label,
+                "version": self.version,
+            }
+
+    args = SimpleNamespace(profile="nightly")
+    output_dir = tmp_path / "report"
+
+    assert _report_benchmark(
+        adapter=Adapter(),
+        args=args,
+        results=[],
+        output_dir=output_dir,
+        mode="live",
+        repeat=1,
+        environment_extras={"dockerPreflight": {"status": "ok"}},
+    ) == 0
+
+    report = json.loads((output_dir / "report.json").read_text(encoding="utf-8"))
+    assert report["environment"]["dockerPreflight"] == {"status": "ok"}
+    assert (output_dir / "report.html").is_file()
 
 
 def test_rag_python_benchmark_is_registered_for_internal_split() -> None:

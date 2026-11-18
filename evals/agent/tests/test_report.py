@@ -153,6 +153,123 @@ def test_report_aggregates_tool_failure_classes(tmp_path: Path) -> None:
     }
 
 
+def test_report_does_not_misclassify_traceback_details_as_tool_errors(
+    tmp_path: Path,
+) -> None:
+    case = make_case()
+    trace = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": case.id,
+                "status": "SUCCESS",
+                "finalSummaryText": "ok",
+                "totalTokens": 10,
+                "durationMs": 5,
+            },
+            "toolInvocations": [
+                {
+                    "toolName": "code_execution",
+                    "status": "FAILED",
+                    "errorMsg": (
+                        "SynchronousOnlyOperation: Traceback (most recent call last)\n"
+                        "query_utils.py:429\n"
+                        'ValueError: relation_name argument must be a string.'
+                    ),
+                },
+                {
+                    "toolName": "WebFetch",
+                    "status": "FAILED",
+                    "errorMsg": "WebFetch 失败：HTTP 502 for https://example.com/a",
+                },
+            ],
+        }
+    )
+    score = ScoreRecord(
+        case_id=case.id,
+        scorer="deterministic",
+        name="task_success",
+        value=False,
+        unit="boolean",
+        passed=False,
+        hard_gate=True,
+        status="verified",
+    )
+    report = build_report(
+        profile="pr",
+        agent="cute-agent",
+        cases=[CaseResult(case=case, trace=trace, scores=[score], trace_path="trace.json")],
+        output_dir=tmp_path,
+    )
+
+    assert report["summary"]["toolFailureClasses"] == {
+        "code_runtime_error": 1,
+        "web_tool_error": 1,
+    }
+    categories = report["caseSummaries"][0]["failureCategories"]
+    assert categories["code_runtime_error"] == 1
+    assert categories["web_tool_error"] == 1
+    assert "tool_rate_limit" not in categories
+    assert "tool_arguments" not in categories
+
+
+def test_report_keeps_real_rate_limit_and_tool_argument_errors(tmp_path: Path) -> None:
+    case = make_case()
+    trace = RunTrace.from_dict(
+        {
+            "run": {
+                "caseId": case.id,
+                "status": "SUCCESS",
+                "finalSummaryText": "ok",
+                "totalTokens": 10,
+                "durationMs": 5,
+            },
+            "toolInvocations": [
+                {
+                    "toolName": "WebFetch",
+                    "status": "FAILED",
+                    "errorMsg": "WebFetch failed: HTTP 429 Too Many Requests",
+                },
+                {
+                    "toolName": "workspace_read",
+                    "status": "FAILED",
+                    "errorMsg": "workspace_read 失败：missing required argument: path",
+                },
+                {
+                    "toolName": "code_execution",
+                    "status": "FAILED",
+                    "errorMsg": "RuntimeError: Settings already configured.",
+                },
+            ],
+        }
+    )
+    score = ScoreRecord(
+        case_id=case.id,
+        scorer="deterministic",
+        name="task_success",
+        value=False,
+        unit="boolean",
+        passed=False,
+        hard_gate=True,
+        status="verified",
+    )
+    report = build_report(
+        profile="pr",
+        agent="cute-agent",
+        cases=[CaseResult(case=case, trace=trace, scores=[score], trace_path="trace.json")],
+        output_dir=tmp_path,
+    )
+
+    assert report["summary"]["toolFailureClasses"] == {
+        "code_runtime_error": 1,
+        "invalid_arguments": 1,
+        "web_tool_error": 1,
+    }
+    categories = report["caseSummaries"][0]["failureCategories"]
+    assert categories["web_tool_error"] == 1
+    assert categories["workspace_argument_error"] == 1
+    assert categories["code_runtime_error"] == 1
+
+
 def test_report_stratifies_cases_by_declared_metadata(tmp_path: Path) -> None:
     case = make_case()
     case.metadata = {

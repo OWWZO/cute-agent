@@ -173,6 +173,35 @@ def _parse_tool_result(value: Any) -> Any:
         return value
 
 
+def _looks_like_failure_result(value: Any) -> bool:
+    """识别 status=SUCCESS 但正文已经承认失败的硬失败。"""
+    if value is None:
+        return False
+    if value is True or value is False:
+        return False
+    if isinstance(value, dict):
+        return any(_looks_like_failure_result(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_looks_like_failure_result(item) for item in value)
+    text = str(value).lower()
+    if any(
+        marker in text
+        for marker in (
+            "403",
+            "forbidden",
+            "connection failed",
+            "连接失败",
+            "no tests ran",
+            "collection error",
+            "upload failed",
+        )
+    ):
+        return True
+    return "pytest" in text and any(
+        marker in text for marker in ("未执行", "not executed")
+    )
+
+
 def _tool_failure_signal(tool: dict[str, Any]) -> str | None:
     status = str(tool.get("status") or "").upper()
     if status in {
@@ -187,6 +216,9 @@ def _tool_failure_signal(tool: dict[str, Any]) -> str | None:
         return f"status:{status}"
     if tool.get("errorMsg"):
         return "errorMsg"
+    observation = tool.get("llmObservation")
+    if _looks_like_failure_result(observation):
+        return "observation:failure_text"
     parsed = _parse_tool_result(tool.get("toolResult"))
     if isinstance(parsed, dict):
         if parsed.get("ok") is False:
@@ -196,6 +228,8 @@ def _tool_failure_signal(tool: dict[str, Any]) -> str | None:
         result_status = str(parsed.get("status") or "").upper()
         if result_status in {"FAILED", "ERROR", "TIMEOUT", "REJECTED"}:
             return f"result:status={result_status}"
+        if _looks_like_failure_result(parsed):
+            return "result:failure_text"
     elif isinstance(parsed, str):
         compact = "".join(parsed.split()).lower()
         if '"ok":false' in compact:
@@ -203,6 +237,12 @@ def _tool_failure_signal(tool: dict[str, Any]) -> str | None:
         for status in ("failed", "error", "timeout", "rejected"):
             if f'"status":"{status}"' in compact:
                 return f"result:status={status.upper()}"
+        try:
+            nested = json.loads(compact)
+        except json.JSONDecodeError:
+            nested = None
+        if _looks_like_failure_result(nested if nested is not None else parsed):
+            return "result:failure_text"
     return None
 
 

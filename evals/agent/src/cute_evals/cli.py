@@ -9,6 +9,7 @@ from dataclasses import asdict, replace
 from datetime import datetime, timedelta
 from importlib.util import find_spec
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from .ab_runner import (
@@ -34,7 +35,10 @@ from .benchmarks.marble.runner import (
 from .benchmarks.rag import RagAdapter, run_mrag
 from .benchmarks.spider2 import Spider2Adapter
 from .benchmarks.tau2 import Tau2Adapter, Tau2UserSimulator
-from .benchmarks.workbuddybench import WorkBuddyBenchAdapter
+from .benchmarks.workbuddybench import (
+    DockerEnvironmentError,
+    WorkBuddyBenchAdapter,
+)
 from .case_loader import load_case_dirs
 from .compare.runner import (
     materialize_compare_dataset,
@@ -54,6 +58,7 @@ from .judge_benchmarks.agent_process_bench import AgentProcessBenchAdapter
 from .judge_benchmarks.client import OpenAICompatibleJudge
 from .judge_benchmarks.trail import TrailAdapter
 from .java_runner import (
+    EvalRunnerError,
     compile_java_fixture_runner,
     export_ledger_traces,
     run_java_cases,
@@ -904,6 +909,7 @@ def _report_benchmark(
     require_official: bool = False,
     agent: str | None = None,
     budget_policy: BudgetPolicy | None = None,
+    environment_extras: dict[str, Any] | None = None,
 ) -> int:
     metadata = adapter.report_metadata()
     if budget_policy is not None:
@@ -912,40 +918,43 @@ def _report_benchmark(
             "budgetPolicy": budget_policy.to_dict(),
         }
     subject_agent = agent or AGENT_ID
+    report_environment = {
+        "engine": f"{adapter.name}-adapter",
+        "javaMode": (
+            mode
+            if mode in {"fixture", "live", "benchmark"}
+            else None
+        ),
+        "runnerMode": mode,
+        "repeat": repeat,
+        "budgetMode": (
+            budget_policy.mode if budget_policy is not None else "product"
+        ),
+        "budgetPolicy": (
+            budget_policy.to_dict() if budget_policy is not None else None
+        ),
+        "sampling": {
+            "temperature": 0.0,
+            "mode": "deterministic",
+            "source": (
+                "codex-cli"
+                if subject_agent == "codex-cli"
+                else "application-eval.yml"
+            ),
+        },
+        "suite": f"{adapter.name}-{metadata['split']}",
+        "datasetHash": metadata["datasetHash"],
+        "scoreLabel": metadata["scoreLabel"],
+        "upstreamVersion": metadata["version"],
+    }
+    if environment_extras:
+        report_environment.update(environment_extras)
     report = build_report(
         profile=args.profile,
         agent=subject_agent,
         cases=results,
         output_dir=output_dir,
-        environment={
-            "engine": f"{adapter.name}-adapter",
-            "javaMode": (
-                mode
-                if mode in {"fixture", "live", "benchmark"}
-                else None
-            ),
-            "runnerMode": mode,
-            "repeat": repeat,
-            "budgetMode": (
-                budget_policy.mode if budget_policy is not None else "product"
-            ),
-            "budgetPolicy": (
-                budget_policy.to_dict() if budget_policy is not None else None
-            ),
-            "sampling": {
-                "temperature": 0.0,
-                "mode": "deterministic",
-                "source": (
-                    "codex-cli"
-                    if subject_agent == "codex-cli"
-                    else "application-eval.yml"
-                ),
-            },
-            "suite": f"{adapter.name}-{metadata['split']}",
-            "datasetHash": metadata["datasetHash"],
-            "scoreLabel": metadata["scoreLabel"],
-            "upstreamVersion": metadata["version"],
-        },
+        environment=report_environment,
         benchmark=metadata,
     )
     summary = report["summary"]
@@ -2123,9 +2132,10 @@ def benchmark_command(args: argparse.Namespace) -> int:
     if getattr(args, "agent", "cute") == "codex" and args.name not in {
         "gaia",
         "tau2",
+        "workbuddybench",
     }:
         raise ValueError(
-            "Codex official adapter currently supports only GAIA and tau2"
+            "Codex official adapter currently supports only GAIA, tau2, and workbuddybench"
         )
     if args.name == "gaia":
         return _run_gaia_benchmark(args)
@@ -2149,8 +2159,9 @@ def benchmark_command(args: argparse.Namespace) -> int:
 
 
 def _run_workbuddybench_benchmark(args: argparse.Namespace) -> int:
-    if getattr(args, "agent", "cute") != "cute":
-        raise ValueError("WorkBuddy Bench hybrid mode currently supports Cute Agent only")
+    subject_agent = getattr(args, "agent", "cute")
+    if subject_agent not in {"cute", "codex"}:
+        raise ValueError("WorkBuddy Bench hybrid mode supports only cute and codex agents")
     if args.split != "internal":
         raise ValueError("WorkBuddy Bench currently supports only --split internal")
     source_dir = (
@@ -2182,21 +2193,68 @@ def _run_workbuddybench_benchmark(args: argparse.Namespace) -> int:
             raise ValueError("--limit must be >= 1")
         tasks = tasks[: args.limit]
     mode, repeat, output_dir = _benchmark_settings(args)
-    if mode != "live":
-        raise ValueError("WorkBuddy Bench requires --java-mode live")
+    if subject_agent == "codex" and mode == "fixture":
+        raise ValueError("WorkBuddy Bench Codex mode requires live execution")
+    if subject_agent == "cute" and mode != "live":
+        raise ValueError("WorkBuddy Bench Cute Agent mode requires --java-mode live")
     if not args.skip_build:
         compile_java_fixture_runner()
+    codex_options = _codex_options(args) if subject_agent == "codex" else None
+    codex_version_value = (
+        codex_version(codex_options.command) if codex_options else None
+    )
+    if subject_agent == "codex":
+        report_metadata = adapter.report_metadata()
+        dataset_hash = report_metadata["datasetHash"]
+    else:
+        report_metadata = None
+        dataset_hash = None
     budget_policy = policy_from_args(args)
     _validate_workbuddy_execution_roots(output_dir)
     preflight_root = output_dir.resolve() / "_tool_preflight" / uuid4().hex
-    run_workbuddy_tool_preflight(
-        preflight_root / "workspace",
-        preflight_root / "report.json",
-        build=False,
-    )
+    smoke_preflight = None
+    if codex_options is None:
+        smoke_preflight = run_workbuddy_tool_preflight(
+            preflight_root / "workspace",
+            preflight_root / "report.json",
+            allowed_root=output_dir.resolve(),
+            build=False,
+        )
+    try:
+        docker_os, docker_api = adapter.docker_verifier.check_environment()
+        docker_preflight = {
+            "dockerPreflight": {
+                "status": "ok",
+                "os": docker_os,
+                "apiVersion": docker_api,
+            }
+        }
+    except DockerEnvironmentError as exc:
+        docker_preflight = {
+            "dockerPreflight": {
+                "status": "failed",
+                "error": str(exc),
+            }
+        }
+        try:
+            _report_benchmark(
+                adapter=adapter,
+                args=args,
+                results=[],
+                output_dir=output_dir,
+                mode=mode,
+                repeat=repeat,
+                require_official=True,
+                budget_policy=budget_policy,
+                environment_extras=docker_preflight,
+            )
+        except Exception as report_error:
+            print(f"failed to write Docker preflight report: {report_error}")
+        raise
     artifact_env = {
         "CUTE_FILE_ARTIFACT_ALLOWED_ROOT": str(output_dir.resolve()),
     }
+    workspace_preflights: dict[str, dict] = {}
     results: list[CaseResult] = []
     for attempt in range(1, repeat + 1):
         attempt_relative = f"attempts/{attempt:02d}"
@@ -2208,31 +2266,96 @@ def _run_workbuddybench_benchmark(args: argparse.Namespace) -> int:
                 task_attempt_dir / "workspace" / task.id,
             )
             case = budget_policy.apply(adapter.case_for_task(prepared.task))
-            traces = run_java_cases(
-                [case],
-                task_attempt_dir,
-                mode=mode,
-                profile=args.profile,
-                build=False,
-                timeout_seconds=_case_batch_timeout_seconds(
+            if codex_options is None:
+                case_preflight = run_workbuddy_tool_preflight(
+                    prepared.workspace,
+                    task_attempt_dir / "preflight" / "report.json",
+                    allowed_root=output_dir.resolve(),
+                    copy_workspace=True,
+                    copy_root=task_attempt_dir / "preflight",
+                    build=False,
+                    timeout_seconds=_case_batch_timeout_seconds([case], args.timeout),
+                )
+                if not case_preflight.get("workspaceCopied") or not any(
+                    check.get("name") == "code_execution_test_file"
+                    and check.get("status") == "ok"
+                    for check in case_preflight.get("checks") or []
+                ):
+                    raise EvalRunnerError(
+                        "environment",
+                        "WorkBuddy tool preflight did not validate the real workspace "
+                        f"for {task.id}: {task_attempt_dir / 'preflight' / 'report.json'}",
+                    )
+                workspace_preflights[task.id] = {
+                    "workspaceRoot": case_preflight.get("workspaceRoot"),
+                    "sourceWorkspace": case_preflight.get("workspaceTemplate"),
+                    "report": (
+                        Path(attempt_relative)
+                        / task.id
+                        / "preflight"
+                        / "report.json"
+                    ).as_posix(),
+                    "requiredPassed": case_preflight.get("requiredPassed"),
+                }
+            if codex_options is not None:
+                codex_case = replace(case, query=case.query)
+                trace = run_codex_case(
+                    codex_case,
+                    prepared.workspace,
+                    task_attempt_dir / "codex" / task.id,
+                    options=codex_options,
+                    timeout_seconds=_codex_timeout_seconds(codex_case, args.timeout),
+                    environment={
+                        "agent": "codex-cli",
+                        "agentVersion": codex_version_value,
+                        "workspace": str(prepared.workspace),
+                        "datasetHash": dataset_hash,
+                        "split": args.split,
+                        "mode": "codex-cli",
+                        "budgetMode": budget_policy.mode,
+                        "benchmark": adapter.name,
+                        "taskId": task.id,
+                    },
+                    app_server=True,
+                    soft_budget_finalize=budget_policy.mode == "product",
+                )
+                trace_relative = (
+                    f"{attempt_relative}/{task.id}/traces/{task.id}/trace.json"
+                )
+                trace_path = output_dir / trace_relative
+                trace_path.parent.mkdir(parents=True, exist_ok=True)
+                trace_path.write_text(
+                    json.dumps(trace.raw, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            else:
+                traces = run_java_cases(
                     [case],
-                    args.timeout,
-                ),
-                runner_class="org.wwz.ai.test.domain.EvalBenchmarkLiveRunnerCli",
-                workspace_roots={task.id: prepared.workspace},
-                tool_mode="production",
-                env_overrides=artifact_env,
-            )
-            trace = traces.get(task.id)
-            if trace is None:
-                raise ValueError(f"Java runner returned no trace for {task.id}")
+                    task_attempt_dir,
+                    mode=mode,
+                    profile=args.profile,
+                    build=False,
+                    timeout_seconds=_case_batch_timeout_seconds(
+                        [case],
+                        args.timeout,
+                    ),
+                    runner_class="org.wwz.ai.test.domain.EvalBenchmarkLiveRunnerCli",
+                    workspace_roots={task.id: prepared.workspace},
+                    tool_mode="production",
+                    env_overrides=artifact_env,
+                )
+                trace = traces.get(task.id)
+                if trace is None:
+                    raise ValueError(f"Java runner returned no trace for {task.id}")
+            if not trace.tool_invocations:
+                raise ValueError(
+                    f"WorkBuddy {subject_agent} run {task.id} completed without tool ledger "
+                    "evidence; refusing to score an unverifiable trajectory"
+                )
             run = adapter.collect(
                 prepared.task,
                 trace,
-                (
-                    f"{attempt_relative}/{task.id}/traces/"
-                    f"{task.id}/trace.json"
-                ),
+                f"{attempt_relative}/{task.id}/traces/{task.id}/trace.json",
                 prepared=prepared,
             )
             result = adapter.score(run, case=case)
@@ -2243,10 +2366,24 @@ def _run_workbuddybench_benchmark(args: argparse.Namespace) -> int:
         args=args,
         results=results,
         output_dir=output_dir,
-        mode=mode,
+        mode="codex-cli" if codex_options is not None else mode,
         repeat=repeat,
         require_official=True,
         budget_policy=budget_policy,
+        environment_extras={
+            **docker_preflight,
+            "preflight": {
+                "smoke": (
+                    Path("_tool_preflight")
+                    / preflight_root.name
+                    / "report.json"
+                ).as_posix()
+                if smoke_preflight is not None
+                else None,
+                "workspaces": workspace_preflights,
+            },
+        },
+        agent="codex-cli" if codex_options is not None else None,
     )
 
 

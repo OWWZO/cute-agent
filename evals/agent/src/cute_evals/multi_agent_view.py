@@ -6,6 +6,7 @@ from typing import Any
 
 from .models import RunTrace
 from .process_view import ProcessStep, project_process_view
+from .trajectory_quality import _tool_failure_signal
 
 MULTI_AGENT_VIEW_SCHEMA_VERSION = "1.0"
 
@@ -138,6 +139,9 @@ def project_multi_agent_view(
             )
         sub_agent_id = str(invocation.get("subAgentId") or "").strip()
         agent_id = sub_agent_id or "main"
+        failed = _tool_failure_signal(invocation) is not None
+        reported_status = str(invocation.get("status") or "UNKNOWN").upper()
+        tool_status = "FAILED" if failed else reported_status
         if agent_id not in agents:
             agent_type = str(
                 invocation.get("subAgentType") or "subagent"
@@ -165,7 +169,7 @@ def project_multi_agent_view(
                         else None
                     ),
                     tool_name=str(invocation.get("toolName") or ""),
-                    status=str(invocation.get("status") or "UNKNOWN"),
+                    status=tool_status,
                 )
             )
         else:
@@ -198,7 +202,7 @@ def project_multi_agent_view(
                     else None
                 ),
                 tool_name=str(invocation.get("toolName") or ""),
-                status=str(invocation.get("status") or "UNKNOWN"),
+                status=tool_status,
                 input_json=(
                     str(invocation["inputJson"])
                     if invocation.get("inputJson") is not None
@@ -221,12 +225,15 @@ def project_multi_agent_view(
         for tool in node.tools
         if tool.status.upper() == "SUCCESS"
     )
+    execution_status = "FAILED" if any(
+        tool.status == "FAILED" for node in agents.values() for tool in node.tools
+    ) else run_trace.status
     return MultiAgentTraceView(
         run_id=run_trace.run_uid or run_trace.request_id,
         request_id=run_trace.request_id,
         session_id=process_view.session_id,
         query=process_view.query,
-        status=run_trace.status,
+        status=execution_status,
         final_text=run_trace.final_text,
         agents=[agents[agent_id] for agent_id in order],
         handoffs=handoffs,

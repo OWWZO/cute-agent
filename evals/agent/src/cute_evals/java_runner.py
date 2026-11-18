@@ -221,9 +221,12 @@ def run_workbuddy_tool_preflight(
     workspace: Path,
     report_path: Path,
     *,
+    allowed_root: Path | None = None,
+    copy_workspace: bool = False,
     spring_profile: str = "eval",
     build: bool = True,
     timeout_seconds: int = 300,
+    copy_root: Path | None = None,
     env_overrides: dict[str, str] | None = None,
 ) -> dict:
     """Exercise the production tool pool and fail closed before a model run."""
@@ -233,17 +236,39 @@ def run_workbuddy_tool_preflight(
     report_path = report_path.resolve()
     _require_space_free_path(workspace, "tool preflight workspace")
     _require_space_free_path(report_path, "tool preflight report")
+    effective_allowed_root = (allowed_root or workspace.parent).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     preflight_env = {
-        "CUTE_FILE_ARTIFACT_ALLOWED_ROOT": str(workspace.parent),
+        "CUTE_FILE_ARTIFACT_ALLOWED_ROOT": str(effective_allowed_root),
     }
     if env_overrides:
         preflight_env.update(env_overrides)
+    if copy_workspace:
+        if copy_root is None:
+            raise EvalRunnerError(
+                "environment",
+                "copy_workspace requires copy_root inside the Code Execution allowed roots",
+            )
+        copy_root = copy_root.resolve()
+        allowed = (effective_allowed_root, *[
+            Path(item).resolve()
+            for item in (os.environ.get("CODE_EXECUTION_WORKSPACE_ROOTS") or "").split(
+                os.pathsep
+            )
+            if item.strip()
+        ])
+        if not any(copy_root.is_relative_to(root) for root in allowed):
+            raise EvalRunnerError(
+                "environment",
+                f"tool preflight copy_root is outside allowed roots: {copy_root}",
+            )
+        preflight_env["CUTE_EVAL_PREFLIGHT_COPY_ROOT"] = str(copy_root)
     exec_args = (
         f"--workspace {workspace} "
         f"--out {report_path} "
         f"--spring-profile {spring_profile}"
+        + (" --copy-workspace" if copy_workspace else "")
     )
     result = _run(
         [

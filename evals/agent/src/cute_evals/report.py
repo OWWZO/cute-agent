@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections import Counter
 from datetime import datetime
 from html import escape
@@ -10,6 +11,102 @@ from statistics import median
 from typing import Any
 
 from .models import CaseResult
+from .trajectory_quality import _tool_failure_signal
+
+
+_RATE_LIMIT_PATTERNS = (
+    re.compile(r"\bhttp\s+429\b", re.IGNORECASE),
+    re.compile(r"\bstatus(?:code)?\s*[:=]\s*429\b", re.IGNORECASE),
+    re.compile(r"\b429\s+too\s+many\s+requests\b", re.IGNORECASE),
+    re.compile(r"\brate\s*limit(?:ed|ing|s)?\b", re.IGNORECASE),
+    re.compile(r"限流"),
+)
+_TOOL_ARGUMENT_PATTERNS = (
+    re.compile(r"\bmissing\s+required\s+(?:tool\s+)?argument\b", re.IGNORECASE),
+    re.compile(r"\binvalid\s+tool\s+argument\b", re.IGNORECASE),
+    re.compile(r"\bunexpected\s+keyword\s+argument\b", re.IGNORECASE),
+    re.compile(r"\brequired\s+argument\b", re.IGNORECASE),
+    re.compile(r"\btool\s+argument\b", re.IGNORECASE),
+)
+_WORKSPACE_ARGUMENT_MARKERS = (
+    "path is required",
+    "pattern is required",
+    "参数格式错误",
+    "只支持",
+    "必须是目录",
+)
+_PYTHON_ERROR_PATTERN = re.compile(
+    r"^\s*[A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)\s*:",
+    re.IGNORECASE,
+)
+
+
+def _tool_name(invocation: dict[str, Any]) -> str:
+    return str(invocation.get("toolName") or "").strip().lower()
+
+
+def _is_web_tool(invocation: dict[str, Any]) -> bool:
+    return _tool_name(invocation) in {"webfetch", "web_fetch", "websearch", "web_search"}
+
+
+def _is_code_execution(invocation: dict[str, Any]) -> bool:
+    return _tool_name(invocation) == "code_execution"
+
+
+def _is_workspace_tool(invocation: dict[str, Any]) -> bool:
+    return _tool_name(invocation).startswith("workspace_")
+
+
+def _is_rate_limit_error(error: str) -> bool:
+    return any(pattern.search(error) for pattern in _RATE_LIMIT_PATTERNS)
+
+
+def _is_tool_argument_error(error: str) -> bool:
+    return any(pattern.search(error) for pattern in _TOOL_ARGUMENT_PATTERNS)
+
+
+def _is_code_runtime_error(error: str) -> bool:
+    return (
+        "traceback (most recent call last)" in error
+        or bool(_PYTHON_ERROR_PATTERN.match(error))
+    )
+
+
+def _classify_tool_failure(invocation: dict[str, Any]) -> tuple[str, str]:
+    """Return (failure category, tool failure class) for one failed invocation."""
+    error = str(invocation.get("errorMsg") or "").lower()
+    if _is_web_tool(invocation):
+        return "web_tool_error", "web_tool_error"
+    if _is_code_execution(invocation) and _is_code_runtime_error(error):
+        return "code_runtime_error", "code_runtime_error"
+    if "permission" in error:
+        return "tool_permission", "permission"
+    if _is_rate_limit_error(error):
+        return "tool_rate_limit", "rate_limit"
+    if "timeout" in error or "timed out" in error:
+        return "tool_timeout", "timeout"
+    if "forbidden" in error or "403" in error:
+        return "tool_forbidden", "forbidden"
+    if (
+        "cannot connect to host" in error
+        or "connect call failed" in error
+        or "proxy" in error
+        or "502" in error
+    ):
+        return "tool_network", "network"
+    if "upstream" in error or "503" in error:
+        return "tool_upstream", "upstream"
+    if "json" in error or "malformed" in error:
+        return "tool_payload", "malformed_payload"
+    if _is_tool_argument_error(error):
+        if _is_workspace_tool(invocation):
+            return "workspace_argument_error", "invalid_arguments"
+        return "tool_arguments", "invalid_arguments"
+    if _is_workspace_tool(invocation) and any(
+        marker in error for marker in _WORKSPACE_ARGUMENT_MARKERS
+    ):
+        return "workspace_argument_error", "workspace_argument_error"
+    return "tool_failure", "unknown"
 
 
 def _median(values: list[float | int | None]) -> float | None:
@@ -78,32 +175,10 @@ def _failure_categories(result: CaseResult) -> list[str]:
 
     for invocation in result.trace.tool_invocations:
         status = str(invocation.get("status", "")).upper()
-        if status == "SUCCESS":
+        if status == "SUCCESS" and _tool_failure_signal(invocation) is None:
             continue
-        error = str(invocation.get("errorMsg") or "").lower()
-        if "permission" in error:
-            categories.add("tool_permission")
-        elif "429" in error or "rate limit" in error:
-            categories.add("tool_rate_limit")
-        elif "timeout" in error:
-            categories.add("tool_timeout")
-        elif "forbidden" in error or "403" in error:
-            categories.add("tool_forbidden")
-        elif (
-            "cannot connect to host" in error
-            or "connect call failed" in error
-            or "proxy" in error
-            or "502" in error
-        ):
-            categories.add("tool_network")
-        elif "upstream" in error or "503" in error:
-            categories.add("tool_upstream")
-        elif "json" in error or "malformed" in error:
-            categories.add("tool_payload")
-        elif "argument" in error or "required" in error:
-            categories.add("tool_arguments")
-        else:
-            categories.add("tool_failure")
+        category, _ = _classify_tool_failure(invocation)
+        categories.add(category)
 
     score_categories = {
         "tool_sequence": "trajectory",
@@ -155,32 +230,13 @@ def _failure_categories(result: CaseResult) -> list[str]:
 def _tool_failure_classes(result: CaseResult) -> list[str]:
     categories = []
     for invocation in result.trace.tool_invocations:
-        if str(invocation.get("status", "")).upper() == "SUCCESS":
-            continue
-        error = str(invocation.get("errorMsg") or "").lower()
-        if "permission" in error:
-            categories.append("permission")
-        elif "429" in error or "rate limit" in error:
-            categories.append("rate_limit")
-        elif "timeout" in error:
-            categories.append("timeout")
-        elif "forbidden" in error or "403" in error:
-            categories.append("forbidden")
-        elif (
-            "cannot connect to host" in error
-            or "connect call failed" in error
-            or "proxy" in error
-            or "502" in error
+        if (
+            str(invocation.get("status", "")).upper() == "SUCCESS"
+            and _tool_failure_signal(invocation) is None
         ):
-            categories.append("network")
-        elif "upstream" in error or "503" in error:
-            categories.append("upstream")
-        elif "json" in error or "malformed" in error:
-            categories.append("malformed_payload")
-        elif "argument" in error or "required" in error:
-            categories.append("invalid_arguments")
-        else:
-            categories.append("unknown")
+            continue
+        _, failure_class = _classify_tool_failure(invocation)
+        categories.append(failure_class)
     return sorted(categories)
 
 

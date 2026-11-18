@@ -228,10 +228,14 @@ class RunTrace:
         return [str(item.get("toolName", "")) for item in self.tool_invocations]
 
     def successful_tool_names(self) -> list[str]:
+        from .trajectory_quality import _tool_failure_signal
+
         return [
             str(item.get("toolName", ""))
             for item in self.tool_invocations
             if str(item.get("status", "")).upper() == "SUCCESS"
+            and isinstance(item, dict)
+            and _tool_failure_signal(item) is None
         ]
 
     def first_token_samples(self) -> list[float]:
@@ -250,11 +254,15 @@ class RunTrace:
         return sum(samples) / len(samples)
 
     def tool_success_rate(self) -> float | None:
+        from .trajectory_quality import _tool_failure_signal
+
         if not self.tool_invocations:
             return None
         success = sum(
             1 for item in self.tool_invocations
             if str(item.get("status", "")).upper() == "SUCCESS"
+            and isinstance(item, dict)
+            and _tool_failure_signal(item) is None
         )
         return success / len(self.tool_invocations)
 
@@ -393,12 +401,13 @@ class RunTrace:
         }
 
     def recovered_after_tool_failure(self) -> bool:
+        from .trajectory_quality import _tool_failure_signal
+
         failed = False
         for item in self.tool_invocations:
-            status = str(item.get("status", "")).upper()
-            if status in {"FAILED", "TIMEOUT"}:
+            if isinstance(item, dict) and _tool_failure_signal(item) is not None:
                 failed = True
-            elif failed and status == "SUCCESS":
+            elif failed and str(item.get("status", "")).upper() == "SUCCESS":
                 return True
         return False
 

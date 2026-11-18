@@ -13,6 +13,7 @@ from .framework_scorers import (
     score_ragas,
 )
 from .models import CaseResult, EvalCase, JudgeConfig, RunTrace, ScoreRecord
+from .trajectory_quality import _tool_failure_signal
 
 
 def _record(
@@ -267,8 +268,14 @@ def score_case(
     forbidden = [
         value for value in case.expected.final_not_contains if value in final_text
     ]
+    tool_failed = any(
+        _tool_failure_signal(item) is not None
+        for item in trace.tool_invocations
+        if isinstance(item, dict)
+    )
     task_ok = (
         trace.status == "SUCCESS"
+        and not tool_failed
         and not missing
         and not missing_any
         and not forbidden

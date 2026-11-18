@@ -166,7 +166,10 @@ def test_tasks_prepare_and_case_mapping(tmp_path: Path) -> None:
     case = adapter.case_for_task(task)
     assert case.id == task.id
     assert case.suite == "workbuddybench-internal"
-    assert case.query == task.question
+    assert case.query.startswith("WorkBuddy Code 工作约束：")
+    assert "必须修改源文件" in case.query
+    assert "code_execution 的 Jupyter 会话会保留变量和 import" in case.query
+    assert case.query.endswith(task.question)
     assert case.expected.max_steps == 80
     assert case.budgets.max_total_tokens == 240000
     assert case.budgets.max_wall_ms == 1800000
