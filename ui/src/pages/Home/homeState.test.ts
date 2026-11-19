@@ -94,6 +94,7 @@ describe("homeState", () => {
       sessionId: "session-new",
       title: "新对话",
       status: "RUNNING",
+      subSessionCount: 0,
       latestQueryText: "",
       runCount: 0,
     });
@@ -287,6 +288,42 @@ describe("homeState", () => {
       channelChatType: "C2C",
       visitorLabel: "访客 a1b2",
     });
+  });
+
+  it("本地会话覆盖时保留服务端的子会话计数", () => {
+    const merged = mergeRecentSessions(
+      [
+        {
+          sessionId: "session-parent",
+          title: "父会话",
+          status: "SUCCESS",
+          subSessionCount: 2,
+          latestQueryText: "",
+          runCount: 1,
+          finishedRunCount: 1,
+          failedRunCount: 0,
+          startedAt: "2026-05-08T09:00:00.000Z",
+          lastActiveAt: "2026-05-08T09:10:00.000Z",
+        },
+      ],
+      [
+        {
+          sessionId: "session-parent",
+          title: "本地标题",
+          status: "RUNNING",
+          subSessionCount: 0,
+          latestQueryText: "",
+          runCount: 0,
+          finishedRunCount: 0,
+          failedRunCount: 0,
+          startedAt: "2026-05-08T09:00:00.000Z",
+          lastActiveAt: "2026-05-08T09:20:00.000Z",
+        },
+      ]
+    );
+
+    expect(merged[0].subSessionCount).toBe(2);
+    expect(merged[0].title).toBe("本地标题");
   });
 
   it("分页加载的服务端会话超过二十条后仍全部保留", () => {

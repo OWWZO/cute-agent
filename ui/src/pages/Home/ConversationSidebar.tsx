@@ -462,10 +462,9 @@ const ConversationSidebar = memo(function ConversationSidebar(
                     const treeOpen = sessionTree.isExpanded(session.sessionId);
                     const treeLoading = sessionTree.isLoading(session.sessionId);
                     const children = sessionTree.childrenOf(session.sessionId);
-                    // null/undefined 视为「未知」，保持旧行为；明确为 0 时才收起展开入口。
-                    const canExpand =
-                      session.subSessionCount == null ||
-                      session.subSessionCount > 0;
+                    // 只有明确知道有子会话时才展示箭头。本地新建但尚未落库的会话、
+                    // 以及旧接口没带计数时都不能让用户点进一个不存在的树。
+                    const canExpand = (session.subSessionCount ?? 0) > 0;
 
                     return (
                       <div
@@ -496,7 +495,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
                         >
                           {/* 展开箭头：点它拉子会话，点行本身仍是切换会话。
                               没有子会话时只留等宽占位，保证标题左对齐不跳动。 */}
-                          {canExpand || treeOpen ? (
+                          {canExpand ? (
                             <span
                               role="button"
                               tabIndex={0}

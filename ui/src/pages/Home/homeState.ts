@@ -201,6 +201,8 @@ export function toRecentSessionItem(
     sessionId: conversation.sessionId,
     title: conversation.chatTitle || conversation.title || "新对话",
     status: resolveConversationStatus(conversation),
+    // 本地尚未落库的会话还没有任何子会话；不能把“未知”当成“有子会话”。
+    subSessionCount: 0,
     latestQueryText: resolveLatestQueryText(conversation),
     runCount: conversation.chatList.length + conversation.dataChatList.length,
     finishedRunCount,
@@ -233,13 +235,36 @@ export function mergeRecentSessions(
       merged.set(session.sessionId, session);
       return;
     }
-    // 本地会话对象不携带渠道身份；用服务端的 QQ 字段补全，否则流式更新一次徽标就丢了。
+    // 本地会话对象不携带服务端的树/渠道身份；只补结构字段，标题和运行态仍以本地为准。
+    const remoteStructure = {
+      ...(typeof session.subSessionCount === "number"
+        ? { subSessionCount: session.subSessionCount }
+        : {}),
+      ...(session.sessionKind != null
+        ? { sessionKind: session.sessionKind }
+        : {}),
+      ...(session.parentSessionId != null
+        ? { parentSessionId: session.parentSessionId }
+        : {}),
+      ...(session.rootSessionId != null
+        ? { rootSessionId: session.rootSessionId }
+        : {}),
+      ...(session.subAgentType != null
+        ? { subAgentType: session.subAgentType }
+        : {}),
+    };
     if (session.bindingId != null) {
       merged.set(session.sessionId, {
         ...local,
+        ...remoteStructure,
         bindingId: session.bindingId,
         channelChatType: session.channelChatType,
         visitorLabel: session.visitorLabel,
+      });
+    } else if (Object.keys(remoteStructure).length > 0) {
+      merged.set(session.sessionId, {
+        ...local,
+        ...remoteStructure,
       });
     }
   });

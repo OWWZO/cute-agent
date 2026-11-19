@@ -106,9 +106,9 @@ describe("ConversationSidebar", () => {
     expect(html).toContain("展开子会话");
   });
 
-  it("子会话数量未知时保持旧的展开行为", () => {
+  it("子会话数量未知时默认不展示展开入口", () => {
     const html = renderSidebarWithSession({ subSessionCount: null });
 
-    expect(html).toContain("展开子会话");
+    expect(html).not.toContain("展开子会话");
   });
 });
