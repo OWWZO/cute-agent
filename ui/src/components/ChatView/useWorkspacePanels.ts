@@ -23,6 +23,13 @@ export const clampWorkspaceLeftWidth = (width: number) =>
  */
 export const panelPercent = (percent: number) => `${percent}%`;
 
+export const resolveWorkspacePanelLayout = (
+  leftWidth: number,
+  isRightCollapsed: boolean
+) => isRightCollapsed
+  ? { chat: 100, workspace: 0 }
+  : { chat: leftWidth, workspace: 100 - leftWidth };
+
 /**
  * `Panel` 的 `defaultSize` 必须是**常量**，不能绑定拖拽中变化的宽度 state。
  *
@@ -68,14 +75,12 @@ export function useWorkspacePanels() {
    */
   const groupRef = useRef<GroupImperativeHandle | null>(null);
 
-  const applyLeftWidth = useCallback((percent: number) => {
-    groupRef.current?.setLayout({
-      chat: percent,
-      workspace: 100 - percent,
-    });
-  }, []);
-
   const handleLayoutChange = useCallback((layout: WorkspaceLayout) => {
+    // 收起时会临时把布局写成 100/0；这个值不是用户拖出来的宽度，
+    // 不能覆盖下次展开时要恢复的左侧宽度。
+    if (workspaceRef.current?.getAttribute("data-workspace-open") === "false") {
+      return;
+    }
     const next = layout?.chat;
     if (typeof next === "number") {
       leftPanelWidthRef.current = clampWorkspaceLeftWidth(next);
@@ -108,6 +113,11 @@ export function useWorkspacePanels() {
 
   const toggleRightPanel = useCallback(() => {
     setIsRightCollapsed((previous) => !previous);
+  }, []);
+
+  /** 工作区收起时只改 Group 布局，不走 Panel.collapse()。 */
+  const collapseRightPanel = useCallback(() => {
+    setIsRightCollapsed(true);
   }, []);
 
   const toggleFocusMode = useCallback(() => {
@@ -145,11 +155,16 @@ export function useWorkspacePanels() {
   // 1. 把新宽度推给 Group（defaultSize 不会二次生效）；
   // 2. 让图表重新量一次容器。
   useEffect(() => {
-    if (!isLeftCollapsed) {
-      applyLeftWidth(leftPanelWidthRef.current);
-    }
+    // 直接写 Group 布局，不依赖 Panel.collapse()：当前库版本里，
+    // 收起时它会重新套用旧比例，所以收起态的可见宽度由 global.css 收口。
+    groupRef.current?.setLayout(
+      resolveWorkspacePanelLayout(
+        leftPanelWidthRef.current,
+        isRightCollapsed
+      )
+    );
     notifyResizeEnd();
-  }, [isLeftCollapsed, isRightCollapsed, isFocusMode, applyLeftWidth, notifyResizeEnd]);
+  }, [isLeftCollapsed, isRightCollapsed, isFocusMode, notifyResizeEnd]);
 
   return {
     leftPanelWidth,
@@ -161,6 +176,7 @@ export function useWorkspacePanels() {
     setIsFocusMode,
     toggleLeftPanel,
     toggleRightPanel,
+    collapseRightPanel,
     toggleFocusMode,
     exitFocusMode,
     handleLayoutChange,

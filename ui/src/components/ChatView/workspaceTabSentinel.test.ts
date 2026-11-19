@@ -4,6 +4,7 @@ import {
   decideWorkspaceTabCountChange,
   hasWorkspaceSurface,
   resolveAutoFollowTabKind,
+  resolveTaskWorkspaceTarget,
   shouldAutoFollowWorkspaceTask,
 } from "./workspaceTabSentinel";
 
@@ -199,12 +200,50 @@ describe("resolveAutoFollowTabKind", () => {
     ).toBe("task");
   });
 
-  it("深搜阶段即便带文件也保持任务 tab：过程面板才是它的主体展示", () => {
+  it("深搜过程阶段即便带内部文件也保持任务 tab", () => {
     expect(
       resolveAutoFollowTabKind({
         messageType: "deep_search",
+        resultMessageType: "search",
         hasPrimaryFile: true,
       })
     ).toBe("task");
+  });
+
+  it("深搜最终报告有主文件时开文件 tab", () => {
+    expect(
+      resolveAutoFollowTabKind({
+        messageType: "deep_search",
+        resultMessageType: "report",
+        hasPrimaryFile: true,
+      })
+    ).toBe("file");
+  });
+
+  it("深搜最终报告缺少文件时仍回退任务 tab", () => {
+    expect(
+      resolveAutoFollowTabKind({
+        messageType: "deep_search",
+        resultMessageType: "report",
+        hasPrimaryFile: false,
+      })
+    ).toBe("task");
+  });
+
+  it("点击报告卡与自动跟随共用同一个文件目标判定", () => {
+    const target = resolveTaskWorkspaceTarget({
+      messageType: "deep_search",
+      resultMessageType: "report",
+      hasPrimaryFile: true,
+    });
+
+    expect(target).toBe(
+      resolveAutoFollowTabKind({
+        messageType: "deep_search",
+        resultMessageType: "report",
+        hasPrimaryFile: true,
+      })
+    );
+    expect(target).toBe("file");
   });
 });

@@ -4,6 +4,7 @@ import {
   CHAT_PANEL_DEFAULT_SIZE,
   clampWorkspaceLeftWidth,
   panelPercent,
+  resolveWorkspacePanelLayout,
 } from "./useWorkspacePanels";
 
 describe("workspace panel width calculation", () => {
@@ -25,5 +26,16 @@ describe("workspace panel width calculation", () => {
   // 分隔条只能挪动一两像素就被拽回 —— 表现为「中间那条线拖不动」。
   it("keeps the panel default size a static percentage", () => {
     expect(CHAT_PANEL_DEFAULT_SIZE).toBe("50%");
+  });
+
+  it("collapses the workspace to zero width instead of redistributing it", () => {
+    expect(resolveWorkspacePanelLayout(56, true)).toEqual({
+      chat: 100,
+      workspace: 0,
+    });
+    expect(resolveWorkspacePanelLayout(56, false)).toEqual({
+      chat: 56,
+      workspace: 44,
+    });
   });
 });

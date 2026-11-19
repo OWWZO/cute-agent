@@ -112,7 +112,7 @@ export function shouldAutoFollowWorkspaceTask(params: {
   return showAction && hasLiveTask;
 }
 
-/** 深度研究任务的 messageType：该阶段有自己的过程面板，自动跟随始终开任务 tab。 */
+/** 深度研究任务的 messageType：过程阶段开任务 tab，最终报告有文件时开文件 tab。 */
 export const DEEP_SEARCH_MESSAGE_TYPE = "deep_search";
 
 /**
@@ -127,15 +127,27 @@ export const DEEP_SEARCH_MESSAGE_TYPE = "deep_search";
  *   开成任务 tab 的话，tab 上会是工具名（比如 `bash`），用户会以为名字错了。
  * - 没有产物（纯工具输出）→ **任务 tab**，标题用工具名。
  *
- * 例外：`deep_search` 阶段有自己的过程面板（章节 / 搜索列表），产物文件不是它的
- * 主体展示，所以即便带了文件也保持任务 tab。
+ * `deep_search` 只有最终 `report` 阶段以产物文件为主体；search / chapter_summary
+ * 仍使用自己的过程面板，不能因为中途存在内部检索文件就抢占文件 tab。
  */
 export function resolveAutoFollowTabKind(params: {
   messageType?: string;
+  resultMessageType?: string;
   hasPrimaryFile: boolean;
 }): "file" | "task" {
   if (params.messageType === DEEP_SEARCH_MESSAGE_TYPE) {
-    return "task";
+    return params.resultMessageType === "report" && params.hasPrimaryFile
+      ? "file"
+      : "task";
   }
   return params.hasPrimaryFile ? "file" : "task";
+}
+
+/** 点击任务卡时与自动跟随共用同一条目标判定，避免同一报告打开两种 tab。 */
+export function resolveTaskWorkspaceTarget(params: {
+  messageType?: string;
+  resultMessageType?: string;
+  hasPrimaryFile: boolean;
+}): "file" | "task" {
+  return resolveAutoFollowTabKind(params);
 }

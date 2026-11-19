@@ -3362,6 +3362,20 @@ ol {
   transition: none !important;
 }
 
+/*
+ * react-resizable-panels 在收起时仍会保留上一次的 flex 比例（56/44），
+ * 即使把布局写成 100/0 也会被它的约束重新夹回去。收起态直接由外层
+ * 决定可见性：对话栏占满，工作区节点保留但不占空间，展开后由 Group 恢复。
+ */
+.cute-chat-workspace-layout[data-workspace-open="false"] > #chat {
+  flex: 1 1 100% !important;
+  max-width: 100% !important;
+}
+
+.cute-chat-workspace-layout[data-workspace-open="false"] > #workspace {
+  display: none;
+}
+
 /* Mobile chat adaptation: the workspace becomes a thumb-reachable bottom sheet. */
 .cute-workspace-scrim {
   display: none;
