@@ -86,6 +86,9 @@ type Props = {
   /** 当前会话未发送的输入草稿 */
   draftValue?: string;
   onDraftChange?: (value: string) => void;
+  /** OpenUI 等外部入口：先回填输入框，再用同一提交链路自动发送 */
+  autoSubmitMessage?: { id: number; text: string } | null;
+  onAutoSubmitConsumed?: (id: number) => void;
   /** 推荐模板回填后的选区请求，用于直接覆盖占位词 */
   promptSelectionRequest?: PromptSelectionRequest | null;
   /** 后台子智能体数量（输入框徽标，与右上角面板联动） */
@@ -189,6 +192,8 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     onDraftConsumed,
     draftValue = "",
     onDraftChange,
+    autoSubmitMessage = null,
+    onAutoSubmitConsumed,
     promptSelectionRequest = null,
     subAgentCount = 0,
     subAgentRunningCount = 0,
@@ -222,6 +227,8 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const appliedPromptRequestRef = useRef<number | null>(null);
+  const appliedAutoSubmitRef = useRef<number | null>(null);
+  const submitRef = useRef<(text: string) => void>(() => {});
   const {
     attachmentUploads,
     attachmentOrder,
@@ -459,6 +466,30 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     clearAttachmentUploads();
     promptContexts.clear();
   };
+  submitRef.current = (text) => handleSubmit({ text, files: [] });
+
+  useEffect(() => {
+    if (
+      !autoSubmitMessage ||
+      appliedAutoSubmitRef.current === autoSubmitMessage.id
+    ) {
+      return;
+    }
+    appliedAutoSubmitRef.current = autoSubmitMessage.id;
+    const text = autoSubmitMessage.text.trim().slice(0, MAX_QUERY_CHARS);
+    if (!text) {
+      onAutoSubmitConsumed?.(autoSubmitMessage.id);
+      return;
+    }
+
+    setQuestion(text);
+    onDraftChange?.(text);
+    const frame = requestAnimationFrame(() => {
+      submitRef.current(text);
+      onAutoSubmitConsumed?.(autoSubmitMessage.id);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoSubmitMessage, onAutoSubmitConsumed, onDraftChange]);
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
     if (event.key === "Tab" && promptSelectionRequest?.placeholders.length) {

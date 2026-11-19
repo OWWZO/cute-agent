@@ -2,11 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BuiltinActionType, type ActionEvent } from '@openuidev/react-lang';
 
 const dispatch = vi.fn();
+const registerAdapters = vi.fn();
 vi.mock('@/components/genui/genUiActionBus', () => ({
   dispatchGenUiAction: (action: unknown) => dispatch(action),
+  registerGenUiActionAdapters: (adapters: unknown) => registerAdapters(adapters),
 }));
 
-const { dispatchOpenUiAction } = await import('./openUiActionBridge');
+const {
+  dispatchOpenUiAction,
+  registerOpenUiSendMessageHandler,
+} = await import('./openUiActionBridge');
 
 const event = (partial: Partial<ActionEvent>): ActionEvent => ({
   type: BuiltinActionType.ContinueConversation,
@@ -16,7 +21,34 @@ const event = (partial: Partial<ActionEvent>): ActionEvent => ({
 });
 
 describe('dispatchOpenUiAction', () => {
-  beforeEach(() => dispatch.mockClear());
+  beforeEach(() => {
+    dispatch.mockClear();
+    registerAdapters.mockClear();
+  });
+
+  it('registers @ToAssistant messages for the composer', () => {
+    const send = vi.fn();
+    registerOpenUiSendMessageHandler(send);
+
+    const adapters = registerAdapters.mock.calls[0][0] as {
+      sendMessage: (payload: { content: string }) => void;
+    };
+    adapters.sendMessage({ content: '  Explain the plan  ' });
+
+    expect(send).toHaveBeenCalledWith('Explain the plan');
+  });
+
+  it('ignores an empty registered message', () => {
+    const send = vi.fn();
+    registerOpenUiSendMessageHandler(send);
+
+    const adapters = registerAdapters.mock.calls[0][0] as {
+      sendMessage: (payload: { content: string }) => void;
+    };
+    adapters.sendMessage({ content: '   ' });
+
+    expect(send).not.toHaveBeenCalled();
+  });
 
   it('sends @ToAssistant messages as a new turn', () => {
     dispatchOpenUiAction(event({ humanFriendlyMessage: 'Tell me more' }));

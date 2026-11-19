@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseChartNumber, toSpec } from './chart';
+import { chartRenderIssue, parseChartNumber, toSpec } from './chart';
 
 describe('parseChartNumber', () => {
   it('passes clean numbers and numeric strings through', () => {
@@ -99,5 +99,29 @@ describe('toSpec series guard', () => {
       type: "bar",
       data: []
     } as never)).toBeNull();
+  });
+});
+
+describe('chartRenderIssue', () => {
+  it('reports discarded Chinese keys instead of drawing an empty chart', () => {
+    const spec = toSpec({
+      type: 'bar',
+      data: [{ '?': 180 }],
+      x: '阶段',
+      series: ['预算'],
+    } as never);
+
+    expect(chartRenderIssue(spec)).toContain('字段无法识别');
+  });
+
+  it('accepts a chart with a real series', () => {
+    const spec = toSpec({
+      type: 'bar',
+      data: [{ 阶段: 'P1', 预算: 180 }],
+      x: '阶段',
+      series: ['预算'],
+    } as never);
+
+    expect(chartRenderIssue(spec)).toBeNull();
   });
 });

@@ -59,6 +59,29 @@ function isNumericValue(value: unknown): boolean {
   return /^-?\d+(?:\.\d+)?(?:万|亿)?(?:元|美元)?$/.test(cleaned);
 }
 
+/**
+ * `@Each` 等动态数据在解析阶段还是 AST；裸中文键此时已经被 parser 换成 "?"。
+ * 递归检查动态对象模板，避免把静默丢字段误判成可渲染。
+ */
+function hasDiscardedObjectKey(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(hasDiscardedObjectKey);
+  }
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (
+    value.k === 'Obj' &&
+    Array.isArray(value.entries) &&
+    value.entries.some(
+      (entry) => Array.isArray(entry) && entry[0] === '?'
+    )
+  ) {
+    return true;
+  }
+  return Object.values(value).some(hasDiscardedObjectKey);
+}
+
 function chartDiagnostics(element: ParsedElement): OpenUiDiagnosticError[] {
   const props = element.props ?? {};
   const statementId = element.statementId;
@@ -73,7 +96,15 @@ function chartDiagnostics(element: ParsedElement): OpenUiDiagnosticError[] {
     return errors;
   }
   // @GroupBy / @Pivot 等函数在解析阶段是动态节点，真实行要等运行时才产生。
+  // 但裸中文键被 parser 丢弃时，动态对象模板里已经会出现 "?"，必须在这里拦截。
   if (!Array.isArray(data)) {
+    if (hasDiscardedObjectKey(data)) {
+      push(
+        'chart-keys-lost',
+        '/data',
+        'Chart object keys were discarded by the parser; quote every data key with double quotes'
+      );
+    }
     return errors;
   }
   if (data.length === 0 || !data.every(isRecord)) {

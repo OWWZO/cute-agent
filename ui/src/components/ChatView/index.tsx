@@ -20,6 +20,7 @@ import {
 import Dialogue from "@/components/Dialogue";
 import DataDialogue from "@/components/Dialogue/DataDialogue";
 import GeneralInput from "@/components/GeneralInput";
+import { registerOpenUiSendMessageHandler } from "@/components/openui/openUiActionBridge";
 import ActionView, {
   type OpenAgentTabPayload,
   type OpenDesktopTabPayload,
@@ -41,6 +42,7 @@ import {
   type SubAgentRosterItem,
 } from "@/utils/chat/subAgentRoster";
 import { resolveSubAgentDisplay } from "@/utils/chat/subagent";
+import { resolveTaskResultMap } from "@/utils/chat/toolCalls";
 import FilePreview from "@/components/ActionView/FilePreview";
 import { resolvePreviewTitle } from "@/components/ActionView/filePreviewModel";
 import type {
@@ -70,7 +72,6 @@ import {
   Group,
   Panel,
   Separator,
-  type PanelImperativeHandle,
 } from "react-resizable-panels";
 import { confirm } from "@/components/ui/confirm-dialog";
 import {
@@ -110,6 +111,7 @@ import {
   decideWorkspaceTabCountChange,
   hasWorkspaceSurface,
   resolveAutoFollowTabKind,
+  resolveTaskWorkspaceTarget,
   shouldAutoFollowWorkspaceTask,
 } from "./workspaceTabSentinel";
 import { identityKeys, readTaskIdentity } from "@/utils/chat/taskIdentity";
@@ -567,7 +569,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const workspaceSnapshotsRef = useRef<Map<string, WorkspaceSessionSnapshot>>(
     new Map()
   );
-  const workspacePanelRef = useRef<PanelImperativeHandle | null>(null);
   /**
    * 工作区「最后一个真实 tab 被关掉」的哨兵。
    *
@@ -603,6 +604,11 @@ const ChatView: CuteType.FC<Props> = (props) => {
   const autoOpenedAgentRef = useRef("");
   const lastAutoOpenedDesktopControlRef = useRef("");
   const [composerDraft, setComposerDraft] = useState<string | null>(null);
+  const [autoSubmitMessage, setAutoSubmitMessage] = useState<{
+    id: number;
+    text: string;
+  } | null>(null);
+  const autoSubmitMessageIdRef = useRef(0);
   const {
     isLeftCollapsed,
     isRightCollapsed,
@@ -610,6 +616,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     setIsRightCollapsed,
     toggleLeftPanel,
     toggleRightPanel: toggleWorkspaceRightPanel,
+    collapseRightPanel,
     toggleFocusMode,
     exitFocusMode,
     handleLayoutChange,
@@ -876,7 +883,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     userClosedWorkspaceRef.current = true;
     setWorkspaceOpenRequested(false);
     changeActionStatus(false);
-    setIsRightCollapsed(true);
+    collapseRightPanel();
   });
 
   /**
@@ -985,6 +992,16 @@ const ChatView: CuteType.FC<Props> = (props) => {
     if (!canOpenTaskWorkspacePanel(task)) {
       return;
     }
+    const primaryFile = getPrimaryTaskFile(task);
+    const target = resolveTaskWorkspaceTarget({
+      messageType: task.messageType,
+      resultMessageType: resolveTaskResultMap(task).messageType,
+      hasPrimaryFile: Boolean(primaryFile),
+    });
+    if (target === "file" && primaryFile) {
+      changeFile(primaryFile, chat);
+      return;
+    }
     const taskKey = getTaskStableKey(task);
     if (!taskKey) {
       return;
@@ -996,7 +1013,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       // 文件类任务的标题取自 primary file（`resolvePreviewTitle` 的 file 分支
       // 需要它），工具类任务取工具名 —— 不要直接把 messageType 暴露给用户。
       title:
-        resolvePreviewTitle(task, getPrimaryTaskFile(task)) ||
+        resolvePreviewTitle(task, primaryFile) ||
         task.messageType ||
         "任务",
       task,
@@ -1442,6 +1459,22 @@ const ChatView: CuteType.FC<Props> = (props) => {
 
   const activeChat = conversation.chatList?.[conversation.chatList.length - 1];
   const sessionBusy = loading || isParentLoopLive(activeChat);
+  const requestAutoSubmitMessage = useMemoizedFn((text: string) => {
+    setAutoSubmitMessage({
+      id: ++autoSubmitMessageIdRef.current,
+      text,
+    });
+  });
+  const consumeAutoSubmitMessage = useMemoizedFn(() => {
+    setAutoSubmitMessage(null);
+  });
+  useEffect(() => {
+    registerOpenUiSendMessageHandler(
+      readOnly ? () => {} : requestAutoSubmitMessage
+    );
+    return () => registerOpenUiSendMessageHandler(() => {});
+  }, [readOnly, requestAutoSubmitMessage]);
+
   /**
    * 子智能体名册（同步 + 后台）。
    *
@@ -1672,19 +1705,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
   });
   /** 工作区此刻是否真的占着右侧（收起 / 无内容都算「不可见」）。等价于渲染时的 `hasWorkspaceLayout`。 */
   const workspaceVisible = hasWorkspaceContent && !isRightCollapsed;
-  useEffect(() => {
-    const panel = workspacePanelRef.current;
-    if (!panel) return;
-    if (workspaceVisible) {
-      panel.expand();
-      if (panel.isCollapsed()) {
-        panel.resize("50%");
-      }
-    } else {
-      panel.collapse();
-    }
-  }, [workspaceVisible]);
-
   /**
    * 流式「自动跟随」（原「动态」模式）现在落成一个**真实 tab**。
    *
@@ -1727,6 +1747,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     const primaryFile = getPrimaryTaskFile(workspaceStreamTask);
     const tabKind = resolveAutoFollowTabKind({
       messageType: workspaceStreamTask.messageType,
+      resultMessageType: resolveTaskResultMap(workspaceStreamTask).messageType,
       hasPrimaryFile: Boolean(primaryFile),
     });
     if (tabKind === "file" && primaryFile) {
@@ -1868,6 +1889,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
             onDraftConsumed={clearComposerDraft}
             draftValue={inputDraft}
             onDraftChange={onInputDraftChange}
+            autoSubmitMessage={autoSubmitMessage}
+            onAutoSubmitConsumed={consumeAutoSubmitMessage}
             product={currentProduct}
             deepThink={conversation.deepThink}
             sessionModel={conversation.sessionModel}
@@ -2420,7 +2443,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
           collapsible
           collapsedSize={0}
           minSize={panelPercent(24)}
-          panelRef={workspacePanelRef}
         >
           {/* 会话级 ActionView 常驻挂载；隐藏会话用 hidden 容器保留 DOM 与 iframe。 */}
           {renderWorkspaceActivities()}
@@ -2475,6 +2497,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
                   deepThink={false}
                   draftValue={inputDraft}
                   onDraftChange={onInputDraftChange}
+                  autoSubmitMessage={autoSubmitMessage}
+                  onAutoSubmitConsumed={consumeAutoSubmitMessage}
                   send={(info) =>
                     sendDataMessage({
                       ...info,

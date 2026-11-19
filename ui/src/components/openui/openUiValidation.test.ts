@@ -119,6 +119,22 @@ root = Col([t, b])`;
     expect(isRenderableProgram(normalized as string)).toBe(true);
   });
 
+  it('detects bare Chinese keys inside dynamic @Each chart data', () => {
+    const broken = `phaseData = [{id:"P1",budget:180},{id:"P2",budget:520}]
+chartData = @Each(phaseData, "p", {阶段:p.id, 预算:p.budget})
+root = Chart("bar", chartData, "阶段", ["预算"], "number")`;
+
+    const diagnosis = diagnoseProgram(broken);
+    expect(diagnosis.renderable).toBe(false);
+    expect(
+      diagnosis.errors.some((error) => error.code === 'chart-keys-lost')
+    ).toBe(true);
+
+    const normalized = normalizeOpenUiProgram(broken);
+    expect(normalized).not.toBeNull();
+    expect(isRenderableProgram(normalized as string)).toBe(true);
+  });
+
   it('rescues chart keys with units, spaces, or a leading digit', () => {
     const broken = `root = Chart("line", [{2025年: 1, 营收（元）: 14800, 出生 人口: 954}], "2025年", ["营收（元）", "出生 人口"])`;
 

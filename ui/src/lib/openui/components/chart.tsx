@@ -360,6 +360,23 @@ export function toSpec(props: z.infer<typeof chartProps>): Spec | null {
   };
 }
 
+/**
+ * 数据已经不合法时给出可见错误，避免坐标轴正常、数据却静默清空。
+ * 正常链路会先由中文语法纠偏修好；这里只负责最后一层兜底。
+ */
+export function chartRenderIssue(spec: ReturnType<typeof toSpec>): string | null {
+  if (!spec) {
+    return "图表没有可显示的数据";
+  }
+  if (spec.rows.some((row) => Object.prototype.hasOwnProperty.call(row, "?"))) {
+    return "图表数据字段无法识别，请检查中文键名是否已加引号";
+  }
+  if (spec.series.length === 0) {
+    return "图表没有可用的数值列";
+  }
+  return null;
+}
+
 export const Chart = defineComponent({
   name: "Chart",
   props: chartProps,
@@ -367,11 +384,16 @@ export const Chart = defineComponent({
   component: function ChartView({ props }) {
     const [ref, width] = useWidth();
     const spec = toSpec(props);
+    const issue = chartRenderIssue(spec);
     const pie = spec?.type === "pie" || spec?.type === "donut";
     return (
       <figure className="iui-chart" ref={ref}>
-        {spec && width > 0 ? pie ? <Pie spec={spec} width={width} /> : spec.type === "scatter" ? <Scatter spec={spec} width={width} /> : <Cartesian spec={spec} width={width} /> : <div style={{ height: spec?.height ?? 240 }} />}
-        {spec && !pie && <Legend series={spec.series} />}
+        {issue ? (
+          <div className="iui-chart-error" role="alert">
+            {issue}
+          </div>
+        ) : spec && width > 0 ? pie ? <Pie spec={spec} width={width} /> : spec.type === "scatter" ? <Scatter spec={spec} width={width} /> : <Cartesian spec={spec} width={width} /> : <div style={{ height: spec?.height ?? 240 }} />}
+        {!issue && spec && !pie && <Legend series={spec.series} />}
       </figure>
     );
   },

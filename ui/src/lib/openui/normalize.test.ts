@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeOpenUiProgram } from "./normalize";
+import {
+  normalizeOpenUiProgram,
+  normalizeOpenUiUnicodeSyntax,
+} from "./normalize";
 
 describe("normalizeOpenUiProgram", () => {
   it("rewrites the slash form of @Set", () => {
@@ -131,6 +134,15 @@ describe("normalizeOpenUiProgram — builtin functions in slash form", () => {
 });
 
 describe("normalizeOpenUiProgram — bare object keys", () => {
+  it("quotes bare Chinese keys inside an @Each template", () => {
+    const source =
+      'chartData = @Each(phaseData, "p", {阶段:p.id, 预算:p.budget})';
+
+    expect(normalizeOpenUiUnicodeSyntax(source)).toBe(
+      'chartData = @Each(phaseData, "p", {"阶段":p.id, "预算":p.budget})'
+    );
+  });
+
   it("quotes bare Chinese keys in chart data", () => {
     const source =
       'root = Chart("line", [{年: 2016, 出生率: 12.95, 结婚率: 8.3}, {年: 2017, 出生率: 12.43, 结婚率: 7.7}], "年", ["出生率", "结婚率"])';

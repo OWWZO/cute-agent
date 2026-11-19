@@ -1,12 +1,15 @@
 import { BuiltinActionType, type ActionEvent } from '@openuidev/react-lang';
 
-import { dispatchGenUiAction } from '@/components/genui/genUiActionBus';
+import {
+  dispatchGenUiAction,
+  registerGenUiActionAdapters,
+} from '@/components/genui/genUiActionBus';
 
 /**
  * 把 openui 的 action 事件接到现有的对话发送链路上。
  *
- * 复用 `genUiActionBus`：ChatView 里的 `GenUiActionBridge` 已经注册了 sendMessage / openUrl
- * 适配器（含 busy 拦截与 URL 白名单），这里只做事件格式转换，不重复实现发送逻辑。
+ * 复用 `genUiActionBus`：ChatView 通过 `registerOpenUiSendMessageHandler` 注册
+ * 输入框发送适配器，这里只做事件格式转换，不重复实现发送逻辑。
  * `@Set` / `@Reset` 由 Renderer 内部处理，不会到这里。
  */
 export function dispatchOpenUiAction(event: ActionEvent): void {
@@ -22,6 +25,21 @@ export function dispatchOpenUiAction(event: ActionEvent): void {
     if (!url) return;
     void dispatchGenUiAction({ type: 'open_url', payload: { url, external: true } });
   }
+}
+
+/**
+ * 把 OpenUI 的 @ToAssistant 消息交给当前会话的输入框。
+ * 输入框仍负责忙碌判断、模型参数和发送后的清理。
+ */
+export function registerOpenUiSendMessageHandler(
+  handler: (content: string) => void
+): void {
+  registerGenUiActionAdapters({
+    sendMessage(payload) {
+      const content = payload.content.trim();
+      if (content) handler(content);
+    },
+  });
 }
 
 function composeContinueMessage(event: ActionEvent): string {

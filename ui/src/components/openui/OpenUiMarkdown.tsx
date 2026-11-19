@@ -2,7 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ActionEvent, ParseResult } from '@openuidev/react-lang';
 
 import MarkdownRenderer from '@/components/ActionPanel/MarkdownRenderer';
-import { normalizeOpenUiProgram } from '@/lib/openui/normalize';
+import {
+  normalizeOpenUiProgram,
+  normalizeOpenUiUnicodeSyntax,
+} from '@/lib/openui/normalize';
 import { applyIntents, type ReplaceBlock } from '@/lib/openui/repairIntent';
 import { splitOpenUiSegments } from '@/lib/openui/segments';
 import {
@@ -152,10 +155,21 @@ function OpenUiSegment({
   // 模型常把 action 写成 `@//set/(` 这类路径形态，parser 会在那一行直接中断，
   // 整段被判 incomplete。这是纯形态错误，字符串替换就能掰正，不必花钱打后端。
   // 只有「原文不可渲染 + 纠偏后可渲染」才采用，所以永远不会把本就能渲染的程序改坏。
-  const normalized = useMemo(() => normalizeOpenUiProgram(text), [text]);
   const program = useMemo(
-    () => (normalized === null || isRenderableProgram(text) ? text : normalized),
-    [text, normalized]
+    () => {
+      // 中文键是否丢字段与原程序能否解析无关：parser 会把裸中文键静默改成 "?"。
+      // 只要纯中文语法纠偏结果可渲染，就必须优先采用。
+      const unicodeNormalized = normalizeOpenUiUnicodeSyntax(text);
+      if (
+        unicodeNormalized !== null &&
+        isRenderableProgram(unicodeNormalized)
+      ) {
+        return unicodeNormalized;
+      }
+      const normalized = normalizeOpenUiProgram(text);
+      return normalized === null || isRenderableProgram(text) ? text : normalized;
+    },
+    [text]
   );
   const repaired =
     selectRepairForSource(text, repairResult) ?? repairedCache.get(text) ?? null;

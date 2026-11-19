@@ -188,6 +188,20 @@ function normalizeChineseObjectSyntax(text: string, markRewritten: () => void): 
 }
 
 /**
+ * 只修正中文对象键和中文成员访问，不改 action、函数名或展示文本。
+ *
+ * <p>Parser 遇到未加引号的中文键不会报错，而是静默生成 `{"?": ...}`；因此
+ * 即使原文仍能解析，也必须优先尝试这类确定的 Unicode 语法纠偏。</p>
+ */
+export function normalizeOpenUiUnicodeSyntax(text: string): string | null {
+  let rewritten = false;
+  const out = normalizeChineseObjectSyntax(text, () => {
+    rewritten = true;
+  });
+  return rewritten ? out : null;
+}
+
+/**
  * 把程序体里写歪的地方改回规范写法。
  *
  * <p>返回 null 表示"没动过"，调用方据此跳过后续判断。只认 {@link ACTION_STEPS} /
@@ -213,9 +227,11 @@ export function normalizeOpenUiProgram(text: string): string | null {
     return `${prefix}"${TEXT_MAX_SIZE}"`;
   });
 
-  const out = normalizeChineseObjectSyntax(withText, () => {
+  const unicodeNormalized = normalizeOpenUiUnicodeSyntax(withText);
+  const out = unicodeNormalized ?? withText;
+  if (unicodeNormalized !== null) {
     rewritten = true;
-  });
+  }
 
   return rewritten ? out : null;
 }
