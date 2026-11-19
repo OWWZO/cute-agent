@@ -77,9 +77,11 @@ public interface ExecutionLedgerQueryService {
     List<ExecutionRunDetail> queryRunDetails(List<DialogueRunView> runs);
 
     /**
-     * 按 runId 批量读取最后一次 LLM 的上下文用量快照，供会话摘要页恢复 ContextRing。
+     * 按 runId 批量读取最后一次 LLM 的上下文用量快照，供会话摘要和详情恢复 ContextRing。
      * <p>只查询 usage 相关列，不加载响应正文、工具调用、产物或会话消息；
-     * {@code runIds} 为空时返回空 Map。</p>
+     * 优先使用实测 prompt tokens；没有实测值时统一回退到估算值并标记
+     * {@code source=estimate}，避免摘要与回放采用不同口径。</p>
+     * <p>{@code runIds} 为空时返回空 Map。</p>
      */
     Map<Long, ContextUsagePayload> queryRunContextUsage(List<Long> runIds);
 

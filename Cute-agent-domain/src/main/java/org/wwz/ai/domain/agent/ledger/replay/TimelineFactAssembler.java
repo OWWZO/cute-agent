@@ -78,28 +78,12 @@ public final class TimelineFactAssembler {
                 || hasEventData(view)) {
             return;
         }
-        SummaryReplayResultResolver.ResolvedSummary summary =
-                SummaryReplayResultResolver.resolve(run.getFinalSummaryText());
-        Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("requestId", run.getRequestId());
-        resultMap.put("messageId", run.getRequestId() + ":summary");
-        resultMap.put("messageType", "result");
-        resultMap.put("isFinal", true);
-        resultMap.put("finish", true);
-        resultMap.put("result", summary.getSummaryText());
-        resultMap.put("taskSummary", summary.getSummaryText());
-        if (!summary.getArtifactKeys().isEmpty()) {
-            resultMap.put("artifactKeys", summary.getArtifactKeys());
-        }
-
-        Map<String, Object> eventData = new LinkedHashMap<>();
-        eventData.put("taskId", run.getRequestId() + "-summary");
-        eventData.put("taskOrder", 1);
-        eventData.put("messageType", "task");
-        eventData.put("messageOrder", 1);
-        eventData.put("messageId", run.getRequestId() + ":summary");
-        eventData.put("resultMap", resultMap);
-        payload(view).put("eventData", eventData);
+        payload(view).put("eventData", RunFinalEventAssembler.eventData(
+                run,
+                run.getRequestId() + "-summary",
+                1,
+                1
+        ));
     }
 
     private static boolean hasEventData(TimelineItemView view) {

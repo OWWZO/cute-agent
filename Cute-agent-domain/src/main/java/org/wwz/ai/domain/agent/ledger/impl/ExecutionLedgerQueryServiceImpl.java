@@ -185,8 +185,10 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
             Integer promptTokens = usage.getPromptTokens() != null && usage.getPromptTokens() > 0
                     ? usage.getPromptTokens()
                     : null;
-            // 摘要页只显示实测 prompt_tokens；没有实测值时保持未测量，不伪造估算值。
-            if (promptTokens == null) {
+            int used = promptTokens != null
+                    ? promptTokens
+                    : estimated > 0 ? estimated : sys + tools + history;
+            if (used <= 0) {
                 continue;
             }
             result.put(usage.getRunId(), ContextUsagePayload.builder()
@@ -195,11 +197,13 @@ public class ExecutionLedgerQueryServiceImpl implements ExecutionLedgerQueryServ
                     .history(history)
                     .files(0)
                     .max(resolveContextWindow(usage.getModelName()))
-                    .used(promptTokens)
+                    .used(used)
                     .estimatedTotal(estimated > 0 ? estimated : sys + tools + history)
                     .promptTokens(promptTokens)
-                    .completionTokens(usage.getCompletionTokens())
-                    .source("measured")
+                    .completionTokens(usage.getCompletionTokens() != null && usage.getCompletionTokens() > 0
+                            ? usage.getCompletionTokens()
+                            : null)
+                    .source(promptTokens != null ? "measured" : "estimate")
                     .build());
         }
         return result;

@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.wwz.ai.api.response.Response;
 import org.wwz.ai.application.agent.featured.FeaturedConversationPublicQueryApplicationService;
-import org.wwz.ai.application.agent.stream.AgentStreamFrameMapper;
 import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryDetail;
 import org.wwz.ai.domain.agent.ledger.model.ConversationHistoryPage;
 import org.wwz.ai.domain.agent.ledger.model.ConversationRunReplay;
@@ -16,11 +15,7 @@ import org.wwz.ai.domain.agent.ledger.model.ConversationRunSummary;
 import org.wwz.ai.domain.agent.ledger.model.FeaturedConversationCardView;
 import org.wwz.ai.domain.agent.ledger.model.FeaturedConversationPageResult;
 import org.wwz.ai.domain.agent.ledger.model.FeaturedConversationPublicDetail;
-import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
-import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
-import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
-import org.wwz.ai.trigger.http.agent.mapper.AgentStreamResponseMapper;
-import org.wwz.ai.trigger.http.agent.vo.AgentStreamResponseVO;
+import org.wwz.ai.trigger.http.agent.mapper.ConversationRunReplayVoMapper;
 import org.wwz.ai.trigger.http.agent.vo.ConversationHistoryPageRespVO;
 import org.wwz.ai.trigger.http.agent.vo.FeaturedConversationCardRespVO;
 import org.wwz.ai.trigger.http.agent.vo.FeaturedConversationDetailRespVO;
@@ -42,12 +37,6 @@ public class AgentFeaturedConversationController {
 
     @Resource
     private FeaturedConversationPublicQueryApplicationService featuredConversationPublicQueryApplicationService;
-
-    @Resource
-    private AgentStreamFrameMapper agentStreamFrameMapper = new AgentStreamFrameMapper();
-
-    @Resource
-    private AgentStreamResponseMapper agentStreamResponseMapper = new AgentStreamResponseMapper();
 
     @GetMapping("/home")
     public Response<List<FeaturedConversationCardRespVO>> home(
@@ -115,7 +104,7 @@ public class AgentFeaturedConversationController {
             return Response.<ConversationRunReplayRespVO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
-                    .data(toReplayRespVO(replay))
+                    .data(ConversationRunReplayVoMapper.toRespVO(replay))
                     .build();
         } catch (Exception exception) {
             return Response.<ConversationRunReplayRespVO>builder()
@@ -170,7 +159,7 @@ public class AgentFeaturedConversationController {
             return ConversationHistoryPageRespVO.builder()
                     .sessionId(legacyDetail.getSessionId())
                     .title(legacyDetail.getTitle())
-                    .status(resolveStatusLabel(legacyDetail.getStatus()))
+                    .status(ConversationRunReplayVoMapper.toStatusLabel(legacyDetail.getStatus()))
                     .deepThink(legacyDetail.getDeepThink())
                     .runCount(legacyDetail.getRunCount())
                     .finishedRunCount(legacyDetail.getFinishedRunCount())
@@ -185,7 +174,7 @@ public class AgentFeaturedConversationController {
         return ConversationHistoryPageRespVO.builder()
                 .sessionId(page.getSessionId())
                 .title(page.getTitle())
-                .status(resolveStatusLabel(page.getStatus()))
+                .status(ConversationRunReplayVoMapper.toStatusLabel(page.getStatus()))
                 .deepThink(page.getDeepThink())
                 .model(page.getModel())
                 .thinking(page.getThinking())
@@ -209,7 +198,7 @@ public class AgentFeaturedConversationController {
     private ConversationRunSummaryRespVO toLegacyRunSummary(ConversationHistoryDetail.ConversationRunDetail run) {
         return ConversationRunSummaryRespVO.builder()
                 .requestId(run.getRequestId())
-                .status(resolveStatusLabel(run.getStatus()))
+                .status(ConversationRunReplayVoMapper.toStatusLabel(run.getStatus()))
                 .queryPreview(run.getQueryText())
                 .finalSummaryPreview(run.getFinalSummaryText())
                 .finalSummaryText(run.getFinalSummaryText())
@@ -222,7 +211,7 @@ public class AgentFeaturedConversationController {
         return ConversationRunSummaryRespVO.builder()
                 .requestId(run.getRequestId())
                 .entryAgent(run.getEntryAgent())
-                .status(resolveStatusLabel(run.getStatus()))
+                .status(ConversationRunReplayVoMapper.toStatusLabel(run.getStatus()))
                 .queryPreview(run.getQueryPreview())
                 .finalSummaryPreview(run.getFinalSummaryPreview())
                 .finalSummaryText(run.getFinalSummaryText())
@@ -237,57 +226,4 @@ public class AgentFeaturedConversationController {
                 .build();
     }
 
-    private ConversationRunReplayRespVO toReplayRespVO(ConversationRunReplay replay) {
-        if (replay == null || replay.getRun() == null) {
-            return null;
-        }
-        var run = replay.getRun();
-        return ConversationRunReplayRespVO.builder()
-                .runUid(run.getRunUid())
-                .requestId(run.getRequestId())
-                .sessionId(run.getSessionId())
-                .entryAgent(run.getEntryAgent())
-                .status(resolveStatusLabel(run.getStatus()))
-                .queryText(run.getQueryText())
-                .finalSummaryText(run.getFinalSummaryText())
-                .llmCallCount(run.getLlmCallCount())
-                .toolCallCount(run.getToolCallCount())
-                .artifactCount(run.getArtifactCount())
-                .errorCode(run.getErrorCode())
-                .errorMsg(run.getErrorMsg())
-                .startedAt(run.getStartedAt())
-                .finishedAt(run.getFinishedAt())
-                .durationMs(run.getDurationMs())
-                .contextUsage(replay.getContextUsage())
-                .replayFrames(TimelineItemProjection.hasRenderableEventData(replay.getTimelineItems())
-                        ? List.of()
-                        : toResponseFrames(replay.getReplayFrames()))
-                .timelineItems(replay.getTimelineItems())
-                .build();
-    }
-
-    private List<AgentStreamResponseVO> toResponseFrames(List<AgentStreamResult> frames) {
-        if (frames == null) {
-            return List.of();
-        }
-        return frames.stream()
-                .map(agentStreamFrameMapper::toFrame)
-                .map(agentStreamResponseMapper::toResponse)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * 对外统一返回稳定可读状态，避免前端再维护第二套映射。
-     */
-    private String resolveStatusLabel(Integer status) {
-        int normalized = status == null ? ExecutionLedgerConstants.STATUS_RUNNING : status;
-        return switch (normalized) {
-            case ExecutionLedgerConstants.STATUS_SUCCESS -> "SUCCESS";
-            case ExecutionLedgerConstants.STATUS_FAILED -> "FAILED";
-            case ExecutionLedgerConstants.STATUS_TIMEOUT -> "TIMEOUT";
-            case ExecutionLedgerConstants.STATUS_STOPPED -> "STOPPED";
-            case ExecutionLedgerConstants.STATUS_WAITING_INPUT -> "WAITING_INPUT";
-            default -> "RUNNING";
-        };
-    }
 }

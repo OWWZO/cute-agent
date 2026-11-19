@@ -260,8 +260,13 @@ abstract class AbstractToolInvocationProjector implements ToolInvocationProjecto
         response.put("messageId", resolveMessageId(invocation, messageType));
         response.put("messageTime", resolveMessageTime(invocation));
         response.put("messageType", messageType);
-        response.put("isFinal", true);
-        response.put("finish", false);
+        boolean running = invocation != null
+                && Integer.valueOf(ExecutionLedgerConstants.STATUS_RUNNING).equals(invocation.getStatus());
+        response.put("isFinal", !running);
+        response.put("finish", !running);
+        if (running) {
+            response.put("status", "running");
+        }
         return response;
     }
 

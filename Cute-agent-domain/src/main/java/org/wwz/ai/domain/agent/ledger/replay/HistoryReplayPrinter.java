@@ -2,12 +2,10 @@ package org.wwz.ai.domain.agent.ledger.replay;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.wwz.ai.domain.agent.cute.model.constant.Constants;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -41,58 +39,14 @@ public class HistoryReplayPrinter {
             if (!(resultMap instanceof Map<?, ?> nestedMap)) {
                 continue;
             }
-            Object messageType = nestedMap.get("messageType");
-            // task_summary 是过程摘要，不是终答；只有 run-final result 才能阻止兜底。
-            if (!"result".equals(messageType)) {
-                continue;
+            if (RunFinalEventAssembler.isReadableConclusion(nestedMap, eventDataMap)) {
+                return true;
             }
-            // 子 Agent 的嵌套 result 不能冒充主会话结论，否则底部的 fallback 会被吞掉。
-            if (hasNestedSubAgentParent(eventDataMap) || hasNestedSubAgentParent(nestedMap)) {
-                continue;
-            }
-            // 显式 isFinal=false 的是过程帧，同样不能作为最终结论。
-            if (nestedMap.containsKey("isFinal") && !Boolean.TRUE.equals(nestedMap.get("isFinal"))) {
-                continue;
-            }
-            return true;
         }
         return false;
     }
 
-    private boolean hasNestedSubAgentParent(Map<?, ?> resultMap) {
-        Object parentToolUseId = resultMap.get("parentToolUseId");
-        return parentToolUseId != null && StringUtils.isNotBlank(String.valueOf(parentToolUseId));
-    }
-
     private AgentStreamResult buildFallbackConclusion(DialogueRunView run) {
-        SummaryReplayResultResolver.ResolvedSummary resolvedSummary =
-                SummaryReplayResultResolver.resolve(run.getFinalSummaryText());
-        Map<String, Object> nestedResultMap = new LinkedHashMap<>();
-        nestedResultMap.put("messageType", "result");
-        nestedResultMap.put("isFinal", true);
-        nestedResultMap.put("taskSummary", resolvedSummary.getSummaryText());
-        nestedResultMap.put("result", resolvedSummary.getSummaryText());
-
-        Map<String, Object> eventData = new LinkedHashMap<>();
-        eventData.put("taskId", run.getRequestId() + "-summary");
-        eventData.put("taskOrder", 1);
-        eventData.put("messageType", "task");
-        eventData.put("messageOrder", 1);
-        eventData.put("messageId", run.getRequestId() + "-summary");
-        eventData.put("resultMap", nestedResultMap);
-
-        Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("agentType", "history");
-        resultMap.put("multiAgent", new LinkedHashMap<>());
-        resultMap.put("eventData", eventData);
-
-        return AgentStreamResult.builder()
-                .status(Constants.SUCCESS)
-                .complete(true)
-                .requestId(run.getRequestId())
-                .eventData(resultMap)
-                .contentDelta(resolvedSummary.getSummaryText())
-                .content(resolvedSummary.getSummaryText())
-                .build();
+        return RunFinalEventAssembler.streamResult(run);
     }
 }

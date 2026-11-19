@@ -14,7 +14,6 @@ import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
-import org.wwz.ai.domain.agent.ledger.model.LlmInvocationView;
 import org.wwz.ai.domain.agent.ledger.model.RunCursor;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
 import org.wwz.ai.domain.agent.ledger.model.replay.ReplayFactBundle;
@@ -24,8 +23,6 @@ import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemView;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.domain.agent.runtime.llm.ContextUsagePayload;
-import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
-import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -58,26 +55,22 @@ public class ConversationHistoryReplayService {
     private final ExecutionLedgerQueryService executionLedgerQueryService;
     private final ReplayProjector replayProjector;
     private final HistoryReplayPrinter historyReplayPrinter;
-    private final LlmModelCatalog llmModelCatalog;
     private final ITimelineItemRepository timelineItemRepository;
 
     public ConversationHistoryReplayService(ExecutionLedgerQueryService executionLedgerQueryService,
                                             ReplayProjector replayProjector,
-                                            HistoryReplayPrinter historyReplayPrinter,
-                                            LlmModelCatalog llmModelCatalog) {
-        this(executionLedgerQueryService, replayProjector, historyReplayPrinter, llmModelCatalog, null);
+                                            HistoryReplayPrinter historyReplayPrinter) {
+        this(executionLedgerQueryService, replayProjector, historyReplayPrinter, null);
     }
 
     @Autowired
     public ConversationHistoryReplayService(ExecutionLedgerQueryService executionLedgerQueryService,
                                             ReplayProjector replayProjector,
                                             HistoryReplayPrinter historyReplayPrinter,
-                                            LlmModelCatalog llmModelCatalog,
                                             ObjectProvider<ITimelineItemRepository> timelineItemRepositoryProvider) {
         this.executionLedgerQueryService = executionLedgerQueryService;
         this.replayProjector = replayProjector;
         this.historyReplayPrinter = historyReplayPrinter;
-        this.llmModelCatalog = llmModelCatalog;
         this.timelineItemRepository = timelineItemRepositoryProvider == null
                 ? null
                 : timelineItemRepositoryProvider.getIfAvailable();
@@ -219,9 +212,11 @@ public class ConversationHistoryReplayService {
                 }
             });
         }
+        Map<Long, ContextUsagePayload> contextUsageByRunId =
+                queryContextUsage(List.of(run));
         return ConversationRunReplay.builder()
                 .run(run)
-                .contextUsage(resolveContextUsage(runDetail.getLlmInvocations()))
+                .contextUsage(run.getId() == null ? null : contextUsageByRunId.get(run.getId()))
                 .replayFrames(readableFrames)
                 .timelineItems(buildTimelineItems(
                         run, readableFrames, runDetail.getArtifacts(), runToolCallIds))
@@ -405,6 +400,7 @@ public class ConversationHistoryReplayService {
                     sessionId, MAX_HISTORY_RUN_COUNT);
         }
         List<ConversationHistoryDetail.ConversationRunDetail> runDetails = new ArrayList<>();
+        Map<Long, ContextUsagePayload> contextUsageByRunId = queryContextUsage(runs);
         HistoryModeSnapshot historyModeSnapshot = HistoryModeSnapshot.defaultReact();
         // 按 requestId 关联批量明细，避免依赖 queryRunDetails 的返回顺序造成跨 run 串数据。
         Map<String, ExecutionRunDetail> runDetailByRequestId = new HashMap<>();
@@ -438,7 +434,7 @@ public class ConversationHistoryReplayService {
                         .finalSummaryText(run.getFinalSummaryText())
                         .startedAt(run.getStartedAt())
                         .finishedAt(run.getFinishedAt())
-                        .contextUsage(resolveContextUsage(runDetail == null ? List.of() : runDetail.getLlmInvocations()))
+                        .contextUsage(run.getId() == null ? null : contextUsageByRunId.get(run.getId()))
                         .replayFrames(historyReplayPrinter == null
                                 ? replayFrames
                                 : historyReplayPrinter.ensureReadableConclusion(run, replayFrames))
@@ -536,59 +532,20 @@ public class ConversationHistoryReplayService {
                 StringUtils.trimToEmpty(run.getEntryAgent()));
     }
 
-    private ContextUsagePayload resolveContextUsage(List<LlmInvocationView> invocations) {
-        if (CollectionUtils.isEmpty(invocations)) {
-            return null;
+    private Map<Long, ContextUsagePayload> queryContextUsage(List<DialogueRunView> runs) {
+        if (executionLedgerQueryService == null || CollectionUtils.isEmpty(runs)) {
+            return Map.of();
         }
-        for (int index = invocations.size() - 1; index >= 0; index -= 1) {
-            LlmInvocationView invocation = invocations.get(index);
-            if (invocation == null) {
-                continue;
-            }
-            int sys = nonNegative(invocation.getEstSystemTokens());
-            int tools = nonNegative(invocation.getEstToolTokens());
-            int history = nonNegative(invocation.getEstMessageTokens());
-            int estimated = nonNegative(invocation.getEstTotalTokens());
-            Integer promptTokens = invocation.getPromptTokens();
-            Integer completionTokens = invocation.getCompletionTokens();
-            int used = promptTokens != null && promptTokens > 0
-                    ? promptTokens
-                    : estimated > 0 ? estimated : sys + tools + history;
-            if (used <= 0) {
-                continue;
-            }
-            return ContextUsagePayload.builder()
-                    .sys(sys)
-                    .tools(tools)
-                    .history(history)
-                    .files(0)
-                    .max(resolveContextWindow(invocation.getModelName()))
-                    .used(used)
-                    .estimatedTotal(estimated > 0 ? estimated : sys + tools + history)
-                    .promptTokens(promptTokens != null && promptTokens > 0 ? promptTokens : null)
-                    .completionTokens(completionTokens != null && completionTokens > 0 ? completionTokens : null)
-                    .source(promptTokens != null && promptTokens > 0 ? "measured" : "estimate")
-                    .build();
+        List<Long> runIds = runs.stream()
+                .filter(run -> run != null && run.getId() != null)
+                .map(DialogueRunView::getId)
+                .distinct()
+                .toList();
+        if (runIds.isEmpty()) {
+            return Map.of();
         }
-        return null;
-    }
-
-    private int nonNegative(Integer value) {
-        return value == null ? 0 : Math.max(0, value);
-    }
-
-    private int resolveContextWindow(String modelName) {
-        if (StringUtils.isNotBlank(modelName) && llmModelCatalog != null) {
-            try {
-                LLMSettings settings = llmModelCatalog.resolve(modelName).orElse(null);
-                if (settings != null && settings.getMaxInputTokens() > 0) {
-                    return settings.getMaxInputTokens();
-                }
-            } catch (Exception ignored) {
-                // 历史回放不能因模型目录暂时不可用而失败。
-            }
-        }
-        return 100_000;
+        Map<Long, ContextUsagePayload> usage = executionLedgerQueryService.queryRunContextUsage(runIds);
+        return usage == null ? Map.of() : usage;
     }
 
     /** 根据账本入口恢复仅有的两种 Agent 模式。 */

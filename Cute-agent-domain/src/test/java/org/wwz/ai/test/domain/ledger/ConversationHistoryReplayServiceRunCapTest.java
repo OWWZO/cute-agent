@@ -54,7 +54,7 @@ public class ConversationHistoryReplayServiceRunCapTest {
         when(projector.projectHistoryFrames(any())).thenReturn(List.of());
 
         ConversationHistoryReplayService service =
-                new ConversationHistoryReplayService(ledger, projector, null, null);
+                new ConversationHistoryReplayService(ledger, projector, null);
         ConversationHistoryDetail detail = service.queryConversationHistory("s-long");
 
         Assert.assertEquals(ConversationHistoryReplayService.MAX_HISTORY_RUN_COUNT,
@@ -82,7 +82,7 @@ public class ConversationHistoryReplayServiceRunCapTest {
                 1L, ContextUsagePayload.builder().max(128000).promptTokens(13100).used(13100).build()));
 
         ConversationHistoryReplayService service =
-                new ConversationHistoryReplayService(ledger, null, null, null);
+                new ConversationHistoryReplayService(ledger, null, null);
         ConversationHistoryPage page = service.queryConversationHistoryPage("s-context", 20, null);
         ConversationRunSummary summary = page.getRuns().get(0);
 

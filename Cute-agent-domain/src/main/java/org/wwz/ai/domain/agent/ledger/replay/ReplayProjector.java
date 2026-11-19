@@ -420,31 +420,14 @@ public class ReplayProjector {
             return;
         }
 
-        // 某些失败、旧数据或仅有 tool 事实的 run 没有显式 result 事件，使用 run 终态摘要补齐前端结论区。
-        Map<String, Object> resultMap = new LinkedHashMap<>();
-        SummaryReplayResultResolver.ResolvedSummary resolvedSummary =
-                SummaryReplayResultResolver.resolve(run.getFinalSummaryText());
-        resultMap.put("requestId", run.getRequestId());
-        resultMap.put("messageId", run.getRequestId() + ":summary");
-        resultMap.put("messageTime", resolveRunMessageTime(run));
-        resultMap.put("messageType", "result");
-        resultMap.put("isFinal", true);
-        resultMap.put("finish", run.getStatus() != null && run.getStatus() != ExecutionLedgerConstants.STATUS_RUNNING);
-        resultMap.put("result", resolvedSummary.getSummaryText());
-        resultMap.put("taskSummary", resolvedSummary.getSummaryText());
-        if (!resolvedSummary.getArtifactKeys().isEmpty()) {
-            resultMap.put("artifactKeys", resolvedSummary.getArtifactKeys());
-        }
-
         String taskId = state.getTaskId();
-        events.add(ProjectedReplayEvent.builder()
-                .taskId(taskId)
-                .taskOrder(state.getTaskOrder().getAndIncrement())
-                .messageId(run.getRequestId() + ":summary")
-                .messageType("task")
-                .messageOrder(state.getAndIncrOrder(taskId + ":result"))
-                .resultMap(resultMap)
-                .build());
+        // 某些失败、旧数据或仅有 tool 事实的 run 没有显式 result 事件，使用 run 终态摘要补齐前端结论区。
+        events.add(RunFinalEventAssembler.projected(
+                run,
+                taskId,
+                state.getTaskOrder().getAndIncrement(),
+                state.getAndIncrOrder(taskId + ":result")
+        ));
     }
 
     private boolean hasResultEvent(List<ProjectedReplayEvent> events) {
@@ -456,50 +439,12 @@ public class ReplayProjector {
             if (resultMap == null) {
                 continue;
             }
-            Object messageType = resultMap.get("messageType");
-            // task_summary 是过程摘要，不是终答。把它当成 result 会阻止 run-final 兜底，
-            // 子 Agent 的内部执行摘要也可能因此被顶到结论区。
-            if (!"result".equals(messageType)) {
-                continue;
+            // task_summary 是过程摘要，子 Agent 嵌套结果也不能冒充主会话终答。
+            if (RunFinalEventAssembler.isReadableConclusion(resultMap)) {
+                return true;
             }
-            // 子 Agent 嵌套 result 不能冒充主会话终答，否则会跳过 run finalSummary 补齐。
-            if (hasNestedSubAgentParent(resultMap)) {
-                continue;
-            }
-            return true;
         }
         return false;
-    }
-
-    private boolean hasNestedSubAgentParent(Map<?, ?> resultMap) {
-        if (resultMap == null || resultMap.isEmpty()) {
-            return false;
-        }
-        if (StringUtils.isNotBlank(stringOrNull(resultMap.get("parentToolUseId")))) {
-            return true;
-        }
-        Object nested = resultMap.get("resultMap");
-        if (nested instanceof Map<?, ?> nestedMap) {
-            return StringUtils.isNotBlank(stringOrNull(nestedMap.get("parentToolUseId")));
-        }
-        return false;
-    }
-
-    private static String stringOrNull(Object value) {
-        return value == null ? null : String.valueOf(value);
-    }
-
-    private String resolveRunMessageTime(DialogueRunView run) {
-        if (run == null) {
-            return String.valueOf(System.currentTimeMillis());
-        }
-        if (run.getFinishedAt() != null) {
-            return String.valueOf(run.getFinishedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli());
-        }
-        if (run.getStartedAt() != null) {
-            return String.valueOf(run.getStartedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli());
-        }
-        return String.valueOf(System.currentTimeMillis());
     }
 
     private String resolveLlmMessageId(LlmInvocationView invocation) {

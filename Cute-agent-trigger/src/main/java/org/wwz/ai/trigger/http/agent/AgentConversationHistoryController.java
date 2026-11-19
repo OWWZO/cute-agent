@@ -9,7 +9,6 @@ import org.wwz.ai.api.response.Response;
 import org.wwz.ai.application.agent.authorization.ConversationSessionAuthorizationService;
 import org.wwz.ai.application.agent.query.ConversationSessionBootstrapApplicationService;
 import org.wwz.ai.application.agent.query.ConversationSessionBootstrapApplicationService.ConversationSessionBootstrap;
-import org.wwz.ai.application.agent.stream.AgentStreamFrameMapper;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.channel.model.ChannelChatType;
 import org.wwz.ai.domain.agent.channel.policy.ChannelSessionKey;
@@ -22,14 +21,10 @@ import org.wwz.ai.domain.agent.ledger.model.ConversationRunReplay;
 import org.wwz.ai.domain.agent.ledger.model.ConversationRunSummary;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
-import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerQueryService;
 import org.wwz.ai.domain.agent.ledger.replay.ArtifactRelativePath;
 import org.wwz.ai.domain.agent.ledger.replay.ConversationHistoryReplayService;
-import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
-import org.wwz.ai.domain.agent.runtime.stream.AgentStreamResult;
-import org.wwz.ai.trigger.http.agent.mapper.AgentStreamResponseMapper;
-import org.wwz.ai.trigger.http.agent.vo.AgentStreamResponseVO;
+import org.wwz.ai.trigger.http.agent.mapper.ConversationRunReplayVoMapper;
 import org.wwz.ai.trigger.http.agent.vo.ArtifactReferenceRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationHistoryPageRespVO;
 import org.wwz.ai.trigger.http.agent.vo.ConversationSessionBootstrapRespVO;
@@ -65,12 +60,6 @@ public class AgentConversationHistoryController {
 
     @Resource
     private ConversationSessionBootstrapApplicationService conversationSessionBootstrapApplicationService;
-
-    @Resource
-    private AgentStreamFrameMapper agentStreamFrameMapper = new AgentStreamFrameMapper();
-
-    @Resource
-    private AgentStreamResponseMapper agentStreamResponseMapper = new AgentStreamResponseMapper();
 
     /**
      * 会话切换 bootstrap：一次返回恢复会话所需的全部数据，替代 detail + files + 三类 HITL pending 五个串行请求。
@@ -164,7 +153,7 @@ public class AgentConversationHistoryController {
                     .info(ResponseCode.SUCCESS.getInfo())
                     .data(ConversationSessionStatusRespVO.builder()
                             .sessionId(session.getSessionId())
-                            .status(resolveStatusLabel(session.getStatus()))
+                            .status(ConversationRunReplayVoMapper.toStatusLabel(session.getStatus()))
                             .latestRequestId(session.getLatestRequestId())
                             .bindingId(session.getBindingId())
                             .build())
@@ -278,7 +267,7 @@ public class AgentConversationHistoryController {
             return Response.<ConversationRunReplayRespVO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
-                    .data(toReplayRespVO(replay))
+                    .data(ConversationRunReplayVoMapper.toRespVO(replay))
                     .build();
         } catch (Exception e) {
             return Response.<ConversationRunReplayRespVO>builder()
@@ -299,7 +288,7 @@ public class AgentConversationHistoryController {
         return ConversationSessionRespVO.builder()
                 .sessionId(session.getSessionId())
                 .title(session.getTitle())
-                .status(resolveStatusLabel(session.getStatus()))
+                .status(ConversationRunReplayVoMapper.toStatusLabel(session.getStatus()))
                 .sessionKind(session.getSessionKind())
                 .parentSessionId(session.getParentSessionId())
                 .rootSessionId(session.getRootSessionId())
@@ -324,7 +313,7 @@ public class AgentConversationHistoryController {
         return ConversationHistoryPageRespVO.builder()
                 .sessionId(page.getSessionId())
                 .title(page.getTitle())
-                .status(resolveStatusLabel(page.getStatus()))
+                .status(ConversationRunReplayVoMapper.toStatusLabel(page.getStatus()))
                 .deepThink(page.getDeepThink())
                 .model(page.getModel())
                 .thinking(page.getThinking())
@@ -352,7 +341,7 @@ public class AgentConversationHistoryController {
         return ConversationRunSummaryRespVO.builder()
                 .requestId(run.getRequestId())
                 .entryAgent(run.getEntryAgent())
-                .status(resolveStatusLabel(run.getStatus()))
+                .status(ConversationRunReplayVoMapper.toStatusLabel(run.getStatus()))
                 .queryPreview(run.getQueryPreview())
                 .finalSummaryPreview(run.getFinalSummaryPreview())
                 .finalSummaryText(run.getFinalSummaryText())
@@ -365,45 +354,6 @@ public class AgentConversationHistoryController {
                 .durationMs(run.getDurationMs())
                 .hasReplay(run.getHasReplay())
                 .build();
-    }
-
-    private ConversationRunReplayRespVO toReplayRespVO(ConversationRunReplay replay) {
-        DialogueRunView run = replay == null ? null : replay.getRun();
-        if (run == null) {
-            return null;
-        }
-        return ConversationRunReplayRespVO.builder()
-                .runUid(run.getRunUid())
-                .requestId(run.getRequestId())
-                .sessionId(run.getSessionId())
-                .entryAgent(run.getEntryAgent())
-                .status(resolveStatusLabel(run.getStatus()))
-                .queryText(run.getQueryText())
-                .finalSummaryText(run.getFinalSummaryText())
-                .llmCallCount(run.getLlmCallCount())
-                .toolCallCount(run.getToolCallCount())
-                .artifactCount(run.getArtifactCount())
-                .errorCode(run.getErrorCode())
-                .errorMsg(run.getErrorMsg())
-                .startedAt(run.getStartedAt())
-                .finishedAt(run.getFinishedAt())
-                .durationMs(run.getDurationMs())
-                .contextUsage(replay.getContextUsage())
-                .replayFrames(TimelineItemProjection.hasRenderableEventData(replay.getTimelineItems())
-                        ? List.of()
-                        : toResponseFrames(replay.getReplayFrames()))
-                .timelineItems(replay.getTimelineItems())
-                .build();
-    }
-
-    private List<AgentStreamResponseVO> toResponseFrames(List<AgentStreamResult> frames) {
-        if (frames == null) {
-            return List.of();
-        }
-        return frames.stream()
-                .map(agentStreamFrameMapper::toFrame)
-                .map(agentStreamResponseMapper::toResponse)
-                .collect(Collectors.toList());
     }
 
     private ConversationSessionBootstrapRespVO toBootstrapRespVO(ConversationSessionBootstrap bootstrap) {
@@ -429,7 +379,8 @@ public class AgentConversationHistoryController {
             return Map.of();
         }
         Map<String, ConversationRunReplayRespVO> result = new LinkedHashMap<>();
-        replays.forEach((requestId, replay) -> result.put(requestId, toReplayRespVO(replay)));
+        replays.forEach((requestId, replay) ->
+                result.put(requestId, ConversationRunReplayVoMapper.toRespVO(replay)));
         return result;
     }
 
@@ -459,18 +410,4 @@ public class AgentConversationHistoryController {
                 .build();
     }
 
-    /**
-     * 对外接口统一返回可读终态，避免前端和调试工具重复维护状态枚举映射。
-     */
-    private String resolveStatusLabel(Integer status) {
-        int normalized = status == null ? ExecutionLedgerConstants.STATUS_RUNNING : status;
-        return switch (normalized) {
-            case ExecutionLedgerConstants.STATUS_SUCCESS -> "SUCCESS";
-            case ExecutionLedgerConstants.STATUS_FAILED -> "FAILED";
-            case ExecutionLedgerConstants.STATUS_TIMEOUT -> "TIMEOUT";
-            case ExecutionLedgerConstants.STATUS_STOPPED -> "STOPPED";
-            case ExecutionLedgerConstants.STATUS_WAITING_INPUT -> "WAITING_INPUT";
-            default -> "RUNNING";
-        };
-    }
 }

@@ -10,7 +10,6 @@ import org.wwz.ai.domain.agent.ledger.replay.ReplayProjector;
 import org.wwz.ai.domain.agent.ledger.replay.projector.ToolInvocationProjector;
 import org.wwz.ai.domain.agent.ledger.replay.projector.ToolInvocationProjectorRegistry;
 import org.wwz.ai.domain.agent.ledger.timeline.ITimelineItemRepository;
-import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
 import org.wwz.ai.domain.agent.runtime.askuser.IUserQuestionRepository;
 import org.wwz.ai.domain.agent.runtime.desktopcontrol.IDesktopControlRepository;
 import org.wwz.ai.domain.agent.ledger.replay.projector.impl.CanvasPublishToolInvocationProjector;
@@ -118,13 +117,11 @@ public class ReplayProjectorAutoConfiguration {
             ExecutionLedgerQueryService executionLedgerQueryService,
             ReplayProjector replayProjector,
             HistoryReplayPrinter historyReplayPrinter,
-            LlmModelCatalog llmModelCatalog,
             ObjectProvider<ITimelineItemRepository> timelineItemRepositoryProvider) {
         return new ConversationHistoryReplayService(
                 executionLedgerQueryService,
                 replayProjector,
                 historyReplayPrinter,
-                llmModelCatalog,
                 timelineItemRepositoryProvider
         );
     }
