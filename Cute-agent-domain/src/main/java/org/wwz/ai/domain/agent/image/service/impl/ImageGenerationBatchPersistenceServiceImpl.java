@@ -9,7 +9,7 @@ import org.wwz.ai.domain.agent.image.model.WorkspaceImageFile;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactRecordCommand;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ImageGenerationToolOutput;
-import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolFileRef;
+import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolFileRefMapper;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputPersistCommand;
 import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.image.service.IImageGenerationBatchPersistenceService;
@@ -60,7 +60,7 @@ public class ImageGenerationBatchPersistenceServiceImpl implements IImageGenerat
                         .sourceImageCount(result.getSourceImageCount())
                         .maskImageCount(result.getMaskImageCount())
                         .usedFallback(result.getUsedFallback())
-                        .fileRefs(toToolFileRefs(files))
+                        .fileRefs(ToolFileRefMapper.fromWorkspaceImageFiles(files))
                         .build())
                 .build());
         agentExecutionRecorder.recordArtifactsOrThrow(buildArtifactRecords(requestId, toolCallId, files));
@@ -77,22 +77,6 @@ public class ImageGenerationBatchPersistenceServiceImpl implements IImageGenerat
             }
         }
         return valid;
-    }
-
-    private List<ToolFileRef> toToolFileRefs(List<WorkspaceImageFile> files) {
-        List<ToolFileRef> fileRefs = new ArrayList<>(files.size());
-        for (WorkspaceImageFile file : files) {
-            fileRefs.add(ToolFileRef.builder()
-                    .fileName(file.getFileName())
-                    .downloadUrl(file.getDownloadUrl())
-                    .previewUrl(file.getPreviewUrl())
-                    .ossUrl(file.getOssUrl())
-                    .domainUrl(file.getDomainUrl())
-                    .fileSize(file.getFileSize())
-                    .mimeType(file.getMimeType())
-                    .build());
-        }
-        return fileRefs;
     }
 
     private List<ArtifactRecordCommand> buildArtifactRecords(String requestId,

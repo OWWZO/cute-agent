@@ -297,8 +297,9 @@ async def preview_file(file_id: str, file_name: str):
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
     }
     if lower_name.endswith((".html", ".htm")):
+        # Agent 生成的 HTML 需要直接操作宿主页面的输入框和发送动作。
         common_headers["Content-Security-Policy"] = (
-            "sandbox allow-scripts allow-forms allow-popups"
+            "sandbox allow-scripts allow-forms allow-popups allow-same-origin"
         )
     injected_content = _build_html_preview_content(file_info.file_path, file_name)
     if injected_content is not None:

@@ -9,9 +9,8 @@ import org.wwz.ai.domain.agent.adapter.port.RemoteStreamRequest;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamSession;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.FileArtifactUploader;
-import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactBinding;
+import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactFileInfo;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
-import org.wwz.ai.domain.agent.runtime.dto.File;
 import org.wwz.ai.domain.agent.runtime.dto.FileRequest;
 import org.wwz.ai.domain.agent.runtime.dto.MultiModalAgentRequest;
 import org.wwz.ai.domain.agent.runtime.dto.MultiModalAgentResponse;
@@ -25,7 +24,6 @@ import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolFileRefMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -539,31 +537,10 @@ public class MultiModalAgent implements BaseTool {
         return normalized.substring(0, 120) + "...";
     }
 
-    /**
-     * 优先复用 artifact 账本中已经登记的稳定文件信息，不重复造一套文件来源。
-     */
     private List<Map<String, Object>> buildFileInfo(AgentContext agentContext, ToolArtifactSource artifactSource) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        if (artifactSource == null || !StringUtils.hasText(artifactSource.getToolCallId())) {
-            return result;
-        }
-        List<ToolArtifactBinding> bindings = agentContext.getArtifactBindingsByToolCallId(artifactSource.getToolCallId());
-        if (bindings == null) {
-            return result;
-        }
-        for (ToolArtifactBinding binding : bindings) {
-            if (binding == null || binding.getFile() == null) {
-                continue;
-            }
-            File file = binding.getFile();
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("fileName", file.getFileName());
-            item.put("ossUrl", file.getOssUrl());
-            item.put("domainUrl", file.getDomainUrl());
-            item.put("fileSize", file.getFileSize());
-            result.add(item);
-        }
-        return result;
+        return artifactSource == null
+                ? List.of()
+                : ToolArtifactFileInfo.fromToolCall(agentContext, artifactSource.getToolCallId());
     }
 
 }

@@ -15,7 +15,7 @@ import org.wwz.ai.domain.agent.image.model.ImageGenerationExecuteCommand;
 import org.wwz.ai.domain.agent.image.model.ImageGenerationExecutionResult;
 import org.wwz.ai.domain.agent.image.model.WorkspaceImageFile;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ImageGenerationToolOutput;
-import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolFileRef;
+import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolFileRefMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -282,7 +282,7 @@ public class ImageGenerationTool implements BaseTool {
                 .sourceImageCount(result.getSourceImageCount())
                 .maskImageCount(result.getMaskImageCount())
                 .usedFallback(result.getUsedFallback())
-                .fileRefs(toToolFileRefs(result.getFiles()))
+                .fileRefs(ToolFileRefMapper.fromWorkspaceImageFiles(result.getFiles()))
                 .build();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("tool", "image_generation");
@@ -342,24 +342,6 @@ public class ImageGenerationTool implements BaseTool {
             }
         }
         return StringUtils.defaultIfBlank(summary, "image_generation_tool 执行完成");
-    }
-
-    private List<ToolFileRef> toToolFileRefs(List<WorkspaceImageFile> files) {
-        if (CollectionUtils.isEmpty(files)) {
-            return List.of();
-        }
-        return files.stream()
-                .filter(Objects::nonNull)
-                .map(file -> ToolFileRef.builder()
-                        .fileName(file.getFileName())
-                        .ossUrl(file.getOssUrl())
-                        .domainUrl(file.getDomainUrl())
-                        .downloadUrl(file.getDownloadUrl())
-                        .previewUrl(file.getPreviewUrl())
-                        .fileSize(file.getFileSize())
-                        .mimeType(file.getMimeType())
-                        .build())
-                .collect(Collectors.toList());
     }
 
     private Map<String, Object> buildStringParam(String description) {

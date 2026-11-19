@@ -99,7 +99,7 @@ class FileManageApiTest(unittest.TestCase):
                 response.headers["content-disposition"].startswith("inline")
             )
             self.assertEqual(
-                "sandbox allow-scripts allow-forms allow-popups",
+                "sandbox allow-scripts allow-forms allow-popups allow-same-origin",
                 response.headers["content-security-policy"],
             )
             self.assertIn(
