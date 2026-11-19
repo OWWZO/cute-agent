@@ -24,6 +24,8 @@ export type SubAgentDisplay = {
    * 非空表示该子 Agent 已落库为独立隐藏会话，右侧详情面板可据此订阅真实子会话流。
    */
   childSessionId: string;
+  /** 子 Agent 本轮 run 的 requestId（父流 subagent_start 帧下发） */
+  childRequestId: string;
   content: string;
   totalToolUseCount?: number;
   totalDurationMs?: number;
@@ -246,6 +248,7 @@ export function parseAgentObservation(text?: string) {
       agentType: "",
       agentId: "",
       childSessionId: "",
+      childRequestId: "",
       totalToolUseCount: undefined as number | undefined,
       totalDurationMs: undefined as number | undefined,
       content: "",
@@ -279,6 +282,7 @@ export function parseAgentObservation(text?: string) {
       agentType: meta.agentType || "",
       agentId: meta.agentId || "",
       childSessionId: meta.childSessionId || "",
+      childRequestId: meta.childRequestId || "",
       totalToolUseCount: Number.isFinite(count) ? count : undefined,
       totalDurationMs: Number.isFinite(duration) ? duration : undefined,
       content: body || (meta.status ? "" : raw),
@@ -295,6 +299,7 @@ export function parseAgentObservation(text?: string) {
         agentType: asText(parsed.agentType),
         agentId: asText(parsed.agentId),
         childSessionId: asText(parsed.childSessionId),
+        childRequestId: asText(parsed.childRequestId),
         totalToolUseCount:
           typeof parsed.totalToolUseCount === "number" ? parsed.totalToolUseCount : undefined,
         totalDurationMs:
@@ -312,6 +317,7 @@ export function parseAgentObservation(text?: string) {
     agentType: "",
     agentId: "",
     childSessionId: "",
+    childRequestId: "",
     totalToolUseCount: undefined,
     totalDurationMs: undefined,
     content: raw,
@@ -373,6 +379,10 @@ export function resolveSubAgentDisplay(
     parsed.childSessionId ||
     asText(resultMap.childSessionId) ||
     asText(nested?.childSessionId);
+  const childRequestId =
+    parsed.childRequestId ||
+    asText(resultMap.childRequestId) ||
+    asText(nested?.childRequestId);
 
   // 终态摘要：父流 subagent_end 帧先于 observation 到达时用它占位，
   // 观察结果落地后仍以 observation 的 content 为准（这里只是摘要行文案）。
@@ -387,6 +397,7 @@ export function resolveSubAgentDisplay(
     status,
     agentId: parsed.agentId,
     childSessionId,
+    childRequestId,
     content: parsed.content,
     totalToolUseCount: parsed.totalToolUseCount,
     totalDurationMs: parsed.totalDurationMs,

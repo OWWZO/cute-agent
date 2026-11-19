@@ -62,6 +62,28 @@ describe("timelineItems", () => {
     expect(updated.responseAll).toBe("完整输出");
   });
 
+  it("同一时间线项后续帧不能改写首次分配的 orderKey", () => {
+    const store = new TimelineStore([{
+      eventType: "item.upserted",
+      itemId: "tool:call-1",
+      kind: "TOOL_CALL",
+      orderKey: 12,
+      payload: {
+        eventData: eventData("task", {
+          messageType: "deep_search",
+          toolCallId: "call-1",
+        }),
+      },
+    }]);
+    store.upsertMany([{
+      eventType: "item.delta",
+      itemId: "tool:call-1",
+      orderKey: 99,
+    }]);
+
+    expect(store.values()[0].orderKey).toBe(12);
+  });
+
   it("maps item.delta back to the existing canonical renderer envelope", () => {
     const event = eventData("task", {
       messageType: "agent_stream",
@@ -336,5 +358,143 @@ describe("timelineItems", () => {
     }]);
 
     expect(frames[0].resultMap.eventData?.resultMap.result).toBe("完整正文");
+  });
+
+  it("deep_search 的多个阶段快照在同一条工具项下不会互相覆盖", () => {
+    const events = [
+      eventData("task", {
+        messageType: "deep_search",
+        toolCallId: "call-1",
+        resultMap: {
+          messageType: "extend",
+          isFinal: false,
+          searchFinish: false,
+          searchResult: {
+            query: ["子问题一"],
+            docs: [],
+          },
+        },
+      }),
+      eventData("task", {
+        messageType: "deep_search",
+        toolCallId: "call-1",
+        resultMap: {
+          messageType: "chapter_summary",
+          isFinal: false,
+          chapterId: "C1",
+          chapterTitle: "子问题一",
+          chapterSummary: "章节总结",
+          searchResult: {
+            query: ["子问题一"],
+            docs: [],
+          },
+        },
+      }),
+      eventData("task", {
+        messageType: "deep_search",
+        toolCallId: "call-1",
+        resultMap: {
+          messageType: "report",
+          isFinal: true,
+          answer: "完整报告",
+        },
+      }),
+    ];
+
+    const frames = timelineItemsToReplayFrames(
+      events.map((event, index) => ({
+        eventType: "item.delta" as const,
+        itemId: "tool:call-1",
+        kind: "TOOL_CALL" as const,
+        phase: "INTERMEDIATE" as const,
+        itemStatus: "RUNNING" as const,
+        orderKey: index + 1,
+        payload: { eventData: event },
+      }))
+    );
+
+    expect(frames.map((frame) => {
+      const nested = frame.resultMap.eventData?.resultMap.resultMap as
+        | Record<string, unknown>
+        | undefined;
+      return nested?.messageType;
+    })).toEqual(["extend", "chapter_summary", "report"]);
+  });
+
+  it("deep_search 搜索快照合并 query，报告增量合并后再由最终快照覆盖", () => {
+    const events = [
+      eventData("task", {
+        messageType: "deep_search",
+        toolCallId: "call-1",
+        resultMap: {
+          messageType: "search",
+          searchResult: {
+            query: ["query-a"],
+            docs: [[{ title: "A", link: "https://example.com/a" }]],
+          },
+        },
+      }),
+      eventData("task", {
+        messageType: "deep_search",
+        toolCallId: "call-1",
+        resultMap: {
+          messageType: "search",
+          searchResult: {
+            query: ["query-b"],
+            docs: [[{ title: "B", link: "https://example.com/b" }]],
+          },
+        },
+      }),
+      eventData("task", {
+        messageType: "deep_search",
+        toolCallId: "call-1",
+        resultMap: {
+          messageType: "report",
+          isFinal: false,
+          answer: "前半",
+        },
+      }),
+      eventData("task", {
+        messageType: "deep_search",
+        toolCallId: "call-1",
+        resultMap: {
+          messageType: "report",
+          isFinal: false,
+          answer: "后半",
+        },
+      }),
+      eventData("task", {
+        messageType: "deep_search",
+        toolCallId: "call-1",
+        resultMap: {
+          messageType: "report",
+          isFinal: true,
+          answer: "完整报告",
+        },
+      }),
+    ];
+
+    const frames = timelineItemsToReplayFrames(
+      events.map((event, index) => ({
+        eventType: "item.delta" as const,
+        itemId: "tool:call-1",
+        kind: "TOOL_CALL" as const,
+        phase: "INTERMEDIATE" as const,
+        itemStatus: "RUNNING" as const,
+        orderKey: index + 1,
+        payload: { eventData: event },
+      }))
+    );
+    const stages = frames.map((frame) =>
+      frame.resultMap.eventData?.resultMap.resultMap as
+        | Record<string, unknown>
+        | undefined
+    );
+
+    expect(stages.map((stage) => stage?.messageType)).toEqual(["search", "report"]);
+    expect(stages[0]?.searchResult).toMatchObject({
+      query: ["query-a", "query-b"],
+    });
+    expect(stages[1]?.answer).toBe("完整报告");
   });
 });

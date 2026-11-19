@@ -699,6 +699,73 @@ describe("workspace file list events", () => {
   });
 });
 
+describe("子 Agent 父卡终态合并", () => {
+  it("tool_result 替换占位卡时保留 childSessionId / childRequestId", () => {
+    const currentChat = {
+      sessionId: "session-subagent-merge",
+      requestId: "req-subagent-merge",
+      query: "探索",
+      files: [],
+      forceStop: false,
+      loading: true,
+      tasks: [],
+      timeline: [],
+      multiAgent: { tasks: [] },
+    } as CHAT.ChatItem;
+
+    combineData(createToolCallEvent({
+      messageId: "agent-merge-call",
+      taskId: "task-agent-merge",
+      toolCallId: "agent-merge-call",
+      toolName: "Agent",
+      input: { prompt: "scan", subagent_type: "Explore" },
+      status: "running",
+    }), currentChat);
+
+    combineData({
+      messageType: "task",
+      messageId: "agent-merge-start",
+      taskId: "task-agent-merge",
+      taskOrder: 1,
+      messageOrder: 2,
+      resultMap: {
+        messageType: "subagent_start",
+        messageId: "agent-merge-start",
+        messageTime: "1714041600600",
+        status: "running",
+        parentToolCallId: "agent-merge-call",
+        childSessionId: "sub_agent_merge",
+        childRequestId: "req-child-merge",
+      },
+    } as unknown as MESSAGE.EventData, currentChat);
+
+    combineData({
+      messageType: "task",
+      messageId: "agent-merge-result",
+      taskId: "task-agent-merge",
+      taskOrder: 1,
+      messageOrder: 3,
+      resultMap: {
+        messageType: "tool_result",
+        messageId: "agent-merge-result",
+        messageTime: "1714041600900",
+        finish: true,
+        isFinal: true,
+        toolResult: {
+          toolName: "Agent",
+          toolCallId: "agent-merge-call",
+          toolParam: { prompt: "scan", subagent_type: "Explore" },
+          toolResult: JSON.stringify({ status: "completed", content: "完成" }),
+        },
+      },
+    } as unknown as MESSAGE.EventData, currentChat);
+
+    const parent = currentChat.multiAgent.tasks[0]?.[0];
+    expect(parent?.resultMap?.childSessionId).toBe("sub_agent_merge");
+    expect(parent?.resultMap?.childRequestId).toBe("req-child-merge");
+  });
+});
+
 function createPlannerThoughtEvent(options: {
   plannerRoundId: string;
   planThought: string;
@@ -1235,6 +1302,129 @@ describe("chat deep_search progress", () => {
     expect(taskList[0]?.messageId).toBe(taskList[2]?.messageId);
     expect(getStableTaskIdentity(taskList[0])).not.toBe(
       getStableTaskIdentity(taskList[2])
+    );
+  });
+
+  it("deep_search 实时 messageTime 变化不会改变卡片身份", () => {
+    const task = createDeepSearchTask("search");
+    const currentChat = createChatItem(task);
+
+    const first = handleTaskData(currentChat, false, currentChat.multiAgent);
+    const firstIds = first.taskList.map((item) => item.id);
+    const firstGroupIds = deriveAgentProcessModel({
+      chat: first.currentChat,
+      isPlanSolve: false,
+    }).groups.map((group) => group.id);
+
+    task.messageTime = "1714041609999";
+    const second = handleTaskData(currentChat, false, currentChat.multiAgent);
+    const secondGroupIds = deriveAgentProcessModel({
+      chat: second.currentChat,
+      isPlanSolve: false,
+    }).groups.map((group) => group.id);
+
+    expect(second.taskList.map((item) => item.id)).toEqual(firstIds);
+    expect(secondGroupIds).toEqual(firstGroupIds);
+  });
+
+  it("deep_search 从搜索多帧进入报告时研究卡身份保持稳定", () => {
+    const task = createDeepSearchTask("search");
+    const currentChat = createChatItem(task);
+
+    const search = handleTaskData(currentChat, false, currentChat.multiAgent);
+    const searchIds = search.taskList.map((item) => item.id);
+
+    task.resultMap = {
+      ...createDeepSearchTask("report").resultMap,
+    };
+    task.messageType = "deep_search";
+    task.isFinal = true;
+    task.finish = true;
+    task.messageTime = "1714041619999";
+    const report = handleTaskData(currentChat, false, currentChat.multiAgent);
+    const reportIds = report.taskList.map((item) => item.id);
+
+    expect(reportIds).toHaveLength(1);
+    expect(reportIds[0]).toContain(":report");
+    expect(reportIds[0]).not.toBe(searchIds[0]);
+  });
+
+  it("增量 search 帧按查询词合并，不丢失后续章节的来源", () => {
+    const currentChat = {
+      sessionId: "session-incremental-search",
+      requestId: "req-incremental-search",
+      query: "原始问题",
+      files: [],
+      forceStop: false,
+      loading: true,
+      tasks: [],
+      timeline: [],
+      multiAgent: { tasks: [] },
+    } as CHAT.ChatItem;
+
+    combineData(
+      {
+        messageType: "task",
+        messageId: "msg-incremental",
+        taskId: "task-incremental",
+        taskOrder: 1,
+        messageOrder: 1,
+        resultMap: {
+          requestId: "req-incremental-search",
+          messageId: "msg-incremental",
+          messageType: "deep_search",
+          messageTime: "1714041600100",
+          resultMap: {
+            messageType: "search",
+            requestId: "req-incremental-search",
+            isFinal: false,
+            searchFinish: true,
+            searchResult: {
+              query: ["查询一"],
+              docs: [[createDoc("https://example.com/a", "来源一", "内容一")]],
+            },
+            fileInfo: [],
+          },
+        },
+      } as unknown as MESSAGE.EventData,
+      currentChat
+    );
+    combineData(
+      {
+        messageType: "task",
+        messageId: "msg-incremental",
+        taskId: "task-incremental",
+        taskOrder: 1,
+        messageOrder: 2,
+        resultMap: {
+          requestId: "req-incremental-search",
+          messageId: "msg-incremental",
+          messageType: "deep_search",
+          messageTime: "1714041600200",
+          resultMap: {
+            messageType: "search",
+            requestId: "req-incremental-search",
+            isFinal: false,
+            searchFinish: true,
+            searchResult: {
+              query: ["查询二"],
+              docs: [[createDoc("https://example.com/b", "来源二", "内容二")]],
+            },
+            fileInfo: [],
+          },
+        },
+      } as unknown as MESSAGE.EventData,
+      currentChat
+    );
+
+    const { taskList } = handleTaskData(currentChat, false, currentChat.multiAgent);
+
+    expect(taskList.map((item) => item.resultMap?.searchResult?.query?.[0])).toEqual([
+      "查询一",
+      "查询二",
+    ]);
+    expect(taskList[1].resultMap?.searchResult?.docs?.[0]?.title).toBe(
+      "来源二"
     );
   });
 

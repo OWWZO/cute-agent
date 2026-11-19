@@ -211,25 +211,6 @@ export function resolveChapterSummary(resultMap?: DeepSearchResultMapLike | null
   ).trim();
 }
 
-export function findChapterStateForQuery(
-  resultMap: DeepSearchResultMapLike | undefined,
-  query: string
-): MESSAGE.DeepSearchChapterState | undefined {
-  if (!resultMap?.chapters || !query) {
-    return undefined;
-  }
-  const chapters = Object.values(resultMap.chapters);
-  return chapters.find((chapter) => {
-    if (!chapter) {
-      return false;
-    }
-    if (chapter.chapterTitle === query) {
-      return true;
-    }
-    return Array.isArray(chapter.queries) && chapter.queries.includes(query);
-  });
-}
-
 function resolveChapterPreviewDescription(
   resultCount: number,
   summaryStreaming: boolean
@@ -340,7 +321,6 @@ export function buildDeepSearchChapterWorkspaceModel(
       String(task.resultMap?.chapterTitle || "").trim() ||
       formatDeepSearchQueryText(task.resultMap?.searchResult?.query) ||
       "章节研究",
-    content: String(task.resultMap?.chapterContent || "").trim() || undefined,
     summary,
     sources,
     order: task.resultMap?.chapterOrder,

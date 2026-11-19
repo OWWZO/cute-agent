@@ -69,12 +69,13 @@ function parentCard(chat: CHAT.ChatItem) {
 }
 
 describe("subagent_start / subagent_end 摘要帧", () => {
-  it("start 帧把 childSessionId 与 working 相位写到父卡", () => {
+  it("start 帧把 childSessionId、childRequestId 与 working 相位写到父卡", () => {
     const chat = chatWithParentCard();
 
     combineData(
       lifecycleEvent("subagent_start", {
         childSessionId: "sub_agent-1",
+        childRequestId: "child-req-1",
         parentToolCallId: "call-1",
         subAgentId: "agent-1",
         subagentType: "Explore",
@@ -86,6 +87,7 @@ describe("subagent_start / subagent_end 摘要帧", () => {
 
     const card = parentCard(chat);
     expect(card.resultMap?.childSessionId).toBe("sub_agent-1");
+    expect(card.resultMap?.childRequestId).toBe("child-req-1");
     expect(card.resultMap?.subAgentPhase).toBe("working");
     expect(card.resultMap?.subAgentType).toBe("Explore");
   });
@@ -96,6 +98,7 @@ describe("subagent_start / subagent_end 摘要帧", () => {
     combineData(
       lifecycleEvent("subagent_end", {
         childSessionId: "sub_agent-1",
+        childRequestId: "child-req-1",
         parentToolCallId: "call-1",
         subAgentId: "agent-1",
         status: "completed",
@@ -108,6 +111,7 @@ describe("subagent_start / subagent_end 摘要帧", () => {
     expect(card.resultMap?.subAgentPhase).toBe("completed");
     expect(card.resultMap?.subAgentSummary).toBe("找到 3 处调用");
     expect(card.resultMap?.childSessionId).toBe("sub_agent-1");
+    expect(card.resultMap?.childRequestId).toBe("child-req-1");
   });
 
   it("stopped 收口为 suspended，不误判成失败", () => {
@@ -184,19 +188,20 @@ describe("subagent_start / subagent_end 摘要帧", () => {
     expect(card.resultMap?.subAgentPhase).toBe("working");
   });
 
-  it("父卡上的 childSessionId 能被详情入口解析到", () => {
+  it("父卡上的 childSessionId 与 childRequestId 能被详情入口解析到", () => {
     const chat = chatWithParentCard();
 
     combineData(
       lifecycleEvent("subagent_start", {
         childSessionId: "sub_agent-1",
+        childRequestId: "child-req-1",
         parentToolCallId: "call-1",
       }),
       chat
     );
 
-    expect(resolveSubAgentDisplay(parentCard(chat) as CHAT.Task).childSessionId).toBe(
-      "sub_agent-1"
-    );
+    const display = resolveSubAgentDisplay(parentCard(chat) as CHAT.Task);
+    expect(display.childSessionId).toBe("sub_agent-1");
+    expect(display.childRequestId).toBe("child-req-1");
   });
 });

@@ -195,34 +195,37 @@ export function timelineItemsToReplayFrames(
     if (!isRenderableTimelineItem(item)) {
       continue;
     }
-    const eventData = withTimelineResponseText(item);
-    if (!eventData) {
-      continue;
+    const eventDatas = item.payload?.eventDataHistory?.length
+      ? item.payload.eventDataHistory
+      : [withTimelineResponseText(item)].filter(
+        (eventData): eventData is NonNullable<typeof eventData> => Boolean(eventData)
+      );
+    for (const eventData of eventDatas) {
+      const itemStatus = item.itemStatus ?? item.status;
+      frames.push({
+        reqId: String(item.runId || eventData.resultMap?.requestId || ""),
+        status: replayStatus(itemStatus),
+        finished: isRunTerminal(item.eventType),
+        itemId: item.itemId,
+        parentItemId: item.parentItemId,
+        agentId: item.agentId,
+        kind: item.kind,
+        phase: item.phase,
+        itemStatus: item.itemStatus ?? (
+          typeof item.status === "string"
+            ? item.status.toUpperCase() as AgentTimelineItem["itemStatus"]
+            : undefined
+        ),
+        orderKey: item.orderKey,
+        subOrder: item.subOrder,
+        eventType: item.eventType,
+        resultMap: {
+          agentType: "history",
+          multiAgent: {},
+          eventData,
+        },
+      });
     }
-    const itemStatus = item.itemStatus ?? item.status;
-    frames.push({
-      reqId: String(item.runId || eventData.resultMap?.requestId || ""),
-      status: replayStatus(itemStatus),
-      finished: isRunTerminal(item.eventType),
-      itemId: item.itemId,
-      parentItemId: item.parentItemId,
-      agentId: item.agentId,
-      kind: item.kind,
-      phase: item.phase,
-      itemStatus: item.itemStatus ?? (
-        typeof item.status === "string"
-          ? item.status.toUpperCase() as AgentTimelineItem["itemStatus"]
-          : undefined
-      ),
-      orderKey: item.orderKey,
-      subOrder: item.subOrder,
-      eventType: item.eventType,
-      resultMap: {
-        agentType: "history",
-        multiAgent: {},
-        eventData,
-      },
-    });
   }
   return frames;
 }

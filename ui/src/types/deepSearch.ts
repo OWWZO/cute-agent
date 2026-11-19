@@ -29,7 +29,6 @@ export type DeepSearchPreviewModel = {
 
 export type DeepSearchChapterWorkspaceModel = {
   title: string;
-  content?: string;
   summary: string;
   sources: DeepSearchCardItem[];
   order?: number;

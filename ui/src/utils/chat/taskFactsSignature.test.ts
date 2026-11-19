@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { combineData, handleTaskData } from "@/utils/chat";
+import { buildTaskFactsSignature } from "./renderTasks";
 import { findDerivedAgentTaskByToolCallId } from "./taskIdentity";
 import { resolveSubAgentDisplay } from "./subagent";
 
@@ -50,6 +51,19 @@ function countCards(groups: unknown[][] | undefined): number {
     }
   }
   return total;
+}
+
+function deepSearchFacts(resultMap: Record<string, unknown>) {
+  return buildTaskFactsSignature({
+    tasks: [
+      [
+        {
+          messageType: "deep_search",
+          resultMap,
+        },
+      ],
+    ],
+  } as unknown as MESSAGE.MultiAgent);
 }
 
 describe("任务事实签名", () => {
@@ -117,6 +131,7 @@ describe("任务事实签名", () => {
         resultMap: {
           messageType: "subagent_start",
           childSessionId: "sub_agent-1",
+          childRequestId: "child-req-1",
           parentToolCallId: "call-1",
           subAgentId: "agent-1",
           subagentType: "general-purpose",
@@ -150,7 +165,85 @@ describe("任务事实签名", () => {
     const card = findDerivedAgentTaskByToolCallId(derived, "call-1");
     expect(card).toBeTruthy();
     expect(resolveSubAgentDisplay(card!).childSessionId).toBe("sub_agent-1");
+    expect(resolveSubAgentDisplay(card!).childRequestId).toBe("child-req-1");
     expect(resolveSubAgentDisplay(card!).liveText).toBe("正在写文件");
+  });
+
+  it("Deep Research 每个阶段都会改变签名", () => {
+    const extend = deepSearchFacts({
+      messageType: "extend",
+      isFinal: false,
+      searchFinish: false,
+      searchResult: {
+        query: ["方向一", "方向二"],
+        docs: [],
+      },
+    });
+    const search = deepSearchFacts({
+      messageType: "search",
+      isFinal: false,
+      searchFinish: true,
+      searchResult: {
+        query: ["方向一", "方向二"],
+        docs: [
+          [{ link: "https://a.example", title: "来源 A" }],
+          [{ link: "https://b.example", title: "来源 B" }],
+        ],
+      },
+    });
+    const chapterSummary = deepSearchFacts({
+      messageType: "chapter_summary",
+      isFinal: false,
+      searchFinish: true,
+      searchResult: {
+        query: ["方向一", "方向二"],
+        docs: [
+          [{ link: "https://a.example", title: "来源 A" }],
+          [{ link: "https://b.example", title: "来源 B" }],
+        ],
+      },
+      chapterId: "C1",
+      chapterTitle: "方向一",
+      chapterSummary: "章节总结",
+      chapterStreaming: true,
+      chapters: {
+        C1: {
+          chapterId: "C1",
+          chapterTitle: "方向一",
+          queries: ["方向一"],
+          docs: [[{ link: "https://a.example", title: "来源 A" }]],
+          summary: "章节总结",
+          streaming: true,
+        },
+      },
+    });
+    const report = deepSearchFacts({
+      messageType: "report",
+      isFinal: true,
+      searchFinish: true,
+      answer: "最终报告",
+    });
+
+    expect(new Set([extend, search, chapterSummary, report]).size).toBe(4);
+  });
+
+  it("Deep Research 来源内容原地变化会改变签名", () => {
+    const before = deepSearchFacts({
+      messageType: "search",
+      searchResult: {
+        query: ["方向一"],
+        docs: [[{ link: "https://a.example", title: "来源 A" }]],
+      },
+    });
+    const after = deepSearchFacts({
+      messageType: "search",
+      searchResult: {
+        query: ["方向一"],
+        docs: [[{ link: "https://b.example", title: "来源 B" }]],
+      },
+    });
+
+    expect(after).not.toBe(before);
   });
 
   it("按签名重建时，每张新卡都进入派生视图", () => {

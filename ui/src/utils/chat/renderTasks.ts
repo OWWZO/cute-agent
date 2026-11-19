@@ -107,6 +107,7 @@ export function buildTaskFactsSignature(
     const cards: string[] = [];
     for (const task of group || []) {
       const resultMap = (task?.resultMap || {}) as Record<string, unknown>;
+      const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
       const progressLines = Array.isArray(resultMap.subAgentProgressLines)
         ? resultMap.subAgentProgressLines
         : [];
@@ -117,7 +118,7 @@ export function buildTaskFactsSignature(
           String(resultMap.status || ""),
           String(resultMap.result || "").length,
           JSON.stringify(resultMap.args ?? "").length,
-          String(resultMap.childSessionId || ""),
+          String(resultMap.childSessionId || nested.childSessionId || ""),
           String(resultMap.subAgentId || ""),
           String(resultMap.subAgentType || ""),
           String(resultMap.subAgentPhase || ""),
@@ -127,6 +128,8 @@ export function buildTaskFactsSignature(
           String(progressLines[progressLines.length - 1] || ""),
           String(resultMap.subAgentLiveText || "").length,
           String(resultMap.subAgentElapsedMs ?? ""),
+          String(resultMap.childRequestId || nested.childRequestId || ""),
+          getDeepSearchFactsSignature(resultMap),
         ].join(":")
       );
     }
@@ -160,9 +163,66 @@ function getChaptersSignature(resultMap?: MESSAGE.ResultMap): string {
     .sort()
     .map((key) => {
       const chapter = chapters[key];
-      return `${key}:${chapter?.summary?.length || 0}:${chapter?.docs?.length || 0}:${chapter?.streaming ? 1 : 0}`;
+      return [
+        key,
+        hashTextForSignature(String(chapter?.summary || "")),
+        chapter?.docs?.length || 0,
+        chapter?.streaming ? 1 : 0,
+        hashTextForSignature((chapter?.queries || []).join("\n")),
+      ].join(":");
     })
     .join(",");
+}
+
+/**
+ * Deep Research 的阶段内容必须进入任务事实签名，否则同一任务对象原地更新时，
+ * `buildConversationTaskData` 会误判任务树没有变化，直到最终 isFinal 才刷新。
+ */
+function getDeepSearchFactsSignature(
+  resultMap: Record<string, unknown>
+): string {
+  const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
+  const stageMap = isDeepSearchStageMap(nested as MESSAGE.ResultMap)
+    ? nested
+    : isDeepSearchStageMap(resultMap as MESSAGE.ResultMap)
+      ? resultMap
+      : null;
+  if (!stageMap) {
+    return "";
+  }
+  const searchResult = (stageMap.searchResult || {}) as Record<string, unknown>;
+  const queries = Array.isArray(searchResult.query)
+    ? searchResult.query.map((value) => String(value || ""))
+    : [];
+  const docs = Array.isArray(searchResult.docs) ? searchResult.docs : [];
+  const docsSignature = docs
+    .map((bucket) => {
+      if (!Array.isArray(bucket)) {
+        return "0";
+      }
+      const sourceIdentity = bucket
+        .map((doc) => {
+          const record = (doc || {}) as Record<string, unknown>;
+          return `${String(record.link || "")}|${String(record.title || "")}`;
+        })
+        .join("\n");
+      return `${bucket.length}:${hashTextForSignature(sourceIdentity)}`;
+    })
+    .join(",");
+
+  return [
+    String(stageMap.messageType || ""),
+    stageMap.isFinal ? 1 : 0,
+    stageMap.searchFinish ? 1 : 0,
+    hashTextForSignature(queries.join("\n")),
+    docsSignature,
+    getChaptersSignature(stageMap as MESSAGE.ResultMap),
+    String(stageMap.chapterId || ""),
+    hashTextForSignature(String(stageMap.chapterTitle || "")),
+    hashTextForSignature(String(stageMap.chapterSummary || "")),
+    stageMap.chapterStreaming ? 1 : 0,
+    hashTextForSignature(String(stageMap.answer || "")),
+  ].join(":");
 }
 
 /**
@@ -239,7 +299,7 @@ export function getTaskRenderSignature(
     baseId,
     task.messageId || "",
     task.messageType || "",
-    task.messageTime || "",
+    task.messageType === "deep_search" ? "" : task.messageTime || "",
     resultMap.messageType || "",
     resultMap.isFinal ? "1" : "0",
     resultMap.searchFinish ? "1" : "0",
@@ -279,7 +339,8 @@ export function getTaskRenderSignature(
     getArtifactSignature(task),
     querySignature,
     docsSignature,
-    getChaptersSignature(resultMap as MESSAGE.ResultMap),
+    getDeepSearchFactsSignature(resultMap as Record<string, unknown>) ||
+      getChaptersSignature(resultMap as MESSAGE.ResultMap),
     Array.isArray(plan?.stepStatus) ? plan.stepStatus.join(",") : "",
   ].join("|");
 }
@@ -287,13 +348,22 @@ export function getTaskRenderSignature(
 function createRenderTask(
   task: RenderableTask,
   id: string,
-  searchResult?: RenderSearchResult
+  searchResult?: RenderSearchResult,
+  options?: {
+    /** Deep Research 子卡只保留自身阶段事实，不能继承整条工具调用的最终快照。 */
+    isolateResultMap?: boolean;
+  }
 ): CHAT.Task {
+  const baseResultMap = task.resultMap
+    ? options?.isolateResultMap
+      ? pickDeepSearchCardResultMap(task.resultMap as MESSAGE.ResultMap)
+      : { ...task.resultMap }
+    : task.resultMap;
   const nextTask = {
     ...task,
     id,
     __timelineRendered: true,
-    resultMap: task.resultMap ? { ...task.resultMap } : task.resultMap,
+    resultMap: baseResultMap,
     plan: clonePlanForRender(task.plan),
   } as unknown as CHAT.Task;
 
@@ -302,6 +372,27 @@ function createRenderTask(
   }
 
   return nextTask;
+}
+
+function pickDeepSearchCardResultMap(
+  resultMap: MESSAGE.ResultMap
+): MESSAGE.ResultMap {
+  // 外层字段主要承载身份/产物元数据；阶段载荷必须由每张子卡重新写入。
+  // 尤其不能继承 report 的 answer / chapterSummary，否则同一条 Deep Research
+  // 的查询卡在最终帧到达后会被渲染成多份“总结完成”。
+  const copy = { ...resultMap } as MESSAGE.ResultMap;
+  delete copy.answer;
+  delete copy.chapterContent;
+  delete copy.chapterId;
+  delete copy.chapterOrder;
+  delete copy.chapterStreaming;
+  delete copy.chapterSummary;
+  delete copy.chapterTitle;
+  delete copy.chapters;
+  delete copy.messageType;
+  delete copy.searchFinish;
+  delete copy.searchResult;
+  return copy;
 }
 
 type SearchResultWithChapters = MESSAGE.SearchResult & {
@@ -319,20 +410,40 @@ function stableRenderToken(identity: string): string {
   return `${identity.length}-${hashContent(identity)}`;
 }
 
+function resolveDeepSearchQueryRenderId(
+  baseId: string,
+  identity: string,
+  occurrence: number,
+  fallbackIndex: number
+): string {
+  return identity
+    ? `${baseId}query:${stableRenderToken(identity)}:${occurrence}`
+    : `${baseId}query:index-${fallbackIndex}`;
+}
+
 function resolveDeepSearchChapterRenderId(
   baseId: string,
   key: string,
   chapter: MESSAGE.DeepSearchChapterState,
-  index: number
+  index: number,
+  anchorQuery?: string
 ): string {
   const explicitId = String(chapter.chapterId || "").trim();
   const stableKey = String(key || "").trim();
-  const firstQuery = (chapter.queries || []).find(Boolean) || "";
+  // 章节可能包含多个查询词。身份必须取原始 searchResult.query 中最早出现的
+  // 那个查询，而不是章节自己的 queries[0]，否则章节到达时卡片会换身份。
+  const firstQuery = String(
+    anchorQuery || (chapter.queries || []).find(Boolean) || ""
+  ).trim();
+  // 搜索阶段按 query 建卡，章节阶段按 chapter 建卡；优先让两者复用 query 身份，
+  // 否则阶段切换会卸载再挂载同一张卡，入场动画随之重复播放。
+  if (firstQuery) {
+    return resolveDeepSearchQueryRenderId(baseId, firstQuery, 0, index);
+  }
   const title = String(chapter.chapterTitle || "").trim();
   const identity =
     explicitId ||
     (stableKey && !/^chapter-\d+$/.test(stableKey) ? stableKey : "") ||
-    firstQuery ||
     title ||
     (chapter.chapterOrder != null ? `order-${chapter.chapterOrder}` : "");
   return identity
@@ -431,6 +542,24 @@ function collectDeepSearchChapters(
       const rightOrder = right.chapter.chapterOrder ?? Number.MAX_SAFE_INTEGER;
       return leftOrder - rightOrder;
     });
+}
+
+function findChapterEntryForQuery(
+  chapterEntries: DeepSearchChapterEntry[],
+  query: string
+): DeepSearchChapterEntry | undefined {
+  const normalizedQuery = String(query || "").trim();
+  if (!normalizedQuery) {
+    return undefined;
+  }
+  return chapterEntries.find(({ chapter }) => {
+    if (String(chapter.chapterTitle || "").trim() === normalizedQuery) {
+      return true;
+    }
+    return (chapter.queries || []).some(
+      (value) => String(value || "").trim() === normalizedQuery
+    );
+  });
 }
 
 function resolveChapterDocs(
@@ -549,6 +678,112 @@ function inferDeepSearchStage(inner?: MESSAGE.ResultMap): string {
   return raw || "search";
 }
 
+function buildDeepSearchQueryCard(
+  task: RenderableTask,
+  inner: MESSAGE.ResultMap | undefined,
+  baseId: string,
+  query: string,
+  index: number,
+  occurrence: number
+): CHAT.Task {
+  const queryIdentity = String(query || "").trim();
+  const chapter = findChapterForQuery(inner?.chapters, query);
+  const rawDocs =
+    inner?.searchResult?.docs?.[index] ||
+    chapter?.docs?.[0];
+  const docs = Array.isArray(rawDocs) ? rawDocs : rawDocs ? [rawDocs] : [];
+  const searchResult = {
+    query: [query],
+    docs,
+  };
+  const renderTask = createRenderTask(
+    task,
+    resolveDeepSearchQueryRenderId(baseId, queryIdentity, occurrence, index),
+    searchResult,
+    { isolateResultMap: true }
+  );
+
+  if (!renderTask.resultMap) {
+    renderTask.resultMap = {} as CHAT.Task["resultMap"];
+  }
+
+  const hasSummary = Boolean(chapter?.summary);
+  const cardStage = resolveCardStage(hasSummary, docs.length);
+  renderTask.resultMap = {
+    ...renderTask.resultMap,
+    messageType: cardStage,
+    searchResult: searchResult as CHAT.Task["resultMap"]["searchResult"],
+    chapterId: chapter?.chapterId,
+    chapterTitle: chapter?.chapterTitle || query,
+    chapterOrder: chapter?.chapterOrder ?? index + 1,
+    chapterSummary: chapter?.summary || "",
+    chapterStreaming: Boolean(chapter?.streaming),
+    answer: chapter?.summary || "",
+    chapters: inner?.chapters,
+  } as unknown as CHAT.Task["resultMap"];
+
+  return renderTask;
+}
+
+function buildDeepSearchChapterCard(
+  task: RenderableTask,
+  inner: MESSAGE.ResultMap | undefined,
+  baseId: string,
+  entry: DeepSearchChapterEntry,
+  index: number,
+  chapterCount: number,
+  anchorQuery?: string
+): CHAT.Task {
+  const { key, chapter } = entry;
+  const searchResult = inner?.searchResult;
+  const chapterTitle = String(chapter.chapterTitle || "").trim();
+  const chapterQueries = (chapter.queries || []).filter(Boolean);
+  const query = chapterTitle || anchorQuery || chapterQueries[0] || key;
+  const docs = resolveChapterDocs(
+    chapter,
+    index,
+    chapterCount,
+    searchResult
+  );
+  const chapterSearchResult = {
+    query: chapterQueries.length ? chapterQueries : [query],
+    docs,
+  };
+  const renderTask = createRenderTask(
+    task,
+    resolveDeepSearchChapterRenderId(
+      baseId,
+      key,
+      chapter,
+      index,
+      anchorQuery
+    ),
+    chapterSearchResult,
+    { isolateResultMap: true }
+  );
+
+  if (!renderTask.resultMap) {
+    renderTask.resultMap = {} as CHAT.Task["resultMap"];
+  }
+
+  const hasSummary = Boolean(chapter.summary);
+  const cardStage = resolveCardStage(hasSummary, docs.length);
+  renderTask.resultMap = {
+    ...renderTask.resultMap,
+    messageType: cardStage,
+    searchResult: chapterSearchResult as CHAT.Task["resultMap"]["searchResult"],
+    chapterId: chapter.chapterId || key,
+    chapterTitle: chapterTitle || query,
+    chapterOrder: chapter.chapterOrder ?? index + 1,
+    chapterSummary: chapter.summary || "",
+    chapterStreaming: Boolean(chapter.streaming),
+    answer: chapter.summary || "",
+    chapters: inner?.chapters,
+  } as unknown as CHAT.Task["resultMap"];
+
+  return renderTask;
+}
+
 function processDeepSearchTask(
   task: RenderableTask,
   baseId: string
@@ -570,48 +805,93 @@ function processDeepSearchTask(
 
   const chapterEntries = collectDeepSearchChapters(inner);
   if (chapterEntries.length) {
-    const searchResult = inner?.searchResult;
-    return chapterEntries.map(({ key, chapter }, index) => {
-      const chapterTitle = String(chapter.chapterTitle || "").trim();
-      const chapterQueries = (chapter.queries || []).filter(Boolean);
-      const query = chapterTitle || chapterQueries[0] || key;
-      const docs = resolveChapterDocs(
-        chapter,
-        index,
-        chapterEntries.length,
-        searchResult
+    const searchQueries = (inner?.searchResult?.query || [])
+      .map((query) => String(query || "").trim())
+      .filter(Boolean);
+    // 搜索早期只有章节目录、还没有真实检索结果时，章节目录就是唯一展示源。
+    // 此时若再按 query 逐条兜底，会把同一批章节重复展开成额外查询卡。
+    const chaptersAreOnlySource =
+      messageType !== "chapter_summary" &&
+      !searchQueries.some((query) =>
+        Boolean(findChapterEntryForQuery(chapterEntries, query))
       );
-      const chapterSearchResult = {
-        query: chapterQueries.length ? chapterQueries : [query],
-        docs,
-      };
-      const renderTask = createRenderTask(
-        task,
-        resolveDeepSearchChapterRenderId(baseId, key, chapter, index),
-        chapterSearchResult
+    if (chaptersAreOnlySource) {
+      return chapterEntries.map((entry, index) =>
+        buildDeepSearchChapterCard(
+          task,
+          inner,
+          baseId,
+          entry,
+          index,
+          chapterEntries.length,
+          // 目录先到时也按原始 query 顺序绑定身份；后续查询词补齐后不会换 React key。
+          searchQueries[index]
+        )
       );
+    }
+    const chapterIndexByKey = new Map(
+      chapterEntries.map((entry, index) => [entry.key, index])
+    );
+    const emittedChapters = new Set<string>();
+    const cards: CHAT.Task[] = [];
+    const queryOccurrences = new Map<string, number>();
 
-      if (!renderTask.resultMap) {
-        renderTask.resultMap = {} as CHAT.Task["resultMap"];
+    // 以原始 searchResult.query 的顺序作为唯一展示顺序。章节逐章到达时只把
+    // 对应查询卡原地换成章节卡，绝不把新章节插到前面，否则首卡身份变化会
+    // 让整个步骤组卸载重挂，看起来就是持续屏闪。
+    for (const [index, query] of searchQueries.entries()) {
+      const queryIdentity = String(query || "").trim();
+      const occurrence = queryOccurrences.get(queryIdentity) || 0;
+      queryOccurrences.set(queryIdentity, occurrence + 1);
+      const chapterEntry = findChapterEntryForQuery(chapterEntries, query);
+      if (chapterEntry) {
+        if (emittedChapters.has(chapterEntry.key)) {
+          continue;
+        }
+        emittedChapters.add(chapterEntry.key);
+        cards.push(
+          buildDeepSearchChapterCard(
+            task,
+            inner,
+            baseId,
+            chapterEntry,
+            chapterIndexByKey.get(chapterEntry.key) ?? 0,
+            chapterEntries.length,
+            query
+          )
+        );
+        continue;
       }
+      cards.push(
+        buildDeepSearchQueryCard(
+          task,
+          inner,
+          baseId,
+          query,
+          index,
+          occurrence
+        )
+      );
+    }
 
-      const hasSummary = Boolean(chapter.summary);
-      const cardStage = resolveCardStage(hasSummary, docs.length);
-      renderTask.resultMap = {
-        ...renderTask.resultMap,
-        messageType: cardStage,
-        searchResult: chapterSearchResult as CHAT.Task["resultMap"]["searchResult"],
-        chapterId: chapter.chapterId || key,
-        chapterTitle: chapterTitle || query,
-        chapterOrder: chapter.chapterOrder ?? index + 1,
-        chapterSummary: chapter.summary || "",
-        chapterStreaming: Boolean(chapter.streaming),
-        answer: chapter.summary || "",
-        chapters: inner?.chapters,
-      } as unknown as CHAT.Task["resultMap"];
+    // 没有对应 searchResult.query 的章节（历史数据或异常上游）追加在末尾。
+    for (const [index, entry] of chapterEntries.entries()) {
+      if (emittedChapters.has(entry.key)) {
+        continue;
+      }
+      cards.push(
+        buildDeepSearchChapterCard(
+          task,
+          inner,
+          baseId,
+          entry,
+          index,
+          chapterEntries.length
+        )
+      );
+    }
 
-      return renderTask;
-    });
+    return cards;
   }
 
   const queries = (inner?.searchResult?.query || []).filter(Boolean);
@@ -634,44 +914,14 @@ function processDeepSearchTask(
     const queryIdentity = String(query || "").trim();
     const occurrence = queryOccurrences.get(queryIdentity) || 0;
     queryOccurrences.set(queryIdentity, occurrence + 1);
-    const chapter = findChapterForQuery(inner?.chapters, query);
-    const rawDocs =
-      inner?.searchResult?.docs?.[index] ||
-      chapter?.docs?.[0];
-    const docs = Array.isArray(rawDocs) ? rawDocs : rawDocs ? [rawDocs] : [];
-    const searchResult = {
-      query: [query],
-      docs,
-    };
-
-    const renderTask = createRenderTask(
+    return buildDeepSearchQueryCard(
       task,
-      queryIdentity
-        ? `${baseId}query:${stableRenderToken(queryIdentity)}:${occurrence}`
-        : `${baseId}query:index-${index}`,
-      searchResult
+      inner,
+      baseId,
+      query,
+      index,
+      occurrence
     );
-
-    if (!renderTask.resultMap) {
-      renderTask.resultMap = {} as CHAT.Task["resultMap"];
-    }
-
-    const hasSummary = Boolean(chapter?.summary);
-    const cardStage = resolveCardStage(hasSummary, docs.length);
-    renderTask.resultMap = {
-      ...renderTask.resultMap,
-      messageType: cardStage,
-      searchResult: searchResult as CHAT.Task["resultMap"]["searchResult"],
-      chapterId: chapter?.chapterId,
-      chapterTitle: chapter?.chapterTitle || query,
-      chapterOrder: chapter?.chapterOrder ?? index + 1,
-      chapterSummary: chapter?.summary || "",
-      chapterStreaming: Boolean(chapter?.streaming),
-      answer: chapter?.summary || "",
-      chapters: inner?.chapters,
-    } as unknown as CHAT.Task["resultMap"];
-
-    return renderTask;
   });
 }
 

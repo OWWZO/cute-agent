@@ -98,6 +98,7 @@ export function resolveRosterAgentTool(item: SubAgentRosterItem): CHAT.Task {
     resultMap: {
       toolName: "Agent",
       childSessionId: item.childSessionId,
+      childRequestId: item.childRequestId,
       subAgentType: item.meta,
       subAgentDescription: item.name,
       runInBackground: Boolean(item.runInBackground),

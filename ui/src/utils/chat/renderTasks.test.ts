@@ -124,6 +124,285 @@ describe("DeepSearch 展示任务拆分", () => {
     expect(idOf(before, "C2")).toBe(idOf(after, "C2"));
     expect(idOf(before, "C1")).not.toBe(idOf(before, "C2"));
   });
+
+  it("同一查询从搜索阶段进入章节总结时保持卡片身份", () => {
+    const searching = {
+      messageType: "deep_search",
+      messageTime: "1714041600003",
+      resultMap: {
+        messageType: "search",
+        searchResult: {
+          query: ["查询一"],
+          docs: [[{ link: "https://example.com", title: "来源一" }]],
+        },
+      },
+    } as unknown as CHAT.Task;
+    const summarizing = {
+      messageType: "deep_search",
+      messageTime: "1714041600003",
+      resultMap: {
+        messageType: "chapter_summary",
+        chapters: {
+          C1: {
+            chapterId: "C1",
+            chapterTitle: "第一章",
+            chapterOrder: 1,
+            queries: ["查询一"],
+            docs: [[{ link: "https://example.com", title: "来源一" }]],
+            summary: "第一章总结",
+          },
+        },
+      },
+    } as unknown as CHAT.Task;
+
+    const [searchCard] = processTaskForRender(searching, "deep-search-identity-");
+    const [chapterCard] = processTaskForRender(summarizing, "deep-search-identity-");
+
+    expect(searchCard.id).toBe(chapterCard.id);
+  });
+
+  it("章节分批到达时，尚未总结的查询卡不会被暂时删除", () => {
+    const partial = {
+      messageType: "deep_search",
+      messageTime: "1714041600004",
+      resultMap: {
+        messageType: "chapter_summary",
+        searchResult: {
+          query: ["查询一", "查询二"],
+          docs: [
+            [{ link: "https://example.com/a", title: "来源一" }],
+            [{ link: "https://example.com/b", title: "来源二" }],
+          ],
+        },
+        chapters: {
+          C1: {
+            chapterId: "C1",
+            chapterTitle: "第一章",
+            chapterOrder: 1,
+            queries: ["查询一"],
+            docs: [[{ link: "https://example.com/a", title: "来源一" }]],
+            summary: "第一章总结",
+          },
+        },
+      },
+    } as unknown as CHAT.Task;
+
+    const rendered = processTaskForRender(partial, "deep-search-partial-");
+    const queryCard = rendered.find(
+      (item) => item.resultMap?.chapterTitle === "查询二"
+    );
+
+    expect(rendered).toHaveLength(2);
+    expect(queryCard?.resultMap?.messageType).toBe("search");
+    expect(queryCard?.id).toContain("query:");
+  });
+
+  it("章节逐章到达时，剩余查询卡保持同一 React 身份", () => {
+    const makeTask = (withSecondChapter: boolean) => ({
+      messageType: "deep_search",
+      messageTime: withSecondChapter
+        ? "1714041600006"
+        : "1714041600005",
+      resultMap: {
+        messageType: "chapter_summary",
+        searchResult: {
+          query: ["查询一", "查询二"],
+          docs: [
+            [{ link: "https://example.com/a", title: "来源一" }],
+            [{ link: "https://example.com/b", title: "来源二" }],
+          ],
+        },
+        chapters: {
+          C1: {
+            chapterId: "C1",
+            chapterTitle: "第一章",
+            chapterOrder: 1,
+            queries: ["查询一"],
+            docs: [[{ link: "https://example.com/a", title: "来源一" }]],
+            summary: "第一章总结",
+          },
+          ...(withSecondChapter
+            ? {
+              C2: {
+                chapterId: "C2",
+                chapterTitle: "第二章",
+                chapterOrder: 2,
+                queries: ["查询二"],
+                docs: [[{ link: "https://example.com/b", title: "来源二" }]],
+                summary: "第二章总结",
+              },
+            }
+            : {}),
+        },
+      },
+    }) as unknown as CHAT.Task;
+
+    const before = processTaskForRender(makeTask(false), "deep-search-incremental-");
+    const after = processTaskForRender(makeTask(true), "deep-search-incremental-");
+    const beforeSecond = before.find(
+      (item) => item.resultMap?.chapterTitle === "查询二"
+    );
+    const afterSecond = after.find(
+      (item) => item.resultMap?.chapterId === "C2"
+    );
+
+    expect(beforeSecond?.id).toBe(afterSecond?.id);
+  });
+
+  it("章节逐章到达时，卡片顺序和已有身份都不变化", () => {
+    const makeTask = (withSecondChapter: boolean) => ({
+      messageType: "deep_search",
+      messageTime: withSecondChapter
+        ? "1714041600008"
+        : "1714041600007",
+      resultMap: {
+        messageType: "chapter_summary",
+        searchResult: {
+          query: ["查询一", "查询二", "查询三"],
+          docs: [
+            [{ link: "https://example.com/a", title: "来源一" }],
+            [{ link: "https://example.com/b", title: "来源二" }],
+            [{ link: "https://example.com/c", title: "来源三" }],
+          ],
+        },
+        chapters: {
+          C1: {
+            chapterId: "C1",
+            chapterTitle: "第一章",
+            chapterOrder: 1,
+            queries: ["查询一"],
+            docs: [[{ link: "https://example.com/a", title: "来源一" }]],
+            summary: "第一章总结",
+          },
+          ...(withSecondChapter
+            ? {
+              C2: {
+                chapterId: "C2",
+                chapterTitle: "第二章",
+                chapterOrder: 2,
+                queries: ["查询二"],
+                docs: [[{ link: "https://example.com/b", title: "来源二" }]],
+                summary: "第二章总结",
+              },
+            }
+            : {}),
+        },
+      },
+    }) as unknown as CHAT.Task;
+
+    const before = processTaskForRender(makeTask(false), "deep-search-order-");
+    const after = processTaskForRender(makeTask(true), "deep-search-order-");
+
+    expect(before.map((item) => item.id)).toEqual(
+      after.slice(0, before.length).map((item) => item.id)
+    );
+    expect(after.map((item) => item.resultMap?.chapterId || item.resultMap?.chapterTitle))
+      .toEqual(["C1", "C2", "查询三"]);
+  });
+
+  it("目录先到、查询词后补齐时章节卡保持同一身份", () => {
+    const catalogOnly = {
+      messageType: "deep_search",
+      resultMap: {
+        messageType: "search",
+        searchResult: {
+          query: ["查询一"],
+          docs: [],
+          chapters: [
+            {
+              chapterId: "C1",
+              chapterTitle: "第一章",
+              chapterOrder: 1,
+              queries: [],
+            },
+          ],
+        },
+      },
+    } as unknown as CHAT.Task;
+    const summarizing = {
+      messageType: "deep_search",
+      resultMap: {
+        messageType: "chapter_summary",
+        searchResult: {
+          query: ["查询一"],
+          docs: [[{ link: "https://example.com/a", title: "来源一" }]],
+        },
+        chapters: {
+          C1: {
+            chapterId: "C1",
+            chapterTitle: "第一章",
+            chapterOrder: 1,
+            queries: ["查询一"],
+            docs: [[{ link: "https://example.com/a", title: "来源一" }]],
+            summary: "第一章总结",
+          },
+        },
+      },
+    } as unknown as CHAT.Task;
+
+    const [catalogCard] = processTaskForRender(
+      catalogOnly,
+      "deep-search-catalog-"
+    );
+    const [summaryCard] = processTaskForRender(
+      summarizing,
+      "deep-search-catalog-"
+    );
+
+    expect(catalogCard.id).toBe(summaryCard.id);
+  });
+
+  it("Deep Research 子卡不继承最终报告的 answer 和章节总结", () => {
+    const task = {
+      messageType: "deep_search",
+      messageTime: "1714041600009",
+      resultMap: {
+        messageType: "chapter_summary",
+        answer: "最终总结",
+        chapterSummary: "最终总结",
+        chapterTitle: "最终总结",
+        searchResult: {
+          query: ["查询一", "查询二"],
+          docs: [
+            [{ link: "https://example.com/a", title: "来源一" }],
+            [{ link: "https://example.com/b", title: "来源二" }],
+          ],
+        },
+        chapters: {
+          C1: {
+            chapterId: "C1",
+            chapterTitle: "第一章",
+            chapterOrder: 1,
+            queries: ["查询一"],
+            docs: [[{ link: "https://example.com/a", title: "来源一" }]],
+            summary: "第一章总结",
+          },
+          C2: {
+            chapterId: "C2",
+            chapterTitle: "第二章",
+            chapterOrder: 2,
+            queries: ["查询二"],
+            docs: [[{ link: "https://example.com/b", title: "来源二" }]],
+            summary: "第二章总结",
+          },
+        },
+      },
+    } as unknown as CHAT.Task;
+
+    const rendered = processTaskForRender(task, "deep-search-isolated-");
+
+    expect(rendered.map((item) => item.resultMap?.chapterSummary)).toEqual([
+      "第一章总结",
+      "第二章总结",
+    ]);
+    expect(rendered.map((item) => item.resultMap?.answer)).toEqual([
+      "第一章总结",
+      "第二章总结",
+    ]);
+    expect(rendered.every((item) => item.resultMap?.answer !== "最终总结")).toBe(
+      true
+    );
+  });
 });
 
 describe("getTaskRenderSignature 缓存失效契约", () => {
@@ -152,6 +431,28 @@ describe("getTaskRenderSignature 缓存失效契约", () => {
     expect(getTaskRenderSignature(base, "m1")).not.toBe(
       getTaskRenderSignature(base, "m2")
     );
+  });
+
+  it("Deep Search 的实时 messageTime 变化不会单独让渲染缓存失效", () => {
+    const deepSearch = {
+      messageId: "deep-1",
+      messageType: "deep_search",
+      messageTime: "1714041600000",
+      resultMap: {
+        messageType: "search",
+        searchResult: {
+          query: ["查询一"],
+          docs: [[]],
+        },
+      },
+    } as unknown as Parameters<typeof getTaskRenderSignature>[0];
+
+    expect(
+      getTaskRenderSignature(
+        { ...deepSearch, messageTime: "1714041600001" },
+        "deep"
+      )
+    ).toBe(getTaskRenderSignature(deepSearch, "deep"));
   });
 
   it.each([

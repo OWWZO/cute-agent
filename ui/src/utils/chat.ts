@@ -258,6 +258,22 @@ export function getStableTaskIdentity(
 }
 
 /**
+ * Deep Research 一次工具调用会连续发送 extend/search/chapter_summary/report 多帧，
+ * 实时 messageTime 每帧都会变化。若把它拼进 render id，同一张卡会每帧卸载重挂，
+ * 入场动画看起来就像持续屏闪。研究阶段复用 messageId，报告阶段单独占一个稳定角色。
+ */
+function resolveTaskRenderBaseId(
+  task: MESSAGE.Task,
+  taskIndex: number
+): string {
+  if (task.messageType === "deep_search" && task.messageId) {
+    const stage = resolveDeepSearchStage(task.resultMap?.messageType);
+    return `deep_search:${task.messageId}:${stage === "report" ? "report" : "research"}`;
+  }
+  return task.messageTime?.concat(String(taskIndex)) || `task:${task.taskId || taskIndex}`;
+}
+
+/**
  * 处理任务类型的消息
  * @param eventData 事件数据
  * @param currentChat 当前聊天对象
@@ -580,6 +596,7 @@ function applySubAgentLifecycle(
     lifecycle === "subagent_start" ? "working" : resolveSubAgentEndPhase(status);
   const summary = asTextField(merged.summary);
   const childSessionId = asTextField(merged.childSessionId);
+  const childRequestId = asTextField(merged.childRequestId);
 
   slot.group[slot.index] = {
     ...task,
@@ -587,6 +604,7 @@ function applySubAgentLifecycle(
       ...prev,
       // 只补子代理投影字段，绝不写 parentToolUseId（会被派生层当子事件踢出时间线）
       childSessionId: childSessionId || prev.childSessionId,
+      childRequestId: childRequestId || prev.childRequestId,
       subAgentId: subAgentId || prev.subAgentId,
       subAgentType: asTextField(merged.subagentType) || prev.subAgentType,
       subAgentDescription:
@@ -1849,14 +1867,54 @@ function addNewTask(currentChat: CHAT.ChatItem, eventData: MESSAGE.EventData) {
  * 更新搜索结果
  */
 function updateSearchResult(target: MESSAGE.ResultMap, source?: MESSAGE.SearchResult) {
-  if (source?.query?.length) {
-    target.searchResult!.query = source.query;
+  if (!source) {
+    return;
   }
-  if (source?.docs?.length) {
-    target.searchResult!.docs = source.docs;
+  ensureSearchResult(target);
+  const searchResult = target.searchResult!;
+
+  if (source.query?.length) {
+    const queries = [...(searchResult.query || [])];
+    const docs = [...(searchResult.docs || [])];
+    source.query.forEach((query, incomingIndex) => {
+      const normalized = String(query || "").trim();
+      if (!normalized) {
+        return;
+      }
+      const index = queries.indexOf(normalized);
+      const targetIndex = index >= 0 ? index : queries.length;
+      if (index < 0) {
+        queries.push(normalized);
+      }
+      const incomingDocs = source.docs?.[incomingIndex];
+      if (Array.isArray(incomingDocs)) {
+        docs[targetIndex] = incomingDocs;
+      } else if (!docs[targetIndex]) {
+        docs[targetIndex] = [];
+      }
+    });
+    searchResult.query = queries;
+    searchResult.docs = queries.map((_, index) => docs[index] || []);
   }
-  if (source?.chapters?.length) {
-    target.searchResult!.chapters = source.chapters;
+
+  if (source.chapters?.length) {
+    const chapters = new Map<string, MESSAGE.DeepSearchChapterState>();
+    for (const chapter of searchResult.chapters || []) {
+      const key = chapter?.chapterId || chapter?.chapterTitle;
+      if (key) {
+        chapters.set(key, chapter);
+      }
+    }
+    for (const chapter of source.chapters) {
+      const key = chapter?.chapterId || chapter?.chapterTitle;
+      if (key) {
+        chapters.set(key, {
+          ...chapters.get(key),
+          ...chapter,
+        });
+      }
+    }
+    searchResult.chapters = [...chapters.values()];
   }
 }
 
@@ -1990,6 +2048,20 @@ function handleNonStreamingMessage(
           subAgentPhase: nextMap.subAgentPhase || prevMap.subAgentPhase,
           subAgentProgressKind:
             nextMap.subAgentProgressKind || prevMap.subAgentProgressKind,
+          // 父卡从 tool_call 替换为 tool_result 时，终态包通常不带子会话身份；
+          // 这里必须保留，否则详情面板会短暂误判为“没有可用的独立会话轨迹”。
+          childSessionId:
+            nextMap.childSessionId || prevMap.childSessionId,
+          childRequestId:
+            nextMap.childRequestId || prevMap.childRequestId,
+          subAgentId:
+            nextMap.subAgentId || prevMap.subAgentId,
+          subAgentType:
+            nextMap.subAgentType || prevMap.subAgentType,
+          subAgentDescription:
+            nextMap.subAgentDescription || prevMap.subAgentDescription,
+          subAgentSummary:
+            nextMap.subAgentSummary || prevMap.subAgentSummary,
           run_in_background:
             nextMap.run_in_background ??
             prevMap.run_in_background ??
@@ -2244,8 +2316,7 @@ export const handleTaskData = (
       if (task?.messageType === "plan_mode_entered") {
         return;
       }
-      const time = task.messageTime;
-      const id = time?.concat(String(taskIndex));
+      const id = resolveTaskRenderBaseId(task, taskIndex);
       const processedInfo = processTaskForRender(task, id);
       // Agent 父卡若被误写入自身 parentToolUseId，按无父处理，避免自嵌套后从 taskList 消失。
       const rawParentId = resolveParentToolUseId(task);

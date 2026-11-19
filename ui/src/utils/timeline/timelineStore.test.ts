@@ -49,4 +49,155 @@ describe("TimelineStore", () => {
 
     expect(store.values().map((item) => item.itemId)).toEqual(["tool:stable"]);
   });
+
+  it("同一章节的流式总结帧按累计文本合并", () => {
+    const store = new TimelineStore();
+    const chapter = (summary: string, streaming: boolean) => ({
+      eventType: "item.upserted" as const,
+      itemId: "tool:call-deep",
+      kind: "TOOL_CALL" as const,
+      payload: {
+        eventData: {
+          messageType: "task",
+          messageId: "msg-deep",
+          taskId: "task-deep",
+          taskOrder: 1,
+          messageOrder: 1,
+          resultMap: {
+            messageType: "deep_search",
+            messageId: "msg-deep",
+            messageTime: "1",
+            resultMap: {
+              messageType: "chapter_summary",
+              chapterId: "C1",
+              chapterTitle: "第一章",
+              chapterOrder: 1,
+              chapterSummary: summary,
+              answer: summary,
+              chapterStreaming: streaming,
+            },
+          },
+        },
+      },
+    });
+
+    store.upsertMany([chapter("第一段", true) as never]);
+    store.upsertMany([chapter("第一段第二段", true) as never]);
+
+    const payload = store.values()[0].payload?.eventData?.resultMap as
+      | Record<string, unknown>
+      | undefined;
+    const stage = payload?.resultMap as Record<string, unknown> | undefined;
+    expect(stage?.chapterSummary).toBe("第一段第二段");
+    expect(stage?.chapterStreaming).toBe(true);
+  });
+
+  it("章节总结帧不会覆盖已到达的检索来源", () => {
+    const store = new TimelineStore();
+    const deepSearch = (stage: Record<string, unknown>) => ({
+      eventType: "item.upserted" as const,
+      itemId: "tool:call-deep",
+      kind: "TOOL_CALL" as const,
+      payload: {
+        eventData: {
+          messageType: "task",
+          messageId: "msg-deep",
+          taskId: "task-deep",
+          taskOrder: 1,
+          messageOrder: 1,
+          resultMap: {
+            messageType: "deep_search",
+            messageId: "msg-deep",
+            messageTime: "1",
+            resultMap: stage,
+          },
+        },
+      },
+    });
+
+    store.upsertMany([deepSearch({
+      messageType: "search",
+      searchResult: {
+        query: ["查询一"],
+        docs: [[{ title: "来源一", link: "https://example.com/a" }]],
+      },
+    }) as never]);
+    store.upsertMany([deepSearch({
+      messageType: "chapter_summary",
+      chapterId: "C1",
+      chapterTitle: "第一章",
+      chapterOrder: 1,
+      chapterSummary: "章节总结",
+      answer: "章节总结",
+      searchResult: {
+        query: ["查询一"],
+        docs: [],
+      },
+    }) as never]);
+
+    const history = store.values()[0].payload?.eventDataHistory || [];
+    const search = history.find((event) => {
+      const payload = event.resultMap as unknown as Record<string, unknown> | undefined;
+      return (payload?.resultMap as Record<string, unknown> | undefined)?.messageType === "search";
+    });
+    const searchPayload = search?.resultMap as unknown as Record<string, unknown> | undefined;
+    const searchResult = (searchPayload?.resultMap as Record<string, unknown> | undefined)
+      ?.searchResult as Record<string, unknown> | undefined;
+    expect(searchResult?.docs).toEqual([
+      [{ title: "来源一", link: "https://example.com/a" }],
+    ]);
+  });
+
+  it("同一时间线项的后续快照不会丢掉已有的 Deep Search 阶段历史", () => {
+    const deepSearch = (stage: Record<string, unknown>, orderKey: number) => ({
+      eventType: "item.upserted" as const,
+      itemId: "tool:call-deep",
+      kind: "TOOL_CALL" as const,
+      orderKey,
+      payload: {
+        eventData: {
+          messageType: "task",
+          messageId: "msg-deep",
+          taskId: "task-deep",
+          taskOrder: 1,
+          messageOrder: orderKey,
+          resultMap: {
+            messageType: "deep_search",
+            messageId: "msg-deep",
+            messageTime: String(orderKey),
+            resultMap: stage,
+          },
+        },
+      },
+    });
+
+    const store = new TimelineStore();
+    store.upsertMany([deepSearch({
+      messageType: "search",
+      searchResult: {
+        query: ["查询一"],
+        docs: [[{ title: "来源一", link: "https://example.com/a" }]],
+      },
+    }, 1) as never]);
+    store.upsertMany([deepSearch({
+      messageType: "chapter_summary",
+      chapterId: "C1",
+      chapterTitle: "第一章",
+      chapterOrder: 1,
+      chapterSummary: "第一章总结",
+      answer: "第一章总结",
+    }, 2) as never]);
+    store.upsertMany([deepSearch({
+      messageType: "report",
+      isFinal: true,
+      answer: "最终报告",
+    }, 3) as never]);
+
+    const history = store.values()[0]?.payload?.eventDataHistory || [];
+    expect(history.map((event) => {
+      const outer = event.resultMap as unknown as Record<string, unknown>;
+      const nested = outer.resultMap as Record<string, unknown> | undefined;
+      return nested?.messageType;
+    })).toEqual(["search", "chapter_summary", "report"]);
+  });
 });

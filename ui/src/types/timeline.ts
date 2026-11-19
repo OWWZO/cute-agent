@@ -31,6 +31,8 @@ export type TimelineItemStatus =
 
 export interface TimelineItemPayload {
   eventData?: MESSAGE.EventData;
+  /** 同一 live timeline item 下按阶段合并后的 DeepSearch 快照。 */
+  eventDataHistory?: MESSAGE.EventData[];
   artifactId?: number | null;
   toolInvocationId?: number | null;
   [key: string]: unknown;
