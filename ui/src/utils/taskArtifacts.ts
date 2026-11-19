@@ -3,7 +3,10 @@ import {
   normalizeFileUrlForBrowser,
 } from "@/utils/fileUrl";
 import { resolveTaskResultMap } from "@/utils/chat/toolCalls";
-import { resolveFilePreviewKind } from "@/lib/filePreview/kinds";
+import {
+  isBinaryBackedKind,
+  resolveFilePreviewKind,
+} from "@/lib/filePreview/kinds";
 
 /**
  * 任务产物和附件引用归一化工具。
@@ -146,52 +149,6 @@ const toExtension = (name: string, fallbackType?: string) => {
   return fallback.length <= 8 ? fallback : fromName;
 };
 
-const IMAGE_FILE_EXTENSIONS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "bmp",
-  "svg",
-  "svg+xml",
-  "avif",
-  "apng",
-  "ico",
-]);
-
-const PDF_FILE_EXTENSIONS = new Set(["pdf"]);
-const MODEL_3D_FILE_EXTENSIONS = new Set(["glb", "gltf"]);
-
-/** 可客户端转 HTML 预览的 Word（OOXML） */
-const DOCX_FILE_EXTENSIONS = new Set(["docx"]);
-
-/** 老式 Word，浏览器端不做预览 */
-const LEGACY_DOC_EXTENSIONS = new Set(["doc"]);
-
-const TEXT_COPYABLE_EXTENSIONS = new Set([
-  "md",
-  "markdown",
-  "txt",
-  "json",
-  "js",
-  "ts",
-  "tsx",
-  "jsx",
-  "py",
-  "java",
-  "xml",
-  "html",
-  "htm",
-  "css",
-  "yml",
-  "yaml",
-  "sql",
-  "sh",
-  "log",
-  "csv",
-]);
-
 const normalizeExtension = (value?: string | null) => {
   return String(value || "")
     .trim()
@@ -199,17 +156,23 @@ const normalizeExtension = (value?: string | null) => {
     .replace(/^\./, "");
 };
 
-const resolveFileExtension = (
+export const resolveTaskFilePreviewKind = (
   fileLike?: Pick<CHAT.TFile, "type" | "name"> | null
 ) => {
   if (!fileLike) {
-    return "";
+    return "unknown" as const;
   }
-  const fromType = normalizeExtension(fileLike.type);
-  if (fromType) {
-    return fromType;
-  }
-  return normalizeExtension(fileLike.name?.split(".").pop());
+  const type = normalizeExtension(fileLike.type);
+  const name = String(fileLike.name || "");
+  const hasNameExtension = /\.[^./\\]+$/.test(name);
+  const previewName =
+    type && !type.includes("/") && !hasNameExtension
+      ? `${name || "file"}.${type}`
+      : name;
+  const mimeType =
+    (fileLike as { mimeType?: string | null }).mimeType ||
+    (type.includes("/") ? fileLike.type : undefined);
+  return resolveFilePreviewKind({ name: previewName, mimeType, url: name });
 };
 
 /**
@@ -337,21 +300,8 @@ export const artifactRefsToFileInfo = (artifactRefs?: unknown[]) => {
 export const isImageFileLike = (
   fileLike?: Pick<CHAT.TFile, "type" | "name" | "mimeType"> | null
 ) => {
-  if (!fileLike) {
-    return false;
-  }
-
-  if (fileLike.mimeType?.toLowerCase().startsWith("image/")) {
-    return true;
-  }
-
-  const normalizedType = normalizeExtension(fileLike.type);
-  if (IMAGE_FILE_EXTENSIONS.has(normalizedType)) {
-    return true;
-  }
-
-  const normalizedNameExtension = normalizeExtension(fileLike.name.split(".").pop());
-  return IMAGE_FILE_EXTENSIONS.has(normalizedNameExtension);
+  const kind = resolveTaskFilePreviewKind(fileLike);
+  return kind === "image" || kind === "svg";
 };
 
 /**
@@ -360,14 +310,7 @@ export const isImageFileLike = (
 export const isModel3DFileLike = (
   fileLike?: Pick<CHAT.TFile, "type" | "name" | "mimeType"> | null
 ) => {
-  if (!fileLike) {
-    return false;
-  }
-  const mime = fileLike.mimeType?.toLowerCase() || "";
-  if (mime.includes("gltf") || mime.includes("model/gltf")) {
-    return true;
-  }
-  return MODEL_3D_FILE_EXTENSIONS.has(resolveFileExtension(fileLike));
+  return resolveTaskFilePreviewKind(fileLike) === "model3d";
 };
 
 /**
@@ -376,14 +319,7 @@ export const isModel3DFileLike = (
 export const isPdfFileLike = (
   fileLike?: Pick<CHAT.TFile, "type" | "name" | "mimeType"> | null
 ) => {
-  if (!fileLike) {
-    return false;
-  }
-  const mime = fileLike.mimeType?.toLowerCase() || "";
-  if (mime === "application/pdf" || mime.includes("application/pdf")) {
-    return true;
-  }
-  return PDF_FILE_EXTENSIONS.has(resolveFileExtension(fileLike));
+  return resolveTaskFilePreviewKind(fileLike) === "pdf";
 };
 
 /**
@@ -392,17 +328,7 @@ export const isPdfFileLike = (
 export const isDocxFileLike = (
   fileLike?: Pick<CHAT.TFile, "type" | "name" | "mimeType"> | null
 ) => {
-  if (!fileLike) {
-    return false;
-  }
-  const mime = fileLike.mimeType?.toLowerCase() || "";
-  if (
-    mime.includes("officedocument.wordprocessingml") ||
-    mime.includes("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-  ) {
-    return true;
-  }
-  return DOCX_FILE_EXTENSIONS.has(resolveFileExtension(fileLike));
+  return resolveTaskFilePreviewKind(fileLike) === "docx";
 };
 
 /**
@@ -411,17 +337,7 @@ export const isDocxFileLike = (
 export const isLegacyDocFileLike = (
   fileLike?: Pick<CHAT.TFile, "type" | "name" | "mimeType"> | null
 ) => {
-  if (!fileLike) {
-    return false;
-  }
-  if (isDocxFileLike(fileLike)) {
-    return false;
-  }
-  const mime = fileLike.mimeType?.toLowerCase() || "";
-  if (mime === "application/msword") {
-    return true;
-  }
-  return LEGACY_DOC_EXTENSIONS.has(resolveFileExtension(fileLike));
+  return resolveTaskFilePreviewKind(fileLike) === "doc";
 };
 
 /** Word 家族（docx 可预览 + doc 仅下载） */
@@ -432,70 +348,14 @@ export const isWordFileLike = (
 export const isExcelFileLike = (
   fileLike?: Pick<CHAT.TFile, "type" | "name" | "mimeType"> | null
 ) => {
-  if (!fileLike) {
-    return false;
-  }
-  const mime = fileLike.mimeType?.toLowerCase() || "";
-  if (
-    mime.includes("spreadsheet") ||
-    mime.includes("excel") ||
-    mime === "text/csv"
-  ) {
-    return true;
-  }
-  // 扩展名判定统一走 resolveFilePreviewKind，避免与其它调用点各维护一份表
-  // （历史 bug：.xlsm 在这张表里漏掉，导致它被当成二进制引导下载）。
-  const kind = resolveFilePreviewKind({
-    name: fileLike.name,
-    mimeType: fileLike.mimeType,
-  });
+  const kind = resolveTaskFilePreviewKind(fileLike);
   return kind === "xlsx" || kind === "csv";
 };
-
-const PPT_FILE_EXTENSIONS = new Set(["ppt", "pptx", "pps", "ppsx"]);
-/** 二进制 / 媒体容器：禁止按文本复制。与 filePreview 的 binary / media 白名单保持一致。 */
-const ARCHIVE_MEDIA_EXTENSIONS = new Set([
-  "zip",
-  "rar",
-  "7z",
-  "tar",
-  "gz",
-  "exe",
-  "dmg",
-  "apk",
-  "wasm",
-  "bin",
-  "glb",
-  "gltf",
-  // 视频
-  "mp4",
-  "mov",
-  "webm",
-  "m4v",
-  "avi",
-  "mkv",
-  "wmv",
-  "mpeg",
-  "mpg",
-  "flv",
-  // 音频
-  "mp3",
-  "wav",
-  "m4a",
-  "ogg",
-  "opus",
-  "flac",
-  "weba",
-  "aac",
-]);
 
 export const isPptFileLike = (
   fileLike?: Pick<CHAT.TFile, "type" | "name" | "mimeType"> | null
 ) => {
-  if (!fileLike) return false;
-  const mime = fileLike.mimeType?.toLowerCase() || "";
-  if (mime.includes("presentation") || mime.includes("powerpoint")) return true;
-  return PPT_FILE_EXTENSIONS.has(resolveFileExtension(fileLike));
+  return resolveTaskFilePreviewKind(fileLike) === "pptx";
 };
 
 /**
@@ -504,20 +364,7 @@ export const isPptFileLike = (
 export const isBinaryPreviewFileLike = (
   fileLike?: Pick<CHAT.TFile, "type" | "name" | "mimeType"> | null
 ) => {
-  if (!fileLike) {
-    return false;
-  }
-  if (
-    isImageFileLike(fileLike) ||
-    isPdfFileLike(fileLike) ||
-    isWordFileLike(fileLike) ||
-    isExcelFileLike(fileLike) ||
-    isPptFileLike(fileLike) ||
-    isModel3DFileLike(fileLike)
-  ) {
-    return true;
-  }
-  return ARCHIVE_MEDIA_EXTENSIONS.has(resolveFileExtension(fileLike));
+  return isBinaryBackedKind(resolveTaskFilePreviewKind(fileLike));
 };
 
 export const isTextCopyableFileLike = (
@@ -526,11 +373,21 @@ export const isTextCopyableFileLike = (
   if (!fileLike || isBinaryPreviewFileLike(fileLike)) {
     return false;
   }
+  const kind = resolveTaskFilePreviewKind(fileLike);
+  if (
+    kind === "markdown" ||
+    kind === "code" ||
+    kind === "csv" ||
+    kind === "html"
+  ) {
+    return true;
+  }
   const mime = fileLike.mimeType?.toLowerCase() || "";
   if (mime.startsWith("text/") || mime.includes("json") || mime.includes("xml")) {
     return true;
   }
-  return TEXT_COPYABLE_EXTENSIONS.has(resolveFileExtension(fileLike));
+  return kind === "text" &&
+    normalizeExtension(fileLike.name?.split(".").pop()) === "txt";
 };
 
 const readNestedResultMap = (taskLike: any) => {

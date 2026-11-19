@@ -12,14 +12,7 @@ import {
 } from "@/utils/chat/toolCalls";
 import { useMemo } from "react";
 import { PanelItemType, SearchListItem } from "./type";
-import {
-  getPrimaryTaskFile,
-  isDocxFileLike,
-  isExcelFileLike,
-  isLegacyDocFileLike,
-  isPdfFileLike,
-  isPptFileLike,
-} from "@/utils/taskArtifacts";
+import { getPrimaryTaskFile } from "@/utils/taskArtifacts";
 import { resolveFilePreviewKind } from "@/lib/filePreview/kinds";
 import { normalizeToolName } from "@/components/Dialogue/tools/toolMeta";
 
@@ -177,10 +170,10 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
         url: primaryFile.url,
       })
       : null;
-    const useExcel = !!primaryFile && isExcelFileLike(primaryFile);
-    const usePdf = !!primaryFile && isPdfFileLike(primaryFile);
-    const useDocx = !!primaryFile && isDocxFileLike(primaryFile);
-    const useLegacyDoc = !!primaryFile && isLegacyDocFileLike(primaryFile);
+    const useExcel = primaryKind === "xlsx" || primaryKind === "csv";
+    const usePdf = primaryKind === "pdf";
+    const useDocx = primaryKind === "docx";
+    const useLegacyDoc = primaryKind === "doc";
     const useWord = useDocx || useLegacyDoc;
 
     let isHtml = false;
@@ -188,7 +181,7 @@ export const useMsgTypes = (taskItem?: PanelItemType) => {
       isHtml = isHTML(resultMap.codeOutput);
     }
     const useHtml = messageType === 'html' || primaryKind === 'html';
-    const usePpt = messageType === 'ppt' || (!!primaryFile && isPptFileLike(primaryFile));
+    const usePpt = messageType === 'ppt' || primaryKind === "pptx";
     // 只要主文件是图片就走图片预览（图表/工具产物常见为 tool_result + .png）。
     // 注意 SVG 不算位图：它要「图形 / 源码」双模式，走 useSvg。
     const useImage = primaryKind === "image";

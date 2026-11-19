@@ -9,14 +9,10 @@ import LoadingSpinner from "../LoadingSpinner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { resolveFilePreviewKind } from "@/lib/filePreview/kinds";
 import {
   isBinaryPreviewFileLike,
-  isImageFileLike,
-  isModel3DFileLike,
-  isPdfFileLike,
-  isPptFileLike,
   isTextCopyableFileLike,
+  resolveTaskFilePreviewKind,
 } from "@/utils/taskArtifacts";
 import {
   FileText,
@@ -102,20 +98,26 @@ const FILE_TYPE_FILTERS: Array<{ key: FileTypeFilter; label: string }> = [
   },
 ];
 
-const FILE_TYPE_GROUPS: Record<string, string[]> = {
-  document: ["doc", "docx", "pdf", "md", "markdown", "txt"],
-  spreadsheet: ["csv", "xlsx", "xls"],
-  presentation: ["ppt", "pptx", "pps", "ppsx"],
-  code: ["html", "htm", "code", "js", "jsx", "ts", "tsx", "py", "java", "css", "scss", "less", "json", "xml", "yml", "yaml", "sh", "bash", "sql", "go", "rs", "c", "cpp", "h", "hpp", "log"],
-  image: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
-};
-
-const getFileTypeGroup = (type?: string): FileTypeFilter => {
-  const ext = (type || "").toLowerCase();
-  for (const [group, exts] of Object.entries(FILE_TYPE_GROUPS)) {
-    if (exts.includes(ext)) {
-      return group as FileTypeFilter;
-    }
+const getFileTypeGroup = (file: FileItem): FileTypeFilter => {
+  const kind = resolveTaskFilePreviewKind(file);
+  if (kind === "markdown" || kind === "pdf" || kind === "docx" || kind === "doc") {
+    return "document";
+  }
+  if (kind === "text") {
+    const ext = (file.type || file.name?.split(".").pop() || "").toLowerCase();
+    return ext === "txt" ? "document" : "other";
+  }
+  if (kind === "xlsx" || kind === "csv") {
+    return "spreadsheet";
+  }
+  if (kind === "pptx") {
+    return "presentation";
+  }
+  if (kind === "code" || kind === "html") {
+    return "code";
+  }
+  if (kind === "image" || kind === "svg") {
+    return "image";
   }
   return "other";
 };
@@ -164,8 +166,7 @@ const FileList: React.FC<{
   const visibleFiles = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
     return fileList.filter((file) => {
-      const ext = file.type || file.name?.split(".").pop() || "";
-      if (typeFilter !== "all" && getFileTypeGroup(ext) !== typeFilter) {
+      if (typeFilter !== "all" && getFileTypeGroup(file) !== typeFilter) {
         return false;
       }
       if (!keyword) {
@@ -186,7 +187,7 @@ const FileList: React.FC<{
     fileItem && "missingReason" in fileItem ? fileItem.missingReason : undefined;
   const downloadUrl =
     fileItem && "downloadUrl" in fileItem ? fileItem.downloadUrl : undefined;
-  const isImageFile = Boolean(fileItem && isImageFileLike(fileItem));
+  const previewKind = fileItem ? resolveTaskFilePreviewKind(fileItem) : "unknown";
   const canCopyText = Boolean(fileItem && isTextCopyableFileLike(fileItem));
   const isBinaryFile = Boolean(fileItem && isBinaryPreviewFileLike(fileItem));
 
@@ -301,7 +302,7 @@ const FileList: React.FC<{
     <FilePreviewSwitch
       fileUrl={fileItem.url}
       fileName={fileItem.name}
-      mimeType={fileItem.type}
+      mimeType={fileItem.mimeType || fileItem.type}
       downloadUrl={downloadUrl || fileItem.url}
       missingReason={missingReason}
       forceSource={forceSource}
@@ -310,56 +311,28 @@ const FileList: React.FC<{
   );
 
   if (embedded) {
-    const ext = (fileItem.type || fileItem.name?.split(".").pop() || "").toLowerCase();
-    const isSpreadsheet = ["csv", "xlsx", "xls"].includes(ext);
-    const isDownloadOnly = ["ppt", "pptx", "pps", "ppsx"].includes(ext);
+    const isSpreadsheet = previewKind === "xlsx" || previewKind === "csv";
     // 这些渲染器自带 ViewerPanelShell（含顶栏与滚动容器），外壳必须让位，否则会套出双层边框。
     const isSelfScrollingPreview =
-      (isPptFileLike(fileItem) && !forceSource && Boolean(fileItem.url)) ||
-      (isPdfFileLike(fileItem) && !forceSource && Boolean(fileItem.url)) ||
-      (!forceSource &&
-        ["svg", "markdown", "video", "audio"].includes(
-          resolveFilePreviewKind({
-            name: fileItem.name,
-            mimeType: fileItem.type,
-            url: fileItem.url,
-          })
-        ));
+      !forceSource &&
+      Boolean(fileItem.url) &&
+      (previewKind === "pptx" ||
+        previewKind === "pdf" ||
+        previewKind === "svg" ||
+        previewKind === "markdown" ||
+        previewKind === "video" ||
+        previewKind === "audio");
     const isMedia =
-      isImageFile ||
-      isPdfFileLike(fileItem) ||
-      isModel3DFileLike(fileItem) ||
-      isSpreadsheet ||
-      isDownloadOnly ||
-      ["html", "htm"].includes(ext);
+      previewKind === "image" ||
+      previewKind === "svg" ||
+      previewKind === "pdf" ||
+      previewKind === "model3d" ||
+      previewKind === "xlsx" ||
+      previewKind === "csv" ||
+      previewKind === "pptx" ||
+      previewKind === "html";
     // 源码类：全幅白底 + 行号高亮，不套文档卡片
-    const isSourceCode = [
-      "py",
-      "python",
-      "js",
-      "ts",
-      "tsx",
-      "jsx",
-      "css",
-      "scss",
-      "less",
-      "json",
-      "xml",
-      "yml",
-      "yaml",
-      "sh",
-      "bash",
-      "sql",
-      "java",
-      "go",
-      "rs",
-      "c",
-      "cpp",
-      "h",
-      "hpp",
-      "code",
-      "log",
-    ].includes(ext);
+    const isSourceCode = previewKind === "code" || previewKind === "diff";
     // 文档类（Markdown 等）走最后一个分支：对齐 ZCode
     // `previewPaneMarkdownContent.tsx:42,54` 的 `w-full h-full bg-background
     // overflow-auto` + `p-4` —— 内容直接铺在面板里，**不套卡片**。旧版的
@@ -380,23 +353,19 @@ const FileList: React.FC<{
     );
   }
 
-  const detailExt = (
-    fileItem.type ||
-    fileItem.name?.split(".").pop() ||
-    ""
-  ).toLowerCase();
   // 表格、PPTX、PDF 以及自带外壳的 SVG / Markdown / 音视频预览都需要撑满面板并自管滚动，
   // 不能套 h-full overflow-auto p-4。
-  const detailKind = resolveFilePreviewKind({
-    name: fileItem.name,
-    mimeType: fileItem.type,
-    url: fileItem.url,
-  });
   const isImmersiveDetail =
-    ["csv", "xlsx", "xls"].includes(detailExt) ||
-    (isPptFileLike(fileItem) && !forceSource && Boolean(fileItem.url)) ||
-    (isPdfFileLike(fileItem) && !forceSource && Boolean(fileItem.url)) ||
-    (!forceSource && ["svg", "markdown", "video", "audio"].includes(detailKind));
+    previewKind === "csv" ||
+    previewKind === "xlsx" ||
+    (!forceSource &&
+      Boolean(fileItem.url) &&
+      (previewKind === "pptx" ||
+        previewKind === "pdf" ||
+        previewKind === "svg" ||
+        previewKind === "markdown" ||
+        previewKind === "video" ||
+        previewKind === "audio"));
 
   return (
     <ActionViewFrame

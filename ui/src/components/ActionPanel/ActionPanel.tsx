@@ -8,7 +8,7 @@ import HTMLRenderer from "./HTMLRenderer";
 import resolvePanelContent from "./panelContent";
 import MarkdownRenderer from "./MarkdownRenderer";
 import TableRenderer from "./TableRenderer";
-import FileRenderer from "./FileRenderer";
+import FilePreviewSwitch from "./FilePreviewSwitch";
 import ImageRenderer from "./ImageRenderer";
 import MediaFileRenderer from "./MediaFileRenderer";
 import PdfRenderer from "./PdfRenderer";
@@ -63,10 +63,11 @@ const StreamingMarkdownWrapper = memo(
     isStreaming: boolean;
   }) => {
     return (
-      <div className="flex min-h-full flex-col">
+      <div className="chat-dialogue flex min-h-full flex-col">
         <MarkdownRenderer
           markDownContent={content}
           isStreaming={isStreaming}
+          className="chat-markdown conclusion-markdown"
         />
         <div
           aria-hidden
@@ -328,7 +329,7 @@ const ActionPanel: CuteType.FC<ActionPanelProps> = React.memo((props) => {
       case "file":
         return (
           <ContentWrapper key="file">
-            <FileRenderer
+            <FilePreviewSwitch
               fileUrl={panelView.fileUrl}
               fileName={panelView.fileName}
               downloadUrl={panelView.downloadUrl}

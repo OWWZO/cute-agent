@@ -2,15 +2,9 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { useRequest } from "ahooks";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CircleAlert } from "lucide-react";
-import MarkdownFileRenderer from "./MarkdownFileRenderer";
-import SvgFileRenderer from "./SvgFileRenderer";
-import MediaFileRenderer from "./MediaFileRenderer";
-import HTMLRenderer from "./HTMLRenderer";
-import ImageRenderer from "./ImageRenderer";
 import DocumentFallback from "./DocumentFallback";
 import SourceCodeView from "./SourceCodeView";
 import Loading from "./Loading";
-import GenUiModel3D from "@/components/genui/GenUiModel3D";
 import {
   isBinaryBackedKind,
   isTextBackedKind,
@@ -67,12 +61,7 @@ const resolveUnavailableReason = (error: Error) => {
   return message || "引用资源不存在或已失效";
 };
 
-/**
- * 通用文件渲染器：按 `FilePreviewKind` 分派到对应预览器。
- *
- * 这是「不知道文件是什么、只能靠扩展名判断」时的兜底入口 —— 类型判定统一走
- * `resolveFilePreviewKind()`，本组件不再自己维护扩展名表。
- */
+/** 文本 / 二进制兜底渲染器；带专属预览器的类型统一由 `FilePreviewSwitch` 分派。 */
 const FileRenderer: CuteType.FC<FileRendererProps> = React.memo((props) => {
   const {
     fileUrl,
@@ -97,15 +86,12 @@ const FileRenderer: CuteType.FC<FileRendererProps> = React.memo((props) => {
   );
   const resolvedDownload = downloadUrl || fileUrl;
 
-  // markdown / svg / html 由各自的渲染器自己取数，不在这里重复下载。
-  const hasDedicatedTextRenderer =
-    kind === "markdown" || kind === "svg" || kind === "html";
   // 强制源码模式下不按类型分派，但**仍然需要把内容取回来**当纯文本读。
   // 文本类型从 `isTextBackedKind()` 派生，避免新增类型时漏取内容导致空白预览。
   const shouldFetchText =
     forceSource ||
     kind === "unknown" ||
-    (isTextBackedKind(kind) && !hasDedicatedTextRenderer);
+    isTextBackedKind(kind);
 
   const abortRef = useRef<AbortController | null>(null);
   // 卸载时取消未完成的下载；切文件时由 service 自己 abort 上一个。
@@ -185,83 +171,6 @@ const FileRenderer: CuteType.FC<FileRendererProps> = React.memo((props) => {
         sourcePath={fileName}
       />
     );
-  }
-
-  // ---- 有专门渲染器的类型：直接委派 ----
-  switch (kind) {
-    case "image":
-      return (
-        <ImageRenderer
-          imageUrl={fileUrl}
-          fileName={fileName}
-          missingReason={missingReason}
-          className={className}
-        />
-      );
-    case "svg":
-      return (
-        <SvgFileRenderer
-          fileUrl={fileUrl}
-          fileName={fileName}
-          downloadUrl={resolvedDownload}
-          missingReason={missingReason}
-          className={className}
-        />
-      );
-    case "markdown":
-      return (
-        <MarkdownFileRenderer
-          fileUrl={fileUrl}
-          fileName={fileName}
-          downloadUrl={resolvedDownload}
-          missingReason={missingReason}
-          className={className}
-        />
-      );
-    case "video":
-    case "audio":
-      return (
-        <MediaFileRenderer
-          kind={kind}
-          fileUrl={fileUrl}
-          fileName={fileName}
-          missingReason={missingReason}
-          className={className}
-        />
-      );
-    case "html":
-      return (
-        <HTMLRenderer
-          htmlUrl={fileUrl}
-          downloadUrl={resolvedDownload}
-          missingReason={missingReason}
-          showToolBar
-          className={className}
-        />
-      );
-    case "model3d":
-      if (missingReason || !fileUrl) {
-        return (
-          <DocumentFallback
-            label="GLB"
-            title="3D 模型不可读取"
-            description={missingReason || "引用资源不存在或已失效"}
-            fileName={fileName}
-            downloadUrl={resolvedDownload}
-            className={className}
-            type="info"
-          />
-        );
-      }
-      return (
-        <div className={cn("flex h-full min-h-[360px] items-stretch bg-[#0f172a] p-3", className)}>
-          <div className="min-h-[360px] w-full">
-            <GenUiModel3D src={fileUrl} caption={fileName} height={520} />
-          </div>
-        </div>
-      );
-    default:
-      break;
   }
 
   // ---- 二进制：引导下载 ----

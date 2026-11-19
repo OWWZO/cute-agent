@@ -157,9 +157,15 @@ const MarkdownFileRenderer: CuteType.FC<MarkdownFileRendererProps> = React.memo(
       ) : mode === "source" ? (
         <SourceCodeView code={content || ""} language="markdown" sourcePath={fileName} />
       ) : (
-        <div ref={markdownRootRef} className="h-full min-h-0 overflow-auto bg-white">
+        <div
+          ref={markdownRootRef}
+          className="chat-dialogue h-full min-h-0 overflow-auto bg-white"
+        >
           <div className="mx-auto max-w-[720px] px-6 py-6 sm:px-8">
-            <MarkdownRenderer markDownContent={content || ""} />
+            <MarkdownRenderer
+              markDownContent={content || ""}
+              className="chat-markdown conclusion-markdown"
+            />
           </div>
           <MarkdownSelectionMenu rootRef={markdownRootRef} sourcePath={fileName} />
         </div>

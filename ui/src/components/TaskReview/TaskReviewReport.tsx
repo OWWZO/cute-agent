@@ -26,6 +26,8 @@ import {
   type EvidencePreview,
 } from "./EvidenceInspectorDialog";
 import { NarrativeReportPanel } from "./NarrativeReportPanel";
+import { ToolOutputBlock } from "@/components/Dialogue/tools/ToolOutputBlock";
+import { ToolParametersBlock } from "@/components/Dialogue/tools/ToolParametersBlock";
 
 const CONCLUSION_LABELS: Record<string, string> = {
   completed: "完成",
@@ -645,14 +647,14 @@ function ToolTimelineRow({
         <details className="mt-2 text-[11px] text-[var(--chat-text-muted)]">
           <summary className="cursor-pointer select-none">查看参数与结果</summary>
           {tool.argumentsPreview || tool.inputPreview ? (
-            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white/85 p-2.5 font-mono text-[10px] leading-4 text-[var(--chat-text-soft)] ring-1 ring-black/5">
-              {tool.argumentsPreview || tool.inputPreview}
-            </pre>
+            <div className="mt-2">
+              <ToolParametersBlock text={tool.argumentsPreview || tool.inputPreview} />
+            </div>
           ) : null}
           {tool.resultPreview ? (
-            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white/85 p-2.5 font-mono text-[10px] leading-4 text-[var(--chat-text-soft)] ring-1 ring-black/5">
-              {tool.resultPreview}
-            </pre>
+            <div className="mt-2">
+              <ToolOutputBlock lines={tool.resultPreview.split(/\r?\n/)} />
+            </div>
           ) : null}
         </details>
       ) : null}

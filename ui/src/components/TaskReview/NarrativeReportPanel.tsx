@@ -6,9 +6,8 @@ import {
   Route,
   Sparkles,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import MarkdownRenderer from "@/components/ActionPanel/MarkdownRenderer";
 import { downloadTaskReviewReport } from "@/services/taskReview";
 import type { TaskReviewNarrative } from "@/services/taskReview";
 import { DeveloperActionCard } from "./DeveloperActionCard";
@@ -128,7 +127,8 @@ export function NarrativeReportPanel({
             </div>
           </section>
         ) : null}
-        <article
+        <MarkdownRenderer
+          markDownContent={displayMarkdown}
           className={[
             "max-w-none text-[14px] leading-7 text-[var(--chat-text-soft)]",
             "[&_h1]:mb-4 [&_h1]:text-[24px] [&_h1]:font-semibold [&_h1]:tracking-[-0.03em] [&_h1]:text-[var(--chat-text)]",
@@ -136,15 +136,9 @@ export function NarrativeReportPanel({
             "[&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:text-[var(--chat-text)]",
             "[&_p]:my-2.5 [&_ul]:my-2.5 [&_ul]:space-y-1.5 [&_ol]:my-2.5 [&_ol]:space-y-1.5 [&_li]:pl-1",
             "[&_strong]:font-semibold [&_strong]:text-[var(--chat-text)]",
-            "[&_code]:rounded-md [&_code]:bg-black/[0.045] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[11px] [&_code]:text-[var(--chat-text)]",
-            "[&_pre]:overflow-auto [&_pre]:rounded-[18px] [&_pre]:bg-[#171717] [&_pre]:p-4 [&_pre]:text-[12px] [&_pre]:leading-5 [&_pre]:text-white",
             "[&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--chat-accent)]/35 [&_blockquote]:pl-4 [&_blockquote]:text-[var(--chat-text-muted)]",
           ].join(" ")}
-        >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {displayMarkdown}
-          </ReactMarkdown>
-        </article>
+        />
 
         {narrative.status === "fact_only" ? (
           <div className="mt-6 flex items-start gap-2 rounded-[18px] bg-amber-500/10 px-3.5 py-3 text-[12px] leading-5 text-amber-800">

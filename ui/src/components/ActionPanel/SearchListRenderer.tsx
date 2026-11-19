@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { jumpUrl } from "@/utils";
 import { isSafeBrowserUrl } from "@/utils/fileUrl";
+import { useToolEntranceAnimation } from "@/components/Dialogue/tools/useToolEntranceAnimation";
 
 import type { SearchListItem } from "./type";
 
@@ -44,13 +45,14 @@ const SearchListItemComponent: CuteType.FC<SearchListItem & { index: number }> =
     const snippet = normalizeSnippet(pageContent, name);
     const clickable =
       interactive !== false && isSafeBrowserUrl(url, ["http:", "https:"]);
+    const shouldAnimateEntrance = useToolEntranceAnimation(
+      `search:${url || name}`,
+      true
+    );
 
     return (
       <motion.article
-        initial={{
-          opacity: 0,
-          y: 8,
-        }}
+        initial={shouldAnimateEntrance ? { opacity: 0, y: 8 } : false}
         animate={{
           opacity: 1,
           y: 0,
@@ -191,7 +193,7 @@ const SearchListRenderer: CuteType.FC<SearchListRendererProps> = React.memo(({
       <div className="flex flex-col gap-3">
         {list.map((item, index) => (
           <SearchListItemComponent
-            key={`${item.url}-${index}`}
+            key={`${item.url || item.name}#${index}`}
             index={index}
             name={item.name}
             pageContent={item.pageContent}

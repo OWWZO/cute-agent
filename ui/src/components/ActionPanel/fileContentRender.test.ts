@@ -96,28 +96,45 @@ describe("ActionPanel file content rendering", () => {
     }
   });
 
-  it("should resolve the final deep search report to a markdown panel", () => {
+  it("should resolve a final deep search report file through the shared file preview", () => {
     const task = {
       messageType: "deep_search",
       resultMap: {
         messageType: "report",
         answer: "最终章节合并总结",
+        query: "深度研究",
+        fileInfo: [
+          {
+            fileName: "深度研究报告.md",
+            ossUrl: "https://example.com/deep-report.md",
+            domainUrl: "https://example.com/deep-report-preview.md",
+          },
+        ],
         searchResult: {
           query: [],
           docs: [],
         },
       },
     } as unknown as MESSAGE.Task;
+    let msgTypes: ReturnType<typeof useMsgTypes> | undefined;
+    const HookProbe = () => {
+      msgTypes = useMsgTypes(task as unknown as any);
+      return null;
+    };
+    renderToStaticMarkup(createElement(HookProbe));
 
     const panelView = resolvePanelView({
       taskItem: task as unknown as any,
+      msgTypes,
       markDownContent: "最终章节合并总结",
+      primaryFile: getPrimaryTaskFile(task as unknown as any),
     });
 
-    expect(panelView).toMatchObject({
-      type: "markdown",
-      content: "最终章节合并总结",
-    });
+    expect(panelView.type).toBe("file");
+    if (panelView.type === "file") {
+      expect(panelView.fileName).toBe("深度研究报告.md");
+      expect(panelView.fileUrl).toBe("https://example.com/deep-report-preview.md");
+    }
   });
 
   it("should hide nested tool result JSON instead of Structured data panel", () => {
