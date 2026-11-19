@@ -1,6 +1,7 @@
 package org.wwz.ai.domain.agent.ledger.model.tooloutput;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.wwz.ai.domain.agent.image.model.WorkspaceImageFile;
 import org.wwz.ai.domain.agent.runtime.dto.CodeInterpreterResponse;
 
 import java.util.ArrayList;
@@ -63,6 +64,28 @@ public final class ToolFileRefMapper {
                     .previewUrl(firstNonBlank(valueAsString(item.get("previewUrl")), domainUrl, ossUrl))
                     .fileSize(valueAsLong(item.get("fileSize")))
                     .mimeType(valueAsString(item.get("mimeType")))
+                    .build());
+        }
+        return result;
+    }
+
+    public static List<ToolFileRef> fromWorkspaceImageFiles(List<WorkspaceImageFile> files) {
+        List<ToolFileRef> result = new ArrayList<>();
+        if (CollectionUtils.isEmpty(files)) {
+            return result;
+        }
+        for (WorkspaceImageFile file : files) {
+            if (file == null) {
+                continue;
+            }
+            result.add(ToolFileRef.builder()
+                    .fileName(file.getFileName())
+                    .ossUrl(file.getOssUrl())
+                    .domainUrl(file.getDomainUrl())
+                    .downloadUrl(file.getDownloadUrl())
+                    .previewUrl(file.getPreviewUrl())
+                    .fileSize(file.getFileSize())
+                    .mimeType(file.getMimeType())
                     .build());
         }
         return result;

@@ -18,10 +18,20 @@ public class DeepSearchDoc {
 
     private String summary;
 
+    private String docType;
+
+    public DeepSearchDoc(String title, String link, String summary) {
+        this(title, link, summary, null);
+    }
+
     /**
      * 统一工厂，避免运行时依赖 Lombok Builder 内部类。
      */
     public static DeepSearchDoc of(String title, String link, String summary) {
-        return new DeepSearchDoc(title, link, summary);
+        return of(title, link, summary, null);
+    }
+
+    public static DeepSearchDoc of(String title, String link, String summary, String docType) {
+        return new DeepSearchDoc(title, link, summary, docType);
     }
 }

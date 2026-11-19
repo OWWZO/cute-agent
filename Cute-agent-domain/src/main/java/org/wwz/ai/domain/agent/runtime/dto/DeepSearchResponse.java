@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchStage;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * DeepSearch 工具响应模型，承载搜索阶段结果、章节总结和最终摘要。
@@ -37,6 +38,8 @@ public class DeepSearchResponse {
     private Integer chapterOrder;
     private String chapterSummary;
     private Boolean chapterStreaming;
+    /** 已登记的最终报告文件；实时与历史共用同一 fileInfo 结构。 */
+    private List<Map<String, Object>> fileInfo;
 
     @Data
     @Builder

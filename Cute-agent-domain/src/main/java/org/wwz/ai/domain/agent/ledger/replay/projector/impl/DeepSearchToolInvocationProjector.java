@@ -2,18 +2,17 @@ package org.wwz.ai.domain.agent.ledger.replay.projector.impl;
 
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.ledger.model.ArtifactView;
+import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.runtime.stream.AgentStreamAccumulator;
 import org.wwz.ai.domain.agent.ledger.model.replay.ProjectedReplayEvent;
-import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchChapter;
-import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchDoc;
-import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchQueryResult;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchStage;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchToolOutput;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputNames;
+import org.wwz.ai.domain.agent.runtime.dto.DeepSearchResponse;
+import org.wwz.ai.domain.agent.runtime.tool.common.DeepSearchStageEventMapper;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -39,7 +38,11 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
                 ? structuredOutput
                 : null;
         if (output == null || output.getStages() == null || output.getStages().isEmpty()) {
-            return List.of();
+            if (invocation != null
+                    && Integer.valueOf(ExecutionLedgerConstants.STATUS_RUNNING).equals(invocation.getStatus())) {
+                return projectRunningInvocation(invocation, artifacts, state);
+            }
+            return projectAsToolResult(invocation, artifacts, state);
         }
 
         List<ProjectedReplayEvent> events = new ArrayList<>();
@@ -48,17 +51,19 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
             if (StringUtils.isBlank(stageType)) {
                 continue;
             }
-            Map<String, Object> resultMap = switch (stageType) {
-                case DeepSearchStage.STAGE_EXTEND -> buildExtendResult(output, stage);
-                case DeepSearchStage.STAGE_SEARCH -> buildSearchResult(output, stage);
-                case DeepSearchStage.STAGE_CHAPTER_SUMMARY -> buildChapterSummaryResult(output, stage);
-                case DeepSearchStage.STAGE_REPORT -> buildReportResult(output, stage);
-                default -> Map.of();
-            };
+            DeepSearchResponse response = DeepSearchStageEventMapper.toResponse(
+                    output.getQuery(),
+                    output.getChapters(),
+                    stage
+            );
+            Map<String, Object> resultMap = DeepSearchStageEventMapper.toResultMap(response);
             if (resultMap.isEmpty()) {
                 continue;
             }
             List<Map<String, Object>> stageArtifactRefs = resolveStageArtifactRefs(stageType, artifacts);
+            if (DeepSearchStage.STAGE_REPORT.equals(stageType) && !stageArtifactRefs.isEmpty()) {
+                resultMap.put("fileInfo", stageArtifactRefs);
+            }
             events.add(buildTaskEvent(
                     state,
                     invocation,
@@ -70,136 +75,58 @@ public class DeepSearchToolInvocationProjector extends AbstractToolInvocationPro
         return events;
     }
 
-    private Map<String, Object> buildExtendResult(DeepSearchToolOutput output, DeepSearchStage stage) {
-        Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", DeepSearchStage.STAGE_EXTEND);
-        resultMap.put("isFinal", true);
-        resultMap.put("searchFinish", false);
-        resultMap.put("query", output.getQuery());
-        Map<String, Object> searchResult = new LinkedHashMap<>();
-        searchResult.put("query", stage.getQueries() == null ? List.of() : stage.getQueries());
-        searchResult.put("docs", List.of());
-        searchResult.put("chapters", buildChapterMetadata(output));
-        resultMap.put("searchResult", searchResult);
-        return resultMap;
-    }
-
-    private Map<String, Object> buildSearchResult(DeepSearchToolOutput output, DeepSearchStage stage) {
-        Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", DeepSearchStage.STAGE_SEARCH);
-        resultMap.put("isFinal", true);
-        resultMap.put("searchFinish", true);
-        resultMap.put("query", output.getQuery());
-
-        List<String> queries = new ArrayList<>();
-        List<List<Map<String, Object>>> docs = new ArrayList<>();
-        for (DeepSearchQueryResult item : stage.getResults()) {
-            if (item == null) {
-                continue;
-            }
-            queries.add(StringUtils.defaultString(item.getQuery()));
-            docs.add(toDocList(item.getDocs()));
+    /**
+     * 运行中的工具还没有结构化输出，但刷新后仍需保留 DeepSearch 卡片。
+     * 用模型入参生成一个 extend 占位阶段，后续实时/最终阶段会复用同一 toolCallId。
+     */
+    private List<ProjectedReplayEvent> projectRunningInvocation(ToolInvocationView invocation,
+                                                                List<ArtifactView> artifacts,
+                                                                AgentStreamAccumulator state) {
+        Map<String, Object> input = readMap(invocation.getInputJson());
+        String query = StringUtils.defaultIfBlank(
+                stringValue(input.get("query")),
+                "正在执行深度研究"
+        );
+        DeepSearchStage runningStage = DeepSearchStage.extend(List.of(query));
+        DeepSearchResponse response = DeepSearchStageEventMapper.toResponse(
+                query,
+                List.of(),
+                runningStage
+        );
+        Map<String, Object> resultMap = DeepSearchStageEventMapper.toResultMap(response);
+        List<Map<String, Object>> artifactRefs = buildArtifactRefs(visibleArtifacts(artifacts));
+        if (!artifactRefs.isEmpty()) {
+            resultMap.put("fileInfo", artifactRefs);
         }
-        Map<String, Object> searchResult = new LinkedHashMap<>();
-        searchResult.put("query", queries);
-        searchResult.put("docs", docs);
-        searchResult.put("chapters", buildChapterMetadata(output));
-        resultMap.put("searchResult", searchResult);
-        return resultMap;
-    }
-
-    private List<Map<String, Object>> buildChapterMetadata(DeepSearchToolOutput output) {
-        if (output == null || output.getChapters() == null) {
-            return List.of();
-        }
-        List<Map<String, Object>> chapters = new ArrayList<>();
-        for (DeepSearchChapter chapter : output.getChapters()) {
-            if (chapter == null) {
-                continue;
-            }
-            Map<String, Object> chapterMap = new LinkedHashMap<>();
-            chapterMap.put("chapterId", chapter.getChapterId());
-            chapterMap.put("chapterTitle", chapter.getTitle());
-            chapterMap.put("chapterContent", chapter.getContent());
-            chapterMap.put("chapterOrder", chapter.getOrder());
-            chapterMap.put("queries", chapter.getQueries() == null
-                    ? List.of()
-                    : new ArrayList<>(chapter.getQueries()));
-            chapters.add(chapterMap);
-        }
-        return chapters;
-    }
-
-    private Map<String, Object> buildChapterSummaryResult(DeepSearchToolOutput output, DeepSearchStage stage) {
-        Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", DeepSearchStage.STAGE_CHAPTER_SUMMARY);
-        resultMap.put("isFinal", true);
-        resultMap.put("searchFinish", true);
-        resultMap.put("query", output.getQuery());
-        resultMap.put("chapterId", StringUtils.defaultString(stage.getChapterId()));
-        resultMap.put("chapterTitle", StringUtils.defaultString(stage.getChapterTitle()));
-        resultMap.put("chapterContent", StringUtils.defaultString(stage.getChapterContent(), stage.getChapterTitle()));
-        resultMap.put("chapterOrder", stage.getChapterOrder());
-        resultMap.put("chapterSummary", StringUtils.defaultString(stage.getChapterSummary()));
-        resultMap.put("answer", StringUtils.defaultString(stage.getChapterSummary()));
-
-        List<String> queries = stage.getQueries() == null ? new ArrayList<>() : new ArrayList<>(stage.getQueries());
-        List<List<Map<String, Object>>> docs = new ArrayList<>();
-        if (stage.getResults() != null) {
-            for (DeepSearchQueryResult item : stage.getResults()) {
-                if (item == null) {
-                    continue;
-                }
-                if (!queries.contains(StringUtils.defaultString(item.getQuery()))) {
-                    queries.add(StringUtils.defaultString(item.getQuery()));
-                }
-                docs.add(toDocList(item.getDocs()));
-            }
-        }
-        Map<String, Object> searchResult = new LinkedHashMap<>();
-        searchResult.put("query", queries);
-        searchResult.put("docs", docs);
-        resultMap.put("searchResult", searchResult);
-        return resultMap;
-    }
-
-    private List<Map<String, Object>> toDocList(List<DeepSearchDoc> docs) {
-        if (docs == null || docs.isEmpty()) {
-            return new ArrayList<>();
-        }
-        List<Map<String, Object>> result = new ArrayList<>(docs.size());
-        for (DeepSearchDoc doc : docs) {
-            if (doc == null) {
-                continue;
-            }
-            Map<String, Object> docMap = new LinkedHashMap<>();
-            docMap.put("title", StringUtils.defaultString(doc.getTitle()));
-            docMap.put("link", StringUtils.defaultString(doc.getLink()));
-            if (StringUtils.isNotBlank(doc.getSummary())) {
-                docMap.put("content", doc.getSummary());
-            }
-            result.add(docMap);
-        }
-        return result;
-    }
-
-    private Map<String, Object> buildReportResult(DeepSearchToolOutput output, DeepSearchStage stage) {
-        Map<String, Object> resultMap = new LinkedHashMap<>();
-        resultMap.put("messageType", DeepSearchStage.STAGE_REPORT);
-        resultMap.put("isFinal", true);
-        resultMap.put("query", output.getQuery());
-        resultMap.put("answer", StringUtils.defaultString(stage.getAnswer()));
-        return resultMap;
+        return List.of(buildTaskEvent(
+                state,
+                invocation,
+                ToolOutputNames.DEEP_SEARCH,
+                buildStructuredToolResponse(
+                        invocation,
+                        ToolOutputNames.DEEP_SEARCH,
+                        resultMap
+                ),
+                artifactRefs
+        ));
     }
 
     private List<Map<String, Object>> resolveStageArtifactRefs(String stageType, List<ArtifactView> artifacts) {
-        if (!DeepSearchStage.STAGE_REPORT.equals(stageType) || artifacts == null || artifacts.isEmpty()) {
+        if (!DeepSearchStage.STAGE_REPORT.equals(stageType)) {
             return List.of();
         }
-        List<ArtifactView> finalArtifacts = artifacts.stream()
+        return buildArtifactRefs(visibleArtifacts(artifacts));
+    }
+
+    private List<ArtifactView> visibleArtifacts(List<ArtifactView> artifacts) {
+        if (artifacts == null || artifacts.isEmpty()) {
+            return List.of();
+        }
+        return artifacts.stream()
                 .filter(artifact -> artifact != null && StringUtils.isNotBlank(artifact.getFileName()))
+                .filter(artifact -> !ExecutionLedgerConstants.VISIBILITY_INTERNAL.equalsIgnoreCase(
+                        artifact.getVisibility()))
                 .filter(artifact -> !StringUtils.endsWithIgnoreCase(artifact.getFileName(), "_search_result.txt"))
                 .collect(Collectors.toList());
-        return buildArtifactRefs(finalArtifacts);
     }
 }

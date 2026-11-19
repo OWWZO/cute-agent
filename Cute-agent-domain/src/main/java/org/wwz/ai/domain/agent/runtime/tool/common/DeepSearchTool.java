@@ -10,6 +10,7 @@ import org.wwz.ai.domain.agent.adapter.port.RemoteStreamRequest;
 import org.wwz.ai.domain.agent.adapter.port.RemoteStreamSession;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.artifact.FileArtifactUploader;
+import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactFileInfo;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactSource;
 import org.wwz.ai.domain.agent.runtime.dto.DeepSearchRequest;
 import org.wwz.ai.domain.agent.runtime.dto.DeepSearchResponse;
@@ -18,6 +19,8 @@ import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.util.StringUtil;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
+import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchChapter;
+import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchStage;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchToolOutput;
 
 import java.util.HashMap;
@@ -167,8 +170,13 @@ public class DeepSearchTool implements BaseTool {
             AtomicInteger eventIndex = new AtomicInteger(0);
             AtomicInteger reportIndex = new AtomicInteger(1);
             AtomicReference<String> resultRef = new AtomicReference<>("搜索结果为空");
-            AtomicReference<String> messageIdRef = new AtomicReference<>("");
             String toolCallId = artifactSource == null ? null : artifactSource.getToolCallId();
+            // live 与历史 projector 使用同一消息身份，避免每个阶段另起一张卡。
+            AtomicReference<String> messageIdRef = new AtomicReference<>(
+                    StringUtils.isNotBlank(toolCallId)
+                            ? toolCallId + ":deep_search"
+                            : StringUtil.getUUID()
+            );
             // 同一次流调用的 search 事件复用同一 basename，且中间文件沿用最终报告名。
             String finalReportFileName = DeepSearchFileNamePolicy.resolveReportFileName(
                     searchRequest.getReport_file_name());
@@ -235,18 +243,39 @@ public class DeepSearchTool implements BaseTool {
                             // 总结文章全量回传，供 observation / fallback 使用，不再截断
                             resultRef.set(searchResponse.getAnswer());
 
-                            ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, true);
+                            DeepSearchResponse reportEvent = canonicalEvent(
+                                    resultBuilder.getQuery(),
+                                    resultBuilder.getChapters(),
+                                    DeepSearchStage.report(searchResponse.getAnswer()),
+                                    searchResponse
+                            );
+                            reportEvent.setFileInfo(
+                                    ToolArtifactFileInfo.fromToolCall(ctx, toolCallId)
+                            );
+                            ctx.getPrinter().send(
+                                    messageIdRef.get(),
+                                    "deep_search",
+                                    reportEvent,
+                                    digitalEmployee,
+                                    true
+                            );
                             return;
                         }
 
-                        resultBuilder.recordEvent(searchResponse);
+                        DeepSearchStage stage = resultBuilder.recordEvent(searchResponse);
+                        DeepSearchResponse eventResponse = canonicalEvent(
+                                resultBuilder.getQuery(),
+                                resultBuilder.getChapters(),
+                                stage,
+                                searchResponse
+                        );
 
                         Map<String, Object> contentMap = new HashMap<>();
-                        if (searchResponse.getSearchResult() != null
-                                && searchResponse.getSearchResult().getQuery() != null
-                                && searchResponse.getSearchResult().getDocs() != null) {
-                            List<String> eventQueries = searchResponse.getSearchResult().getQuery();
-                            List<List<DeepSearchResponse.SearchDoc>> eventDocs = searchResponse.getSearchResult().getDocs();
+                        if (eventResponse.getSearchResult() != null
+                                && eventResponse.getSearchResult().getQuery() != null
+                                && eventResponse.getSearchResult().getDocs() != null) {
+                            List<String> eventQueries = eventResponse.getSearchResult().getQuery();
+                            List<List<DeepSearchResponse.SearchDoc>> eventDocs = eventResponse.getSearchResult().getDocs();
                             // query/docs 可能因章节补搜不同步，按较短一侧对齐，避免 IndexOutOfBoundsException。
                             int alignedSize = Math.min(eventQueries.size(), eventDocs.size());
                             for (int idx = 0; idx < alignedSize; idx++) {
@@ -255,12 +284,9 @@ public class DeepSearchTool implements BaseTool {
                         }
 
                         if (DeepSearchResponse.MESSAGE_TYPE_EXTEND.equals(searchResponse.getMessageType())) {
-                            messageIdRef.set(StringUtil.getUUID());
-                            searchResponse.setSearchFinish(false);
-                            ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
+                            ctx.getPrinter().send(messageIdRef.get(), "deep_search", eventResponse, digitalEmployee, false);
                         } else if (DeepSearchResponse.MESSAGE_TYPE_SEARCH.equals(searchResponse.getMessageType())) {
-                            searchResponse.setSearchFinish(true);
-                            ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
+                            ctx.getPrinter().send(messageIdRef.get(), "deep_search", eventResponse, digitalEmployee, false);
                             FileRequest fileRequest = FileRequest.builder()
                                     .requestId(ctx.getRequestId())
                                     .fileName(searchResultFileName)
@@ -269,21 +295,14 @@ public class DeepSearchTool implements BaseTool {
                                     .build();
                              fileArtifactUploader.upload(fileRequest, true, artifactSource);
                         } else if (DeepSearchResponse.MESSAGE_TYPE_CHAPTER_SUMMARY.equals(searchResponse.getMessageType())) {
-                            if (messageIdRef.get().isEmpty()) {
-                                messageIdRef.set(StringUtil.getUUID());
-                            }
-                            searchResponse.setSearchFinish(true);
-                            ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
+                            ctx.getPrinter().send(messageIdRef.get(), "deep_search", eventResponse, digitalEmployee, false);
                         } else if (DeepSearchResponse.MESSAGE_TYPE_REPORT.equals(searchResponse.getMessageType())) {
                             int currentReportIndex = reportIndex.get();
-                            if (currentReportIndex == 1 && messageIdRef.get().isEmpty()) {
-                                messageIdRef.set(StringUtil.getUUID());
-                            }
                             stringBuilderIncr.append(searchResponse.getAnswer());
                             stringBuilderAll.append(searchResponse.getAnswer());
                             if (currentReportIndex == firstInterval || currentReportIndex % sendInterval == 0) {
-                                searchResponse.setAnswer(stringBuilderIncr.toString());
-                                ctx.getPrinter().send(messageIdRef.get(), "deep_search", searchResponse, digitalEmployee, false);
+                                eventResponse.setAnswer(stringBuilderIncr.toString());
+                                ctx.getPrinter().send(messageIdRef.get(), "deep_search", eventResponse, digitalEmployee, false);
                                 stringBuilderIncr.setLength(0);
                             }
                             reportIndex.incrementAndGet();
@@ -341,6 +360,19 @@ public class DeepSearchTool implements BaseTool {
         }
 
         return future;
+    }
+
+    private DeepSearchResponse canonicalEvent(String query,
+                                              List<DeepSearchChapter> chapters,
+                                              DeepSearchStage stage,
+                                              DeepSearchResponse source) {
+        DeepSearchResponse canonical = DeepSearchStageEventMapper.toResponse(query, chapters, stage);
+        if (canonical == null) {
+            return source;
+        }
+        canonical.setRequestId(source.getRequestId());
+        canonical.setToolCallId(source.getToolCallId());
+        return canonical;
     }
 
     private void uploadFinalAnswerWithRetry(AgentContext ctx,

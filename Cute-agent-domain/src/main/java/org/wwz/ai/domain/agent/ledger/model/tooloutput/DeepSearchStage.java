@@ -37,6 +37,15 @@ public class DeepSearchStage {
 
     private String chapterSummary;
 
+    /** 该阶段是否为最终事件；历史旧数据为空时由映射器按阶段类型推断。 */
+    private Boolean isFinal;
+
+    /** 搜索结果是否已收口，与实时 DeepSearchResponse 使用同一字段语义。 */
+    private Boolean searchFinish;
+
+    /** 章节总结仍在流式生成时为 true。 */
+    private Boolean chapterStreaming;
+
     /**
      * extend 阶段工厂。
      */
@@ -44,6 +53,8 @@ public class DeepSearchStage {
         DeepSearchStage stage = new DeepSearchStage();
         stage.setStage(STAGE_EXTEND);
         stage.setQueries(queries == null ? new ArrayList<>() : new ArrayList<>(queries));
+        stage.setIsFinal(false);
+        stage.setSearchFinish(false);
         return stage;
     }
 
@@ -54,6 +65,8 @@ public class DeepSearchStage {
         DeepSearchStage stage = new DeepSearchStage();
         stage.setStage(STAGE_SEARCH);
         stage.setResults(results == null ? new ArrayList<>() : new ArrayList<>(results));
+        stage.setIsFinal(false);
+        stage.setSearchFinish(true);
         return stage;
     }
 
@@ -76,6 +89,8 @@ public class DeepSearchStage {
         stage.setChapterSummary(chapterSummary);
         stage.setQueries(queries == null ? new ArrayList<>() : new ArrayList<>(queries));
         stage.setResults(results == null ? new ArrayList<>() : new ArrayList<>(results));
+        stage.setIsFinal(false);
+        stage.setSearchFinish(true);
         return stage;
     }
 
@@ -86,6 +101,8 @@ public class DeepSearchStage {
         DeepSearchStage stage = new DeepSearchStage();
         stage.setStage(STAGE_REPORT);
         stage.setAnswer(answer);
+        stage.setIsFinal(true);
+        stage.setSearchFinish(true);
         return stage;
     }
 }
