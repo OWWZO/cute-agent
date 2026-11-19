@@ -38,6 +38,9 @@ import {
   isSubAgentParentTask,
   isRunInBackgroundAgent,
 } from "@/utils/chat/subagent";
+import { isParentLoopLive } from "@/components/ChatView/streamState";
+import { useToolEntranceAnimation } from "./tools/useToolEntranceAnimation";
+import { resolveTaskResultMap } from "@/utils/chat/toolCalls";
 import {
   ToolCallView,
   ToolGroup,
@@ -233,12 +236,34 @@ const ThoughtVersionSwitcher: FC<{
 
 type StepRowContext = {
   chat: CHAT.ChatItem;
+  runLive: boolean;
   changeActiveChat: CHAT.OpenTaskHandler;
   changePlan?: () => void;
   changeFile?: CHAT.OpenFileHandler;
   onOpenToolDiff?: (task: CHAT.Task, chat: CHAT.ChatItem, fileIndex?: number) => void;
   onOpenAgent?: (task: CHAT.Task, chat: CHAT.ChatItem) => void;
 };
+
+const TimelineEntrance: FC<{
+  entryKey: string;
+  active: boolean;
+  className?: string;
+  children: ReactNode;
+}> = memo(({ entryKey, active, className, children }) => {
+  const shouldAnimate = useToolEntranceAnimation(entryKey, active);
+  return (
+    <motion.div
+      initial={shouldAnimate ? { opacity: 0, y: 4 } : false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+});
+
+TimelineEntrance.displayName = "TimelineEntrance";
 
 const CompactStepRow: FC<{
   step: ProcessStepRow;
@@ -251,10 +276,11 @@ const CompactStepRow: FC<{
   // 组内原生 CoT：标题点击折叠，流式完自动收起
   if (isThought) {
     return (
-      <div className="timeline-segment-enter py-0.5 pl-1" data-testid="llm-reasoning-step">
+      <div className="py-0.5 pl-1" data-testid="llm-reasoning-step">
         <ThinkingBlock
           text={thoughtText || "…"}
           streaming={step.active}
+          autoCollapseOnStreamEnd={!ctx.runLive}
           durationMs={step.durationMs}
           durationLabel={step.durationLabel}
         />
@@ -268,7 +294,7 @@ const CompactStepRow: FC<{
       return null;
     }
     return (
-      <div className="timeline-assistant-reply timeline-segment-enter px-1 py-1 pl-7">
+      <div className="timeline-assistant-reply px-1 py-1 pl-7">
         {text}
       </div>
     );
@@ -297,7 +323,7 @@ const CompactStepRow: FC<{
   if (rich) {
     const stage =
       step.tool.messageType === "deep_search"
-        ? resolveDeepSearchStage(step.tool.resultMap?.messageType)
+        ? resolveDeepSearchStage(resolveTaskResultMap(step.tool).messageType)
         : undefined;
     const showDeepSearchPreview =
       step.tool.messageType === "deep_search" &&
@@ -375,7 +401,7 @@ const StepGroupBlock: FC<{
 
   if (allToolCards) {
     return (
-      <div className="timeline-segment-enter w-full py-0.5">
+      <div className="w-full py-0.5">
         <ToolGroup
           title={group.title}
           count={toolCardSteps.length}
@@ -403,39 +429,28 @@ const StepGroupBlock: FC<{
   const stepsBody = (
     <div className="timeline-rail relative ml-[7px] pl-3.5">
       <AnimatePresence initial={false}>
-        {group.steps.map((step, index) => (
-          <motion.div
+        {group.steps.map((step) => (
+          <TimelineEntrance
             key={step.id}
-            initial={{
-              opacity: 0,
-              y: 4,
-            }}
-            animate={{
-              opacity: 1,
-              y: 0,
-            }}
-            transition={{
-              duration: 0.2,
-              delay: Math.min(index * 0.03, 0.18),
-              ease: [0.22, 1, 0.36, 1],
-            }}
+            entryKey={step.id}
+            active={ctx.runLive}
           >
             <CompactStepRow step={step} ctx={ctx} />
-          </motion.div>
+          </TimelineEntrance>
         ))}
       </AnimatePresence>
     </div>
   );
 
   if (!canCollapse) {
-    return <div className="timeline-segment-enter w-full">{stepsBody}</div>;
+    return <div className="w-full">{stepsBody}</div>;
   }
 
   return (
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="timeline-segment-enter w-full"
+      className="w-full"
     >
       <CollapsibleTrigger
         className={cn(
@@ -487,37 +502,52 @@ UserMessageSegment.displayName = "UserMessageSegment";
 /** 分段深度思考：标题点击折叠，流式完自动收起 */
 const ThinkingSegment: FC<{
   step: ProcessStepRow;
-}> = memo(({ step }) => {
+  autoCollapseOnStreamEnd: boolean;
+}> = memo(({ step, autoCollapseOnStreamEnd }) => {
   const thoughtText = asText(step.tool.toolThought);
   const streaming = step.active;
 
   return (
-    <div className="timeline-segment-enter py-0.5" data-testid="process-thinking">
-      <ThinkingBlock
-        text={thoughtText || "…"}
-        streaming={streaming}
-        durationMs={step.durationMs}
-        durationLabel={step.durationLabel}
-      />
-    </div>
+    <TimelineEntrance
+      entryKey={`thinking:${step.id}`}
+      active={autoCollapseOnStreamEnd === false}
+      className="py-0.5"
+    >
+      <div data-testid="process-thinking">
+        <ThinkingBlock
+          text={thoughtText || "…"}
+          streaming={streaming}
+          autoCollapseOnStreamEnd={autoCollapseOnStreamEnd}
+          durationMs={step.durationMs}
+          durationLabel={step.durationLabel}
+        />
+      </div>
+    </TimelineEntrance>
   );
 });
 
 ThinkingSegment.displayName = "ThinkingSegment";
 
 /** 助手过程回复：深度思考下方常显 */
-const AssistantReplySegment: FC<{ text: string; streaming?: boolean }> = memo(
-  ({ text, streaming }) => (
-    <div
-      className="timeline-assistant-reply timeline-segment-enter mt-0.5 mb-2 w-full max-w-[94%] px-1"
-      data-testid="process-assistant-reply"
+const AssistantReplySegment: FC<{
+  entryKey: string;
+  text: string;
+  streaming?: boolean;
+}> = memo(
+  ({ entryKey, text, streaming }) => (
+    <TimelineEntrance
+      entryKey={entryKey}
+      active={Boolean(streaming)}
+      className="timeline-assistant-reply mt-0.5 mb-2 w-full max-w-[94%] px-1"
     >
-      <MarkdownRenderer
-        markDownContent={text}
-        isStreaming={Boolean(streaming)}
-        className="chat-markdown kimi-md"
-      />
-    </div>
+      <div data-testid="process-assistant-reply">
+        <MarkdownRenderer
+          markDownContent={text}
+          isStreaming={Boolean(streaming)}
+          className="chat-markdown kimi-md"
+        />
+      </div>
+    </TimelineEntrance>
   )
 );
 
@@ -561,11 +591,17 @@ const ProcessSegmentView: FC<{
   ctx: StepRowContext;
 }> = memo(({ segment, isLast, loading, conclusionText = "", conclusionNormalized = "", ctx }) => {
   if (segment.type === "thinking") {
-    return <ThinkingSegment step={segment.step} />;
+    return (
+      <ThinkingSegment
+        step={segment.step}
+        autoCollapseOnStreamEnd={!ctx.runLive}
+      />
+    );
   }
   if (segment.type === "assistant_reply") {
     return (
       <AssistantReplySegment
+        entryKey={`assistant:${segment.step.id}`}
         text={segment.text}
         streaming={loading && isLast && segment.step.active}
       />
@@ -647,6 +683,7 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
   } = props;
 
   const nowTick = useNowTicker(Boolean(chat.loading));
+  const runLive = isParentLoopLive(chat);
   const processSignature = buildAgentProcessSignature(chat);
   const taskModel = useMemo(
     () =>
@@ -689,6 +726,7 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
   const ctx = useMemo<StepRowContext>(
     () => ({
       chat,
+      runLive,
       changeActiveChat,
       changePlan,
       changeFile,
@@ -697,6 +735,7 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
     }),
     [
       chat,
+      runLive,
       changeActiveChat,
       changePlan,
       changeFile,
@@ -720,10 +759,15 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
       aria-label="Agent 执行过程"
     >
       {model.thought ? (
-        <div className="timeline-segment-enter mb-2">
+        <TimelineEntrance
+          entryKey={`thought:${chat.requestId || chat.startedAt || "run"}`}
+          active={runLive}
+          className="mb-2"
+        >
           <ThinkingBlock
             text={model.thought.text}
             streaming={model.thought.streaming}
+            autoCollapseOnStreamEnd={!runLive}
             durationMs={model.thought.durationMs}
             durationLabel={model.thought.durationLabel}
             headerExtra={
@@ -743,7 +787,7 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
               {model.intentLine}
             </p>
           ) : null}
-        </div>
+        </TimelineEntrance>
       ) : null}
 
       {planSlot ? <div className="mb-3 w-full">{planSlot}</div> : null}
@@ -786,26 +830,35 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
 
 export const AgentStepTimeline = memo(
   AgentStepTimelineComponent,
-  (prev, next) =>
-    prev.chat === next.chat &&
-    buildAgentProcessSignature(prev.chat) ===
-      buildAgentProcessSignature(next.chat) &&
-    prev.isPlanSolveMessage === next.isPlanSolveMessage &&
-    prev.thoughtText === next.thoughtText &&
-    prev.thoughtStreaming === next.thoughtStreaming &&
-    prev.thoughtVersionLabel === next.thoughtVersionLabel &&
-    prev.thoughtVersionIndex === next.thoughtVersionIndex &&
-    prev.thoughtVersionTotal === next.thoughtVersionTotal &&
-    prev.planSlot === next.planSlot &&
-    prev.changeActiveChat === next.changeActiveChat &&
-    prev.changePlan === next.changePlan &&
-    prev.changeFile === next.changeFile &&
-    prev.onOpenToolDiff === next.onOpenToolDiff &&
-    prev.onOpenAgent === next.onOpenAgent &&
-    prev.onThoughtPrev === next.onThoughtPrev &&
-    prev.onThoughtNext === next.onThoughtNext &&
-    prev.canThoughtPrev === next.canThoughtPrev &&
-    prev.canThoughtNext === next.canThoughtNext
+  (prev, next) => {
+    const processUnchanged =
+      buildAgentProcessSignature(prev.chat) ===
+      buildAgentProcessSignature(next.chat);
+    const conclusionUnchanged =
+      resolveTaskSummaryText(prev.chat.conclusion) ===
+      resolveTaskSummaryText(next.chat.conclusion);
+    return (
+      processUnchanged &&
+      conclusionUnchanged &&
+      isParentLoopLive(prev.chat) === isParentLoopLive(next.chat) &&
+      prev.isPlanSolveMessage === next.isPlanSolveMessage &&
+      prev.thoughtText === next.thoughtText &&
+      prev.thoughtStreaming === next.thoughtStreaming &&
+      prev.thoughtVersionLabel === next.thoughtVersionLabel &&
+      prev.thoughtVersionIndex === next.thoughtVersionIndex &&
+      prev.thoughtVersionTotal === next.thoughtVersionTotal &&
+      prev.planSlot === next.planSlot &&
+      prev.changeActiveChat === next.changeActiveChat &&
+      prev.changePlan === next.changePlan &&
+      prev.changeFile === next.changeFile &&
+      prev.onOpenToolDiff === next.onOpenToolDiff &&
+      prev.onOpenAgent === next.onOpenAgent &&
+      prev.onThoughtPrev === next.onThoughtPrev &&
+      prev.onThoughtNext === next.onThoughtNext &&
+      prev.canThoughtPrev === next.canThoughtPrev &&
+      prev.canThoughtNext === next.canThoughtNext
+    );
+  }
 );
 
 AgentStepTimeline.displayName = "AgentStepTimeline";

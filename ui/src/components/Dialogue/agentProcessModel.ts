@@ -835,12 +835,18 @@ export function segmentProcessSteps(
       nowMs: options.nowMs ?? Date.now(),
     });
     groupSerial += 1;
-    // ReAct 会把多个 task 容器合并成同一个执行组。此时容器是“当前最后到达的
-    // 容器”，不能作为 React 身份，否则流式追加新容器会让整组卸载重挂、重播
-    // 入场动画。组内第一个真实步骤只会追加，身份在整个流式过程中保持稳定。
-    const groupIdentity = options.isPlanSolve && options.container
-      ? (options.container.id || options.container.messageId || "work-group")
-      : (executables[0]?.id || ordered[0]?.id || "work-group");
+    // 流式追加容器时，容器本身可能持续变化，不能作为 React 身份，否则整组会
+    // 卸载重挂并重播入场动画。组内第一个真实步骤只会追加，身份更稳定；
+    // PlanSolve 也只借用 container 生成标题，不把它当作组 key。
+    const firstExecutable = executables[0] || ordered[0];
+    // Deep Research 会从一张“空查询占位卡”升级为首个查询卡，子卡 id 会变，
+    // 但它始终属于同一个 tool messageId，所以优先使用消息身份。
+    const groupIdentity =
+      firstExecutable?.tool.messageId ||
+      firstExecutable?.tool.id ||
+      options.container?.id ||
+      options.container?.messageId ||
+      "work-group";
     segments.push({
       type: "group",
       group: {
@@ -1044,12 +1050,15 @@ export function buildAgentProcessSignature(chat: CHAT.ChatItem): string {
     const nested = (resultMap.resultMap || {}) as Record<string, unknown>;
     const timing = (task as { timing?: Record<string, unknown> }).timing || {};
     const searchResult = (resultMap.searchResult || {}) as Record<string, unknown>;
+    const includeTaskMessageTime = task.messageType !== "deep_search";
     parts.push(
       [
         task.id || "",
         task.messageId || "",
         task.messageType || "",
-        task.messageTime || "",
+        includeTaskMessageTime ? task.messageTime || "" : "",
+        includeTaskMessageTime ? resultMap.messageTime || "" : "",
+        includeTaskMessageTime ? nested.messageTime || "" : "",
         task.isFinal ? 1 : 0,
         task.finish ? 1 : 0,
         task.task?.trim() || "",
@@ -1077,6 +1086,7 @@ export function buildAgentProcessSignature(chat: CHAT.ChatItem): string {
         signatureFiles(task.artifactRefs),
         signatureFiles(resultMap.artifactRefs),
         resultMap.childSessionId || "",
+        resultMap.childRequestId || "",
         resultMap.messageType || "",
         resultMap.status || "",
         resultMap.toolName || "",
@@ -1099,6 +1109,8 @@ export function buildAgentProcessSignature(chat: CHAT.ChatItem): string {
         String(resultMap.finishedAt ?? resultMap.finished_at ?? ""),
         String(resultMap.durationMs ?? resultMap.duration_ms ?? ""),
         String(nested.messageType || ""),
+        String(nested.childSessionId || ""),
+        String(nested.childRequestId || ""),
         String(nested.status || ""),
         String(nested.toolCallId || ""),
         String(nested.isFinal ? 1 : 0),

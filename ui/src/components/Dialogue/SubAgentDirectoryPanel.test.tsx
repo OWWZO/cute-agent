@@ -109,7 +109,7 @@ describe("sub-agent roster selectors", () => {
     expect(roster).toHaveLength(0);
   });
 
-  it("父卡缺失时用名册条目合成可渲染的 Agent 卡（保住 childSessionId）", () => {
+  it("父卡缺失时用名册条目合成可渲染的 Agent 卡（保住子会话订阅键）", () => {
     const tool = resolveRosterAgentTool(
       rosterItem({
         id: "tc-bg",
@@ -118,11 +118,13 @@ describe("sub-agent roster selectors", () => {
         state: "done",
         runInBackground: true,
         childSessionId: "sub_agent-1",
+        childRequestId: "child-req-1",
       })
     );
     const resultMap = tool.resultMap as Record<string, unknown>;
     expect(resultMap.toolName).toBe("Agent");
     expect(resultMap.childSessionId).toBe("sub_agent-1");
+    expect(resultMap.childRequestId).toBe("child-req-1");
     expect(resultMap.runInBackground).toBe(true);
     expect((resultMap.input as Record<string, unknown>).description).toBe(
       "后台探索"

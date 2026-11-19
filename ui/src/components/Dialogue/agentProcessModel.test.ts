@@ -9,6 +9,7 @@ import {
   STEP_KIND_BEFORE_SUBAGENT,
   resolveProcessStepKind,
 } from "./agentProcessModel";
+import { processTaskForRender } from "@/utils/chat/renderTasks";
 
 const BASE_TIME_MS = 1714041600000;
 
@@ -66,6 +67,40 @@ function workGroup(children: CHAT.Task[]): CHAT.ChatItem["tasks"] {
 }
 
 describe("agentProcessModel", () => {
+  it("Deep Research 从空查询升级为首个查询时保持执行组身份", () => {
+    const makeCards = (messageType: "extend" | "search") => {
+      const task = {
+        messageId: "deep-search-1",
+        messageType: "deep_search",
+        messageTime: messageType === "extend"
+          ? "1714041601000"
+          : "1714041602000",
+        resultMap: {
+          messageType,
+          searchResult: {
+            query: messageType === "search" ? ["查询一"] : [],
+            docs: messageType === "search" ? [[]] : [],
+          },
+        },
+      } as unknown as CHAT.Task;
+      return processTaskForRender(task, "deep_search:deep-search-1:research");
+    };
+    const groupIdOf = (children: CHAT.Task[]) => {
+      const model = deriveAgentProcessModel({
+        chat: createChat({
+          loading: true,
+          tasks: [[{ id: "container", children } as unknown as CHAT.Task]],
+        }),
+        isPlanSolve: false,
+        nowMs: BASE_TIME_MS + 3_000,
+      });
+      const group = model.segments.find((segment) => segment.type === "group");
+      return group?.type === "group" ? group.group.id : undefined;
+    };
+
+    expect(groupIdOf(makeCards("extend"))).toBe(groupIdOf(makeCards("search")));
+  });
+
   it("formats duration in Cursor-like seconds", () => {
     expect(formatProcessDuration(80)).toBe("0.1s");
     expect(formatProcessDuration(400)).toBe("0.4s");
@@ -629,6 +664,37 @@ describe("agentProcessModel", () => {
     );
   });
 
+  it("PlanSolve 容器身份变化时仍复用同一个执行组 key", () => {
+    const makeContainer = (containerId: string) => ({
+      id: containerId,
+      messageId: containerId,
+      task: "收集资料",
+      children: [
+        tool({
+          id: "search-1",
+          messageId: "deep-search-1",
+          messageType: "deep_search",
+          resultMap: {
+            messageType: "search",
+            searchResult: { query: ["查询一"], docs: [] },
+          },
+        }),
+      ],
+    } as unknown as CHAT.Task);
+    const readGroupId = (container: CHAT.Task) => {
+      const model = deriveAgentProcessModel({
+        chat: createChat({ loading: true, tasks: [[container]] }),
+        isPlanSolve: true,
+        nowMs: BASE_TIME_MS + 3_000,
+      });
+      return model.groups[0]?.id;
+    };
+
+    expect(readGroupId(makeContainer("plan-container-1"))).toBe(
+      readGroupId(makeContainer("plan-container-2"))
+    );
+  });
+
   it("keeps lone assistant-reply as assistant_reply (终答只走 conclusion)", () => {
     const chat = createChat({
       loading: false,
@@ -1053,6 +1119,31 @@ describe("interactive 步骤会切开前面的工具组", () => {
 });
 
 describe("buildAgentProcessSignature", () => {
+  it("Deep Research 的实时 messageTime 变化不单独改变任务签名", () => {
+    const chat = createChat({
+      tasks: workGroup([
+        tool({
+          id: "deep-1",
+          messageId: "deep-1",
+          messageType: "deep_search",
+          messageTime: "1714041601000",
+          resultMap: {
+            messageType: "search",
+            searchResult: {
+              query: ["查询一"],
+              docs: [],
+            },
+          },
+        }),
+      ]),
+    });
+    const before = buildAgentProcessSignature(chat);
+
+    chat.tasks[0][0].children![0].messageTime = "1714041601001";
+
+    expect(buildAgentProcessSignature(chat)).toBe(before);
+  });
+
   it("纯正文 / 终答 / tip 更新不改变任务签名", () => {
     const chat = createChat({
       tasks: workGroup([

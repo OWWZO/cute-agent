@@ -122,6 +122,8 @@ describe("agentRuntimeProjector", () => {
         subAgentProgressLines: ["running · Explore · 探索 API · 3s"],
         subAgentElapsedMs: 3000,
         subAgentPhase: "working",
+        childSessionId: "sub_agent-1",
+        childRequestId: "child-req-1",
       },
     } as unknown as CHAT.Task;
 
@@ -153,6 +155,8 @@ describe("agentRuntimeProjector", () => {
     expect(dock).toHaveLength(1);
     expect(dock[0].kind).toBe("subagent");
     expect(dock[0].state).toBe("run");
+    expect(dock[0].childSessionId).toBe("sub_agent-1");
+    expect(dock[0].childRequestId).toBe("child-req-1");
   });
 
   it("projects resumed SendMessage into dock", () => {

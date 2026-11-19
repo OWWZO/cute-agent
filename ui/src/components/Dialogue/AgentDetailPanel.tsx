@@ -111,10 +111,21 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
   const phaseTone = resolveAgentPhaseTone(member?.phase, sub.status);
 
   // 子会话真实详情：只有开关开启且父卡确实带 childSessionId 时才订阅。
-  // 不具备 childSessionId（旧会话 / 未落库成功）时只展示空态，不伪造轨迹。
+  // childRequestId 让详情面板在历史索引尚未刷新时也能直接接上本轮 run。
   const childSessionId = SUBAGENT_CHILD_SESSION_ENABLED ? sub.childSessionId : "";
-  const childSession = useSessionTimeline(childSessionId, Boolean(childSessionId));
+  const childRequestId = SUBAGENT_CHILD_SESSION_ENABLED
+    ? sub.childRequestId
+    : "";
+  const childSession = useSessionTimeline(
+    childSessionId,
+    Boolean(childSessionId),
+    childRequestId
+  );
   const useRealChildSession = Boolean(childSessionId);
+  const childSessionStarting =
+    SUBAGENT_CHILD_SESSION_ENABLED &&
+    !childSessionId &&
+    Boolean(childRequestId || sub.status === "running");
 
   // 数据源：真实子会话继续由会话级渲染链路消费；本面板在真实模式下
   // 以「历史已就绪 + 实时帧已到达」作为渲染准入，避免打开瞬间空白。
@@ -123,6 +134,14 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
   );
   const realSessionReady =
     Boolean(childSessionId) && readySessionId === childSessionId;
+  const awaitingRequestedChildRun =
+    useRealChildSession &&
+    realSessionReady &&
+    Boolean(childRequestId) &&
+    !childSession.runs[childRequestId] &&
+    sub.status === "running" &&
+    !childSession.error &&
+    !childSession.reconnectExhausted;
   useEffect(() => {
     if (!useRealChildSession) {
       setReadySessionId("");
@@ -175,6 +194,16 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
       })),
     [childSessionRounds]
   );
+  // 并发启动时，childSessionId 可能先于历史索引到达；只要子 Agent 仍在运行，
+  // 空轨迹只能代表“还在建立/读取”，不能当成真实空态。
+  const awaitingRunningChildTrace =
+    useRealChildSession &&
+    realSessionReady &&
+    sub.status === "running" &&
+    !childSession.reconnectExhausted &&
+    (childRequestId
+      ? !childSession.runs[childRequestId]?.items.length
+      : childSessionTurns.length === 0);
   const [visibleTurnCount, setVisibleTurnCount] = useState(() => {
     return {
       sessionId: childSessionId,
@@ -213,7 +242,11 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
   );
 
   const showEmpty =
+    !childSessionStarting &&
+    !awaitingRequestedChildRun &&
+    !awaitingRunningChildTrace &&
     childSessionTurns.length === 0 &&
+    (!SUBAGENT_CHILD_SESSION_ENABLED || sub.status !== "running") &&
     (realSessionReady || Boolean(childSession.error) || !useRealChildSession);
 
   const handleChangeActiveChat = useCallback(
@@ -498,7 +531,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
           </div>
         ) : null}
 
-        {childSession.error ? (
+        {childSession.error && sub.status !== "running" ? (
           <div className="mb-2 rounded-lg border border-[var(--color-warning-bd)] bg-[var(--color-warning-soft)] px-3 py-2 text-ui-caption text-[var(--color-warning)]">
             子会话读取失败：{childSession.error}
           </div>
@@ -558,6 +591,14 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
               );
             })}
           </div>
+        ) : null}
+
+        {childSessionStarting ? (
+          <div className="kimi-detail-panel-empty">正在建立子会话…</div>
+        ) : null}
+
+        {awaitingRequestedChildRun || awaitingRunningChildTrace ? (
+          <div className="kimi-detail-panel-empty">正在读取子会话轨迹…</div>
         ) : null}
 
         {showEmpty ? (

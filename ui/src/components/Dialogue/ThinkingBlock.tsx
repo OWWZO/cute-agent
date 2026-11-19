@@ -27,6 +27,8 @@ type ThinkingBlockProps = {
   durationMs?: number;
   /** 标题行右侧额外控件（如版本切换），点击不触发折叠 */
   headerExtra?: ReactNode;
+  /** 当前片段流式结束后是否自动收起；整轮 Agent 仍在运行时由调用方关闭。 */
+  autoCollapseOnStreamEnd?: boolean;
   className?: string;
 };
 
@@ -115,6 +117,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   durationLabel,
   durationMs,
   headerExtra,
+  autoCollapseOnStreamEnd = true,
   className,
 }: ThinkingBlockProps) {
   const bodyRef = useRef<HTMLPreElement | null>(null);
@@ -146,7 +149,11 @@ export const ThinkingBlock = memo(function ThinkingBlock({
       }
       return;
     }
-    if (userToggledRef.current) {
+    if (!autoCollapseOnStreamEnd || userToggledRef.current) {
+      if (streamEndTimerRef.current !== null) {
+        window.clearTimeout(streamEndTimerRef.current);
+        streamEndTimerRef.current = null;
+      }
       return;
     }
     if (streamEndTimerRef.current !== null) {
@@ -156,7 +163,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
       streamEndTimerRef.current = null;
       setOpen(false);
     }, STREAM_END_SETTLE_MS);
-  }, [streaming, text]);
+  }, [autoCollapseOnStreamEnd, streaming, text]);
 
   useEffect(() => {
     return () => {

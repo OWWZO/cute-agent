@@ -449,6 +449,7 @@ export function projectSubAgentItems(chat: CHAT.ChatItem): DockTaskItem[] {
       runInBackground: isRunInBackgroundAgent(task),
       parentToolCallId: id,
       childSessionId: display.childSessionId || undefined,
+      childRequestId: display.childRequestId || undefined,
       startedAtMs: resolveTaskStartedAtMs(task),
       summary: display.summary || undefined,
       endedAtMs: resolveTaskEndedAtMs(task),

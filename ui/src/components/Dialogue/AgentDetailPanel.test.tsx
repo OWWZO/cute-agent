@@ -10,6 +10,7 @@ const childSessionTool = {
   resultMap: {
     toolName: "Agent",
     childSessionId: "sub_agent-1",
+    childRequestId: "child-req-1",
     input: {
       prompt: "research",
       subagent_type: "Explore",
@@ -23,7 +24,7 @@ const childSessionChat = {
 } as CHAT.ChatItem;
 
 describe("AgentDetailPanel shared dialogue renderer", () => {
-  it("does not synthesize a second renderer when childSessionId is missing", () => {
+  it("running 且 childSessionId 尚未到达时显示建立中，不显示无轨迹空态", () => {
     const html = renderToStaticMarkup(
       <AgentDetailPanel
         tool={
@@ -73,15 +74,43 @@ describe("AgentDetailPanel shared dialogue renderer", () => {
       />
     );
 
-    expect(html).toContain("没有可用的独立会话轨迹");
+    expect(html).toContain("正在建立子会话");
+    expect(html).not.toContain("没有可用的独立会话轨迹");
     expect(html).not.toContain("搜索完成");
     expect(html).not.toContain("query");
+  });
+
+  it("终态且确实没有 childSessionId 时才显示无轨迹空态", () => {
+    const html = renderToStaticMarkup(
+      <AgentDetailPanel
+        tool={
+          {
+            ...childSessionTool,
+            resultMap: {
+              toolName: "Agent",
+              status: "success",
+              isFinal: true,
+              input: {
+                prompt: "research",
+                subagent_type: "Explore"
+              },
+            },
+          } as unknown as CHAT.Task
+        }
+        chat={childSessionChat}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(html).toContain("没有可用的独立会话轨迹");
+    expect(html).not.toContain("正在建立子会话");
   });
 });
 
 describe("AgentDetailPanel real child session (flag on)", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     vi.resetModules();
   });
 
@@ -99,7 +128,117 @@ describe("AgentDetailPanel real child session (flag on)", () => {
     expect(html).not.toContain("搜索完成");
   });
 
-  it("flag 开启但没有 childSessionId 时不回退合成投影", async () => {
+  it("父卡 childRequestId 会直接传给子会话订阅", async () => {
+    vi.stubEnv("VITE_SUBAGENT_CHILD_SESSION", "1");
+    vi.resetModules();
+    const sessionModule = await import("@/hooks/useSessionTimeline");
+    const timelineSpy = vi
+      .spyOn(sessionModule, "useSessionTimeline")
+      .mockReturnValue({
+        ready: false,
+        loading: true,
+        error: "",
+        history: null,
+        runs: {},
+        activeRequestId: "",
+        source: "idle",
+        reconnectAttempts: 0,
+        reconnectExhausted: false,
+        reload: vi.fn(),
+        loadRun: vi.fn(),
+        observeRun: vi.fn(),
+      });
+
+    const { AgentDetailPanel: Panel } = await import("./AgentDetailPanel");
+    renderToStaticMarkup(
+      <Panel tool={childSessionTool} chat={childSessionChat} onClose={vi.fn()} />
+    );
+
+    expect(timelineSpy).toHaveBeenCalledWith(
+      "sub_agent-1",
+      true,
+      "child-req-1"
+    );
+  });
+
+  it("历史已就绪但本轮 run 尚未到达时显示读取中，不显示无轨迹空态", async () => {
+    vi.stubEnv("VITE_SUBAGENT_CHILD_SESSION", "1");
+    vi.resetModules();
+    const sessionModule = await import("@/hooks/useSessionTimeline");
+    vi.spyOn(sessionModule, "useSessionTimeline").mockReturnValue({
+      ready: true,
+      loading: false,
+      error: "",
+      history: {
+        sessionId: "sub_agent-1",
+        title: "子会话",
+        runs: [],
+      } as never,
+      runs: {},
+      activeRequestId: "child-req-1",
+      source: "history",
+      reconnectAttempts: 0,
+      reconnectExhausted: false,
+      reload: vi.fn(),
+      loadRun: vi.fn(),
+      observeRun: vi.fn(),
+    });
+
+    const { AgentDetailPanel: Panel } = await import("./AgentDetailPanel");
+    const html = renderToStaticMarkup(
+      <Panel tool={childSessionTool} chat={childSessionChat} onClose={vi.fn()} />
+    );
+
+    expect(html).toContain("正在读取子会话轨迹");
+    expect(html).not.toContain("没有可用的独立会话轨迹");
+  });
+
+  it("运行中的子会话读取失败时仍显示读取中，不显示无轨迹空态", async () => {
+    vi.stubEnv("VITE_SUBAGENT_CHILD_SESSION", "1");
+    vi.resetModules();
+    const sessionModule = await import("@/hooks/useSessionTimeline");
+    vi.spyOn(sessionModule, "useSessionTimeline").mockReturnValue({
+      ready: true,
+      loading: false,
+      error: "session not found",
+      history: {
+        sessionId: "sub_agent-1",
+        title: "子会话",
+        runs: [],
+      } as never,
+      runs: {},
+      activeRequestId: "child-req-1",
+      source: "history",
+      reconnectAttempts: 0,
+      reconnectExhausted: false,
+      reload: vi.fn(),
+      loadRun: vi.fn(),
+      observeRun: vi.fn(),
+    });
+
+    const { AgentDetailPanel: Panel } = await import("./AgentDetailPanel");
+    const html = renderToStaticMarkup(
+      <Panel
+        tool={
+          {
+            ...childSessionTool,
+            resultMap: {
+              ...childSessionTool.resultMap,
+              status: "running",
+            },
+          } as unknown as CHAT.Task
+        }
+        chat={childSessionChat}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(html).toContain("正在读取子会话轨迹");
+    expect(html).not.toContain("没有可用的独立会话轨迹");
+    expect(html).not.toContain("子会话读取失败");
+  });
+
+  it("flag 开启但运行中尚未拿到 childSessionId 时不回退合成投影", async () => {
     vi.stubEnv("VITE_SUBAGENT_CHILD_SESSION", "1");
     vi.resetModules();
     const { AgentDetailPanel: Panel } = await import("./AgentDetailPanel");
@@ -139,7 +278,8 @@ describe("AgentDetailPanel real child session (flag on)", () => {
     );
 
     expect(html).not.toContain("加载子会话");
-    expect(html).toContain("没有可用的独立会话轨迹");
+    expect(html).toContain("正在建立子会话");
+    expect(html).not.toContain("没有可用的独立会话轨迹");
     expect(html).not.toContain("query");
   });
 

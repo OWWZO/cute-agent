@@ -52,6 +52,8 @@ import {
   ToolCallView,
   resolveStackPosition,
 } from "./tools";
+import { resolveToolKey } from "./tools/toolTaskAdapter";
+import { useToolEntranceAnimation } from "./tools/useToolEntranceAnimation";
 
 type TimelineProps = {
   chat: CHAT.ChatItem;
@@ -510,6 +512,10 @@ export const DeepSearchPreviewItem: FC<{
   changeActiveChat: CHAT.OpenTaskHandler;
 }> = memo(({ tool, chat, changeActiveChat }) => {
   const model = useMemo(() => buildDeepSearchPreviewModel(tool), [tool]);
+  const shouldAnimateEntrance = useToolEntranceAnimation(
+    tool.id || resolveToolKey(tool),
+    Boolean(chat.loading)
+  );
 
   if (!model) {
     return null;
@@ -524,10 +530,14 @@ export const DeepSearchPreviewItem: FC<{
 
   return (
     <motion.div
-      initial={{
-        opacity: 0,
-        y: 8,
-      }}
+      initial={
+        shouldAnimateEntrance
+          ? {
+            opacity: 0,
+            y: 8,
+          }
+          : false
+      }
       animate={{
         opacity: 1,
         y: 0,
