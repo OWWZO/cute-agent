@@ -19,16 +19,18 @@ public class AgentPromptContractStripTest {
     }
 
     @Test
-    public void coordinatorPromptDoesNotRetainUserFacingContractTail() {
-        String withUserContract = AgentPrompt.ensureUserFacingReplyContract("# 角色\n你是助手。");
-        String followedByAnotherSection = withUserContract + "\n# 附加规则\n不要泄漏内部实现。\n";
+    public void legacyCoordinatorContractIsRemovedWhenUserContractApplied() {
+        String followedByAnotherSection = "# 角色\n你是助手。\n\n"
+                + "# 面向协调者的回复约定 (COORDINATOR_FACING_REPLY_CONTRACT_V1)\n"
+                + "- 状态：完成 | 部分完成 | 失败\n\n"
+                + "# 附加规则\n不要泄漏内部实现。\n";
 
-        String coordinator = AgentPrompt.ensureCoordinatorFacingReplyContract(followedByAnotherSection);
+        String user = AgentPrompt.ensureUserFacingReplyContract(followedByAnotherSection);
 
-        Assert.assertFalse("用户侧语言/交付规则必须被整体移除",
-                coordinator.contains("交付文件标记（必须）"));
-        Assert.assertFalse(coordinator.contains("## 语言"));
-        Assert.assertTrue("契约之后的章节不能被一起吞掉", coordinator.contains("# 附加规则"));
-        Assert.assertTrue(coordinator.contains(AgentPrompt.COORDINATOR_FACING_REPLY_CONTRACT_MARKER));
+        Assert.assertFalse("旧协调者契约必须被整体移除",
+                user.contains("COORDINATOR_FACING_REPLY_CONTRACT_V1"));
+        Assert.assertFalse("旧协调者回复结构必须被整体移除", user.contains("状态：完成"));
+        Assert.assertTrue("契约之后的章节不能被一起吞掉", user.contains("# 附加规则"));
+        Assert.assertTrue(user.contains(AgentPrompt.USER_FACING_REPLY_CONTRACT_MARKER));
     }
 }

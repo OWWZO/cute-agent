@@ -46,6 +46,30 @@ public class ReactFinalAnswerResolverTest {
     }
 
     @Test
+    public void terminatedCurrentTurnDoesNotFallBackToPreviousTurnAnswer() {
+        StubAgent agent = new StubAgent();
+        agent.getMemory().addMessage(Message.assistantMessage("上一轮答案", null));
+        agent.getMemory().addMessage(Message.userMessage("新一轮问题", null));
+        agent.setState(AgentState.FINISHED);
+
+        Assert.assertEquals(
+                ReactFinalAnswerResolver.MISSING_USER_FACING_ANSWER,
+                ReactFinalAnswerResolver.resolve(agent, "Terminated: Reached max steps")
+        );
+    }
+
+    @Test
+    public void missingCurrentTurnAnswerUsesStableFallbackEvenWhenAgentIsNotFinished() {
+        StubAgent agent = new StubAgent();
+        agent.getMemory().addMessage(Message.userMessage("新一轮问题", null));
+
+        Assert.assertEquals(
+                ReactFinalAnswerResolver.MISSING_USER_FACING_ANSWER,
+                ReactFinalAnswerResolver.resolve(agent, null)
+        );
+    }
+
+    @Test
     public void sanitizeReturnsEmptyForBlankFinishBody() {
         Assert.assertEquals("", ReactFinalAnswerResolver.sanitize("Finish[]"));
         Assert.assertEquals("", ReactFinalAnswerResolver.sanitize("Finish[   ]"));

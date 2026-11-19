@@ -6,7 +6,7 @@ import org.wwz.ai.domain.agent.runtime.tool.common.openui.OpenUiResources;
 /**
  * Agent system 提示。
  * <p>
- * ReAct 与子 Agent 共用 {@link #REACT_SYSTEM_PROMPT}；终答约定不同（用户 / 协调者）。
+ * ReAct 与子 Agent 共用 {@link #REACT_SYSTEM_PROMPT}；子 Agent 不额外注入专门终答契约。
  * PlanSolve 主路径底座为 {@code PlanSolvePrompt.ORCHESTRATION}，不使用 REACT 底座。
  * 工具以 API {@code tools[]} 为准，system 不写死工具清单。
  */
@@ -14,7 +14,6 @@ import org.wwz.ai.domain.agent.runtime.tool.common.openui.OpenUiResources;
 public class AgentPrompt {
 
     public static final String USER_FACING_REPLY_CONTRACT_MARKER = "USER_FACING_REPLY_CONTRACT_V6";
-    public static final String COORDINATOR_FACING_REPLY_CONTRACT_MARKER = "COORDINATOR_FACING_REPLY_CONTRACT_V1";
     public static final String OPENUI_PROTOCOL_MARKER = "OPENUI_PROTOCOL_V1";
 
     /**
@@ -67,23 +66,6 @@ public class AgentPrompt {
               site/index.html、chart.png
             - 以上规则不适用于 tool call 参数与代码。
             """.formatted(USER_FACING_REPLY_CONTRACT_MARKER);
-
-    /**
-     * 子 Agent 终答：面向协调者（主 Agent），不是终端用户气泡。
-     */
-    public static final String COORDINATOR_FACING_REPLY_CONTRACT = """
-            # 面向协调者的回复约定 (%s)
-
-            - 你的调用方是主编排 Agent，不是终端用户。
-            - 本轮不调用工具时的 assistant 文本 = 交给协调者的结论文本。
-             - 回复结构：
-               状态：完成 | 部分完成 | 失败
-               面向协调者的结论文本：...
-               文件产物：可 workspace_read 的相对路径（如有）
-               缺口：未完成项与阻塞原因（如有）
-             - 如果有需要交付给用户的文件，结尾追加单独一段 `$$$` 和工作区相对路径或唯一文件名；
-                优先写相对路径，不要写 toolCallId。
-             """.formatted(COORDINATOR_FACING_REPLY_CONTRACT_MARKER);
 
     /**
      * ReAct 主路径与子 Agent 共用底座。
@@ -276,14 +258,14 @@ public class AgentPrompt {
             """;
 
     /**
-     * 组装子 Agent system 模板：与 ReAct 同底座 + 面向协调者终答 + 类型指令。
+     * 组装子 Agent system 模板：与 ReAct 同底座 + 类型指令，不额外注入专门终答契约。
      */
     public static String composeSubAgentSystemPrompt(String typeDirective) {
-        String withContract = ensureCoordinatorFacingReplyContract(REACT_SYSTEM_PROMPT.trim());
+        String base = REACT_SYSTEM_PROMPT.trim();
         if (typeDirective == null || typeDirective.isBlank()) {
-            return withContract;
+            return base + "\n";
         }
-        return withContract.trim() + "\n\n# Subagent directive\n" + typeDirective.trim() + "\n";
+        return base + "\n\n# Subagent directive\n" + typeDirective.trim() + "\n";
     }
 
     /**
@@ -324,7 +306,7 @@ public class AgentPrompt {
 
     public static String ensureUserFacingReplyContract(String systemPrompt) {
         String base = normalizeNewlines(systemPrompt);
-        base = stripCoordinatorFacingReplyContract(base);
+        base = stripLegacyCoordinatorReplyContract(base);
         base = stripLegacyUserFacingContract(base);
         if (base.contains(USER_FACING_REPLY_CONTRACT_MARKER)) {
             return endsWithNewline(base);
@@ -332,25 +314,13 @@ public class AgentPrompt {
         return appendBlock(base, USER_FACING_REPLY_CONTRACT.trim());
     }
 
-    public static String ensureCoordinatorFacingReplyContract(String systemPrompt) {
-        String base = normalizeNewlines(systemPrompt);
-        base = stripUserFacingReplyContract(base);
-        if (base.contains(COORDINATOR_FACING_REPLY_CONTRACT_MARKER)) {
-            return endsWithNewline(base);
-        }
-        return appendBlock(base, COORDINATOR_FACING_REPLY_CONTRACT.trim());
-    }
-
-    public static String stripUserFacingReplyContract(String systemPrompt) {
-        String base = normalizeNewlines(systemPrompt);
-        base = stripLegacyUserFacingContract(base);
-        return stripMarkedSection(base, USER_FACING_REPLY_CONTRACT_MARKER, "# 面向用户的终答约定");
-    }
-
-    public static String stripCoordinatorFacingReplyContract(String systemPrompt) {
+    /**
+     * 清理旧版本遗留的协调者终答契约；当前子 Agent 不再注入该契约。
+     */
+    private static String stripLegacyCoordinatorReplyContract(String systemPrompt) {
         return stripMarkedSection(
                 normalizeNewlines(systemPrompt),
-                COORDINATOR_FACING_REPLY_CONTRACT_MARKER,
+                "COORDINATOR_FACING_REPLY_CONTRACT_V1",
                 "# 面向协调者的回复约定");
     }
 

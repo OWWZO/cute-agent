@@ -2,9 +2,11 @@ package org.wwz.ai.test.domain.subagent;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionIdentity;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionPort;
 import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionStreamPort;
+import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
@@ -52,11 +54,57 @@ public class SubAgentSessionStreamIsolationTest {
 
         // 父流只留下两条自包含摘要帧，且先 start 后 end
         Assert.assertEquals(List.of("subagent_start", "subagent_end"), parentPrinter.messageTypes);
-        Assert.assertEquals("sub_agent-fixed", parentPrinter.childSessionIds.get(0));
-        Assert.assertEquals("sub_agent-fixed", parentPrinter.childSessionIds.get(1));
+        Assert.assertEquals(List.of("sub_agent-fixed", "sub_agent-fixed"),
+                parentPrinter.frameChildSessionIds);
+        Assert.assertEquals(List.of(call.requestId, call.requestId),
+                parentPrinter.frameChildRequestIds);
 
         // 结果仍带回 childSessionId（隔离流端口不可用时回退透传，不阻断子 Agent）
         Assert.assertEquals("sub_agent-fixed", result.getChildSessionId());
+    }
+
+    @Test
+    public void childRunShouldBeInitializedBeforeStartFrame() {
+        RecordingStreamPort streamPort = new RecordingStreamPort();
+        RecordingPrinter parentPrinter = new RecordingPrinter();
+        AgentExecutionRecorder recorder = Mockito.mock(AgentExecutionRecorder.class);
+        Mockito.when(recorder.createRun(Mockito.any())).thenAnswer(invocation -> {
+            Assert.assertFalse("subagent_start 必须在 child run 初始化之后广播",
+                    parentPrinter.messageTypes.contains("subagent_start"));
+            return 7L;
+        });
+        SubAgentRunner runner = new SubAgentRunner(new SubAgentRegistry());
+
+        runner.run(
+                newParentContext(new NoopSessionPort(), streamPort, Boolean.TRUE, parentPrinter, recorder),
+                "探索前端", "任务 prompt",
+                SubAgentRegistry.TYPE_GENERAL_PURPOSE, null, null, "agent-fixed");
+
+        Assert.assertEquals(List.of("subagent_start", "subagent_end"),
+                parentPrinter.messageTypes);
+    }
+
+    @Test
+    public void childRunInitializationFailureShouldCloseStreamWithoutStartFrame() {
+        RecordingStreamPort streamPort = new RecordingStreamPort();
+        RecordingPrinter parentPrinter = new RecordingPrinter();
+        AgentExecutionRecorder recorder = Mockito.mock(AgentExecutionRecorder.class);
+        Mockito.when(recorder.createRun(Mockito.any()))
+                .thenThrow(new IllegalStateException("ledger unavailable"));
+        SubAgentRunner runner = new SubAgentRunner(new SubAgentRegistry());
+
+        try {
+            runner.run(
+                    newParentContext(new NoopSessionPort(), streamPort, Boolean.TRUE, parentPrinter, recorder),
+                    "探索前端", "任务 prompt",
+                    SubAgentRegistry.TYPE_GENERAL_PURPOSE, null, null, "agent-fixed");
+            Assert.fail("初始化失败必须向上抛出，不能广播一个不可查询的子会话");
+        } catch (IllegalStateException expected) {
+            Assert.assertEquals("ledger unavailable", expected.getMessage());
+        }
+
+        Assert.assertTrue("start 前失败不得广播摘要帧", parentPrinter.messageTypes.isEmpty());
+        Assert.assertEquals(List.of("sub_agent-fixed"), streamPort.closes);
     }
 
     @Test
@@ -100,6 +148,14 @@ public class SubAgentSessionStreamIsolationTest {
                                                  SubAgentSessionStreamPort streamPort,
                                                  Boolean isolatedFlag,
                                                  Printer printer) {
+        return newParentContext(sessionPort, streamPort, isolatedFlag, printer, null);
+    }
+
+    private static AgentContext newParentContext(SubAgentSessionPort sessionPort,
+                                                 SubAgentSessionStreamPort streamPort,
+                                                 Boolean isolatedFlag,
+                                                 Printer printer,
+                                                 AgentExecutionRecorder recorder) {
         org.wwz.ai.domain.agent.cute.config.CuteConfig config = null;
         if (isolatedFlag != null) {
             config = new org.wwz.ai.domain.agent.cute.config.CuteConfig();
@@ -126,6 +182,7 @@ public class SubAgentSessionStreamIsolationTest {
                 .query("q")
                 .agentType(AgentType.PLAN_SOLVE.getValue())
                 .printer(printer)
+                .executionRecorder(recorder)
                 .toolCollection(new ToolCollection())
                 .runtimeDependencies(dependencies)
                 .build();
@@ -185,7 +242,8 @@ public class SubAgentSessionStreamIsolationTest {
 
     private static final class RecordingPrinter implements Printer {
         private final List<String> messageTypes = new ArrayList<>();
-        private final List<String> childSessionIds = new ArrayList<>();
+        private final List<String> frameChildSessionIds = new ArrayList<>();
+        private final List<String> frameChildRequestIds = new ArrayList<>();
 
         @Override
         public void send(String messageId, String messageType, Object message, String digitalEmployee, Boolean isFinal) {
@@ -196,15 +254,15 @@ public class SubAgentSessionStreamIsolationTest {
         public void send(String messageId, String messageType, Object message, Map<String, Object> extraResultMap, String digitalEmployee, Boolean isFinal) {
             record(messageType, message);
             if (extraResultMap != null && extraResultMap.get("childSessionId") != null) {
-                childSessionIds.add(String.valueOf(extraResultMap.get("childSessionId")));
+                frameChildSessionIds.add(String.valueOf(extraResultMap.get("childSessionId")));
+            }
+            if (extraResultMap != null && extraResultMap.get("childRequestId") != null) {
+                frameChildRequestIds.add(String.valueOf(extraResultMap.get("childRequestId")));
             }
         }
 
         private void record(String messageType, Object message) {
             messageTypes.add(messageType);
-            if (message instanceof Map<?, ?> map && map.get("childSessionId") != null) {
-                childSessionIds.add(String.valueOf(map.get("childSessionId")));
-            }
         }
 
         @Override

@@ -742,7 +742,7 @@ public abstract class BaseAgent {
     }
 
     /**
-     * 子 Agent：REACT 底座 + 面向协调者终答 + 类型指令，整段替换（去掉 USER_FACING）。
+     * 子 Agent：REACT 底座 + 类型指令，不额外注入专门终答契约。
      */
     public void applySubAgentSystemPrompt(String typeDirective) {
         String template = AgentPrompt.composeSubAgentSystemPrompt(typeDirective);

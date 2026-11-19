@@ -14,6 +14,7 @@ import org.wwz.ai.domain.agent.memory.WorkingMemoryScopes;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.agent.ReactImplAgent;
+import org.wwz.ai.domain.agent.runtime.agent.ReactFinalAnswerResolver;
 import org.wwz.ai.domain.agent.runtime.artifact.TaskSummaryArtifactProtocol;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactBinding;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
@@ -181,6 +182,8 @@ public class SubAgentRunner {
             return failed(agentId, childSessionId, definition, description, prompt, start, "prompt 不能为空");
         }
         if (parentContext.isRunCancelled()) {
+            recordCancelledBeforeStart(parentContext, description, prompt, definition, agentId,
+                    childSessionId, cancellationOverride);
             return failed(agentId, childSessionId, definition, description, prompt, start,
                     "父 run 已停止，取消子 Agent 启动");
         }
@@ -275,26 +278,36 @@ public class SubAgentRunner {
         String childRequestId = SubAgentContextFactory.newChildRequestId(agentId);
         Printer isolatedChildPrinter = openIsolatedChildStream(
                 parentContext, childSessionId, childRequestId, prompt);
-        if (isolatedChildPrinter != null) {
-            emitParentSubAgentFrame(parentContext, "subagent_start", childSessionId, parentToolUseId,
-                    agentId, definition.getAgentType(), description, "running", null);
-        }
 
-        AgentContext childContext = SubAgentContextFactory.create(
-                parentContext, prompt, description, childTools, agentId, definition.getAgentType(), parentToolUseId,
-                isolatedChildPrinter, isolatedChildPrinter == null ? null : childRequestId);
-        // 后台 Agent：用任务级取消令牌，TaskStop 不误伤主 run；同步派发仍共享父令牌
-        if (cancellationOverride != null) {
-            childContext.control().bindCancellation(cancellationOverride);
+        final AgentContext childContext;
+        try {
+            childContext = SubAgentContextFactory.create(
+                    parentContext, prompt, description, childTools, agentId, definition.getAgentType(),
+                    parentToolUseId, isolatedChildPrinter,
+                    isolatedChildPrinter == null ? null : childRequestId);
+            // 后台 Agent：用任务级取消令牌，TaskStop 不误伤主 run；同步派发仍共享父令牌
+            if (cancellationOverride != null) {
+                childContext.control().bindCancellation(cancellationOverride);
+            }
+            // 子 Agent 记账落独立 run：LLM / tool / artifact 挂到 childSessionId 的 run，
+            // 父 run 的 llm_call_count / tool_call_count 不再包含子代理调用。
+            // recorder 共享同一无状态实例，run 身份由 AgentRunState 隔离。
+            ExecutionLedgerRunSupport.initializeSubAgentRun(
+                    childContext.getExecutionRecorder(),
+                    childContext,
+                    ExecutionLedgerConstants.ENTRY_AGENT_SUBAGENT,
+                    prompt);
+        } catch (RuntimeException e) {
+            // startup 广播前失败时子流已在注册表中，必须立即注销，避免留下无法查询的孤儿投影。
+            if (isolatedChildPrinter != null) {
+                closeIsolatedChildStream(parentContext, childSessionId, isolatedChildPrinter);
+            }
+            throw e;
         }
-        // 子 Agent 记账落独立 run：LLM / tool / artifact 挂到 childSessionId 的 run，
-        // 父 run 的 llm_call_count / tool_call_count 不再包含子代理调用。
-        // recorder 共享同一无状态实例，run 身份由 AgentRunState 隔离。
-        ExecutionLedgerRunSupport.initializeSubAgentRun(
-                childContext.getExecutionRecorder(),
-                childContext,
-                ExecutionLedgerConstants.ENTRY_AGENT_SUBAGENT,
-                prompt);
+        if (isolatedChildPrinter != null) {
+            emitParentSubAgentFrame(parentContext, "subagent_start", childSessionId, childRequestId,
+                    parentToolUseId, agentId, definition.getAgentType(), description, "running", null);
+        }
         ReactImplAgent agent = null;
         // 子 run 终态收口：resume 早退、异常与正常路径都要收敛到同一个 finally，
         // 避免漏写导致 run 永挂 RUNNING、子会话投影流泄漏。
@@ -357,12 +370,12 @@ public class SubAgentRunner {
             agent = new ReactImplAgent(childContext);
             agent.setName("subagent:" + definition.getAgentType());
             agent.setDescription(StringUtils.defaultIfBlank(description, definition.getAgentType()));
-            // 整段替换为子 Agent 底座（面向协调者），不复用 ReAct 用户向 system / USER_FACING
+            // 子 Agent 使用 ReAct 底座 + 类型指令，不额外注入专门终答契约
             agent.applySubAgentSystemPrompt(definition.getSystemPrompt());
             // 子 agent 与主 agent 复用同一套行模型：正文 delta 同样走 agent_stream，
             // 由隔离子会话流（openIsolatedChildStream）承载、子会话面板用同一条 combineData
             // 链路消费；透传回退路径由 SubAgentPrinter 打嵌套标签、前端挂嵌套时间线。
-            // "终答回给协调者"是消费语义，不改变展示语义。
+            // 返回值回给协调者是消费语义，不改变展示语义。
             if (definition.getMaxSteps() != null && definition.getMaxSteps() > 0) {
                 agent.setMaxSteps(definition.getMaxSteps());
             }
@@ -419,7 +432,7 @@ public class SubAgentRunner {
                             .memoryPersisted(memoryPersisted)
                             .build();
                 }
-                content = finalizeContent(agent, runResult);
+                content = ReactFinalAnswerResolver.resolve(agent, runResult);
                 content = emitSubAgentFinalReply(childContext, agent, content);
                 childRunStatus.set(ExecutionLedgerConstants.STATUS_SUCCESS);
                 childRunSummary.set(content);
@@ -469,8 +482,8 @@ public class SubAgentRunner {
             }
             // Phase 3：父流补一条自包含的 subagent_end，然后关闭子会话投影流。
             if (isolatedChildPrinter != null) {
-                emitParentSubAgentFrame(parentContext, "subagent_end", childSessionId, parentToolUseId,
-                        agentId, definition.getAgentType(), description,
+                emitParentSubAgentFrame(parentContext, "subagent_end", childSessionId, childRequestId,
+                        parentToolUseId, agentId, definition.getAgentType(), description,
                         childContext.isRunCancelled() ? "stopped" : resolveEndStatus(childRunStatus.get()),
                         resolveEndSummary(childRunStatus, childRunSummary));
                 closeIsolatedChildStream(parentContext, childSessionId, isolatedChildPrinter);
@@ -567,6 +580,7 @@ public class SubAgentRunner {
     private static void emitParentSubAgentFrame(AgentContext parentContext,
                                                 String messageType,
                                                 String childSessionId,
+                                                String childRequestId,
                                                 String parentToolUseId,
                                                 String agentId,
                                                 String agentType,
@@ -581,6 +595,7 @@ public class SubAgentRunner {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("delegationId", agentId);
             payload.put("childSessionId", childSessionId);
+            payload.put("childRequestId", childRequestId);
             payload.put("parentToolCallId", parentToolUseId);
             payload.put("subAgentId", agentId);
             payload.put("subagentType", agentType);
@@ -594,6 +609,7 @@ public class SubAgentRunner {
             extra.put(SubAgentPrinter.KEY_SUB_AGENT_ID, agentId);
             extra.put(SubAgentPrinter.KEY_SUB_AGENT_TYPE, agentType);
             extra.put("childSessionId", childSessionId);
+            extra.put("childRequestId", childRequestId);
             parentPrinter.send(null, messageType, payload, extra, null, true);
         } catch (Exception e) {
             log.debug("{} emit {} skipped id={}: {}",
@@ -869,37 +885,48 @@ public class SubAgentRunner {
         return StringUtils.trimToNull(parent.getCurrentToolArtifactSource().getToolCallId());
     }
 
-    private static String finalizeContent(ReactImplAgent agent, String runResult) {
-        if (StringUtils.isNotBlank(runResult) && !isNonUserFacingRunResult(runResult)) {
-            return runResult.trim();
-        }
-        if (agent == null || agent.getMemory() == null || agent.getMemory().getMessages() == null) {
-            return StringUtils.defaultString(runResult);
-        }
-        List<Message> messages = agent.getMemory().getMessages();
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            Message message = messages.get(i);
-            if (message == null || message.getRole() != RoleType.ASSISTANT) {
-                continue;
+    /**
+     * 父 run 在子 Agent 启动前已经取消时，不能再启动子 Agent，但必须留下
+     * 一条可查询的 STOPPED 子 run，避免调用方只看到一个没有账本的失败结果。
+     */
+    private void recordCancelledBeforeStart(AgentContext parentContext,
+                                            String description,
+                                            String prompt,
+                                            SubAgentDefinition definition,
+                                            String agentId,
+                                            String childSessionId,
+                                            RunCancellation cancellationOverride) {
+        try {
+            ToolCollection parentTools = parentContext.getSubAgentToolCollection() != null
+                    ? parentContext.getSubAgentToolCollection()
+                    : parentContext.getToolCollection();
+            ToolCollection childTools = SubAgentToolFilter.filter(parentTools, definition);
+            AgentContext childContext = SubAgentContextFactory.create(
+                    parentContext, prompt, description, childTools, agentId,
+                    definition.getAgentType(), resolveParentToolUseId(parentContext), null, null);
+            if (cancellationOverride != null) {
+                childContext.control().bindCancellation(cancellationOverride);
             }
-            if (message.getToolCalls() != null && !message.getToolCalls().isEmpty()) {
-                continue;
-            }
-            if (StringUtils.isNotBlank(message.getContent())) {
-                return message.getContent().trim();
-            }
+            ExecutionLedgerRunSupport.initializeSubAgentRun(
+                    childContext.getExecutionRecorder(),
+                    childContext,
+                    ExecutionLedgerConstants.ENTRY_AGENT_SUBAGENT,
+                    prompt
+            );
+            ExecutionLedgerRunSupport.finishRun(
+                    childContext,
+                    ExecutionLedgerConstants.STATUS_STOPPED,
+                    null,
+                    "USER_CANCELLED",
+                    "父 run 已停止，取消子 Agent 启动"
+            );
+        } catch (RuntimeException e) {
+            log.warn("{} persist cancelled subagent run failed id={} childSessionId={}",
+                    parentContext == null ? null : parentContext.getRequestId(),
+                    agentId,
+                    childSessionId,
+                    e);
         }
-        return StringUtils.defaultIfBlank(runResult, "");
-    }
-
-    private static boolean isNonUserFacingRunResult(String runResult) {
-        if (StringUtils.isBlank(runResult)) {
-            return true;
-        }
-        String text = runResult.trim();
-        return text.startsWith("Terminated:")
-                || "No steps executed".equals(text)
-                || "Thinking complete - no action needed".equals(text);
     }
 
     private static int countToolUses(ReactImplAgent agent) {

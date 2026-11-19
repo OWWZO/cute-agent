@@ -76,10 +76,11 @@ public class PlanSolvePromptOrchestrationTest {
     }
 
     @Test
-    public void subAgentSharesReactBaseWithCoordinatorFacing() {
+    public void subAgentSharesReactBaseWithoutDedicatedReplyContract() {
         String sub = AgentPrompt.composeSubAgentSystemPrompt("专属指令");
         Assert.assertTrue(sub.contains("你是 Cute，专注深度调研与数据分析"));
-        Assert.assertTrue(sub.contains(AgentPrompt.COORDINATOR_FACING_REPLY_CONTRACT_MARKER));
+        Assert.assertFalse(sub.contains("COORDINATOR_FACING_REPLY_CONTRACT_V1"));
+        Assert.assertFalse(sub.contains("# 面向协调者的回复约定"));
         Assert.assertFalse(sub.contains(AgentPrompt.USER_FACING_REPLY_CONTRACT_MARKER));
         Assert.assertTrue(sub.contains("# Subagent directive"));
         Assert.assertTrue(sub.contains("专属指令"));
@@ -90,7 +91,7 @@ public class PlanSolvePromptOrchestrationTest {
     public void reactBaseKeepsUserFacingWhenEnsured() {
         String react = AgentPrompt.ensureUserFacingReplyContract(AgentPrompt.REACT_SYSTEM_PROMPT);
         Assert.assertTrue(react.contains(AgentPrompt.USER_FACING_REPLY_CONTRACT_MARKER));
-        Assert.assertFalse(react.contains(AgentPrompt.COORDINATOR_FACING_REPLY_CONTRACT_MARKER));
+        Assert.assertFalse(react.contains("COORDINATOR_FACING_REPLY_CONTRACT_V1"));
         Assert.assertFalse(react.contains(PlanSolvePrompt.ORCHESTRATION_MARKER));
     }
 
