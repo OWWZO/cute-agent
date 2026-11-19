@@ -5,6 +5,7 @@ import type {
 } from "@/services/agentConversation";
 import type { SessionRunTimelineSource } from "@/hooks/useSessionTimeline";
 import type { AgentTimelineItem } from "@/types/timeline";
+import { TimelineStore } from "@/utils/timeline/timelineStore";
 import {
   buildSessionTimelineChat,
   buildSessionTimelineRounds,
@@ -332,6 +333,131 @@ describe("sessionTimelineChat", () => {
     );
 
     expect(projected.conclusion?.result).toBe("控制流已经拿到的终答");
+  });
+
+  it("Deep Research 多阶段时间线仍逐卡展示章节总结，不继承最终报告", () => {
+    const deepSearchEvent = (
+      stage: Record<string, unknown>,
+      orderKey: number
+    ): MESSAGE.EventData => eventData({
+      requestId: "r1",
+      messageId: "msg-deep",
+      messageType: "deep_search",
+      messageTime: String(orderKey),
+      resultMap: stage,
+    }, {
+      messageId: "msg-deep",
+      taskId: "t1",
+    });
+    const deepSearchItem = (
+      stage: Record<string, unknown>,
+      orderKey: number
+    ): AgentTimelineItem => item(
+      "tool:call-deep",
+      deepSearchEvent(stage, orderKey),
+      {
+        kind: "TOOL_CALL",
+        orderKey,
+        payload: {
+          eventData: deepSearchEvent(stage, orderKey),
+        },
+      }
+    );
+    const store = new TimelineStore();
+    store.upsertMany([
+      deepSearchItem({
+        messageType: "search",
+        searchResult: {
+          query: ["查询一", "查询二"],
+          docs: [
+            [{ link: "https://example.com/a", title: "来源一" }],
+            [{ link: "https://example.com/b", title: "来源二" }],
+          ],
+        },
+      }, 1),
+    ]);
+    store.upsertMany([
+      deepSearchItem({
+        messageType: "chapter_summary",
+        chapterId: "C1",
+        chapterTitle: "第一章",
+        chapterOrder: 1,
+        chapterSummary: "第一章总结",
+        answer: "第一章总结",
+        searchResult: {
+          query: ["查询一"],
+          docs: [[{ link: "https://example.com/a", title: "来源一" }]],
+        },
+      }, 2),
+    ]);
+    store.upsertMany([
+      deepSearchItem({
+        messageType: "chapter_summary",
+        chapterId: "C2",
+        chapterTitle: "第二章",
+        chapterOrder: 2,
+        chapterSummary: "第二章总结",
+        answer: "第二章总结",
+        searchResult: {
+          query: ["查询二"],
+          docs: [[{ link: "https://example.com/b", title: "来源二" }]],
+        },
+      }, 3),
+    ]);
+    store.upsertMany([
+      deepSearchItem({
+        messageType: "report",
+        isFinal: true,
+        answer: "最终报告",
+      }, 4),
+    ]);
+
+    const chat = buildSessionTimelineChat({
+      sessionId: "sub-1",
+      run: run(),
+      source: {
+        items: store.values(),
+        status: "SUCCESS",
+        loaded: true,
+      },
+    });
+    const historyStages = (
+      store.values()[0]?.payload?.eventDataHistory || []
+    ).map((event) => {
+      const outer = event.resultMap as unknown as Record<string, unknown>;
+      const nested = outer.resultMap as Record<string, unknown> | undefined;
+      return nested?.messageType;
+    });
+    expect(historyStages).toEqual([
+      "search",
+      "chapter_summary",
+      "chapter_summary",
+      "report",
+    ]);
+    const cards = (chat.tasks || []).flatMap((group) =>
+      (group || []).flatMap((container) =>
+        (container.children || []).filter(
+          (child) => child.messageType === "deep_search"
+        )
+      )
+    );
+
+    expect(cards.map((card) => card.resultMap?.messageType)).toEqual([
+      "chapter_summary",
+      "chapter_summary",
+      "report",
+    ]);
+    expect(cards.map((card) => card.resultMap?.chapterSummary)).toEqual([
+      "第一章总结",
+      "第二章总结",
+      undefined,
+    ]);
+    expect(cards.map((card) => card.resultMap?.answer)).toEqual([
+      "第一章总结",
+      "第二章总结",
+      "最终报告",
+    ]);
+    expect(new Set(cards.map((card) => card.id)).size).toBe(cards.length);
   });
 
   it("main and child Agent share the same canonical task structure", () => {

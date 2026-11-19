@@ -1,30 +1,20 @@
 import type {
   ConversationHistoryDetail,
   ConversationHistoryPage,
-  ConversationReplayFrame,
   ConversationRunReplay,
   ConversationRunSummary,
 } from "@/services/agentConversation";
 import { GENERIC_TASK_PRODUCT } from "@/utils/constants";
-import { normalizeRunStatus } from "@/utils/runStatus";
 import {
   AGENT_TYPE_DEEP_THINK,
   AGENT_TYPE_PLAN_SOLVE,
 } from "@/utils/agentMode";
-import { extractArtifactSection } from "@/utils/artifactContent";
 import {
   hasRenderableTimelineItems,
   isRunReplay,
   resolveRunReplayFrames,
 } from "@/utils/timelineItems";
-import { isRunFinalStatus } from "@/utils/timeline/timelineStore";
-
-import {
-  buildConversationTaskData,
-  buildTaskFromEventData,
-  combineData,
-} from "./chat";
-import { applyTimelineSourcesToChat } from "./chat/timelineProjection";
+import { buildSessionTimelineChat } from "./chat/sessionTimelineChat";
 
 type ConversationHistoryTitleDetail = Pick<
   ConversationHistoryPage,
@@ -96,33 +86,32 @@ export function hydrateRunSummary(
   detail: ConversationHistoryPage | ConversationHistoryDetail,
   run: ConversationRunSummary | ConversationRunReplay
 ): CHAT.ChatItem {
-  const currentChat = createRunShell(detail, run);
-  applyFallbackConclusion(currentChat, run, false);
-  applyRunMetadata(currentChat, run);
-  return currentChat;
+  return buildSessionTimelineChat({
+    sessionId: detail.sessionId,
+    run: toRunSummary(run),
+    fallbackQuery: getRunQuery(run),
+    agentType: resolveConversationAgentType(detail.deepThink),
+  });
 }
 
 export function hydrateRunReplay(
   detail: ConversationHistoryPage | ConversationHistoryDetail,
   run: ConversationRunReplay
 ): CHAT.ChatItem {
-  // 历史 run 先还原为与实时流相同的空状态，再逐帧复用 combineData，确保历史和实时使用同一事件语义。
-  const currentChat = createRunShell(detail, run);
-
-  applyTimelineSourcesToChat(currentChat, {
-    items: run.timelineItems,
-    replayFrames: resolveRunReplayFrames(run),
-    allowLegacyResult: isRunFinalStatus(normalizeRunStatus(run.status)),
+  return buildSessionTimelineChat({
+    sessionId: detail.sessionId,
+    run: toRunSummary(run),
+    source: {
+      items: run.timelineItems || [],
+      replayFrames: resolveRunReplayFrames(run),
+      status: run.status,
+      loaded: true,
+    },
+    fallbackQuery: getRunQuery(run),
+    agentType: resolveConversationAgentType(detail.deepThink),
     settleResultMetadata: true,
+    isolatedSession: false,
   });
-
-  applyFallbackConclusion(currentChat, run, true);
-  applyRunMetadata(currentChat, run);
-
-  return {
-    ...buildConversationTaskData(currentChat, detail.deepThink).currentChat,
-    replayLoaded: true,
-  };
 }
 
 /**
@@ -234,100 +223,6 @@ function buildConversationHistory(
   };
 }
 
-function createRunShell(
-  detail: ConversationHistoryPage | ConversationHistoryDetail,
-  run: ConversationRunSummary | ConversationRunReplay
-): CHAT.ChatItem {
-  const runStatus = normalizeRunStatus(run.status);
-  const isRunning = runStatus === "RUNNING";
-  return {
-    sessionId: detail.sessionId,
-    requestId: run.requestId,
-    query: getRunQuery(run),
-    files: [],
-    responseType: "txt",
-    agentType: resolveConversationAgentType(detail.deepThink),
-    loading: isRunning,
-    forceStop: runStatus === "STOPPED",
-    tasks: [],
-    thought: "",
-    response: "",
-    taskStatus: 0,
-    tip: "",
-    multiAgent: { tasks: [] },
-    timeline: [],
-    startedAt: run.startedAt,
-    finishedAt: run.finishedAt,
-    replayLoaded: false,
-    replayAvailable: isRunReplay(run) ? true : run.hasReplay,
-    metrics: { status: runStatus },
-  } as CHAT.ChatItem;
-}
-
-function applyFallbackConclusion(
-  currentChat: CHAT.ChatItem,
-  run: ConversationRunSummary | ConversationRunReplay,
-  includeTaskData: boolean
-) {
-  const runStatus = normalizeRunStatus(run.status);
-  const summaryText = getRunSummary(run);
-  if (runStatus === "RUNNING" || currentChat.conclusion || !summaryText) {
-    return;
-  }
-  // 旧数据或失败 run 可能没有 result frame，用 run 终态摘要补一条与实时 result 同构的事件。
-  const fallbackEventData = buildFallbackConclusionEventData(run, summaryText);
-  if (includeTaskData) {
-    combineData(fallbackEventData, currentChat);
-    syncConclusionFromEventData(currentChat, {
-      reqId: run.requestId,
-      status: run.status,
-      finished: true,
-      itemId: `run:${run.requestId}:final`,
-      kind: "ASSISTANT_MESSAGE",
-      phase: "FINAL",
-      eventType: runStatus === "FAILED"
-        ? "run.failed"
-        : runStatus === "STOPPED"
-          ? "run.stopped"
-          : "run.completed",
-      resultMap: { eventData: fallbackEventData },
-    }, fallbackEventData);
-    return;
-  }
-  currentChat.conclusion = buildTaskFromEventData(fallbackEventData) as unknown as CHAT.Task;
-}
-
-function applyRunMetadata(
-  currentChat: CHAT.ChatItem,
-  run: ConversationRunSummary | ConversationRunReplay
-) {
-  const runStatus = normalizeRunStatus(run.status);
-  const isRunning = runStatus === "RUNNING";
-
-  // 历史接口可能只返回到账本已落盘的部分事件，RUNNING 状态必须覆盖事件中的
-  // 暂态字段，避免页面刷新后把仍在后台执行的 run 错误显示成已完成。
-  currentChat.loading = isRunning;
-  currentChat.metrics = {
-    ...(currentChat.metrics || {}),
-    status: runStatus,
-  };
-  if (runStatus === "WAITING_INPUT") {
-    currentChat.tip = "需要你的帮助";
-    currentChat.loading = false;
-  }
-  const contextUsage = getRunContextUsage(run);
-  if (contextUsage) {
-    currentChat.contextUsage = {
-      max: contextUsage.max,
-      promptTokens: contextUsage.promptTokens,
-    };
-  }
-  if (typeof run.durationMs === "number" && Number.isFinite(run.durationMs)) {
-    currentChat.runDurationMs = run.durationMs;
-    currentChat.runTimingSource = "ledger";
-  }
-}
-
 function mergeSummaryChatsByRequestId(
   existing: CHAT.ChatItem[],
   incoming: CHAT.ChatItem[]
@@ -371,26 +266,28 @@ function getRunQuery(run: ConversationRunSummary | ConversationRunReplay) {
     : String(run.queryPreview || "");
 }
 
-function getRunSummary(run: ConversationRunSummary | ConversationRunReplay) {
-  return isRunReplay(run)
-    ? String(run.finalSummaryText || "")
-    : String(run.finalSummaryText || run.finalSummaryPreview || "");
-}
-
-function getRunContextUsage(run: ConversationRunSummary | ConversationRunReplay) {
-  return run.contextUsage;
-}
-
-function syncConclusionFromEventData(
-  currentChat: CHAT.ChatItem,
-  frame: ConversationReplayFrame,
-  eventData: MESSAGE.EventData
-) {
-  applyTimelineSourcesToChat(currentChat, {
-    replayFrames: [{ ...frame, resultMap: { ...frame.resultMap, eventData } }],
-    allowLegacyResult: false,
-    settleResultMetadata: true,
-  });
+function toRunSummary(
+  run: ConversationRunSummary | ConversationRunReplay
+): ConversationRunSummary {
+  if (!isRunReplay(run)) {
+    return run;
+  }
+  return {
+    requestId: run.requestId,
+    status: run.status,
+    queryPreview: run.queryText,
+    finalSummaryPreview: run.finalSummaryText,
+    finalSummaryText: run.finalSummaryText,
+    entryAgent: run.entryAgent,
+    contextUsage: run.contextUsage,
+    llmCallCount: run.llmCallCount,
+    toolCallCount: run.toolCallCount,
+    artifactCount: run.artifactCount,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    durationMs: run.durationMs,
+    hasReplay: true,
+  };
 }
 
 function toTimestamp(value?: string | null, fallback = Date.now()) {
@@ -403,54 +300,4 @@ function toTimestamp(value?: string | null, fallback = Date.now()) {
 
 function resolveConversationAgentType(deepThink?: boolean) {
   return deepThink ? AGENT_TYPE_DEEP_THINK : AGENT_TYPE_PLAN_SOLVE;
-}
-
-function buildFallbackConclusionEventData(
-  run: Pick<ConversationRunSummary | ConversationRunReplay, "requestId" | "finishedAt" | "startedAt">,
-  summaryText: string
-): MESSAGE.EventData {
-  const resolvedSummary = resolveFallbackSummary(summaryText);
-  const taskId = run.requestId || `${Date.now()}`;
-  return {
-    taskId,
-    taskOrder: 1,
-    messageType: "task",
-    messageOrder: 1,
-    messageId: `${run.requestId}-summary`,
-    ...(resolvedSummary.artifactRefs.length ? { artifactRefs: resolvedSummary.artifactRefs } : {}),
-    resultMap: {
-      requestId: run.requestId,
-      messageId: `${run.requestId}-summary`,
-      messageType: "result",
-      messageTime: String(toTimestamp(run.finishedAt, toTimestamp(run.startedAt))),
-      finish: true,
-      isFinal: true,
-      result: resolvedSummary.summaryText,
-      taskSummary: resolvedSummary.summaryText,
-      fileList: resolvedSummary.fileList,
-      ...(resolvedSummary.artifactKeys.length
-        ? { artifactKeys: resolvedSummary.artifactKeys }
-        : {}),
-    } as unknown as MESSAGE.Task,
-  };
-}
-
-function resolveFallbackSummary(rawSummaryText?: string | null) {
-  const normalized = String(rawSummaryText || "");
-  const section = extractArtifactSection(normalized);
-  if (!section) {
-    return {
-      summaryText: normalized,
-      fileList: [] as MESSAGE.FileInfo[],
-      artifactRefs: [] as MESSAGE.ArtifactReference[],
-      artifactKeys: [] as string[],
-    };
-  }
-
-  return {
-    summaryText: normalized,
-    fileList: [] as MESSAGE.FileInfo[],
-    artifactRefs: [] as MESSAGE.ArtifactReference[],
-    artifactKeys: section.artifactKeys,
-  };
 }

@@ -5,7 +5,9 @@ import type {
 import type { SessionRunTimelineSource } from "@/hooks/useSessionTimeline";
 import {
   buildConversationTaskData,
+  combineData,
 } from "@/utils/chat";
+import { extractArtifactSection } from "@/utils/artifactContent";
 import { normalizeRunStatus } from "@/utils/runStatus";
 import {
   isRunFinalReplayFrame,
@@ -30,7 +32,8 @@ function createSessionRunShell(
   sessionId: string,
   run: ConversationRunSummary,
   fallbackQuery: string | undefined,
-  loaded: boolean
+  loaded: boolean,
+  agentType?: CHAT.ChatItem["agentType"]
 ): CHAT.ChatItem {
   const status = normalizeRunStatus(run.status);
   return {
@@ -39,6 +42,7 @@ function createSessionRunShell(
     query: asText(run.queryPreview) || asText(fallbackQuery),
     files: [],
     responseType: "txt",
+    agentType,
     loading: status === "RUNNING",
     forceStop: status === "STOPPED",
     tasks: [],
@@ -72,6 +76,12 @@ function applyRunMetadata(chat: CHAT.ChatItem, statusValue: string, run: Convers
     chat.runDurationMs = run.durationMs;
     chat.runTimingSource = "ledger";
   }
+  if (run.contextUsage) {
+    chat.contextUsage = {
+      max: run.contextUsage.max,
+      promptTokens: run.contextUsage.promptTokens,
+    };
+  }
 }
 
 function applyLegacySummaryConclusion(
@@ -85,22 +95,63 @@ function applyLegacySummaryConclusion(
   if (!summary) {
     return undefined;
   }
+  const artifactKeys = extractArtifactSection(summary)?.artifactKeys || [];
   const messageId = `${run.requestId}-summary`;
   chat.conclusion = {
     id: messageId,
     messageId,
     messageType: "result",
+    requestId: run.requestId,
     result: summary,
+    taskSummary: summary,
     finish: true,
     isFinal: true,
+    ...(artifactKeys.length ? { artifactKeys } : {}),
     resultMap: {
       result: summary,
       taskSummary: summary,
       isFinal: true,
+      finish: true,
       fileList: [],
+      ...(artifactKeys.length ? { artifactKeys } : {}),
     } as unknown as MESSAGE.ResultMap,
   } as unknown as CHAT.Task;
   return chat.conclusion;
+}
+
+function applySourceFallbackConclusion(
+  chat: CHAT.ChatItem,
+  run: ConversationRunSummary,
+  statusValue?: string
+) {
+  if (chat.conclusion || !isRunFinalStatus(normalizeRunStatus(statusValue || run.status))) {
+    return;
+  }
+  const summary = asText(run.finalSummaryText) || asText(run.finalSummaryPreview);
+  if (!summary) {
+    return;
+  }
+  const artifactKeys = extractArtifactSection(summary)?.artifactKeys || [];
+  const messageId = `${run.requestId}-summary`;
+  combineData({
+    taskId: run.requestId || `${Date.now()}`,
+    taskOrder: 1,
+    messageType: "task",
+    messageOrder: 1,
+    messageId,
+    resultMap: {
+      requestId: run.requestId,
+      messageId,
+      messageType: "result",
+      messageTime: String(run.finishedAt || run.startedAt || Date.now()),
+      result: summary,
+      taskSummary: summary,
+      fileList: [],
+      isFinal: true,
+      finish: true,
+      ...(artifactKeys.length ? { artifactKeys } : {}),
+    },
+  } as unknown as MESSAGE.EventData, chat);
 }
 
 /**
@@ -111,13 +162,25 @@ export function buildSessionTimelineChat(input: {
   run: ConversationRunSummary;
   source?: SessionRunTimelineSource;
   fallbackQuery?: string;
+  agentType?: CHAT.ChatItem["agentType"];
+  settleResultMetadata?: boolean;
+  isolatedSession?: boolean;
 }): CHAT.ChatItem {
-  const { sessionId, run, source, fallbackQuery } = input;
+  const {
+    sessionId,
+    run,
+    source,
+    fallbackQuery,
+    agentType,
+    settleResultMetadata = false,
+    isolatedSession = true,
+  } = input;
   const chat = createSessionRunShell(
     sessionId,
     run,
     fallbackQuery,
-    Boolean(source?.loaded)
+    Boolean(source?.loaded),
+    agentType
   );
   let explicitConclusion: CHAT.Task | undefined;
   let legacyConclusion: CHAT.Task | undefined;
@@ -127,22 +190,21 @@ export function buildSessionTimelineChat(input: {
       items: source.items,
       replayFrames: source.replayFrames,
       allowLegacyResult: isRunFinalStatus(normalizeRunStatus(sourceStatus)),
-      settleResultMetadata: false,
-      isolatedSession: true,
+      settleResultMetadata,
+      isolatedSession,
     });
+    applySourceFallbackConclusion(chat, run, sourceStatus);
   } else {
     legacyConclusion = applyLegacySummaryConclusion(chat, run);
   }
   applyRunMetadata(chat, source?.status || run.status, run);
   const derived = buildConversationTaskData(chat, false).currentChat;
   if (source) {
-    derived.conclusion = explicitConclusion || applyLegacySummaryConclusion(
-      { ...derived, conclusion: undefined },
-      {
-        ...run,
-        status: source.status || run.status,
-      }
-    );
+    const derivedConclusion = derived.conclusion;
+    derived.conclusion = explicitConclusion
+      || (derivedConclusion?.messageType === "task_summary"
+        ? undefined
+        : derivedConclusion);
   } else {
     derived.conclusion = legacyConclusion;
   }

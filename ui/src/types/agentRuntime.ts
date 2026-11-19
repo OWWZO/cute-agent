@@ -113,6 +113,8 @@ export type DockTaskItem = {
   parentToolCallId?: string;
   /** 真实子会话 ID（sub_{agentId}）：详情面板据此订阅子会话，父卡缺失时也能下钻 */
   childSessionId?: string;
+  /** 当前子 run 的 requestId：历史尚未刷新时据此直接订阅实时轨迹 */
+  childRequestId?: string;
   /** 任务起始时间（ms epoch）：运行中条目据此实时累计「已运行 X 分 X 秒」 */
   startedAtMs?: number;
   /** 结束时间（ms epoch）：目录里算「刚刚 / X 分前」相对时间 */

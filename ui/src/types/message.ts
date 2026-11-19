@@ -266,6 +266,8 @@ declare global {
       subAgentProgressLines?: string[]
       /** 真实子会话 ID（sub_{agentId}）：父 Agent 卡据此下钻子会话详情面板 */
       childSessionId?: string
+      /** 子 Agent 本轮 run 的 requestId：父卡可据此直接订阅子会话实时轨迹 */
+      childRequestId?: string
       /** 父流 subagent_end 帧携带的子代理终态摘要（观察结果之前的占位结论） */
       subAgentSummary?: string
       /** 工具流式输出行（未来 tool_output / 现有 codeOutput 归一） */
