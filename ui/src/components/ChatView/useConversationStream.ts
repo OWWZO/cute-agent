@@ -83,6 +83,7 @@ import {
   resolveLatestRunState,
   resolveRunPresence,
   resolveWorkspaceCaption,
+  shouldForceTimelineFlush,
   shouldRefreshWorkspaceTask,
   shouldStopForegroundLoading,
   WAITING_USER_HELP_HINT,
@@ -1805,21 +1806,7 @@ export function useConversationStream(
       draftController.replaceLastItem({ ...currentChat });
       if (!isPlanThoughtEvent || isPlanThoughtFinal) {
         pendingConversation = draftController.getSnapshot();
-        const forceTimeline =
-          finished ||
-          isLlmRetryEvent(eventData) ||
-          eventData.messageType === "tool_thought" ||
-          eventData.messageType === "llm_reasoning" ||
-          eventData.messageType === "tool_call" ||
-          eventData.messageType === "tool_result" ||
-          eventData.messageType === "subagent_progress" ||
-          eventData.resultMap?.messageType === "tool_call" ||
-          eventData.resultMap?.messageType === "tool_result" ||
-          eventData.resultMap?.messageType === "tool_thought" ||
-          eventData.resultMap?.messageType === "llm_reasoning" ||
-          eventData.resultMap?.messageType === "subagent_progress" ||
-          eventData.resultMap?.messageType === "context_usage";
-        scheduleNonChatFlush(forceTimeline);
+        scheduleNonChatFlush(shouldForceTimelineFlush(eventData, finished));
       }
     };
 
@@ -3281,27 +3268,7 @@ export function useConversationStream(
       if (!isPlanThoughtEvent || isPlanThoughtFinal) {
         pendingConversation = draftController.getSnapshot();
         // 过程文 / 工具占位 / 工具结果：强制刷新，避免等工具跑完才整块冒泡
-        const forceTimeline =
-          finished ||
-          isLlmRetryEvent(eventData) ||
-          eventData.messageType === "ask_user_question" ||
-          eventData.messageType === "desktop_control" ||
-          eventData.messageType === "plan_approval" ||
-          eventData.messageType === "tool_thought" ||
-          eventData.messageType === "llm_reasoning" ||
-          eventData.messageType === "tool_call" ||
-          eventData.messageType === "tool_result" ||
-          eventData.messageType === "subagent_progress" ||
-          eventData.resultMap?.messageType === "ask_user_question" ||
-          eventData.resultMap?.messageType === "desktop_control" ||
-          eventData.resultMap?.messageType === "plan_approval" ||
-          eventData.resultMap?.messageType === "tool_call" ||
-          eventData.resultMap?.messageType === "tool_result" ||
-          eventData.resultMap?.messageType === "tool_thought" ||
-          eventData.resultMap?.messageType === "llm_reasoning" ||
-          eventData.resultMap?.messageType === "subagent_progress" ||
-          eventData.resultMap?.messageType === "context_usage";
-        scheduleNonChatFlush(forceTimeline);
+        scheduleNonChatFlush(shouldForceTimelineFlush(eventData, finished));
       }
     };
 

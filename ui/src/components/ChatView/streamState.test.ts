@@ -7,6 +7,7 @@ import {
   isChatItemFollowable,
   isChatItemRunning,
   isParentLoopLive,
+  isTimelineRunLive,
   planSessionObservation,
   isHitlYieldEvent,
   isStructuredDataOnlyTask,
@@ -20,6 +21,7 @@ import {
   resolveRunPresence,
   isWorkspaceRenderableTask,
   resolveWorkspaceCaption,
+  shouldForceTimelineFlush,
   shouldRefreshWorkspaceTask,
   shouldStopForegroundLoading,
   WAITING_USER_HELP_HINT,
@@ -79,6 +81,23 @@ describe("streamState presence & attention", () => {
         metrics: { status: "RUNNING" },
       } as CHAT.ChatItem)
     ).toBe(true);
+  });
+
+  it("终答已出但 run 仍在收口时，时间线思考仍保持 live", () => {
+    expect(
+      isTimelineRunLive({
+        loading: false,
+        conclusion: { messageType: "result" },
+        metrics: { status: "RUNNING" },
+      } as CHAT.ChatItem)
+    ).toBe(true);
+    expect(
+      isTimelineRunLive({
+        loading: false,
+        conclusion: { messageType: "result" },
+        metrics: { status: "SUCCESS" },
+      } as CHAT.ChatItem)
+    ).toBe(false);
   });
 
   it("SUCCESS 且无后台任务时不再占用会话", () => {
@@ -995,5 +1014,30 @@ describe("HITL 卡片 ID 守卫：取不到 ID 时一律跳过", () => {
   ] as const)("%s：ID 匹配时标记", (messageType, idField, mark) => {
     const chat = chatWith(card(messageType, idField, true));
     expect(statusOf(mark(chat, "hit"))).toBeDefined();
+  });
+});
+
+describe("时间线强制刷新判定", () => {
+  it("正常流和重连流共用同一套工具与过程事件规则", () => {
+    const toolCall = {
+      messageType: "task",
+      resultMap: { messageType: "tool_call" },
+    } as unknown as MESSAGE.EventData;
+    const ordinaryText = {
+      messageType: "task",
+      resultMap: { messageType: "agent_stream" },
+    } as unknown as MESSAGE.EventData;
+
+    expect(shouldForceTimelineFlush(toolCall)).toBe(true);
+    expect(shouldForceTimelineFlush(ordinaryText)).toBe(false);
+  });
+
+  it("终态始终刷新", () => {
+    expect(
+      shouldForceTimelineFlush(
+        { messageType: "task", resultMap: {} } as MESSAGE.EventData,
+        true
+      )
+    ).toBe(true);
   });
 });

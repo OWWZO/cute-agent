@@ -82,6 +82,23 @@ export function isParentLoopLive(chat?: CHAT.ChatItem | null): boolean {
   return status === "RUNNING";
 }
 
+/**
+ * 时间线自身的运行态与"父循环是否还能 inject"不同。
+ *
+ * 父循环可能已经产出终答但 run 仍在收口（后台任务 / 结算帧）；此时不能
+ * 让思考块因为 conclusion 短暂出现而收起。只有 run 真正进入终态才结束动画。
+ */
+export function isTimelineRunLive(chat?: CHAT.ChatItem | null): boolean {
+  if (!chat) {
+    return false;
+  }
+  if (hasPendingAskUserQuestion(chat) || chat.loading) {
+    return true;
+  }
+  const status = String(chat.metrics?.status || "").toUpperCase();
+  return status === "RUNNING" || status === "WAITING_INPUT";
+}
+
 export function hasRunningBackgroundTask(chat?: CHAT.ChatItem | null): boolean {
   return (chat?.multiAgent?.tasks || []).flat().some((task) => {
     if (!task) {
@@ -393,6 +410,42 @@ export function shouldRefreshWorkspaceTask(eventData?: MESSAGE.EventData) {
   }
 
   return isWorkspaceAttentionTask(pseudoTask);
+}
+
+const FORCE_TIMELINE_FLUSH_TYPES = new Set([
+  "ask_user_question",
+  "desktop_control",
+  "plan_approval",
+  "tool_thought",
+  "llm_reasoning",
+  "tool_call",
+  "tool_result",
+  "subagent_progress",
+  "context_usage",
+  "llm_retry",
+]);
+
+/**
+ * 正常流与重连流共用的时间线强制刷新判定。
+ *
+ * 只保留“会让可见过程树发生变化”的事件；终态始终刷新。
+ */
+export function shouldForceTimelineFlush(
+  eventData: MESSAGE.EventData | undefined,
+  finished = false
+): boolean {
+  if (finished) {
+    return true;
+  }
+  if (!eventData) {
+    return false;
+  }
+  const outerType = String(eventData.messageType || "");
+  const innerType = String(eventData.resultMap?.messageType || "");
+  return (
+    FORCE_TIMELINE_FLUSH_TYPES.has(outerType) ||
+    FORCE_TIMELINE_FLUSH_TYPES.has(innerType)
+  );
 }
 
 export function getLatestRenderableTask(chat: CHAT.ChatItem): CHAT.Task | undefined {

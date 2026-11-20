@@ -128,9 +128,11 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   /** 用户手动点过折叠后，流式过程中不再被强制拉开 */
   const userToggledRef = useRef(false);
   const isFoldable = foldable && Boolean(text.trim());
-  const [open, setOpen] = useState(() => Boolean(streaming));
+  const [open, setOpen] = useState(
+    () => Boolean(streaming) || !autoCollapseOnStreamEnd
+  );
   const [shouldRenderContent, setShouldRenderContent] = useState(() =>
-    Boolean(streaming)
+    Boolean(streaming) || !autoCollapseOnStreamEnd
   );
 
   useEffect(() => {
@@ -153,6 +155,9 @@ export const ThinkingBlock = memo(function ThinkingBlock({
       if (streamEndTimerRef.current !== null) {
         window.clearTimeout(streamEndTimerRef.current);
         streamEndTimerRef.current = null;
+      }
+      if (!autoCollapseOnStreamEnd && !userToggledRef.current) {
+        setOpen(true);
       }
       return;
     }

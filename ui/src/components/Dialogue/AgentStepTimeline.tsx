@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/collapsible";
 import {
   resolveDeepSearchStage,
-  shouldRenderDeepSearchPreview,
+  shouldRenderDeepSearchTimelineCard,
 } from "@/utils/deepSearch";
 import { cn } from "@/lib/utils";
 import { DeepSearchPreviewItem, ToolItem } from "./Timeline";
@@ -38,7 +38,7 @@ import {
   isSubAgentParentTask,
   isRunInBackgroundAgent,
 } from "@/utils/chat/subagent";
-import { isParentLoopLive } from "@/components/ChatView/streamState";
+import { isTimelineRunLive } from "@/components/ChatView/streamState";
 import { useToolEntranceAnimation } from "./tools/useToolEntranceAnimation";
 import { resolveTaskResultMap } from "@/utils/chat/toolCalls";
 import {
@@ -327,7 +327,7 @@ const CompactStepRow: FC<{
         : undefined;
     const showDeepSearchPreview =
       step.tool.messageType === "deep_search" &&
-      shouldRenderDeepSearchPreview(stage);
+      shouldRenderDeepSearchTimelineCard(stage);
 
     return (
       <div className="relative py-0.5">
@@ -339,6 +339,7 @@ const CompactStepRow: FC<{
             tool={step.tool}
             chat={ctx.chat}
             changeActiveChat={ctx.changeActiveChat}
+            animateEntrance={false}
           />
         ) : (
           <ToolItem
@@ -683,7 +684,7 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
   } = props;
 
   const nowTick = useNowTicker(Boolean(chat.loading));
-  const runLive = isParentLoopLive(chat);
+  const runLive = isTimelineRunLive(chat);
   const processSignature = buildAgentProcessSignature(chat);
   const taskModel = useMemo(
     () =>
@@ -840,7 +841,7 @@ export const AgentStepTimeline = memo(
     return (
       processUnchanged &&
       conclusionUnchanged &&
-      isParentLoopLive(prev.chat) === isParentLoopLive(next.chat) &&
+      isTimelineRunLive(prev.chat) === isTimelineRunLive(next.chat) &&
       prev.isPlanSolveMessage === next.isPlanSolveMessage &&
       prev.thoughtText === next.thoughtText &&
       prev.thoughtStreaming === next.thoughtStreaming &&

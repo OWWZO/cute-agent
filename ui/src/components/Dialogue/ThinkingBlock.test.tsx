@@ -33,6 +33,19 @@ describe("ThinkingBlock", () => {
     expect(html).not.toContain("完整思考内容");
   });
 
+  it("整轮仍运行时，流式短暂结束也不自动收起", () => {
+    const html = renderToStaticMarkup(
+      <ThinkingBlock
+        text="多轮规划之间的短暂停顿"
+        streaming={false}
+        autoCollapseOnStreamEnd={false}
+      />
+    );
+
+    expect(html).toContain('data-open="true"');
+    expect(html).toContain("多轮规划之间的短暂停顿");
+  });
+
   it("折叠态标题按钮可展开", () => {
     const html = renderToStaticMarkup(<ThinkingBlock text="完整思考内容" />);
 
