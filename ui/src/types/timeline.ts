@@ -12,6 +12,19 @@ export type TimelineEventType =
   | "stream.follow_idle"
   | "stream.closed";
 
+/**
+ * TimelinePatch v1 的唯一写入动作。
+ *
+ * 旧 SSE/replay 仍由兼容 adapter 转成 AgentTimelineItem；新协议必须显式声明
+ * operation，前端不再根据文本前后缀猜“追加还是覆盖”。
+ */
+export type TimelinePatchOperation =
+  | "upsert"
+  | "append"
+  | "replace"
+  | "status"
+  | "remove";
+
 export type TimelineItemKind =
   | "ASSISTANT_MESSAGE"
   | "REASONING"
@@ -40,6 +53,8 @@ export interface TimelineItemPayload {
 
 export interface AgentTimelineItem {
   protocolVersion?: string;
+  /** 新 canonical patch 的写入动作；旧历史项没有该字段。 */
+  operation?: TimelinePatchOperation;
   eventType?: TimelineEventType;
   eventId?: string;
   runId?: string;
@@ -69,4 +84,36 @@ export interface AgentTimelineItem {
   errorMsg?: string | null;
   /** live 展示帧为 true；committed snapshot 永远为 false。 */
   transient?: boolean;
+}
+
+/**
+ * 实时 SSE 与历史 replay 共用的时间线写入协议。
+ *
+ * `itemId` 是唯一 React 身份；`eventId` 用于幂等去重；`seq` 用于阻止旧帧
+ * 覆盖新帧。`contentMode`/`contentOffset` 只描述正文内容，不再让 UI 层猜
+ * append 与 snapshot。
+ */
+export interface TimelinePatch {
+  protocolVersion: "timeline.v1";
+  runId: string;
+  sessionId: string;
+  eventId: string;
+  seq: number;
+  operation: TimelinePatchOperation;
+  itemId: string;
+  parentItemId?: string | null;
+  kind: TimelineItemKind;
+  phase?: AgentTimelineItem["phase"];
+  status?: TimelineItemStatus;
+  contentMode?: "append" | "replace" | "snapshot";
+  contentOffset?: number;
+  /** append 模式新增的正文；replace/snapshot 模式为完整正文。 */
+  delta?: string | null;
+  /** 截至当前 patch 的累计正文。 */
+  responseAll?: string | null;
+  payload?: TimelineItemPayload;
+  artifactIds?: string[];
+  startedAt?: string;
+  finishedAt?: string;
+  error?: string | null;
 }

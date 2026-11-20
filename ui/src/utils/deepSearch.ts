@@ -3,6 +3,7 @@ import type {
   DeepSearchChapterWorkspaceModel,
   DeepSearchPreviewModel,
   DeepSearchStage,
+  DeepSearchTimelineCardModel,
 } from "@/types/deepSearch";
 
 const DEEP_SEARCH_STAGES: DeepSearchStage[] = [
@@ -116,6 +117,11 @@ export function shouldRenderDeepSearchPreview(stage: unknown): boolean {
     normalizedStage === "search" ||
     normalizedStage === "chapter_summary"
   );
+}
+
+export function shouldRenderDeepSearchTimelineCard(stage: unknown): boolean {
+  // 报告也留在时间线卡片树里；点击后仍由右侧工作区统一打开 Markdown/文件预览。
+  return isDeepSearchStage(resolveDeepSearchStage(stage));
 }
 
 export function shouldRenderDeepSearchWorkspace(stage: unknown): boolean {
@@ -296,6 +302,45 @@ export function buildDeepSearchPreviewModel(
     hasSummary: false,
     summaryStreaming: false,
     sources: resultItems,
+  };
+}
+
+export function buildDeepSearchTimelineCardModel(
+  task: {
+    messageType?: string;
+    isFinal?: boolean;
+    resultMap?: DeepSearchResultMapLike | null;
+  }
+): DeepSearchTimelineCardModel | undefined {
+  const preview = buildDeepSearchPreviewModel(task);
+  if (preview) {
+    return preview;
+  }
+  if (task.messageType !== "deep_search") {
+    return undefined;
+  }
+  const stage = resolveDeepSearchStage(task.resultMap?.messageType);
+  if (stage !== "report") {
+    return undefined;
+  }
+  const answer = String(task.resultMap?.answer || "").trim();
+  return {
+    stage,
+    query:
+      String(task.resultMap?.chapterTitle || "").trim() ||
+      formatDeepSearchQueryText(task.resultMap?.searchResult?.query) ||
+      "研究报告",
+    statusLabel: task.isFinal ? "报告完成" : "正在生成报告",
+    description: task.isFinal
+      ? "点击查看生成的 Markdown 研究报告。"
+      : "报告生成中，点击查看最新内容。",
+    loading: !task.isFinal,
+    interactive: true,
+    resultCount: 0,
+    hasSummary: Boolean(answer),
+    summary: answer,
+    summaryStreaming: !task.isFinal,
+    sources: [],
   };
 }
 

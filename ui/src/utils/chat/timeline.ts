@@ -38,6 +38,7 @@ export function ensureTimelineTaskContainer(
   }
 
   const placeholder: TimelineTaskContainer = {
+    id: task?.id || `timeline-container:${task?.messageId || task?.taskId || "anonymous"}`,
     hidden: false,
     task: task?.task || "",
     taskId: task?.taskId,
@@ -75,6 +76,9 @@ export function upsertTimelineTaskContainer(
 
   const nextContainer: TimelineTaskContainer = {
     ...task,
+    id:
+      task.id ||
+      `timeline-container:${task.messageId || task.taskId || "anonymous"}`,
     task: task.task,
     hidden: false,
     children: [],

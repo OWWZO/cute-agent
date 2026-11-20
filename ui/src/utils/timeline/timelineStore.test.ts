@@ -1,11 +1,35 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   TimelineStore,
   isConclusionEligibleLiveFrame,
   isRunFinalTimelineItem,
 } from "./timelineStore";
+import type { TimelinePatch } from "@/types/timeline";
+import {
+  getTimelineDiagnosticsSnapshot,
+  resetTimelineDiagnostics,
+} from "./timelineDiagnostics";
 
 describe("TimelineStore", () => {
+  beforeEach(() => {
+    resetTimelineDiagnostics();
+  });
+
+  const patch = (
+    overrides: Partial<TimelinePatch> = {},
+  ): TimelinePatch => ({
+    protocolVersion: "timeline.v1",
+    runId: "run-1",
+    sessionId: "session-1",
+    eventId: "event-1",
+    seq: 1,
+    operation: "upsert",
+    itemId: "tool:call-1",
+    kind: "TOOL_CALL",
+    status: "RUNNING",
+    ...overrides,
+  });
+
   it("按 itemId upsert，并用 orderKey/subOrder 排序", () => {
     const store = new TimelineStore([
       { itemId: "tool:b", kind: "TOOL_CALL", orderKey: 2, subOrder: 0 },
@@ -199,5 +223,149 @@ describe("TimelineStore", () => {
       const nested = outer.resultMap as Record<string, unknown> | undefined;
       return nested?.messageType;
     })).toEqual(["search", "chapter_summary", "report"]);
+  });
+
+  it("Deep Search 报告的非终态帧按显式增量合并，终态快照直接替换", () => {
+    const store = new TimelineStore();
+    const report = (
+      answer: string,
+      isFinal: boolean,
+      eventId: string,
+    ) => ({
+      eventType: "item.upserted" as const,
+      eventId,
+      itemId: "tool:call-deep",
+      kind: "TOOL_CALL" as const,
+      seq: eventId.endsWith("2") ? 2 : eventId.endsWith("3") ? 3 : 1,
+      payload: {
+        eventData: {
+          messageType: "task",
+          messageId: "msg-deep",
+          taskId: "task-deep",
+          taskOrder: 1,
+          messageOrder: 1,
+          resultMap: {
+            messageType: "deep_search",
+            messageId: "msg-deep",
+            messageTime: "1",
+            resultMap: {
+              messageType: "report",
+              answer,
+              isFinal,
+            },
+          },
+        },
+      },
+    });
+
+    store.upsertMany([report("第一段", false, "report-1") as never]);
+    store.upsertMany([report("第二段", false, "report-2") as never]);
+    expect(
+      (
+        (
+          store.values()[0].payload?.eventData?.resultMap as unknown as Record<string, unknown>
+        ).resultMap as Record<string, unknown>
+      ).answer
+    ).toBe("第一段第二段");
+
+    store.upsertMany([report("完整报告", true, "report-3") as never]);
+    expect(
+      (
+        (
+          store.values()[0].payload?.eventData?.resultMap as unknown as Record<string, unknown>
+        ).resultMap as Record<string, unknown>
+      ).answer
+    ).toBe("完整报告");
+  });
+
+  it("TimelinePatch 的 eventId 幂等，重复帧不会重复写卡", () => {
+    const store = new TimelineStore();
+    store.applyPatch(patch());
+    store.applyPatch(patch());
+
+    expect(store.values()).toHaveLength(1);
+    expect(store.values()[0].itemId).toBe("tool:call-1");
+  });
+
+  it("直接 upsert canonical item 时 eventId 同样幂等", () => {
+    const store = new TimelineStore();
+    const item = {
+      eventId: "event-live-1",
+      itemId: "tool:call-live",
+      kind: "TOOL_CALL" as const,
+      delta: "一次",
+    };
+    store.upsertMany([item]);
+    store.upsertMany([{ ...item, delta: "重复" }]);
+
+    expect(store.values()).toHaveLength(1);
+    expect(store.values()[0].delta).toBe("一次");
+  });
+
+  it("同一 itemId 的旧 seq 不得覆盖新 seq", () => {
+    const store = new TimelineStore();
+    store.applyPatch(patch({ eventId: "event-new", seq: 3 }));
+    store.applyPatch(patch({
+      eventId: "event-old",
+      seq: 1,
+      status: "COMPLETED",
+    }));
+
+    expect(store.values()[0].itemStatus).toBe("RUNNING");
+  });
+
+  it("终态不会被迟到 RUNNING 帧静默回退，并记录非法迁移", () => {
+    const store = new TimelineStore();
+    store.applyPatch(patch({
+      eventId: "event-completed",
+      status: "COMPLETED",
+    }));
+    store.applyPatch(patch({
+      eventId: "event-late-running",
+      seq: 2,
+      status: "RUNNING",
+    }));
+
+    expect(store.values()[0].itemStatus).toBe("COMPLETED");
+    expect(getTimelineDiagnosticsSnapshot().counters.illegal_transition).toBe(1);
+  });
+
+  it("同一 eventId 指向不同 itemId 时记录 churn", () => {
+    const store = new TimelineStore();
+    store.applyPatch(patch());
+    store.applyPatch(patch({ itemId: "tool:call-other" }));
+
+    expect(store.values()).toHaveLength(1);
+    expect(getTimelineDiagnosticsSnapshot().counters.duplicate_event).toBe(1);
+    expect(getTimelineDiagnosticsSnapshot().counters.item_id_churn).toBe(1);
+  });
+
+  it("replace 是完整快照，不会保留上一版正文", () => {
+    const store = new TimelineStore();
+    store.applyPatch(patch({
+      eventId: "event-append",
+      operation: "append",
+      delta: "旧内容",
+    }));
+    store.applyPatch(patch({
+      eventId: "event-replace",
+      seq: 2,
+      operation: "replace",
+      delta: "完整内容",
+    }));
+
+    expect(store.values()[0].delta).toBe("完整内容");
+  });
+
+  it("remove 会移除同一 itemId，不再出现在渲染结果中", () => {
+    const store = new TimelineStore();
+    store.applyPatch(patch());
+    store.applyPatch(patch({
+      eventId: "event-remove",
+      seq: 2,
+      operation: "remove",
+    }));
+
+    expect(store.values()).toHaveLength(0);
   });
 });

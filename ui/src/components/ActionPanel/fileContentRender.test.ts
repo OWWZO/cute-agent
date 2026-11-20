@@ -137,6 +137,37 @@ describe("ActionPanel file content rendering", () => {
     }
   });
 
+  it("should render a deep search report without artifact as plain Markdown", () => {
+    const task = {
+      messageType: "deep_search",
+      isFinal: false,
+      resultMap: {
+        messageType: "report",
+        answer: "## 流式报告\n\n正文",
+        searchResult: { query: [], docs: [] },
+      },
+    } as unknown as MESSAGE.Task;
+    let msgTypes: ReturnType<typeof useMsgTypes> | undefined;
+    const HookProbe = () => {
+      msgTypes = useMsgTypes(task as unknown as any);
+      return null;
+    };
+    renderToStaticMarkup(createElement(HookProbe));
+
+    const panelView = resolvePanelView({
+      taskItem: task as unknown as any,
+      msgTypes,
+      markDownContent: "## 流式报告\n\n正文",
+      primaryFile: undefined,
+    });
+
+    expect(panelView).toEqual({
+      type: "markdown",
+      content: "## 流式报告\n\n正文",
+      isStreaming: true,
+    });
+  });
+
   it("should hide nested tool result JSON instead of Structured data panel", () => {
     const task = {
       messageType: "tool_result",

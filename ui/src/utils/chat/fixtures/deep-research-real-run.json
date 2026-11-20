@@ -1,0 +1,316 @@
+{
+  "description": "Captured from local Execution Ledger for a real Deep Research run.",
+  "capturedAt": "2026-11-19",
+  "source": {
+    "requestId": "1795087313169-8722",
+    "sessionId": "session-1795087304478-6030",
+    "toolCallId": "chatcmpl-tool-b171719ed41f0a16",
+    "status": 1
+  },
+  "input": {
+    "query": "Agent",
+    "reportFileName": "Agent研究.md"
+  },
+  "timelineItems": [
+    {
+      "kind": "REASONING",
+      "phase": "INTERMEDIATE",
+      "itemId": "llm:16675:reasoning",
+      "status": "COMPLETED",
+      "agentId": "react",
+      "orderKey": 1,
+      "subOrder": -1,
+      "artifactId": null,
+      "sourceType": "LLM",
+      "parentItemId": "llm:16675",
+      "toolInvocationId": null
+    },
+    {
+      "kind": "ASSISTANT_MESSAGE",
+      "phase": "INTERMEDIATE",
+      "itemId": "llm:16675",
+      "status": "COMPLETED",
+      "agentId": "main",
+      "orderKey": 1,
+      "subOrder": 0,
+      "artifactId": null,
+      "sourceType": "LLM",
+      "parentItemId": null,
+      "toolInvocationId": null
+    },
+    {
+      "kind": "TOOL_CALL",
+      "phase": "INTERMEDIATE",
+      "itemId": "tool:chatcmpl-tool-8a8f7a0e2e488fbc",
+      "status": "COMPLETED",
+      "agentId": "main",
+      "orderKey": 2,
+      "subOrder": 0,
+      "artifactId": null,
+      "sourceType": "TOOL",
+      "parentItemId": null,
+      "toolInvocationId": 21617
+    },
+    {
+      "kind": "REASONING",
+      "phase": "INTERMEDIATE",
+      "itemId": "llm:16676:reasoning",
+      "status": "COMPLETED",
+      "agentId": "react",
+      "orderKey": 3,
+      "subOrder": -1,
+      "artifactId": null,
+      "sourceType": "LLM",
+      "parentItemId": "llm:16676",
+      "toolInvocationId": null
+    },
+    {
+      "kind": "ASSISTANT_MESSAGE",
+      "phase": "INTERMEDIATE",
+      "itemId": "llm:16676",
+      "status": "COMPLETED",
+      "agentId": "main",
+      "orderKey": 3,
+      "subOrder": 0,
+      "artifactId": null,
+      "sourceType": "LLM",
+      "parentItemId": null,
+      "toolInvocationId": null
+    },
+    {
+      "kind": "TOOL_CALL",
+      "phase": "INTERMEDIATE",
+      "itemId": "tool:chatcmpl-tool-b171719ed41f0a16",
+      "status": "COMPLETED",
+      "agentId": "main",
+      "orderKey": 4,
+      "subOrder": 0,
+      "artifactId": null,
+      "sourceType": "TOOL",
+      "parentItemId": null,
+      "toolInvocationId": 21618
+    },
+    {
+      "kind": "ARTIFACT",
+      "phase": "INTERMEDIATE",
+      "itemId": "artifact:4549",
+      "status": "COMPLETED",
+      "agentId": "main",
+      "orderKey": 4,
+      "subOrder": 1,
+      "artifactId": 4549,
+      "sourceType": "ARTIFACT",
+      "parentItemId": "tool:chatcmpl-tool-b171719ed41f0a16",
+      "toolInvocationId": 21618
+    },
+    {
+      "kind": "ASSISTANT_MESSAGE",
+      "phase": "INTERMEDIATE",
+      "itemId": "llm:16677",
+      "status": "COMPLETED",
+      "agentId": "main",
+      "orderKey": 5,
+      "subOrder": 0,
+      "artifactId": null,
+      "sourceType": "LLM",
+      "parentItemId": null,
+      "toolInvocationId": null
+    },
+    {
+      "kind": "ASSISTANT_MESSAGE",
+      "phase": "FINAL",
+      "itemId": "run:1795087313169-8722:final",
+      "status": "COMPLETED",
+      "agentId": "main",
+      "orderKey": 6,
+      "subOrder": 0,
+      "artifactId": null,
+      "sourceType": "RUN",
+      "parentItemId": null,
+      "toolInvocationId": null
+    }
+  ],
+  "stages": [
+    {
+      "stage": "extend",
+      "isFinal": false,
+      "searchFinish": false,
+      "queries": [
+        "AI Agent 的概念与能力边界",
+        "AI Agent 的产业应用与落地挑战",
+        "AI Agent 定义 核心组件 规划 记忆 工具调用 2026",
+        "AI Agent vs workflow RPA chatbot Copilot 区别",
+        "autonomous AI agents capability levels taxonomy 2025 2026",
+        "AI Agent 行业应用 落地案例 2025 2026",
+        "AI Agent software development customer service finance enterprise adoption 2025 2026",
+        "AI Agent evaluation security governance reliability deployment challenges 2025 2026"
+      ]
+    },
+    {
+      "stage": "search",
+      "isFinal": false,
+      "searchFinish": true,
+      "results": [
+        {
+          "query": "AI Agent 定义 核心组件 规划 记忆 工具调用 2026",
+          "docs": [
+            {
+              "link": "https://docs.aws.amazon.com/zh_cn/prescriptive-guidance/latest/agentic-ai-foundations/core-modules.html",
+              "title": "软件代理的核心构建块 - AWS 规范性指导",
+              "docType": "web_page",
+              "summary": "本文属于机器"
+            },
+            {
+              "link": "https://cloud.google.com/resources/core-concepts-ai-agents?hl=zh-CN",
+              "title": "AI 智能体的核心概念 | Google Cloud",
+              "docType": "web_page",
+              "summary": "AI 智能体"
+            },
+            {
+              "link": "https://www.huaweicloud.com/guide/productsdesc-bms_a073af6bc2bd069cd20f3de79984b26dsupport0",
+              "title": "Agent核心概念_基本概念_智能体开发平台 AGENTARTS-华为云",
+              "docType": "web_page",
+              "summary": "检测到您已登"
+            }
+          ]
+        },
+        {
+          "query": "AI Agent vs workflow RPA chatbot Copilot 区别",
+          "docs": []
+        },
+        {
+          "query": "autonomous AI agents capability levels taxonomy 2025 2026",
+          "docs": []
+        },
+        {
+          "query": "AI Agent 行业应用 落地案例 2025 2026",
+          "docs": [
+            {
+              "link": "https://aliyun.github.io/ai-agent-handbook/cases/",
+              "title": "实践篇导读 · AI Agent Handbook",
+              "docType": "web_page",
+              "summary": "# 实践篇导"
+            },
+            {
+              "link": "https://www.stcn.com/article/detail/3703494.html",
+              "title": "博鳌现场｜百度智能云发布十大智能体案例：智能体重塑产业未来",
+              "docType": "web_page",
+              "summary": "3月26日，"
+            },
+            {
+              "link": "https://pdf.dfcfw.com/pdf/H3_AP202609101829193604_1.pdf",
+              "title": "2026中国智能体经济白皮书",
+              "docType": "web_page",
+              "summary": "RCP\n\n上"
+            }
+          ]
+        },
+        {
+          "query": "AI Agent software development customer service finance enterprise adoption 2025 2026",
+          "docs": []
+        },
+        {
+          "query": "AI Agent evaluation security governance reliability deployment challenges 2025 2026",
+          "docs": []
+        }
+      ]
+    },
+    {
+      "stage": "chapter_summary",
+      "isFinal": false,
+      "searchFinish": true,
+      "queries": [
+        "AI Agent 定义 核心组件 规划 记忆 工具调用 2026",
+        "AI Agent vs workflow RPA chatbot Copilot 区别",
+        "autonomous AI agents capability levels taxonomy 2025 2026"
+      ],
+      "results": [
+        {
+          "query": "AI Agent 定义 核心组件 规划 记忆 工具调用 2026",
+          "docs": [
+            {
+              "link": "https://docs.aws.amazon.com/zh_cn/prescriptive-guidance/latest/agentic-ai-foundations/core-modules.html",
+              "title": "软件代理的核心构建块 - AWS 规范性指导",
+              "docType": "web_page",
+              "summary": "本文属于机器"
+            },
+            {
+              "link": "https://cloud.google.com/resources/core-concepts-ai-agents?hl=zh-CN",
+              "title": "AI 智能体的核心概念 | Google Cloud",
+              "docType": "web_page",
+              "summary": "AI 智能体"
+            },
+            {
+              "link": "https://www.huaweicloud.com/guide/productsdesc-bms_a073af6bc2bd069cd20f3de79984b26dsupport0",
+              "title": "Agent核心概念_基本概念_智能体开发平台 AGENTARTS-华为云",
+              "docType": "web_page",
+              "summary": "检测到您已登"
+            }
+          ]
+        },
+        {
+          "query": "AI Agent vs workflow RPA chatbot Copilot 区别",
+          "docs": []
+        },
+        {
+          "query": "autonomous AI agents capability levels taxonomy 2025 2026",
+          "docs": []
+        }
+      ],
+      "chapterId": "C1",
+      "chapterTitle": "AI Agent 的概念与能力边界"
+    },
+    {
+      "stage": "chapter_summary",
+      "isFinal": false,
+      "searchFinish": true,
+      "queries": [
+        "AI Agent 行业应用 落地案例 2025 2026",
+        "AI Agent software development customer service finance enterprise adoption 2025 2026",
+        "AI Agent evaluation security governance reliability deployment challenges 2025 2026"
+      ],
+      "results": [
+        {
+          "query": "AI Agent 行业应用 落地案例 2025 2026",
+          "docs": [
+            {
+              "link": "https://aliyun.github.io/ai-agent-handbook/cases/",
+              "title": "实践篇导读 · AI Agent Handbook",
+              "docType": "web_page",
+              "summary": "# 实践篇导"
+            },
+            {
+              "link": "https://www.stcn.com/article/detail/3703494.html",
+              "title": "博鳌现场｜百度智能云发布十大智能体案例：智能体重塑产业未来",
+              "docType": "web_page",
+              "summary": "3月26日，"
+            },
+            {
+              "link": "https://pdf.dfcfw.com/pdf/H3_AP202609101829193604_1.pdf",
+              "title": "2026中国智能体经济白皮书",
+              "docType": "web_page",
+              "summary": "RCP\n\n上"
+            }
+          ]
+        },
+        {
+          "query": "AI Agent software development customer service finance enterprise adoption 2025 2026",
+          "docs": []
+        },
+        {
+          "query": "AI Agent evaluation security governance reliability deployment challenges 2025 2026",
+          "docs": []
+        }
+      ],
+      "chapterId": "C2",
+      "chapterTitle": "AI Agent 的产业应用与落地挑战"
+    },
+    {
+      "stage": "report",
+      "isFinal": true,
+      "searchFinish": true,
+      "answer": "# Agent\n\n## 1. AI Agent 的概念与能力边界\n\n本章回答：AI Agent/智能体是什么、由哪些关键能力组成，以及它与聊天机器人、Copilot、RPA 和工作流自动化在控制流、工具使用、自治程度和适用边界上的差别。\n\n## 核心结论\n\n- **在本章口径下，AI Agent 不是“更会聊天的模型”，而是目标与权限约束下的闭环执行系统**：材料将其界定为“在给定目标与权限范围内，由模型根据当前状态选择行动、接收反馈，并决定继续、调整或停止的系统”；IBM 也将智能体式 AI 描述为能够代表用户或其他系统自主规划并执行任务，通过拆解复杂子任务并使用工具与外部系统交互或执行计算来解决问题[[9]](https://tingdeliu.github.io/AI-Agent-Survey/)[[4]](https://www.ibm.com/cn-zh/think/architectures/patterns/agentic-ai)。\n- **关键组成可归纳为感知/上下文、模型推理、规划与决策、工具调用与行动、记忆与学习、反馈与运行时治理**：AWS 将智能代理拆为感知、认知、动作、学习等模块，并强调感知—推理—行动的持续循环；Google Cloud 则用模型、接地、工具、数据架构、编排、运行时六类核心概念描述企业智能体[[1]](https://docs.aws.amazon.com/zh_cn/prescriptive-guidance/latest/agentic-ai-foundations/core-modules.html)[[2]](https://cloud.google.com/resources/core-concepts-ai-agents?hl=zh-CN)。\n- **自治程度是连续变量，不是 Agent 的单一开关**：材料明确指出，长期记忆、显式计划和多 Agent 协作都是可选设计，不是定义上的必需组件；生产系统多数仍是工作流，而不是完全自主 Agent，只有任务真正需要灵活的多步决策时，增加自主性才可能值得其额外成本和风险[[9]](https://tingdeliu.github.io/AI-Agent-Survey/)[[7]](https://aimap.page/zh-hans/learn/agents/how-agents-work/)。\n- **区分 Agent 与相邻形态的关键判据是“谁决定下一步”**：预定义工作流和规则触发脚本由程序决定路径，Agent 循环中模型参与选择下一步行动、工具调用时机和停止条件；材料未提供 Copilot 与 RPA 的独立定义，因此只能按已有描述和对照项作条件性比较，不能仅凭名称判断[[7]](https://aimap.page/zh-hans/learn/agents/how-agents-work/)[[9]](https://tingdeliu.github.io/AI-Agent-Survey/)[[2]](https://cloud.google.com/resources/core-concepts-ai-agents?hl=zh-CN)。\n\n## 一、概念口径：从“回答”到“面向目标的闭环执行”\n\n**事实层面**，不同来源对 AI Agent 的表述虽各有侧重，但共同指向“自主、目标导向、环境交互、工具行动、反馈闭环”。综述材料将 LLM-based Agent 定义为：在目标与权限范围内，由模型根据当前状态选择行动、接收反馈，并决定继续、调整或停止的系统[[9]](https://tingdeliu.github.io/AI-Agent-Survey/)。IBM 强调智能体式 AI 能够代表用户或其他系统自主规划并执行任务，把复杂问题拆成多个子任务，并利用工具与外部系统交互或执行计算[[4]](https://www.ibm.com/cn-zh/think/architectures/patterns/agentic-ai)。Google Cloud 则将其描述为已从被动聊天机器人发展为能够推理、使用企业工具和执行复杂工作流的自主系统[[2]](https://cloud.google.com/resources/core-concepts-ai-agents?hl=zh-CN)。《自然》上海大学文章摘要同样指出，AI Agent 通过感知、规划、决策与反思等模块，结合工具调用能力与分层记忆管理，具备多步骤推理与环境交互能力[[6]](https://www.nature.shu.edu.cn/CN/Y2026/V48/I2/79)。\n\n**事实补充**：IBM 用“推荐购买哪款汽车”的例子说明单纯 LLM 与智能",
+      "answerTruncated": true
+    }
+  ]
+}

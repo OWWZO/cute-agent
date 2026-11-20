@@ -252,25 +252,63 @@ export function getStableTaskIdentity(
   return (
     task.id ||
     task.messageId ||
-    (task.taskId && task.messageTime ? `${task.taskId}:${task.messageTime}` : "") ||
+    task.taskId ||
     ""
   );
 }
 
 /**
- * Deep Research 一次工具调用会连续发送 extend/search/chapter_summary/report 多帧，
- * 实时 messageTime 每帧都会变化。若把它拼进 render id，同一张卡会每帧卸载重挂，
- * 入场动画看起来就像持续屏闪。研究阶段复用 messageId，报告阶段单独占一个稳定角色。
+ * 渲染身份只能来自业务身份，不能来自流式帧时间或数组位置。
+ *
+ * 同一条 LLM 思考/工具调用会连续发送多帧，messageTime 可能每帧变化；
+ * 把它拼进 render id 会让同一张卡每帧卸载重挂，表现为屏闪和重复入场动画。
  */
 function resolveTaskRenderBaseId(
-  task: MESSAGE.Task,
-  taskIndex: number
+  task: MESSAGE.Task
 ): string {
-  if (task.messageType === "deep_search" && task.messageId) {
+  const resultMap = task.resultMap as unknown as Record<string, unknown> | undefined;
+  const nestedResultMap = resultMap?.resultMap as
+    | Record<string, unknown>
+    | undefined;
+  const messageId =
+    task.messageId ||
+    (typeof resultMap?.messageId === "string" ? resultMap.messageId : "") ||
+    (typeof nestedResultMap?.messageId === "string"
+      ? nestedResultMap.messageId
+      : "");
+  if (task.messageType === "deep_search" && messageId) {
     const stage = resolveDeepSearchStage(task.resultMap?.messageType);
-    return `deep_search:${task.messageId}:${stage === "report" ? "report" : "research"}`;
+    return `deep_search:${messageId}:${stage === "report" ? "report" : "research"}`;
   }
-  return task.messageTime?.concat(String(taskIndex)) || `task:${task.taskId || taskIndex}`;
+
+  const messageType = task.messageType || "task";
+  const toolCallId = resolveTaskToolCallId(task);
+  // tool_call / tool_result 共用同一个 toolCallId 时必须落到同一张卡；
+  // 其他内容事件仍优先使用 messageId，避免同一工具派生的多张内容卡串位。
+  if (
+    toolCallId &&
+    (messageType === "tool_call" ||
+      messageType === "tool_call_delta" ||
+      messageType === "tool_result")
+  ) {
+    return `tool:${toolCallId}`;
+  }
+
+  if (messageId) {
+    return `${messageType}:${messageId}`;
+  }
+
+  if (toolCallId) {
+    return `tool:${toolCallId}:${messageType}`;
+  }
+
+  const taskId = task.taskId;
+  if (taskId) {
+    return `${messageType}:${taskId}`;
+  }
+
+  // 没有业务身份时宁可使用匿名稳定键，也不能把位置或时间伪装成身份。
+  return `${messageType}:anonymous`;
 }
 
 /**
@@ -2312,11 +2350,11 @@ export const handleTaskData = (
       parentToolUseId: string;
     }> = [];
 
-    taskGroup?.forEach((task, taskIndex) => {
+    taskGroup?.forEach((task) => {
       if (task?.messageType === "plan_mode_entered") {
         return;
       }
-      const id = resolveTaskRenderBaseId(task, taskIndex);
+      const id = resolveTaskRenderBaseId(task);
       const processedInfo = processTaskForRender(task, id);
       // Agent 父卡若被误写入自身 parentToolUseId，按无父处理，避免自嵌套后从 taskList 消失。
       const rawParentId = resolveParentToolUseId(task);

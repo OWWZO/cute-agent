@@ -206,6 +206,18 @@ export function resolvePanelView(params: ResolvePanelViewParams): PanelView {
   } = msgTypes || {};
 
   if (taskItem.messageType === "deep_search") {
+    const stage = resolveDeepSearchStage(resolvedResultMap.messageType);
+    if (stage === "report") {
+      // 报告是普通 Markdown 文档：有 artifact 时继续走统一文件预览，
+      // 尚未产出文件时直接复用 MarkdownRenderer，不再进入深搜专属 UI。
+      if (!primaryFile?.url) {
+        return {
+          type: "markdown",
+          content: markDownContent || String(resolvedResultMap.answer || ""),
+          isStreaming: !isFinal,
+        };
+      }
+    }
     const deepSearchTask = {
       ...taskItem,
       resultMap: resolvedResultMap,
@@ -218,7 +230,6 @@ export function resolvePanelView(params: ResolvePanelViewParams): PanelView {
       };
     }
 
-    const stage = resolveDeepSearchStage(deepSearchTask.resultMap?.messageType);
     if (stage === "search" || stage === "chapter_summary") {
       return {
         type: "search",

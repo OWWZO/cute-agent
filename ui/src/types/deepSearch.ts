@@ -27,6 +27,14 @@ export type DeepSearchPreviewModel = {
   sources?: DeepSearchCardItem[];
 };
 
+/** 时间线卡片模型。报告阶段也使用同一张卡，不切换组件树。 */
+export type DeepSearchTimelineCardModel = Omit<
+  DeepSearchPreviewModel,
+  "stage"
+> & {
+  stage: DeepSearchStage;
+};
+
 export type DeepSearchChapterWorkspaceModel = {
   title: string;
   summary: string;

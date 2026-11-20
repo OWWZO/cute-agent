@@ -1,5 +1,9 @@
-import type { AgentTimelineItem } from "@/types/timeline";
+import type {
+  AgentTimelineItem,
+  TimelinePatch,
+} from "@/types/timeline";
 import type { ConversationReplayFrame } from "@/services/agentConversation";
+import { recordTimelineDiagnostic } from "./timelineDiagnostics";
 
 /**
  * 主 Agent 与子 Agent 共用的时间线合并规则。
@@ -9,9 +13,25 @@ import type { ConversationReplayFrame } from "@/services/agentConversation";
  */
 export class TimelineStore {
   private readonly items = new Map<string, AgentTimelineItem>();
+  private readonly itemIdByEventId = new Map<string, string>();
+  private readonly latestSeqByItemId = new Map<string, number>();
 
   constructor(initial: AgentTimelineItem[] = []) {
     this.upsertMany(initial);
+  }
+
+  /** TimelinePatch v1 的唯一写入入口。 */
+  applyPatch(patch: TimelinePatch): void {
+    this.applyPatches([patch]);
+  }
+
+  applyPatches(patches: TimelinePatch[] | undefined): void {
+    for (const patch of patches || []) {
+      if (!patch) {
+        continue;
+      }
+      this.upsertMany([timelinePatchToItem(patch)]);
+    }
   }
 
   upsertMany(items: AgentTimelineItem[] | undefined): void {
@@ -19,11 +39,80 @@ export class TimelineStore {
       if (!item) {
         continue;
       }
+      const eventId = String(item.eventId || "").trim();
       const key = timelineItemKey(item);
       if (!key) {
         continue;
       }
+      if (eventId && this.itemIdByEventId.has(eventId)) {
+        const previousItemId = this.itemIdByEventId.get(eventId) || "";
+        recordTimelineDiagnostic("duplicate_event", {
+          eventId,
+          itemId: key,
+          detail: `already applied as ${previousItemId || "unknown"}`,
+        });
+        if (previousItemId && previousItemId !== key) {
+          recordTimelineDiagnostic("item_id_churn", {
+            eventId,
+            itemId: key,
+            from: previousItemId,
+            to: key,
+          });
+        }
+        continue;
+      }
+      if (item.operation === "remove") {
+        if (eventId) {
+          this.itemIdByEventId.set(eventId, key);
+        }
+        this.items.delete(key);
+        this.latestSeqByItemId.delete(key);
+        continue;
+      }
       const previous = this.items.get(key);
+      const previousStatus = previous?.itemStatus ?? previous?.status;
+      const incomingStatus = item.itemStatus ?? item.status;
+      if (isIllegalStatusTransition(previousStatus, incomingStatus)) {
+        if (eventId) {
+          this.itemIdByEventId.set(eventId, key);
+        }
+        recordTimelineDiagnostic("illegal_transition", {
+          eventId,
+          itemId: key,
+          runId: item.runId,
+          from: String(previousStatus || ""),
+          to: String(incomingStatus || ""),
+        });
+        continue;
+      }
+      if (eventId) {
+        this.itemIdByEventId.set(eventId, key);
+      }
+      const previousSeq = Math.max(
+        Number(previous?.seq || 0),
+        this.latestSeqByItemId.get(key) || 0,
+      );
+      const incomingSeq = Number(item.seq || 0);
+      // 同一 itemId 的旧 seq 不得覆盖新 seq；0 表示旧协议未提供 seq。
+      if (
+        previousSeq > 0
+        && incomingSeq > 0
+        && incomingSeq < previousSeq
+      ) {
+        continue;
+      }
+      if (incomingSeq > 0) {
+        this.latestSeqByItemId.set(key, incomingSeq);
+      }
+      if (item.operation === "replace") {
+        this.items.set(key, {
+          ...item,
+          itemId: key,
+          payload: mergePayload(undefined, item.payload),
+          delta: item.delta || null,
+        });
+        continue;
+      }
       const normalized = mergeDefined(previous, item);
       normalized.itemId = key;
       if (previous?.orderKey && previous.orderKey > 0) {
@@ -31,7 +120,9 @@ export class TimelineStore {
       }
       normalized.delta = item.eventType === "item.delta" && item.delta
         ? `${previous?.delta || ""}${item.delta}`
-        : previous?.delta || item.delta || null;
+        : item.operation === "append" && item.delta
+          ? `${previous?.delta || ""}${item.delta}`
+          : previous?.delta || item.delta || null;
       normalized.payload = mergePayload(previous?.payload, item.payload);
       normalized.responseAll = item.responseAll || previous?.responseAll;
       this.items.set(key, normalized);
@@ -41,6 +132,46 @@ export class TimelineStore {
   values(): AgentTimelineItem[] {
     return [...this.items.values()].sort(compareTimelineItems);
   }
+}
+
+const TERMINAL_ITEM_STATUSES = new Set([
+  "COMPLETED",
+  "SUCCESS",
+  "FAILED",
+  "STOPPED",
+  "CANCELLED",
+  "TIMEOUT",
+]);
+
+function isIllegalStatusTransition(
+  previous?: AgentTimelineItem["itemStatus"] | AgentTimelineItem["status"],
+  incoming?: AgentTimelineItem["itemStatus"] | AgentTimelineItem["status"],
+): boolean {
+  const from = String(previous || "").toUpperCase();
+  const to = String(incoming || "").toUpperCase();
+  return TERMINAL_ITEM_STATUSES.has(from)
+    && (to === "RUNNING" || to === "PENDING");
+}
+
+function timelinePatchToItem(patch: TimelinePatch): AgentTimelineItem {
+  return {
+    protocolVersion: patch.protocolVersion,
+    operation: patch.operation,
+    eventId: patch.eventId,
+    runId: patch.runId,
+    sessionId: patch.sessionId,
+    seq: patch.seq,
+    itemId: patch.itemId,
+    parentItemId: patch.parentItemId,
+    kind: patch.kind,
+    phase: patch.phase,
+    itemStatus: patch.status,
+    status: patch.status,
+    delta: patch.delta,
+    responseAll: patch.responseAll,
+    payload: patch.payload,
+    errorMsg: patch.error,
+  };
 }
 
 const DEEP_SEARCH_STAGES = new Set([
@@ -222,16 +353,17 @@ function mergeDeepSearchReport(
   incoming: MESSAGE.EventData,
   incomingPayload: Record<string, unknown>,
 ): MESSAGE.EventData {
+  const incomingAnswer = String(incomingPayload.answer || "");
   if (incomingPayload.isFinal) {
+    // 终态永远是完整报告快照，直接替换流式累计正文。
     return incoming;
   }
   const previousAnswer = String(previousPayload.answer || "");
-  const incomingAnswer = String(incomingPayload.answer || "");
-  const answer = !incomingAnswer || previousAnswer.endsWith(incomingAnswer)
-    ? previousAnswer
-    : incomingAnswer.startsWith(previousAnswer)
-      ? incomingAnswer
-      : `${previousAnswer}${incomingAnswer}`;
+  // 旧 SSE 的 report 非终态帧按协议就是增量片段；不再用前后缀猜
+  // “这是 delta 还是 snapshot”，避免重复帧被拼接两次或快照被误追加。
+  const answer = incomingAnswer
+    ? `${previousAnswer}${incomingAnswer}`
+    : previousAnswer;
   return replaceDeepSearchPayload(incoming, {
     ...incomingPayload,
     answer,

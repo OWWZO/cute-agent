@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { resolveToolKey } from "@/components/Dialogue/tools/toolTaskAdapter";
+import { canonicalizeDeepSearchTask } from "./deepSearchCanonicalizer";
 import { getTaskRenderSignature, processTaskForRender } from "./renderTasks";
 
 describe("DeepSearch 展示任务拆分", () => {
@@ -517,5 +519,32 @@ describe("签名对大 payload 的规模", () => {
 
   it("内容相同则签名相同（缓存可命中）", () => {
     expect(sigWith('{"a":1}')).toBe(sigWith('{"a":1}'));
+  });
+});
+
+describe("DeepSearch React 身份", () => {
+  it("同一次工具调用的多张阶段卡不会共用父 toolCallId", () => {
+    const task = {
+      messageType: "deep_search",
+      messageId: "deep-msg",
+      messageTime: "1714041600000",
+      resultMap: {
+        messageType: "search",
+        toolCallId: "call-deep-1",
+        searchResult: {
+          query: ["查询一", "查询二"],
+          docs: [[], []],
+        },
+      },
+    } as unknown as CHAT.Task;
+
+    const cards = canonicalizeDeepSearchTask(
+      task,
+      "deep_search:call-deep-1:research",
+    );
+    const keys = cards.map((card) => resolveToolKey(card.task));
+
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
   });
 });

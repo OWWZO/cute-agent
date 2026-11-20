@@ -9,9 +9,9 @@ import {
   resolveSubAgentDisplay,
 } from "@/utils/chat/subagent";
 import {
-  buildDeepSearchPreviewModel,
+  buildDeepSearchTimelineCardModel,
   resolveDeepSearchStage,
-  shouldRenderDeepSearchPreview,
+  shouldRenderDeepSearchTimelineCard,
 } from "@/utils/deepSearch";
 import { getTaskFiles, isFileListOnlyTask } from "@/utils/taskArtifacts";
 import { DEEP_SEARCH_PREVIEW_ENTER } from "@/lib/motion";
@@ -94,6 +94,19 @@ const taskTitleClass =
 
 const taskMetaClass =
   "truncate text-ui-sm text-[var(--color-text-muted)]";
+
+function resolveTimelineTaskKey(task?: CHAT.Task): string {
+  if (!task) {
+    return "";
+  }
+  // 时间线身份只认工具/消息/task 身份；messageTime 和数组位置不再参与 key。
+  return (
+    resolveToolKey(task) ||
+    task.messageId ||
+    task.taskId ||
+    `${task.messageType || "task"}:anonymous`
+  );
+}
 
 function subAgentIconClassName(failed: boolean, running: boolean): string {
   let tone = "border-[var(--chat-border)] text-[var(--chat-accent)]";
@@ -486,7 +499,7 @@ const SubAgentTimelineCard: FC<{
         <div className="ml-6 border-l border-[var(--chat-border)]/40 pl-3">
           {nested.map((child, index) => (
             <ToolCallView
-              key={child.id || child.messageId || child.taskId || index}
+              key={resolveTimelineTaskKey(child)}
               tool={child}
               chat={chat}
               stackPosition={resolveStackPosition(index, nested.length)}
@@ -510,11 +523,12 @@ export const DeepSearchPreviewItem: FC<{
   tool: CHAT.Task;
   chat: CHAT.ChatItem;
   changeActiveChat: CHAT.OpenTaskHandler;
-}> = memo(({ tool, chat, changeActiveChat }) => {
-  const model = useMemo(() => buildDeepSearchPreviewModel(tool), [tool]);
+  animateEntrance?: boolean;
+}> = memo(({ tool, chat, changeActiveChat, animateEntrance = true }) => {
+  const model = useMemo(() => buildDeepSearchTimelineCardModel(tool), [tool]);
   const shouldAnimateEntrance = useToolEntranceAnimation(
     tool.id || resolveToolKey(tool),
-    Boolean(chat.loading)
+    Boolean(chat.loading) && animateEntrance
   );
 
   if (!model) {
@@ -567,6 +581,8 @@ export const DeepSearchPreviewItem: FC<{
         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--chat-border)]/40 bg-hover text-[var(--chat-text-muted)]">
           {model.loading ? (
             <LoaderCircleIcon className="size-4 animate-spin" />
+          ) : model.stage === "report" ? (
+            <FileTextIcon className="size-4" />
           ) : (
             <SearchIcon className="size-4" />
           )}
@@ -688,18 +704,18 @@ const TimelineTaskBlock: FC<{
         </button>
       ) : null}
       {expanded || !canCollapse
-        ? children.map((tool, index) => {
+        ? children.map((tool) => {
             const stage =
               tool.messageType === "deep_search"
                 ? resolveDeepSearchStage(tool.resultMap?.messageType)
                 : undefined;
             const shouldRenderPreview =
               tool.messageType === "deep_search" &&
-              shouldRenderDeepSearchPreview(stage);
+              shouldRenderDeepSearchTimelineCard(stage);
 
             return (
               <div
-                key={tool.id || tool.messageId || tool.taskId || index}
+                key={resolveTimelineTaskKey(tool)}
                 className="overflow-hidden"
               >
                 {shouldRenderPreview ? (
@@ -707,6 +723,7 @@ const TimelineTaskBlock: FC<{
                     tool={tool}
                     chat={chat}
                     changeActiveChat={changeActiveChat}
+                    animateEntrance={false}
                   />
                 ) : (
                   <ToolItem
@@ -739,9 +756,9 @@ const TimelineContent: FC<{
 }> = ({ chat, tasks, isPlanSolveMessage, changeActiveChat, changePlan, changeFile }) => {
   return (
     <>
-      {tasks.map((task, taskIndex) => (
+      {tasks.map((task) => (
         <TimelineTaskBlock
-          key={task.id || task.messageId || task.taskId || taskIndex}
+          key={resolveTimelineTaskKey(task)}
           chat={chat}
           task={task}
           isPlanSolveMessage={isPlanSolveMessage}
@@ -766,7 +783,13 @@ export const Timeline: FC<TimelineProps> = ({
         ReAct 则只渲染内容列，避免用不存在的计划序号制造视觉状态。 */}
     {chat.tasks.map((tasks, index) => {
       const lastTask = index === chat.tasks.length - 1;
-      const groupKey = tasks[0]?.id || tasks[0]?.messageId || tasks[0]?.taskId || index;
+      const firstChildKey = resolveTimelineTaskKey(
+        tasks[0]?.children?.[0] as CHAT.Task | undefined
+      );
+      const groupKey =
+        resolveTimelineTaskKey(tasks[0]) ||
+        firstChildKey ||
+        "timeline-group:anonymous";
       const showCompletedIcon = shouldShowTimelineGroupCompletedIcon({
         isPlanSolve: isPlanSolveMessage,
         isLastGroup: lastTask,

@@ -246,6 +246,16 @@ export function formatDurationLabel(ms?: number): string {
  */
 export function resolveToolKey(tool: CHAT.Task): string {
   const top = tool as unknown as Record<string, unknown>;
+  // canonicalizer / renderTasks 写入的 id 就是这一张逻辑卡的 itemId；
+  // 必须在 toolCallId 之前使用，否则一次 Deep Research 的所有子卡会共用
+  // 同一个 toolCallId，React 会把它们当成同一张卡并反复复用/重挂。
+  const renderedId =
+    top.__timelineRendered === true && typeof tool.id === "string"
+      ? tool.id.trim()
+      : "";
+  if (renderedId) {
+    return renderedId;
+  }
   // taskId 可能是同一子会话共享的父任务 ID，不能先于工具调用自身身份使用，
   // 否则展开一张子工具卡会让同组其他工具卡一起展开。
   const [toolIdentity] = identityKeys(readTaskIdentity(tool));

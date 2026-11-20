@@ -188,6 +188,57 @@ describe("Plan mode 进入事件", () => {
   });
 });
 
+describe("普通流式任务身份", () => {
+  it("messageTime 变化不会改变 llm_reasoning 卡片的 render id", () => {
+    const makeChat = (messageTime: string) => {
+      const chat = {
+        sessionId: "session-reasoning",
+        requestId: "req-reasoning",
+        query: "分析问题",
+        files: [],
+        forceStop: false,
+        loading: true,
+        tasks: [],
+        timeline: [],
+        multiAgent: { tasks: [] },
+      } as CHAT.ChatItem;
+      chat.multiAgent.tasks = [[
+        {
+          taskId: "task-reasoning",
+          messageId: "reasoning-message",
+          messageType: "llm_reasoning",
+          messageTime,
+          resultMap: {
+            messageType: "llm_reasoning",
+            messageId: "reasoning-message",
+            messageTime,
+            reasoningContent: "正在分析问题",
+          },
+        } as unknown as MESSAGE.Task,
+      ]];
+      return chat;
+    };
+
+    const firstChat = makeChat("1714041600000");
+    const firstRendered = handleTaskData(
+      firstChat,
+      false,
+      firstChat.multiAgent,
+    );
+    const secondChat = makeChat("1714041600123");
+    const secondRendered = handleTaskData(
+      secondChat,
+      false,
+      secondChat.multiAgent,
+    );
+    const firstCard = firstRendered.currentChat.tasks[0]?.[0]?.children?.[0];
+    const secondCard = secondRendered.currentChat.tasks[0]?.[0]?.children?.[0];
+
+    expect(firstCard?.id).toBeTruthy();
+    expect(secondCard?.id).toBe(firstCard?.id);
+  });
+});
+
 function createDoc(link: string, title: string, content: string): MESSAGE.Doc {
   return {
     link,

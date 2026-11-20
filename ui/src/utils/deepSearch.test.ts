@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDeepSearchPreviewModel,
+  buildDeepSearchTimelineCardModel,
   buildDeepSearchChapterWorkspaceModel,
   buildDeepSearchExtendMarkdown,
   buildDeepSearchResultItems,
@@ -10,6 +11,7 @@ import {
   resolveDeepSearchStage,
   resolveDeepSearchTitle,
   shouldRenderDeepSearchPreview,
+  shouldRenderDeepSearchTimelineCard,
   shouldRenderDeepSearchWorkspace,
 } from "./deepSearch";
 import { canOpenTaskWorkspacePanel } from "@/components/ChatView/streamState";
@@ -209,5 +211,24 @@ describe("deepSearch utils", () => {
       })
     );
     expect(model).toBeUndefined();
+  });
+
+  it("report 阶段复用同一时间线卡片，不切换组件树", () => {
+    const task = {
+      ...createPreviewTask("report", {
+        query: ["问题A"],
+        docs: [],
+      }),
+      isFinal: true,
+    };
+
+    expect(shouldRenderDeepSearchTimelineCard("report")).toBe(true);
+    expect(buildDeepSearchTimelineCardModel(task)).toMatchObject({
+      stage: "report",
+      query: "问题A",
+      statusLabel: "报告完成",
+      loading: false,
+      interactive: true,
+    });
   });
 });

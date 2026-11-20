@@ -7,6 +7,7 @@ import router from './router';
 import '@openuidev/react-ui/layered/styles/index.css';
 import { restoreAuthSession } from '@/services/auth';
 import { useAuthStore } from '@/stores/auth';
+import { TimelineDebugPanel } from '@/components/ChatView/TimelineDebugPanel';
 
 /** index.html 里首屏骨架屏的 id（见 ui/index.html 顶部注释）。 */
 const BOOT_SKELETON_ID = 'boot-skeleton';
@@ -32,7 +33,10 @@ const App: CuteType.FC = () => {
       <Spinner className="size-8" aria-label="正在恢复登录状态" />
     </div>
   ) : (
-    <RouterProvider router={router} />
+    <>
+      <RouterProvider router={router} />
+      <TimelineDebugPanel />
+    </>
   );
 };
 

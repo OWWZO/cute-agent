@@ -219,12 +219,12 @@ function isStepCompleted(tool: CHAT.Task): boolean {
   return Boolean(tool.finish || tool.isFinal || tool.resultMap?.isFinal);
 }
 
-function resolveStepId(tool: CHAT.Task, index: number): string {
+function resolveStepId(tool: CHAT.Task): string {
   return (
     tool.id ||
     tool.messageId ||
     resolveToolCallId(tool) ||
-    `${tool.messageType || "step"}-${tool.taskId || index}`
+    `${tool.messageType || "step"}:${tool.taskId || "anonymous"}`
   );
 }
 
@@ -737,7 +737,7 @@ function buildStepRows(
       Boolean(item.tool.children?.length);
 
     return {
-      id: resolveStepId(item.tool, index),
+      id: resolveStepId(item.tool),
       kind,
       title,
       detail,
@@ -784,7 +784,6 @@ export function segmentProcessSteps(
     loading: boolean;
     isPlanSolve: boolean;
     container?: CHAT.Task;
-    groupIndexBase?: number;
     nowMs?: number;
   }
 ): ProcessSegment[] {
@@ -794,7 +793,6 @@ export function segmentProcessSteps(
   const segments: ProcessSegment[] = [];
   /** 缓冲：thinking + tools；有非空助手回复时 thinking 提出外层，否则 thinking 进组 */
   let buffer: ProcessStepRow[] = [];
-  let groupSerial = options.groupIndexBase ?? 0;
 
   const isThinkingStep = (step: ProcessStepRow) =>
     step.kind === "thinking" || isNativeReasoningTask(step.tool);
@@ -834,23 +832,22 @@ export function segmentProcessSteps(
       loading: options.loading,
       nowMs: options.nowMs ?? Date.now(),
     });
-    groupSerial += 1;
     // 流式追加容器时，容器本身可能持续变化，不能作为 React 身份，否则整组会
     // 卸载重挂并重播入场动画。组内第一个真实步骤只会追加，身份更稳定；
     // PlanSolve 也只借用 container 生成标题，不把它当作组 key。
     const firstExecutable = executables[0] || ordered[0];
-    // Deep Research 会从一张“空查询占位卡”升级为首个查询卡，子卡 id 会变，
-    // 但它始终属于同一个 tool messageId，所以优先使用消息身份。
+    // Deep Research 会从一张“空查询占位卡”升级为首个查询卡，子卡 id 会变；
+    // 统一优先使用已完成渲染的 itemId，其次才是消息身份。
     const groupIdentity =
-      firstExecutable?.tool.messageId ||
       firstExecutable?.tool.id ||
+      firstExecutable?.tool.messageId ||
       options.container?.id ||
       options.container?.messageId ||
-      "work-group";
+      `${options.container?.messageType || "work"}:anonymous`;
     segments.push({
       type: "group",
       group: {
-        id: `group:${groupIdentity}:${groupSerial}`,
+        id: `group:${groupIdentity}`,
         title: buildGroupTitle(
           options.container,
           displayCount,
@@ -1153,7 +1150,6 @@ export function deriveAgentProcessTaskModel(input: {
   // 可能被按“一个工具一个容器”保存，先合并 children 再分组，才能恢复连续执行组。
   // 这是展示层的重建，不会改写原始 chat.tasks，也不改变 ledger 的事件顺序。
   const segments: ProcessSegment[] = [];
-  let groupSerial = 0;
   const taskGroups = chat.tasks || [];
 
   // ReAct / 普通任务：跨 container 合并 children 再切分，避免历史回放「一工具一组」时
@@ -1224,15 +1220,9 @@ export function deriveAgentProcessTaskModel(input: {
       loading: loading && slice.isLastContainer,
       isPlanSolve,
       container: slice.container,
-      groupIndexBase: groupSerial,
       nowMs,
     });
-    for (const segment of sliced) {
-      if (segment.type === "group") {
-        groupSerial += 1;
-      }
-      segments.push(segment);
-    }
+    segments.push(...sliced);
   }
 
   const groups = segments
