@@ -24,6 +24,7 @@ import org.wwz.ai.domain.agent.ledger.model.LlmInvocationFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationBatchStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
+import org.wwz.ai.domain.agent.ledger.model.ToolInvocationSnapshotRecord;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputNames;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.ToolOutputPersistCommand;
 import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
@@ -472,6 +473,42 @@ public class AgentExecutionRecorderImpl implements AgentExecutionRecorder {
     @Transactional(rollbackFor = Exception.class)
     public void finishToolInvocationWithoutTimeline(ToolInvocationFinishRecord record) {
         finishToolInvocationInternal(record, false);
+    }
+
+    @Override
+    public void snapshotToolInvocation(ToolInvocationSnapshotRecord record) {
+        if (record == null || record.getStructuredOutput() == null) {
+            return;
+        }
+        try {
+            Long toolInvocationId = record.getToolInvocationId();
+            if (toolInvocationId == null
+                    && record.getRunId() != null
+                    && StringUtils.isNotBlank(record.getToolCallId())) {
+                var invocation = executionLedgerWriteRepository.queryToolInvocation(
+                        record.getRunId(),
+                        record.getToolCallId()
+                );
+                toolInvocationId = invocation == null ? null : invocation.getId();
+            }
+            if (toolInvocationId == null) {
+                return;
+            }
+            toolOutputWriter.write(ToolOutputPersistCommand.builder()
+                    .toolInvocationId(toolInvocationId)
+                    .runId(record.getRunId())
+                    .requestId(record.getRequestId())
+                    .requestSource(ExecutionLedgerConstants.REQUEST_SOURCE_AGENT)
+                    .sessionId(record.getSessionId())
+                    .toolCallId(record.getToolCallId())
+                    .toolName(record.getToolName())
+                    .status(record.getStatus())
+                    .structuredOutput(record.getStructuredOutput())
+                    .build());
+        } catch (Exception e) {
+            log.warn("tool snapshot persist failed requestId={} toolCallId={}",
+                    record.getRequestId(), record.getToolCallId(), e);
+        }
     }
 
     private void finishToolInvocationInternal(ToolInvocationFinishRecord record, boolean writeTimeline) {

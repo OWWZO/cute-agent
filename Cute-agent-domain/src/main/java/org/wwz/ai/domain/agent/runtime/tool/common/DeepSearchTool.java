@@ -19,6 +19,8 @@ import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolResultPayload;
 import org.wwz.ai.domain.agent.runtime.util.StringUtil;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
+import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
+import org.wwz.ai.domain.agent.ledger.model.ToolInvocationSnapshotRecord;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchChapter;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchStage;
 import org.wwz.ai.domain.agent.ledger.model.tooloutput.DeepSearchToolOutput;
@@ -252,6 +254,13 @@ public class DeepSearchTool implements BaseTool {
                             reportEvent.setFileInfo(
                                     ToolArtifactFileInfo.fromToolCall(ctx, toolCallId)
                             );
+                            snapshotDeepSearchOutput(
+                                    ctx,
+                                    toolCallId,
+                                    resultBuilder,
+                                    searchResponse.getAnswer(),
+                                    true
+                            );
                             ctx.getPrinter().send(
                                     messageIdRef.get(),
                                     "deep_search",
@@ -284,8 +293,10 @@ public class DeepSearchTool implements BaseTool {
                         }
 
                         if (DeepSearchResponse.MESSAGE_TYPE_EXTEND.equals(searchResponse.getMessageType())) {
+                            snapshotDeepSearchOutput(ctx, toolCallId, resultBuilder, "");
                             ctx.getPrinter().send(messageIdRef.get(), "deep_search", eventResponse, digitalEmployee, false);
                         } else if (DeepSearchResponse.MESSAGE_TYPE_SEARCH.equals(searchResponse.getMessageType())) {
+                            snapshotDeepSearchOutput(ctx, toolCallId, resultBuilder, "");
                             ctx.getPrinter().send(messageIdRef.get(), "deep_search", eventResponse, digitalEmployee, false);
                             FileRequest fileRequest = FileRequest.builder()
                                     .requestId(ctx.getRequestId())
@@ -295,6 +306,7 @@ public class DeepSearchTool implements BaseTool {
                                     .build();
                              fileArtifactUploader.upload(fileRequest, true, artifactSource);
                         } else if (DeepSearchResponse.MESSAGE_TYPE_CHAPTER_SUMMARY.equals(searchResponse.getMessageType())) {
+                            snapshotDeepSearchOutput(ctx, toolCallId, resultBuilder, "");
                             ctx.getPrinter().send(messageIdRef.get(), "deep_search", eventResponse, digitalEmployee, false);
                         } else if (DeepSearchResponse.MESSAGE_TYPE_REPORT.equals(searchResponse.getMessageType())) {
                             int currentReportIndex = reportIndex.get();
@@ -302,6 +314,12 @@ public class DeepSearchTool implements BaseTool {
                             stringBuilderAll.append(searchResponse.getAnswer());
                             if (currentReportIndex == firstInterval || currentReportIndex % sendInterval == 0) {
                                 eventResponse.setAnswer(stringBuilderIncr.toString());
+                                snapshotDeepSearchOutput(
+                                        ctx,
+                                        toolCallId,
+                                        resultBuilder,
+                                        stringBuilderAll.toString()
+                                );
                                 ctx.getPrinter().send(messageIdRef.get(), "deep_search", eventResponse, digitalEmployee, false);
                                 stringBuilderIncr.setLength(0);
                             }
@@ -360,6 +378,42 @@ public class DeepSearchTool implements BaseTool {
         }
 
         return future;
+    }
+
+    private void snapshotDeepSearchOutput(AgentContext ctx,
+                                          String toolCallId,
+                                          DeepSearchStructuredResultBuilder resultBuilder,
+                                          String fallbackAnswer) {
+        snapshotDeepSearchOutput(ctx, toolCallId, resultBuilder, fallbackAnswer, false);
+    }
+
+    private void snapshotDeepSearchOutput(AgentContext ctx,
+                                          String toolCallId,
+                                          DeepSearchStructuredResultBuilder resultBuilder,
+                                          String fallbackAnswer,
+                                          boolean reportFinal) {
+        if (ctx == null
+                || ctx.getExecutionRecorder() == null
+                || ctx.getAgentRunState() == null
+                || StringUtils.isBlank(toolCallId)) {
+            return;
+        }
+        Long invocationId = ctx.getAgentRunState().resolveToolInvocationId(toolCallId);
+        if (invocationId == null) {
+            return;
+        }
+        ctx.getExecutionRecorder().snapshotToolInvocation(
+                ToolInvocationSnapshotRecord.builder()
+                        .toolInvocationId(invocationId)
+                        .runId(ctx.getAgentRunState().getRunId())
+                        .requestId(ctx.getRequestId())
+                        .sessionId(ctx.getSessionId())
+                        .toolCallId(toolCallId)
+                        .toolName(getName())
+                        .status(ExecutionLedgerConstants.STATUS_RUNNING)
+                        .structuredOutput(resultBuilder.buildSnapshot(fallbackAnswer, reportFinal))
+                        .build()
+        );
     }
 
     private DeepSearchResponse canonicalEvent(String query,

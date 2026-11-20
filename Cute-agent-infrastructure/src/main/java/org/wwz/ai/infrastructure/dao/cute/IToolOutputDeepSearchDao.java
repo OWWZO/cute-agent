@@ -17,6 +17,8 @@ public interface IToolOutputDeepSearchDao {
 
     int insert(@Param("row") Map<String, Object> row);
 
+    int upsert(@Param("row") Map<String, Object> row);
+
     Map<String, Object> queryByToolInvocationId(@Param("toolInvocationId") Long toolInvocationId);
 
     List<Map<String, Object>> queryByToolInvocationIds(@Param("toolInvocationIds") List<Long> toolInvocationIds);

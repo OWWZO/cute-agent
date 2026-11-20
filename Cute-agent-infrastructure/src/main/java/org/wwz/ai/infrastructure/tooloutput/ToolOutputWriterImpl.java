@@ -81,7 +81,8 @@ public class ToolOutputWriterImpl implements ToolOutputWriter {
         try {
              // 每种可持久化 rich tool 使用独立输出表，但共享同一组账本关联字段。
             switch (toolName) {
-                case ToolOutputNames.DEEP_SEARCH -> handleInsertResult(command, deepSearchDao.insert(buildDeepSearchRow(command, cast(command, DeepSearchToolOutput.class))), strict);
+                // Deep Research 在运行中会持续刷新同一份阶段快照，终态也必须覆盖它。
+                case ToolOutputNames.DEEP_SEARCH -> handleInsertResult(command, deepSearchDao.upsert(buildDeepSearchRow(command, cast(command, DeepSearchToolOutput.class))), strict);
                 case ToolOutputNames.CODE_INTERPRETER -> handleInsertResult(command, codeInterpreterDao.insert(buildCodeInterpreterRow(command, cast(command, CodeInterpreterToolOutput.class))), strict);
                 case ToolOutputNames.DATA_ANALYSIS -> handleInsertResult(command, dataAnalysisDao.insert(buildDataAnalysisRow(command, cast(command, DataAnalysisToolOutput.class))), strict);
                 case ToolOutputNames.MULTIMODAL_AGENT -> handleInsertResult(command, multimodalAgentDao.insert(buildMultimodalRow(command, cast(command, MultimodalAgentToolOutput.class))), strict);

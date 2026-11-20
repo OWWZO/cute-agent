@@ -35,6 +35,26 @@
         )
     </insert>
 
+    <insert id="upsert" parameterType="map">
+        INSERT INTO ai_agent_tool_output_deep_search (
+            tool_invocation_id, run_id, request_id, session_id, tool_call_id, status, error_msg,
+            query, answer_summary, stages_json, created_at, updated_at
+        )
+        VALUES (
+            #{row.toolInvocationId}, #{row.runId}, #{row.requestId}, #{row.sessionId}, #{row.toolCallId}, #{row.status}, #{row.errorMsg},
+            #{row.query}, #{row.answerSummary}, #{row.stagesJson}, NOW(), NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            tool_invocation_id = VALUES(tool_invocation_id),
+            run_id = VALUES(run_id),
+            status = VALUES(status),
+            error_msg = VALUES(error_msg),
+            query = VALUES(query),
+            answer_summary = VALUES(answer_summary),
+            stages_json = VALUES(stages_json),
+            updated_at = NOW()
+    </insert>
+
     <select id="queryByToolInvocationId" resultType="map">
         SELECT id, tool_invocation_id, run_id, request_id, session_id, tool_call_id, status, error_msg,
                query, answer_summary, stages_json, created_at, updated_at

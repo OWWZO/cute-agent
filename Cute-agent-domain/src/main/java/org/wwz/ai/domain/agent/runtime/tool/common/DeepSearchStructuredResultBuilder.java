@@ -103,7 +103,7 @@ public class DeepSearchStructuredResultBuilder {
      */
     public ToolResultPayload buildPayload(String fallbackAnswer) {
         String normalizedAnswer = StringUtils.defaultIfBlank(finalAnswer, StringUtils.defaultString(fallbackAnswer));
-        DeepSearchToolOutput output = buildOutput(normalizedAnswer);
+        DeepSearchToolOutput output = buildOutput(normalizedAnswer, true);
         DeepSearchObservationOutput observation = DeepSearchObservationOutput.builder()
                 .tool("deep_search")
                 .query(query)
@@ -113,6 +113,25 @@ public class DeepSearchStructuredResultBuilder {
                 .answerSummary(normalizedAnswer)
                 .build();
         return ToolResultPayload.fromData(observation, output);
+    }
+
+    /**
+     * 运行中阶段快照：只产出可回放的 typed stages，不生成主智能体 observation。
+     */
+    public DeepSearchToolOutput buildSnapshot(String fallbackAnswer) {
+        return buildSnapshot(fallbackAnswer, false);
+    }
+
+    /**
+     * @param reportFinal 仅在上游明确发送 final 时为 true；流式阶段快照必须保持非终态，
+     *                    否则中途刷新会把“正在生成”误投影成“已完成”。
+     */
+    public DeepSearchToolOutput buildSnapshot(String fallbackAnswer, boolean reportFinal) {
+        String normalizedAnswer = StringUtils.defaultIfBlank(
+                finalAnswer,
+                StringUtils.defaultString(fallbackAnswer)
+        );
+        return buildOutput(normalizedAnswer, reportFinal);
     }
 
     public String getQuery() {
@@ -239,7 +258,7 @@ public class DeepSearchStructuredResultBuilder {
         finalAnswer = finalAnswer + answerChunk;
     }
 
-    private DeepSearchToolOutput buildOutput(String normalizedAnswer) {
+    private DeepSearchToolOutput buildOutput(String normalizedAnswer, boolean reportFinal) {
         List<DeepSearchStage> stages = new ArrayList<>();
         if (!decomposedQueries.isEmpty()) {
             stages.add(DeepSearchStage.extend(new ArrayList<>(decomposedQueries)));
@@ -276,7 +295,9 @@ public class DeepSearchStructuredResultBuilder {
                     chapterStreaming.get(chapter.getChapterId()));
         }
         if (StringUtils.isNotBlank(normalizedAnswer)) {
-            stages.add(DeepSearchStage.report(normalizedAnswer));
+            DeepSearchStage report = DeepSearchStage.report(normalizedAnswer);
+            report.setIsFinal(reportFinal);
+            stages.add(report);
         }
         return DeepSearchToolOutput.of(query, normalizedAnswer, stages, orderedChapters());
     }

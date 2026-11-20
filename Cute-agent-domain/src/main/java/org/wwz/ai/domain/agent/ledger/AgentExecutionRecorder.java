@@ -7,6 +7,7 @@ import org.wwz.ai.domain.agent.ledger.model.LlmInvocationFinishRecord;
 import org.wwz.ai.domain.agent.ledger.model.LlmInvocationStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationBatchStartRecord;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
+import org.wwz.ai.domain.agent.ledger.model.ToolInvocationSnapshotRecord;
 
 import java.util.List;
 import java.util.Map;
@@ -83,6 +84,13 @@ public interface AgentExecutionRecorder {
      * 只结算工具账本，不写时间线目录。用于 HITL 关键事务或目录写失败后的补偿。
      */
     void finishToolInvocationWithoutTimeline(ToolInvocationFinishRecord record);
+
+    /**
+     * 更新运行中工具的结构化输出快照，不结算主账本行。
+     */
+    default void snapshotToolInvocation(ToolInvocationSnapshotRecord record) {
+        // 兼容测试/轻量 recorder；生产实现会覆盖为持久化写入。
+    }
 
     /**
      * 写入产物。普通账本异常 fail-open；时间线目录写入失败会抛出
