@@ -251,6 +251,41 @@ describe("sessionTimelineChat", () => {
     expect(rounds[1]?.loading).toBe(true);
   });
 
+  it("renders a live child run before the history index catches up", () => {
+    const tool = eventData({
+      messageType: "tool_result",
+      toolName: "workspace_read",
+      toolCallId: "child-call-1",
+      status: "success",
+      result: "已读取",
+    });
+    const rounds = buildSessionTimelineRounds({
+      sessionId: "sub-1",
+      history: history([]),
+      sources: {
+        "child-req-live": source(
+          [item("tool:child-call-1", tool, { kind: "TOOL_CALL" })],
+          "RUNNING"
+        ),
+      },
+    });
+
+    expect(rounds.map((chat) => chat.requestId)).toEqual(["child-req-live"]);
+    expect(rounds[0]?.loading).toBe(true);
+    expect(findTask(rounds[0], "child-call-1")).toBeDefined();
+  });
+
+  it("can omit the synthetic fallback round for trace-confirmation UIs", () => {
+    const rounds = buildSessionTimelineRounds({
+      sessionId: "sub-1",
+      history: history([]),
+      sources: {},
+      includeFallbackRun: false,
+    });
+
+    expect(rounds).toEqual([]);
+  });
+
   it("uses canonical source status instead of stale history status", () => {
     const chat = buildSessionTimelineChat({
       sessionId: "sub-1",

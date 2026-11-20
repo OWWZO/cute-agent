@@ -121,6 +121,10 @@ public class AgentStreamProjection implements AgentSessionStream {
         }
     }
 
+    public String getRequestId() {
+        return request == null ? "" : StringUtils.defaultString(request.getRequestId());
+    }
+
     public AgentStreamProjection bindRegistry(SessionProjectionRegistry registry) {
         this.projectionRegistry = registry;
         if (registry != null && request != null && StringUtils.isNotBlank(request.getSessionId())) {
@@ -480,23 +484,52 @@ public class AgentStreamProjection implements AgentSessionStream {
      * {@code tool_result} / {@code result} 等骨架帧不参与 —— 数量有限，且重订后前端仍需
      * 它们重建时间线与卡片。
      */
-    private static String resolvePruneGroupKey(Map<String, Object> eventData) {
+    static String resolvePruneGroupKey(Map<String, Object> eventData) {
         if (eventData == null) {
             return null;
         }
-        String messageType = asText(eventData.get("messageType"));
+        String messageType = resolveStreamMessageType(eventData);
         if (MESSAGE_GROUPED_STREAM_TYPES.contains(messageType)) {
             String messageId = asText(eventData.get("messageId"));
             return messageId.isEmpty() ? null : "msg:" + messageId;
         }
         if (TOOL_GROUPED_STREAM_TYPES.contains(messageType)) {
-            Object nested = eventData.get("resultMap");
-            String toolCallId = nested instanceof Map<?, ?> map
-                    ? asText(map.get("toolCallId"))
-                    : "";
+            String toolCallId = resolveNestedToolCallId(eventData);
             return toolCallId.isEmpty() ? null : "tool:" + toolCallId;
         }
         return null;
+    }
+
+    private static String resolveStreamMessageType(Map<String, Object> eventData) {
+        String direct = asText(eventData.get("messageType"));
+        if (TOOL_GROUPED_STREAM_TYPES.contains(direct)
+                || MESSAGE_GROUPED_STREAM_TYPES.contains(direct)) {
+            return direct;
+        }
+        Object resultMap = eventData.get("resultMap");
+        if (resultMap instanceof Map<?, ?> outer) {
+            String outerType = asText(outer.get("messageType"));
+            if (!outerType.isEmpty()) {
+                return outerType;
+            }
+            Object inner = outer.get("resultMap");
+            if (inner instanceof Map<?, ?> innerMap) {
+                return asText(innerMap.get("messageType"));
+            }
+        }
+        return direct;
+    }
+
+    private static String resolveNestedToolCallId(Map<String, Object> eventData) {
+        Object resultMap = eventData.get("resultMap");
+        for (int depth = 0; depth < 3 && resultMap instanceof Map<?, ?> map; depth += 1) {
+            String toolCallId = asText(map.get("toolCallId"));
+            if (!toolCallId.isEmpty()) {
+                return toolCallId;
+            }
+            resultMap = map.get("resultMap");
+        }
+        return "";
     }
 
     /** 帧的 eventData：与前端 {@code resultMap.eventData} 同源，isFinal / messageType / messageId 都在这里。 */

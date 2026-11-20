@@ -9,6 +9,7 @@ import org.wwz.ai.domain.agent.adapter.port.SubAgentSessionStreamPort;
 import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
@@ -19,6 +20,7 @@ import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Phase 3 SSE 隔离开关的行为契约。
@@ -108,6 +110,36 @@ public class SubAgentSessionStreamIsolationTest {
     }
 
     @Test
+    public void isolatedChildRunIsRegisteredBeforeStartFrameAndRemovedAfterFinish() {
+        RecordingStreamPort streamPort = new RecordingStreamPort();
+        RecordingPrinter parentPrinter = new RecordingPrinter();
+        ActiveAgentRunRegistry registry = new ActiveAgentRunRegistry();
+        parentPrinter.onMessageType = messageType -> {
+            if ("subagent_start".equals(messageType)) {
+                String childRequestId = streamPort.calls.get(0).requestId;
+                Assert.assertTrue("start 帧广播前必须已有可观察的 child run",
+                        registry.find(childRequestId).isPresent());
+            }
+        };
+        SubAgentRunner runner = new SubAgentRunner(new SubAgentRegistry());
+
+        runner.run(
+                newParentContext(
+                        new NoopSessionPort(),
+                        streamPort,
+                        Boolean.TRUE,
+                        parentPrinter,
+                        null,
+                        registry
+                ),
+                "探索前端", "任务 prompt",
+                SubAgentRegistry.TYPE_GENERAL_PURPOSE, null, null, "agent-fixed");
+
+        Assert.assertFalse("child run 结束后必须从活跃索引移除",
+                registry.find(streamPort.calls.get(0).requestId).isPresent());
+    }
+
+    @Test
     public void flagOffShouldNotEmitSubAgentSummaryFrames() {
         RecordingStreamPort streamPort = new RecordingStreamPort();
         RecordingPrinter parentPrinter = new RecordingPrinter();
@@ -156,6 +188,15 @@ public class SubAgentSessionStreamIsolationTest {
                                                  Boolean isolatedFlag,
                                                  Printer printer,
                                                  AgentExecutionRecorder recorder) {
+        return newParentContext(sessionPort, streamPort, isolatedFlag, printer, recorder, null);
+    }
+
+    private static AgentContext newParentContext(SubAgentSessionPort sessionPort,
+                                                 SubAgentSessionStreamPort streamPort,
+                                                 Boolean isolatedFlag,
+                                                 Printer printer,
+                                                 AgentExecutionRecorder recorder,
+                                                 ActiveAgentRunRegistry registry) {
         org.wwz.ai.domain.agent.cute.config.CuteConfig config = null;
         if (isolatedFlag != null) {
             config = new org.wwz.ai.domain.agent.cute.config.CuteConfig();
@@ -173,6 +214,7 @@ public class SubAgentSessionStreamIsolationTest {
                 .cuteConfig(config)
                 .subAgentSessionPort(sessionPort)
                 .subAgentSessionStreamPort(streamPort)
+                .activeAgentRunRegistry(registry)
                 .build();
 
         return AgentContext.builder()
@@ -244,6 +286,7 @@ public class SubAgentSessionStreamIsolationTest {
         private final List<String> messageTypes = new ArrayList<>();
         private final List<String> frameChildSessionIds = new ArrayList<>();
         private final List<String> frameChildRequestIds = new ArrayList<>();
+        private Consumer<String> onMessageType;
 
         @Override
         public void send(String messageId, String messageType, Object message, String digitalEmployee, Boolean isFinal) {
@@ -263,6 +306,9 @@ public class SubAgentSessionStreamIsolationTest {
 
         private void record(String messageType, Object message) {
             messageTypes.add(messageType);
+            if (onMessageType != null) {
+                onMessageType.accept(messageType);
+            }
         }
 
         @Override

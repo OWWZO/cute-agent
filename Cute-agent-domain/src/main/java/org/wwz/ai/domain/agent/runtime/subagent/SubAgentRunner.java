@@ -17,6 +17,7 @@ import org.wwz.ai.domain.agent.runtime.agent.ReactImplAgent;
 import org.wwz.ai.domain.agent.runtime.agent.ReactFinalAnswerResolver;
 import org.wwz.ai.domain.agent.runtime.artifact.TaskSummaryArtifactProtocol;
 import org.wwz.ai.domain.agent.runtime.artifact.ToolArtifactBinding;
+import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
 import org.wwz.ai.domain.agent.runtime.dto.Message;
 import org.wwz.ai.domain.agent.runtime.dto.TaskSummaryResult;
@@ -297,6 +298,14 @@ public class SubAgentRunner {
                     childContext,
                     ExecutionLedgerConstants.ENTRY_AGENT_SUBAGENT,
                     prompt);
+            if (isolatedChildPrinter != null) {
+                registerIsolatedChildRun(
+                        parentContext,
+                        childContext,
+                        childSessionId,
+                        childRequestId
+                );
+            }
         } catch (RuntimeException e) {
             // startup 广播前失败时子流已在注册表中，必须立即注销，避免留下无法查询的孤儿投影。
             if (isolatedChildPrinter != null) {
@@ -464,6 +473,10 @@ public class SubAgentRunner {
             childRunSummary.set(err);
             return failed(agentId, childSessionId, definition, description, prompt, start, err, content, memoryPersisted);
         } finally {
+            ActiveAgentRunRegistry activeRunRegistry = parentContext.activeAgentRunRegistry();
+            if (activeRunRegistry != null && isolatedChildPrinter != null) {
+                activeRunRegistry.end(childRequestId);
+            }
             // 子 run 终态收口（含取消：/stop 走异常或正常路径都已覆盖）
             try {
                 if (childContext.isRunCancelled()) {
@@ -494,6 +507,18 @@ public class SubAgentRunner {
 
     private static String resolveEndStatus(int runStatus) {
         return runStatus == ExecutionLedgerConstants.STATUS_SUCCESS ? "completed" : "failed";
+    }
+
+    private static void registerIsolatedChildRun(AgentContext parentContext,
+                                                 AgentContext childContext,
+                                                 String childSessionId,
+                                                 String childRequestId) {
+        ActiveAgentRunRegistry registry = parentContext.activeAgentRunRegistry();
+        if (registry == null || childContext == null) {
+            return;
+        }
+        registry.begin(childRequestId, childSessionId, parentContext.getUserId());
+        registry.bindContext(childRequestId, childContext);
     }
 
     private static String resolveEndSummary(java.util.concurrent.atomic.AtomicInteger runStatus,

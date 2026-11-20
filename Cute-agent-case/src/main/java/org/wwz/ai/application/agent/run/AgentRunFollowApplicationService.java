@@ -69,17 +69,33 @@ public class AgentRunFollowApplicationService {
         }
         agentRunLaunchGate.launchBySession(sessionId);
         List<AgentStreamProjection> live = sessionProjectionRegistry.listLive(sessionId);
+        Optional<ActiveAgentRunRegistry.ActiveRun> found =
+                activeAgentRunRegistry.findBySessionId(sessionId);
+        if (!live.isEmpty() && found.isPresent()) {
+            List<AgentStreamProjection> currentRunProjections = live.stream()
+                    .filter(projection -> StringUtils.equals(
+                            projection.getRequestId(),
+                            found.get().getRequestId()
+                    ))
+                    .toList();
+            if (!currentRunProjections.isEmpty()) {
+                live = currentRunProjections;
+            }
+        }
         if (!live.isEmpty()) {
             if (!replayLiveProjections(sessionId, lastEventSeq, replay, live)) {
                 return FollowAttachResult.PENDING;
             }
-            Optional<ActiveAgentRunRegistry.ActiveRun> found = activeAgentRunRegistry.findBySessionId(sessionId);
-            found.ifPresent(run -> activeAgentRunRegistry.bindStream(run.getRequestId(), live.get(live.size() - 1)));
+            if (found.isPresent()) {
+                activeAgentRunRegistry.bindStream(
+                        found.get().getRequestId(),
+                        live.get(live.size() - 1)
+                );
+            }
             log.info("observe attached sessionId={} liveProjections={}", sessionId, live.size());
             return FollowAttachResult.ATTACHED;
         }
 
-        Optional<ActiveAgentRunRegistry.ActiveRun> found = activeAgentRunRegistry.findBySessionId(sessionId);
         if (found.isEmpty()) {
             log.info("observe idle, no live projection sessionId={}", sessionId);
             return FollowAttachResult.IDLE;

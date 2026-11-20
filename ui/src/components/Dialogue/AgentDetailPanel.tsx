@@ -13,6 +13,7 @@ import { buildSessionTimelineRounds } from "@/utils/chat/sessionTimelineChat";
 import { groupChatsIntoTurns, mergeTurnChats } from "@/lib/turnGroups";
 import { projectAgentMember } from "@/utils/chat/agentRuntimeProjector";
 import { useSessionTimeline } from "@/hooks/useSessionTimeline";
+import { isRunTimelineTerminal } from "@/utils/timeline/timelineStore";
 import {
   formatAgentElapsed,
   resolveAgentPhaseLabel,
@@ -45,10 +46,34 @@ export const SUBAGENT_CHILD_SESSION_ENABLED =
 
 /** 子会话一次挂载的轮数；更早轮次按需展开，避免长会话把所有 Dialogue 同时挂上。 */
 const CHILD_SESSION_TURN_PAGE_SIZE = 8;
+const CHILD_TRACE_DISCOVERY_GRACE_MS = 2500;
 const SCROLL_ANCHOR_IDLE_MS = 100;
 const SCROLL_CORRECTION_WINDOW_MS = 400;
 const useIsomorphicLayoutEffect =
   typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+function hasRenderableChildTrace(chat: CHAT.ChatItem): boolean {
+  const hasTimelineContent = (chat.tasks || []).some(
+    (group) => Array.isArray(group) && group.some((task) =>
+      Boolean(
+        task.messageType
+          || task.messageId
+          || task.resultMap
+          || task.result
+          || task.taskSummary
+      )
+    )
+  );
+  return Boolean(
+    hasTimelineContent
+      || chat.multiAgent?.tasks?.length
+      || chat.conclusion
+      || chat.thought?.trim()
+      || chat.response?.trim()
+      || chat.files?.length
+      || chat.replayAvailable
+  );
+}
 
 type AgentDetailPanelProps = {
   tool: CHAT.Task;
@@ -126,6 +151,20 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
     SUBAGENT_CHILD_SESSION_ENABLED &&
     !childSessionId &&
     Boolean(childRequestId || sub.status === "running");
+  const requestedChildRun = childRequestId
+    ? childSession.runs[childRequestId]
+    : undefined;
+  const requestedHistoryRun = childRequestId
+    ? childSession.history?.runs.find(
+      (run) => run.requestId === childRequestId
+    )
+    : undefined;
+  const requestedChildRunStatus =
+    requestedChildRun?.status || requestedHistoryRun?.status || "";
+  const requestedChildRunTerminal =
+    Boolean(requestedChildRunStatus) &&
+    isRunTimelineTerminal(requestedChildRunStatus);
+  const [traceDiscoveryExpired, setTraceDiscoveryExpired] = useState(false);
 
   // 数据源：真实子会话继续由会话级渲染链路消费；本面板在真实模式下
   // 以「历史已就绪 + 实时帧已到达」作为渲染准入，避免打开瞬间空白。
@@ -134,14 +173,6 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
   );
   const realSessionReady =
     Boolean(childSessionId) && readySessionId === childSessionId;
-  const awaitingRequestedChildRun =
-    useRealChildSession &&
-    realSessionReady &&
-    Boolean(childRequestId) &&
-    !childSession.runs[childRequestId] &&
-    sub.status === "running" &&
-    !childSession.error &&
-    !childSession.reconnectExhausted;
   useEffect(() => {
     if (!useRealChildSession) {
       setReadySessionId("");
@@ -174,6 +205,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
       sources: childSession.runs,
       pendingRun,
       fallbackQuery: sub.prompt || sub.description,
+      includeFallbackRun: false,
     });
   }, [
     useRealChildSession,
@@ -194,16 +226,58 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
       })),
     [childSessionRounds]
   );
+  const renderableChildSessionTurns = useMemo(
+    () => childSessionTurns.filter((turn) => hasRenderableChildTrace(turn.chat)),
+    [childSessionTurns]
+  );
+  const hasChildTrace = renderableChildSessionTurns.length > 0;
+  useEffect(() => {
+    if (
+      !useRealChildSession
+      || !realSessionReady
+      || hasChildTrace
+      || requestedChildRunTerminal
+      || childSession.error
+      || childSession.reconnectExhausted
+    ) {
+      setTraceDiscoveryExpired(false);
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setTraceDiscoveryExpired(true),
+      CHILD_TRACE_DISCOVERY_GRACE_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [
+    useRealChildSession,
+    realSessionReady,
+    hasChildTrace,
+    requestedChildRunTerminal,
+    childSession.error,
+    childSession.reconnectExhausted,
+  ]);
+  const awaitingChildTraceDiscovery =
+    useRealChildSession &&
+    realSessionReady &&
+    !hasChildTrace &&
+    !requestedChildRunTerminal &&
+    !traceDiscoveryExpired &&
+    !childSession.error &&
+    !childSession.reconnectExhausted;
   // 并发启动时，childSessionId 可能先于历史索引到达；只要子 Agent 仍在运行，
   // 空轨迹只能代表“还在建立/读取”，不能当成真实空态。
   const awaitingRunningChildTrace =
     useRealChildSession &&
     realSessionReady &&
-    sub.status === "running" &&
     !childSession.reconnectExhausted &&
-    (childRequestId
-      ? !childSession.runs[childRequestId]?.items.length
-      : childSessionTurns.length === 0);
+    !hasChildTrace &&
+    (
+      sub.status === "running" ||
+      (
+        Boolean(requestedChildRunStatus) &&
+        !isRunTimelineTerminal(requestedChildRunStatus)
+      )
+    );
   const [visibleTurnCount, setVisibleTurnCount] = useState(() => {
     return {
       sessionId: childSessionId,
@@ -217,9 +291,9 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
     visibleTurnCount.sessionId === childSessionId
       ? visibleTurnCount.count
       : CHILD_SESSION_TURN_PAGE_SIZE;
-  const visibleChildSessionTurns = childSessionTurns.slice(-visibleCount);
+  const visibleChildSessionTurns = renderableChildSessionTurns.slice(-visibleCount);
   const hiddenChildSessionTurnCount =
-    childSessionTurns.length - visibleChildSessionTurns.length;
+    renderableChildSessionTurns.length - visibleChildSessionTurns.length;
   const reloadChildSession = childSession.reload;
   const observeChildRun = childSession.observeRun;
   const childRunCount = Object.keys(childSession.runs).length;
@@ -243,11 +317,12 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
 
   const showEmpty =
     !childSessionStarting &&
-    !awaitingRequestedChildRun &&
+    !awaitingChildTraceDiscovery &&
     !awaitingRunningChildTrace &&
-    childSessionTurns.length === 0 &&
+    !hasChildTrace &&
     (!SUBAGENT_CHILD_SESSION_ENABLED || sub.status !== "running") &&
-    (realSessionReady || Boolean(childSession.error) || !useRealChildSession);
+    !childSession.error &&
+    (realSessionReady || !useRealChildSession);
 
   const handleChangeActiveChat = useCallback(
     (task: CHAT.Task) => {
@@ -550,7 +625,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
         ) : null}
 
         {/* 子会话按轮窗口化；流式 live run 常驻尾部，避免子会话长期运行时历史 Dialogue 全挂载。 */}
-        {useRealChildSession && childSessionTurns.length ? (
+        {useRealChildSession && renderableChildSessionTurns.length ? (
           <div className="flex flex-col gap-2">
             {hiddenChildSessionTurnCount > 0 ? (
               <button
@@ -597,7 +672,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
           <div className="kimi-detail-panel-empty">正在建立子会话…</div>
         ) : null}
 
-        {awaitingRequestedChildRun || awaitingRunningChildTrace ? (
+        {awaitingChildTraceDiscovery || awaitingRunningChildTrace ? (
           <div className="kimi-detail-panel-empty">正在读取子会话轨迹…</div>
         ) : null}
 

@@ -22,6 +22,7 @@ export type BuildSessionTimelineRoundsInput = {
   sources?: Record<string, SessionRunTimelineSource>;
   pendingRun?: { requestId: string; query: string } | null;
   fallbackQuery?: string;
+  includeFallbackRun?: boolean;
 };
 
 function asText(value: unknown): string {
@@ -278,10 +279,37 @@ export function projectChatWithTimelineSource(
 export function buildSessionTimelineRounds(
   input: BuildSessionTimelineRoundsInput
 ): CHAT.ChatItem[] {
-  const { sessionId, history, sources, pendingRun, fallbackQuery } = input;
+  const {
+    sessionId,
+    history,
+    sources,
+    pendingRun,
+    fallbackQuery,
+    includeFallbackRun = true,
+  } = input;
   const runs: ConversationRunSummary[] = Array.isArray(history?.runs)
-    ? [...history.runs]
+    ? history.runs.map((run) => ({ ...run }))
     : [];
+  const knownRequestIds = new Set(runs.map((run) => run.requestId));
+  for (const [requestId, source] of Object.entries(sources || {})) {
+    if (!requestId || knownRequestIds.has(requestId)) {
+      continue;
+    }
+    // history 索引可能晚于 live timeline。子会话并发启动时如果只认 history.runs，
+    // 已经收到 childRequestId 的实时 run 会被误判为“没有轨迹”。
+    runs.push({
+      requestId,
+      status: source.status || "RUNNING",
+      queryPreview:
+        pendingRun?.requestId === requestId
+          ? pendingRun.query
+          : undefined,
+      hasReplay: false,
+      startedAt: undefined,
+      finishedAt: undefined,
+    });
+    knownRequestIds.add(requestId);
+  }
   if (pendingRun && !runs.some((run) => run.requestId === pendingRun.requestId)) {
     runs.push({
       requestId: pendingRun.requestId,
@@ -292,6 +320,9 @@ export function buildSessionTimelineRounds(
     });
   }
   if (runs.length === 0) {
+    if (!includeFallbackRun) {
+      return [];
+    }
     const fallbackRun: ConversationRunSummary = {
       requestId: "",
       status: "RUNNING",
