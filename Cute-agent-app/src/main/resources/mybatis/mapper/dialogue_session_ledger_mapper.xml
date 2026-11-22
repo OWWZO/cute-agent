@@ -15,6 +15,7 @@
         <result column="parent_session_id" property="parentSessionId"/>
         <result column="root_session_id" property="rootSessionId"/>
         <result column="sub_agent_type" property="subAgentType"/>
+        <result column="main_agent_key" property="mainAgentKey"/>
         <result column="title" property="title"/>
         <result column="status" property="status"/>
         <result column="latest_request_id" property="latestRequestId"/>
@@ -28,7 +29,10 @@
         <result column="model" property="model"/>
         <result column="thinking" property="thinking"/>
         <result column="thinking_effort" property="thinkingEffort"/>
-        <result column="deep_think" property="deepThink"/>
+        <result column="collaboration_mode" property="collaborationMode"/>
+        <result column="prompt_version" property="promptVersion"/>
+        <result column="prompt_hash" property="promptHash"/>
+        <result column="prompt_snapshot" property="promptSnapshot"/>
         <result column="event_seq" property="eventSeq"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
@@ -44,6 +48,7 @@
         <result column="parent_session_id" property="parentSessionId"/>
         <result column="root_session_id" property="rootSessionId"/>
         <result column="sub_agent_type" property="subAgentType"/>
+        <result column="main_agent_key" property="mainAgentKey"/>
         <result column="sub_session_count" property="subSessionCount"/>
         <result column="title" property="title"/>
         <result column="status" property="status"/>
@@ -58,29 +63,34 @@
         <result column="model" property="model"/>
         <result column="thinking" property="thinking"/>
         <result column="thinking_effort" property="thinkingEffort"/>
-        <result column="deep_think" property="deepThink"/>
+        <result column="collaboration_mode" property="collaborationMode"/>
+        <result column="prompt_version" property="promptVersion"/>
+        <result column="prompt_hash" property="promptHash"/>
         <result column="create_time" property="createTime"/>
     </resultMap>
 
     <sql id="dialogueSessionColumns">
-        id, session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+        id, session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, main_agent_key, title, status, latest_request_id,
         latest_query_text, latest_summary_text, run_count, finished_run_count, failed_run_count,
-        started_at, last_active_at, model, thinking, thinking_effort, deep_think,
+        started_at, last_active_at, model, thinking, thinking_effort, collaboration_mode,
+        prompt_version, prompt_hash, prompt_snapshot,
         event_seq, create_time, update_time, deleted
     </sql>
 
     <sql id="dialogueSessionViewColumns">
-        id, session_id, user_id, binding_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+        id, session_id, user_id, binding_id, session_kind, parent_session_id, root_session_id, sub_agent_type, main_agent_key, title, status, latest_request_id,
         latest_query_text, latest_summary_text, run_count, finished_run_count, failed_run_count,
-        started_at, last_active_at, model, thinking, thinking_effort, deep_think, create_time
+        started_at, last_active_at, model, thinking, thinking_effort, collaboration_mode,
+        prompt_version, prompt_hash, create_time
     </sql>
 
     <sql id="dialogueSessionHistoryViewColumns">
-        id, session_id, user_id, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+        id, session_id, user_id, session_kind, parent_session_id, root_session_id, sub_agent_type, main_agent_key, title, status, latest_request_id,
         LEFT(latest_query_text, 241) AS latest_query_text,
         LEFT(latest_summary_text, 241) AS latest_summary_text,
         run_count, finished_run_count, failed_run_count,
-        started_at, last_active_at, model, thinking, thinking_effort, deep_think, create_time
+        started_at, last_active_at, model, thinking, thinking_effort, collaboration_mode,
+        prompt_version, prompt_hash, create_time
     </sql>
 
     <!-- 侧栏列表专用：随行返回该会话下的子会话数量，前端据此决定是否展示展开入口。
@@ -101,20 +111,21 @@
 
     <!-- 身份列（session_kind / parent_session_id / root_session_id / sub_agent_type）只在建行时写入，ON DUPLICATE 段刻意不覆盖：
          会话身份一旦确定就不该被后续 run 改写，否则子会话可能被父 run 刷回 conversation 漏进侧栏。
-         会话偏好四列（model / thinking / thinking_effort / deep_think）相反，必须进 ON DUPLICATE 段——
-         用户切换模型时要能更新。前三个用 COALESCE 实现「未传不清空」，deep_think 是 NOT NULL 布尔开关直接覆盖。 -->
+         会话偏好与提示词快照进入 ON DUPLICATE 段，但都用 COALESCE 保留首次绑定；
+         模式切换由应用层校验，SQL 不做静默覆盖。 -->
     <insert id="upsertSession" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">
         INSERT INTO ai_agent_dialogue_session (
-            session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+            session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, main_agent_key, title, status, latest_request_id,
             latest_query_text, latest_summary_text,
             run_count, finished_run_count, failed_run_count, started_at, last_active_at,
-            model, thinking, thinking_effort, deep_think,
+            model, thinking, thinking_effort, collaboration_mode, prompt_version, prompt_hash, prompt_snapshot,
             create_time, update_time, deleted
         ) VALUES (
-            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, #{channelLastMsgId}, #{channelLastReceivedAt}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
+            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, #{channelLastMsgId}, #{channelLastReceivedAt}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType}, #{mainAgentKey},
             #{title}, #{status}, #{latestRequestId}, #{latestQueryText}, #{latestSummaryText},
             #{runCount}, #{finishedRunCount}, #{failedRunCount}, #{startedAt}, #{lastActiveAt},
-            #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{deepThink}, 0),
+            #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{collaborationMode}, 'normal'),
+            #{promptVersion}, #{promptHash}, #{promptSnapshot},
             NOW(), NOW(), 0
         )
         ON DUPLICATE KEY UPDATE
@@ -143,7 +154,10 @@
             model = COALESCE(VALUES(model), model),
             thinking = COALESCE(VALUES(thinking), thinking),
             thinking_effort = COALESCE(VALUES(thinking_effort), thinking_effort),
-            deep_think = VALUES(deep_think),
+            collaboration_mode = COALESCE(VALUES(collaboration_mode), collaboration_mode),
+            prompt_version = COALESCE(prompt_version, VALUES(prompt_version)),
+            prompt_hash = COALESCE(prompt_hash, VALUES(prompt_hash)),
+            prompt_snapshot = COALESCE(prompt_snapshot, VALUES(prompt_snapshot)),
             update_time = NOW()
     </insert>
 
@@ -151,16 +165,17 @@
          冲突时只写回相同 session_id，保证 run_count / 身份列保持首次落库值。 -->
     <insert id="insertSessionIfAbsent" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">
         INSERT INTO ai_agent_dialogue_session (
-            session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+            session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, main_agent_key, title, status, latest_request_id,
             latest_query_text, latest_summary_text,
             run_count, finished_run_count, failed_run_count, started_at, last_active_at,
-            model, thinking, thinking_effort, deep_think,
+            model, thinking, thinking_effort, collaboration_mode, prompt_version, prompt_hash, prompt_snapshot,
             create_time, update_time, deleted
         ) VALUES (
-            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, #{channelLastMsgId}, #{channelLastReceivedAt}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
+            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, #{channelLastMsgId}, #{channelLastReceivedAt}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType}, #{mainAgentKey},
             #{title}, #{status}, #{latestRequestId}, #{latestQueryText}, #{latestSummaryText},
             #{runCount}, #{finishedRunCount}, #{failedRunCount}, #{startedAt}, #{lastActiveAt},
-            #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{deepThink}, 0),
+            #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{collaborationMode}, 'normal'),
+            #{promptVersion}, #{promptHash}, #{promptSnapshot},
             NOW(), NOW(), 0
         )
         ON DUPLICATE KEY UPDATE session_id = VALUES(session_id)
@@ -170,16 +185,17 @@
          会话偏好四列同样走「未传不清空」：主链路每轮都会带上用户当前选择，未带时保留库里原值。 -->
     <insert id="upsertSessionOnRunStart" parameterType="org.wwz.ai.domain.agent.ledger.model.DialogueSessionUpsertRecord">
         INSERT INTO ai_agent_dialogue_session (
-            session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, title, status, latest_request_id,
+            session_id, user_id, binding_id, channel_chat_type, channel_target_id, channel_last_msg_id, channel_last_received_at, session_kind, parent_session_id, root_session_id, sub_agent_type, main_agent_key, title, status, latest_request_id,
             latest_query_text, latest_summary_text,
             run_count, finished_run_count, failed_run_count, started_at, last_active_at,
-            model, thinking, thinking_effort, deep_think,
+            model, thinking, thinking_effort, collaboration_mode, prompt_version, prompt_hash, prompt_snapshot,
             create_time, update_time, deleted
         ) VALUES (
-            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, #{channelLastMsgId}, #{channelLastReceivedAt}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType},
+            #{sessionId}, #{userId}, #{bindingId}, #{channelChatType}, #{channelTargetId}, #{channelLastMsgId}, #{channelLastReceivedAt}, IFNULL(#{sessionKind}, 'conversation'), #{parentSessionId}, #{rootSessionId}, #{subAgentType}, #{mainAgentKey},
             #{title}, #{status}, #{latestRequestId}, #{latestQueryText}, #{latestSummaryText},
             1, 0, 0, #{startedAt}, #{lastActiveAt},
-            #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{deepThink}, 0),
+            #{model}, #{thinking}, #{thinkingEffort}, IFNULL(#{collaborationMode}, 'normal'),
+            #{promptVersion}, #{promptHash}, #{promptSnapshot},
             NOW(), NOW(), 0
         )
         ON DUPLICATE KEY UPDATE
@@ -205,7 +221,10 @@
             model = COALESCE(VALUES(model), model),
             thinking = COALESCE(VALUES(thinking), thinking),
             thinking_effort = COALESCE(VALUES(thinking_effort), thinking_effort),
-            deep_think = VALUES(deep_think),
+            collaboration_mode = COALESCE(VALUES(collaboration_mode), collaboration_mode),
+            prompt_version = COALESCE(prompt_version, VALUES(prompt_version)),
+            prompt_hash = COALESCE(prompt_hash, VALUES(prompt_hash)),
+            prompt_snapshot = COALESCE(prompt_snapshot, VALUES(prompt_snapshot)),
             update_time = NOW()
     </insert>
 
@@ -363,14 +382,26 @@
           AND deleted = 0
     </update>
 
-    <!-- 会话偏好：只碰四列，null 不清空。刻意不用 upsertSession —— 那个会整行覆盖
+    <!-- 会话偏好：只碰模型/思考/协作模式，null 不清空。刻意不用 upsertSession —— 那个会整行覆盖
          title/status/run_count，偏好写入时这些字段全是 null，会把会话头清空。 -->
     <update id="updateSessionPreferences">
         UPDATE ai_agent_dialogue_session
         SET model = COALESCE(#{model}, model),
             thinking = COALESCE(#{thinking}, thinking),
             thinking_effort = COALESCE(#{thinkingEffort}, thinking_effort),
-            deep_think = COALESCE(#{deepThink}, deep_think),
+            collaboration_mode = COALESCE(#{collaborationMode}, collaboration_mode),
+            update_time = NOW()
+        WHERE session_id = #{sessionId}
+          AND deleted = 0
+    </update>
+
+    <update id="updateSessionRuntimeBinding">
+        UPDATE ai_agent_dialogue_session
+        SET main_agent_key = COALESCE(main_agent_key, #{mainAgentKey}),
+            collaboration_mode = COALESCE(collaboration_mode, #{collaborationMode}),
+            prompt_version = COALESCE(prompt_version, #{promptVersion}),
+            prompt_hash = COALESCE(prompt_hash, #{promptHash}),
+            prompt_snapshot = COALESCE(prompt_snapshot, #{promptSnapshot}),
             update_time = NOW()
         WHERE session_id = #{sessionId}
           AND deleted = 0

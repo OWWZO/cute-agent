@@ -14,7 +14,7 @@
 --   ai_agent_sub_agent_definition — custom SubAgent definitions for Agent tool
 --
 -- Session task surfaces (not ledger facts):
---   ai_agent_session_todo — Todo V2 list (TaskCreate/List)
+--   ai_agent_session_todo — TodoWrite session list
 --   ai_agent_background_task — background Agent/shell tasks (TaskOutput/Stop)
 -- Agent Browser external resource mapping (not a ledger table): ai_agent_kernel_browser_session
 --
@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_sub_agent_definition (
     display_name            VARCHAR(128)   NULL COMMENT '展示名',
     when_to_use             VARCHAR(512)   NOT NULL COMMENT '何时使用（注入主 Agent 工具描述）',
     system_prompt           MEDIUMTEXT     NOT NULL COMMENT '子 Agent 系统提示词',
-    allowed_tools_json      JSON           NULL COMMENT '允许工具名 JSON 数组；含 * 或空表示全部',
+    allowed_tools_json      JSON           NULL COMMENT '允许工具名 JSON 数组；NULL 或含 * 表示全部，空数组表示不允许业务工具',
     disallowed_tools_json   JSON           NULL COMMENT '额外禁止工具名 JSON 数组',
     tool_policy_mode        VARCHAR(16)    NOT NULL DEFAULT 'inherit' COMMENT '工具装配策略：inherit|custom',
     deferred_tools_json     JSON           NULL COMMENT 'custom 模式下延迟加载的工具名 JSON 数组',
@@ -241,6 +241,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_session (
     parent_session_id  VARCHAR(128)   NULL COMMENT '父会话ID（仅审计与授权穿透；子会话不继承父工作记忆）',
     root_session_id    VARCHAR(128)   NULL COMMENT '根会话ID；根会话指向自己，子会话指向树根。用于一次查询取整棵会话树',
     sub_agent_type     VARCHAR(64)    NULL COMMENT '子智能体类型（对应 ai_agent_sub_agent_definition.agent_key）；决定该会话的工具池。NULL=未记录，回退全量工具',
+    main_agent_key     VARCHAR(64)    NULL COMMENT '普通模式主 Agent key；cluster 模式为空',
     title              VARCHAR(256)   NOT NULL COMMENT '会话标题',
     status             TINYINT        NOT NULL DEFAULT 0 COMMENT '会话终态，复用 run\r\n  状态枚举',
     latest_request_id  VARCHAR(64)    NULL COMMENT '最近一次请求ID',
@@ -254,7 +255,10 @@ CREATE TABLE IF NOT EXISTS ai_agent_dialogue_session (
     model              VARCHAR(128)   NULL COMMENT '会话级模型标识；NULL=未显式选择',
     thinking           TINYINT(1)     NULL COMMENT '是否开启深度思考；NULL=未显式选择',
     thinking_effort    VARCHAR(32)    NULL COMMENT '思考强度（low/medium/high）；NULL=默认',
-    deep_think         TINYINT(1)     NOT NULL DEFAULT 0 COMMENT 'Deep Think 开关；派生 agentType',
+    collaboration_mode VARCHAR(16)    NOT NULL DEFAULT 'normal' COMMENT '主模式：normal=普通 Agent；cluster=通用协调者集群',
+    prompt_version     VARCHAR(64)    NULL COMMENT '会话稳定提示词版本',
+    prompt_hash        CHAR(64)       NULL COMMENT '稳定提示词 SHA-256',
+    prompt_snapshot    MEDIUMTEXT     NULL COMMENT '会话冻结的 system 提示词快照；内部字段',
     event_seq          BIGINT         NOT NULL DEFAULT 0 COMMENT '会话内 SSE 高水位，delta 占号但不逐帧回写',
     timeline_seq       BIGINT         NOT NULL DEFAULT 0 COMMENT '会话级 committed timeline 排序高水位',
     create_time        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建\r\n  时间',
@@ -797,11 +801,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_session_todo (
     subject         VARCHAR(512)   NOT NULL COMMENT '短标题',
     description     MEDIUMTEXT     NOT NULL COMMENT '任务详情',
     active_form     VARCHAR(256)   NULL COMMENT '进行时文案',
-    owner           VARCHAR(128)   NULL COMMENT '负责人/owner',
     status          VARCHAR(32)    NOT NULL DEFAULT 'pending' COMMENT 'pending|in_progress|completed',
-    blocks_json     JSON           NULL COMMENT '阻塞的任务 id 列表',
-    blocked_by_json JSON           NULL COMMENT '被阻塞依赖 id 列表',
-    metadata_json   JSON           NULL COMMENT '扩展元数据',
     seq_no          INT            NOT NULL DEFAULT 0 COMMENT '排序序号（通常=task_id 数值）',
     create_time     DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time     DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -809,7 +809,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_session_todo (
     PRIMARY KEY (id),
     UNIQUE KEY uk_session_todo (session_id, task_id, deleted),
     KEY idx_session_todo_session (session_id, deleted, seq_no)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='会话 Todo 任务列表（TaskCreate/List）';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='会话 Todo 任务列表（TodoWrite）';
 
 CREATE TABLE IF NOT EXISTS ai_agent_background_task (
     id                     BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
@@ -821,6 +821,17 @@ CREATE TABLE IF NOT EXISTS ai_agent_background_task (
     command                VARCHAR(512)   NULL COMMENT '命令/子类型摘要',
     agent_id               VARCHAR(64)    NULL COMMENT '子 Agent id',
     agent_type             VARCHAR(64)    NULL COMMENT 'subagent_type',
+    child_session_id       VARCHAR(128)   NULL COMMENT '子 Agent 子会话 ID',
+    parent_session_id      VARCHAR(128)   NULL COMMENT '直接父会话 ID',
+    parent_request_id      VARCHAR(128)   NULL COMMENT '发起派发的父 run requestId',
+    parent_tool_use_id     VARCHAR(128)   NULL COMMENT '父 Agent/SendMessage 工具调用 ID',
+    parent_agent_id        VARCHAR(64)    NULL COMMENT '直接父 Agent 稳定 ID',
+    owner_agent_id         VARCHAR(64)    NULL COMMENT '创建该后台任务的当前 Agent ID',
+    root_session_id        VARCHAR(128)   NULL COMMENT '整棵子 Agent 树的根会话 ID',
+    delegation_depth       INT            NULL COMMENT '根 Agent=0，子 Agent=1',
+    phase                  VARCHAR(32)    NULL COMMENT 'running|waiting_background',
+    execution_mode         VARCHAR(16)    NULL COMMENT 'inline|pool',
+    closing_turn_count     INT            NOT NULL DEFAULT 0 COMMENT '后台唤醒后的收尾轮次数',
     prompt                 MEDIUMTEXT     NULL COMMENT '派发 prompt',
     output                 MEDIUMTEXT     NULL COMMENT '终态输出摘要',
     error_msg              VARCHAR(1024)  NULL COMMENT '错误信息',
@@ -835,7 +846,11 @@ CREATE TABLE IF NOT EXISTS ai_agent_background_task (
     PRIMARY KEY (id),
     UNIQUE KEY uk_session_bg_task (session_id, task_id, deleted),
     KEY idx_session_bg_session (session_id, deleted, update_time DESC),
-    KEY idx_session_bg_status (session_id, status, deleted)
+    KEY idx_session_bg_status (session_id, status, deleted),
+    KEY idx_bg_tree_root_status_agent (root_session_id, status, agent_id),
+    KEY idx_bg_tree_parent_agent (parent_session_id, agent_id),
+    KEY idx_bg_tree_owner_status (owner_agent_id, status),
+    KEY idx_bg_tree_child_status (child_session_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='后台运行任务（Agent run_in_background / TaskOutput）';
 
 -- 用户中途输入与后台任务通知共用同一套会话级投递队列。

@@ -12,6 +12,17 @@
         <result column="command" property="command"/>
         <result column="agent_id" property="agentId"/>
         <result column="agent_type" property="agentType"/>
+        <result column="child_session_id" property="childSessionId"/>
+        <result column="parent_session_id" property="parentSessionId"/>
+        <result column="parent_request_id" property="parentRequestId"/>
+        <result column="parent_tool_use_id" property="parentToolUseId"/>
+        <result column="parent_agent_id" property="parentAgentId"/>
+        <result column="owner_agent_id" property="ownerAgentId"/>
+        <result column="root_session_id" property="rootSessionId"/>
+        <result column="delegation_depth" property="delegationDepth"/>
+        <result column="phase" property="phase"/>
+        <result column="execution_mode" property="executionMode"/>
+        <result column="closing_turn_count" property="closingTurnCount"/>
         <result column="prompt" property="prompt"/>
         <result column="output" property="output"/>
         <result column="error_msg" property="errorMsg"/>
@@ -42,6 +53,26 @@
         LIMIT 1
     </select>
 
+    <select id="selectActiveByChildSessionId" resultMap="BackgroundTaskMap">
+        SELECT *
+        FROM ai_agent_background_task
+        WHERE child_session_id = #{childSessionId}
+          AND status = 'running'
+          AND deleted = 0
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectRunningByOwnerAgentId" resultMap="BackgroundTaskMap">
+        SELECT *
+        FROM ai_agent_background_task
+        WHERE root_session_id = #{rootSessionId}
+          AND owner_agent_id = #{ownerAgentId}
+          AND status = 'running'
+          AND deleted = 0
+        ORDER BY id ASC
+    </select>
+
     <select id="selectOrphanedRunning" resultMap="BackgroundTaskMap">
         SELECT *
         FROM ai_agent_background_task
@@ -55,12 +86,18 @@
     <insert id="upsert" parameterType="org.wwz.ai.infrastructure.dao.cute.po.BackgroundTaskPO">
         INSERT INTO ai_agent_background_task (
             session_id, task_id, type, status, description, command,
-            agent_id, agent_type, prompt, output, error_msg,
+            agent_id, agent_type, child_session_id,
+            parent_session_id, parent_request_id, parent_tool_use_id, parent_agent_id,
+            owner_agent_id, root_session_id, delegation_depth, phase, execution_mode, closing_turn_count,
+            prompt, output, error_msg,
             total_tool_use_count, total_duration_ms, started_at_ms, ended_at_ms, notified,
             create_time, update_time, deleted
         ) VALUES (
             #{sessionId}, #{taskId}, #{type}, #{status}, #{description}, #{command},
-            #{agentId}, #{agentType}, #{prompt}, #{output}, #{errorMsg},
+            #{agentId}, #{agentType}, #{childSessionId},
+            #{parentSessionId}, #{parentRequestId}, #{parentToolUseId}, #{parentAgentId},
+            #{ownerAgentId}, #{rootSessionId}, #{delegationDepth}, #{phase}, #{executionMode}, #{closingTurnCount},
+            #{prompt}, #{output}, #{errorMsg},
             #{totalToolUseCount}, #{totalDurationMs}, #{startedAtMs}, #{endedAtMs}, IFNULL(#{notified}, 0),
             NOW(), NOW(), 0
         )
@@ -71,6 +108,17 @@
             command = VALUES(command),
             agent_id = VALUES(agent_id),
             agent_type = VALUES(agent_type),
+            child_session_id = VALUES(child_session_id),
+            parent_session_id = VALUES(parent_session_id),
+            parent_request_id = VALUES(parent_request_id),
+            parent_tool_use_id = VALUES(parent_tool_use_id),
+            parent_agent_id = VALUES(parent_agent_id),
+            owner_agent_id = VALUES(owner_agent_id),
+            root_session_id = VALUES(root_session_id),
+            delegation_depth = VALUES(delegation_depth),
+            phase = VALUES(phase),
+            execution_mode = VALUES(execution_mode),
+            closing_turn_count = VALUES(closing_turn_count),
             prompt = VALUES(prompt),
             output = VALUES(output),
             error_msg = VALUES(error_msg),
