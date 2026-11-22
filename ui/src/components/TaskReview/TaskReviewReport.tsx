@@ -738,6 +738,17 @@ export function TaskReviewReport({ job }: { job: TaskReviewJob }) {
 
   return (
     <div className="space-y-4">
+      {job.scope === "tree" ? (
+        <section className="rounded-[22px] border border-black/[0.055] bg-white/75 px-4 py-3.5">
+          <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--chat-text)]">
+            <GitBranch className="size-4" />
+            已按整棵 Agent 树复盘
+          </div>
+          <p className="mt-1.5 text-[11px] leading-5 text-[var(--chat-text-muted)]">
+            本次 Trace 覆盖主会话与全部子会话；报告中的执行事实和证据引用均来自整棵树。
+          </p>
+        </section>
+      ) : null}
       <section className="overflow-hidden rounded-[32px] border border-black/[0.055] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_24px_70px_rgba(0,0,0,0.045)] backdrop-blur-xl">
         <div className="px-5 pb-5 pt-6 sm:px-8 sm:pb-8 sm:pt-8">
           <div className="flex flex-wrap items-center gap-2.5">

@@ -125,6 +125,9 @@ def _tool_only_trace() -> dict:
 
 
 class _FakeClient:
+    def __init__(self, *, tree: bool = False) -> None:
+        self.tree = tree
+
     def preflight(self, headers, *, session_id, request_ids):
         return {
             "sessionId": session_id,
@@ -144,7 +147,39 @@ class _FakeClient:
             },
         }
 
-    def export_bundle(self, headers, *, session_id, request_ids):
+    def export_bundle(self, headers, *, session_id, request_ids, scope=None):
+        if self.tree:
+            trace = _trace()
+            trace["run"]["sessionId"] = "session-1"
+            return {
+                "schemaVersion": "2.0",
+                "scope": "tree",
+                "rootSessionId": "session-1",
+                "sessions": [
+                    {
+                        "sessionId": "session-1",
+                        "parentSessionId": None,
+                        "rootSessionId": "session-1",
+                        "sessionKind": "conversation",
+                        "title": "主会话",
+                    },
+                    {
+                        "sessionId": "sub-agent",
+                        "parentSessionId": "session-1",
+                        "rootSessionId": "session-1",
+                        "sessionKind": "subagent",
+                        "title": "子会话",
+                    },
+                ],
+                "runs": [
+                    {
+                        "requestId": "req-1",
+                        "sessionId": "session-1",
+                        "trace": trace,
+                    }
+                ],
+                "artifacts": [],
+            }
         return {
             "schemaVersion": "1.0",
             "runs": [
@@ -332,6 +367,78 @@ def test_service_returns_job_and_errors(tmp_path: Path) -> None:
         report = client.get("/task-review/jobs/review-test/report.md")
         assert report.status_code == 200
         assert report.text == "# 复盘报告"
+
+
+def test_job_manager_passes_scope_and_preserves_tree_bundle(tmp_path: Path) -> None:
+    class _ScopeClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__(tree=True)
+            self.create_calls: list[dict] = []
+
+        def preflight(self, headers, *, session_id, request_ids, scope=None):
+            self.create_calls.append({"stage": "preflight", "scope": scope})
+            return super().preflight(headers, session_id=session_id, request_ids=request_ids)
+
+        def export_bundle(self, headers, *, session_id, request_ids, scope=None):
+            self.create_calls.append({"stage": "bundle", "scope": scope})
+            return super().export_bundle(headers, session_id=session_id, request_ids=request_ids)
+
+    client = _ScopeClient()
+    settings = TaskReviewSettings(
+        review_home=tmp_path,
+        judge=SemanticJudgeConfig(),
+    )
+    manager = TaskReviewJobManager(settings, client=client)
+    try:
+        job = manager.create(
+            {},
+            session_id="session-1",
+            request_ids=["req-1"],
+            scope="tree",
+            include_llm_judge=False,
+        )
+        assert [item["scope"] for item in client.create_calls] == ["tree"]
+        assert [item["stage"] for item in client.create_calls] == ["bundle"]
+        assert job["scope"] == "tree"
+        assert job["report"]["subject"]["rootSessionId"] == "session-1"
+        assert job["report"]["subject"]["scope"] == "tree"
+        assert len(job["report"]["subject"]["sessions"]) == 2
+        bundle = json.loads(
+            (tmp_path / job["jobId"] / "trace" / "bundle.json").read_text(encoding="utf-8")
+        )
+        assert bundle["scope"] == "tree"
+        assert len(bundle["sessions"]) == 2
+    finally:
+        manager.close()
+
+
+def test_service_accepts_tree_scope(tmp_path: Path) -> None:
+    class _Manager:
+        def create(self, headers, **kwargs):
+            assert kwargs["scope"] == "tree"
+            return {
+                "jobId": "review-tree",
+                "status": "completed",
+                "scope": "tree",
+                "fast": {"completion": {"conclusion": "unknown"}},
+            }
+
+        def close(self):
+            return None
+
+    app = create_app(manager=_Manager())
+    with TestClient(app) as client:
+        response = client.post(
+            "/task-review/jobs",
+            json={
+                "sessionId": "session-1",
+                "requestIds": ["req-1"],
+                "scope": "tree",
+                "includeLlmJudge": False,
+            },
+        )
+    assert response.status_code == 202
+    assert response.json()["scope"] == "tree"
 
 
 def test_judge_without_config_is_unverified(tmp_path: Path) -> None:

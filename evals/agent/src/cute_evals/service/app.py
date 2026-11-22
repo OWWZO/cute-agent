@@ -19,6 +19,7 @@ class CreateTaskReviewRequest(BaseModel):
 
     session_id: str = Field(alias="sessionId")
     request_ids: list[str] = Field(alias="requestIds")
+    scope: Literal["run", "tree"] = "run"
     mode: Literal["fast", "standard"] = "standard"
     include_llm_judge: bool = Field(default=True, alias="includeLlmJudge")
     criteria: str | None = None
@@ -64,6 +65,7 @@ def create_app(manager: TaskReviewJobManager | None = None) -> FastAPI:
                 request.headers,
                 session_id=body.session_id,
                 request_ids=body.request_ids,
+                scope=body.scope,
                 mode=body.mode,
                 include_llm_judge=body.include_llm_judge,
                 criteria=body.criteria,

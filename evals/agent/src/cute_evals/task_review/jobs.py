@@ -50,6 +50,7 @@ class TaskReviewJobManager:
         *,
         session_id: str,
         request_ids: list[str],
+        scope: str = "run",
         mode: str = "standard",
         include_llm_judge: bool = True,
         criteria: str | None = None,
@@ -66,18 +67,25 @@ class TaskReviewJobManager:
         ordered_ids = list(dict.fromkeys(item.strip() for item in request_ids if item.strip()))
         if not ordered_ids:
             raise ValueError("requestIds 不能为空")
-        preflight = self.client.preflight(
-            headers,
-            session_id=session_id,
-            request_ids=ordered_ids,
+        if scope not in {"run", "tree"}:
+            raise ValueError("scope 只支持 run 或 tree")
+        preflight = (
+            {"sessionId": session_id, "requestIds": ordered_ids, "canReview": True, "blockers": [], "title": None, "model": None}
+            if scope == "tree"
+            else self.client.preflight(
+                headers,
+                session_id=session_id,
+                request_ids=ordered_ids,
+            )
         )
-        if not preflight.get("canReview"):
+        if scope == "run" and not preflight.get("canReview"):
             blockers = preflight.get("blockers") or ["Run 尚未结束"]
             raise ValueError("; ".join(str(item) for item in blockers))
         bundle = self.client.export_bundle(
             headers,
             session_id=session_id,
             request_ids=ordered_ids,
+            scope=scope,
         )
         evidence_index = build_evidence_index(bundle)
         fast = build_fast_report(bundle, criteria=criteria)
@@ -99,6 +107,7 @@ class TaskReviewJobManager:
             {
                 "sessionId": session_id,
                 "requestIds": ordered_ids,
+                "scope": scope,
                 "mode": mode,
                 "includeLlmJudge": include_llm_judge,
                 "criteria": criteria,
@@ -129,6 +138,7 @@ class TaskReviewJobManager:
             "includeLlmJudge": include_llm_judge,
             "sessionId": session_id,
             "requestIds": ordered_ids,
+            "scope": scope,
             "title": preflight.get("title"),
             "model": preflight.get("model"),
             "createdAt": _now(),

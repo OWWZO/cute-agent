@@ -28,6 +28,7 @@ class TaskReviewSettings:
     )
     preflight_path: str = "/api/agent/task-review/preflight"
     trace_path: str = "/api/agent/task-review/traces"
+    tree_trace_path: str = "/api/agent/task-review/tree-traces"
     model_config_path: str = "/api/agent/task-review/model-config"
     java_timeout_seconds: int = 15
     max_request_ids: int = 20
@@ -108,6 +109,8 @@ class TaskReviewSettings:
             self.preflight_path = str(java["preflightPath"])
         if java.get("tracePath"):
             self.trace_path = str(java["tracePath"])
+        if java.get("treeTracePath"):
+            self.tree_trace_path = str(java["treeTracePath"])
         if java.get("modelConfigPath"):
             self.model_config_path = str(java["modelConfigPath"])
         if java.get("timeoutSeconds") is not None:

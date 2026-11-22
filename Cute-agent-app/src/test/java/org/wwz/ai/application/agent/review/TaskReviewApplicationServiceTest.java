@@ -11,6 +11,7 @@ import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
+import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
 import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
 
@@ -87,21 +88,71 @@ public class TaskReviewApplicationServiceTest {
         Assert.assertEquals("test-key", config.get("apiKey"));
     }
 
+    @Test
+    public void exportTreeBundleIncludesAllSessionsInTheTree() {
+        Fixture fixture = new Fixture(ExecutionLedgerConstants.STATUS_SUCCESS);
+
+        JSONObject bundle = fixture.service.exportTreeBundle("user-1", "session-1");
+
+        Assert.assertEquals("tree", bundle.getString("scope"));
+        Assert.assertEquals("session-1", bundle.getString("rootSessionId"));
+        Assert.assertEquals(3, bundle.getJSONArray("sessions").size());
+        Assert.assertEquals(3, bundle.getJSONArray("runs").size());
+        Assert.assertEquals(
+                "session-1",
+                bundle.getJSONArray("runs").getJSONObject(0).getString("sessionId")
+        );
+        Assert.assertEquals(
+                "sub-agent",
+                bundle.getJSONArray("runs").getJSONObject(1).getString("sessionId")
+        );
+        Assert.assertEquals(
+                "sub-sub-agent",
+                bundle.getJSONArray("runs").getJSONObject(2).getString("sessionId")
+        );
+    }
+
+    @Test
+    public void exportTreeBundleRejectsSessionTreeWithNoTerminalRun() {
+        Fixture fixture = new Fixture(ExecutionLedgerConstants.STATUS_RUNNING);
+
+        try {
+            fixture.service.exportTreeBundle("user-1", "session-1");
+            Assert.fail("应当拒绝未结束的 Run");
+        } catch (IllegalArgumentException expected) {
+            Assert.assertTrue(expected.getMessage().contains("req-1"));
+        }
+    }
+
+    @Test
+    public void exportTreeBundleRejectsOversizedSessionTree() {
+        Fixture fixture = new Fixture(
+                ExecutionLedgerConstants.STATUS_SUCCESS,
+                TaskReviewApplicationService.MAX_SESSION_TREE_SIZE + 1
+        );
+
+        try {
+            fixture.service.exportTreeBundle("user-1", "session-1");
+            Assert.fail("应当拒绝超过节点上限的会话树");
+        } catch (IllegalArgumentException expected) {
+            Assert.assertTrue(expected.getMessage().contains("会话树"));
+        }
+    }
+
     private static final class Fixture {
         private final TaskReviewApplicationService service;
 
         private Fixture(int status) {
+            this(status, 3);
+        }
+
+        private Fixture(int status, int sessionCount) {
             ConversationSessionAuthorizationService authorization =
                     Mockito.mock(ConversationSessionAuthorizationService.class);
             ExecutionLedgerQueryService ledger =
                     Mockito.mock(ExecutionLedgerQueryService.class);
             LlmModelCatalog llmModelCatalog =
                     Mockito.mock(LlmModelCatalog.class);
-            DialogueSessionView session = DialogueSessionView.builder()
-                    .sessionId("session-1")
-                    .title("测试会话")
-                    .model("test-model")
-                    .build();
             DialogueRunView run = DialogueRunView.builder()
                     .id(1L)
                     .requestId("req-1")
@@ -133,9 +184,58 @@ public class TaskReviewApplicationServiceTest {
                                     .build()
                     ))
                     .build();
+            List<DialogueSessionView> sessions = new java.util.ArrayList<>();
+            for (int index = 0; index < sessionCount; index++) {
+                String sessionId = switch (index) {
+                    case 0 -> "session-1";
+                    case 1 -> "sub-agent";
+                    default -> "sub-sub-agent";
+                };
+                String parentSessionId = switch (index) {
+                    case 0 -> null;
+                    case 1 -> "session-1";
+                    default -> "sub-agent";
+                };
+                sessions.add(DialogueSessionView.builder()
+                        .sessionId(sessionId)
+                        .parentSessionId(parentSessionId)
+                        .rootSessionId("session-1")
+                        .sessionKind(index == 0 ? SessionKind.CONVERSATION.code() : SessionKind.SUBAGENT.code())
+                        .title("测试会话 " + index)
+                        .model("test-model")
+                        .build());
+            }
+            DialogueSessionView session = sessions.get(0);
             Mockito.when(ledger.querySession("user-1", "session-1")).thenReturn(session);
+            Mockito.when(ledger.querySessionTree(
+                    Mockito.eq("user-1"),
+                    Mockito.eq("session-1"),
+                    Mockito.anyInt()
+            )).thenReturn(sessions);
             Mockito.when(ledger.queryRunSummary("user-1", "req-1")).thenReturn(run);
             Mockito.when(ledger.queryRunDetail("req-1")).thenReturn(detail);
+            for (DialogueSessionView treeSession : sessions) {
+                String requestId = "req-" + treeSession.getSessionId();
+                DialogueRunView treeRun = DialogueRunView.builder()
+                        .id(1L)
+                        .requestId(requestId)
+                        .sessionId(treeSession.getSessionId())
+                        .userId("user-1")
+                        .status(status)
+                        .entryAgent("react")
+                        .build();
+                ExecutionRunDetail treeDetail = ExecutionRunDetail.builder()
+                        .run(treeRun)
+                        .conversation(List.of())
+                        .build();
+                Mockito.when(ledger.queryRunSummary("user-1", requestId)).thenReturn(treeRun);
+                Mockito.when(ledger.queryRunDetail(requestId)).thenReturn(treeDetail);
+                Mockito.when(ledger.querySessionRuns(
+                        treeSession.getSessionId(),
+                        0,
+                        TaskReviewApplicationService.MAX_REQUEST_IDS + 1
+                )).thenReturn(List.of(treeRun));
+            }
             Mockito.when(llmModelCatalog.resolve("test-model")).thenReturn(
                     Optional.of(LLMSettings.builder()
                             .model("group/deepseek")

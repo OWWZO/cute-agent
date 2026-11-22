@@ -111,6 +111,8 @@ def _fact_narrative(
     headline = str(completion.get("summary") or "任务执行完成，等待结合轨迹阅读。")
     if top_layer[1] > 0:
         headline += f" 主要失败责任层是 {top_layer[0]}。"
+    if str(fast.get("subject", {}).get("scope") or "") == "tree":
+        headline = "整棵 Agent 树复盘：" + headline
 
     execution_narrative = []
     for run in runs:
@@ -216,7 +218,11 @@ def _fact_narrative(
             "verified": [
                 "执行状态、Token、耗时、工具调用、失败调用和产物数量来自 Trace。",
                 "失败责任层来自确定性规则，未知证据保留为 UNKNOWN 或 TRACE_GAP。",
-            ],
+            ] + (
+                ["会话树结构与父子关系来自 Execution Ledger 会话身份缓存。"]
+                if str(fast.get("subject", {}).get("scope") or "") == "tree"
+                else []
+            ),
             "unverified": _strings(fast.get("limitations")),
         },
         "limitations": _strings(fast.get("limitations")),

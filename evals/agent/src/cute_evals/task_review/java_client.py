@@ -54,12 +54,20 @@ class JavaTaskReviewClient:
         *,
         session_id: str,
         request_ids: list[str],
+        scope: str = "run",
     ) -> dict[str, Any]:
-        payload = self._post(
-            self.settings.trace_path,
-            headers,
-            {"sessionId": session_id, "requestIds": request_ids},
-        )
+        if scope == "tree":
+            payload = self._post(
+                self.settings.tree_trace_path,
+                headers,
+                {"sessionId": session_id},
+            )
+        else:
+            payload = self._post(
+                self.settings.trace_path,
+                headers,
+                {"sessionId": session_id, "requestIds": request_ids},
+            )
         if not isinstance(payload, dict) or not isinstance(payload.get("runs"), list):
             raise JavaTaskReviewError(
                 "Java Trace 导出返回结构无效",
@@ -122,6 +130,12 @@ class JavaTaskReviewClient:
                 code="JAVA_EXPORT_FAILED",
             ) from exc
         code = str(body.get("code") if isinstance(body, dict) else "")
+        if "tree" in path and code in {"0002", "0003"}:
+            raise JavaTaskReviewError(
+                str(body.get("info") or "Java 导出失败"),
+                status_code=404 if code == "0002" else 403,
+                code="TREE_NOT_FOUND" if code == "0002" else "RUN_OWNERSHIP_DENIED",
+            )
         if response.status_code >= 400:
             raise JavaTaskReviewError(
                 str(body.get("info") or body.get("message") or "Java 导出失败"),

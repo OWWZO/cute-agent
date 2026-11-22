@@ -114,6 +114,13 @@ function job(): TaskReviewJob {
 }
 
 describe("TaskReviewReport timeline", () => {
+  it("marks a tree-scoped review explicitly", () => {
+    const value = { ...job(), scope: "tree" as const };
+    const html = renderToStaticMarkup(createElement(TaskReviewReport, { job: value }));
+
+    expect(html).toContain("已按整棵 Agent 树复盘");
+  });
+
   it("hides empty assistant steps and does not duplicate the final reply", () => {
     const html = renderToStaticMarkup(createElement(TaskReviewReport, { job: job() }));
 

@@ -407,6 +407,7 @@ export type TaskReviewJob = {
   schemaVersion: string;
   jobId: string;
   status: string;
+  scope?: "run" | "tree";
   mode: string;
   includeLlmJudge: boolean;
   sessionId: string;
@@ -441,6 +442,7 @@ export async function getTaskReviewPreflight(
 export async function createTaskReviewJob(params: {
   sessionId: string;
   requestIds: string[];
+  scope?: "run" | "tree";
   includeLlmJudge?: boolean;
   criteria?: string | null;
   clientRequestId?: string;
@@ -450,6 +452,7 @@ export async function createTaskReviewJob(params: {
     body: JSON.stringify({
       sessionId: params.sessionId,
       requestIds: params.requestIds,
+      scope: params.scope || "run",
       mode: "standard",
       includeLlmJudge: params.includeLlmJudge ?? true,
       criteria: params.criteria || null,

@@ -1,6 +1,7 @@
 package org.wwz.ai.application.agent.review;
 
 import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.JSONArray;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -10,6 +11,7 @@ import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
 import org.wwz.ai.domain.agent.ledger.model.DialogueSessionView;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionRunDetail;
+import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationView;
 import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
 import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
@@ -30,6 +32,7 @@ public class TaskReviewApplicationService {
 
     static final int MAX_REQUEST_IDS = 20;
     static final int MAX_TRACE_BYTES = 20 * 1024 * 1024;
+    static final int MAX_SESSION_TREE_SIZE = ExecutionLedgerQueryService.MAX_SESSION_TREE_SIZE;
 
     private final ConversationSessionAuthorizationService conversationSessionAuthorizationService;
     private final ExecutionLedgerQueryService executionLedgerQueryService;
@@ -65,6 +68,106 @@ public class TaskReviewApplicationService {
             throw new IllegalArgumentException("Trace Bundle 超过 20MB 限制");
         }
         return bundle;
+    }
+
+    /**
+     * 导出整个 Agent 会话树的 Trace Bundle。
+     *
+     * <p>以任一节点为入口，按 {@code rootSessionId} 一次读取根会话和全部后代，
+     * 并汇总树中每个会话的已结束 Run。</p>
+     */
+    public JSONObject exportTreeBundle(String userId, String sessionId) {
+        if (StringUtils.isBlank(sessionId)) {
+            throw new IllegalArgumentException("sessionId 不能为空");
+        }
+        conversationSessionAuthorizationService.ensureExistingSessionAccessible(userId, sessionId);
+        List<DialogueSessionView> sessions = executionLedgerQueryService.querySessionTree(
+                userId,
+                sessionId,
+                MAX_SESSION_TREE_SIZE + 1
+        );
+        if (sessions == null || sessions.isEmpty()) {
+            throw new IllegalArgumentException("会话不存在或无权访问");
+        }
+        if (sessions.size() > MAX_SESSION_TREE_SIZE) {
+            throw new IllegalArgumentException("会话树超过 " + MAX_SESSION_TREE_SIZE + " 个节点，无法复盘");
+        }
+
+        JSONObject bundle = new JSONObject();
+        bundle.put("schemaVersion", "2.0");
+        bundle.put("scope", "tree");
+        bundle.put("rootSessionId", sessions.get(0).getRootSessionId());
+        bundle.put("exportedAt", java.time.LocalDateTime.now().toString());
+        bundle.put("conversationSource", "execution-ledger");
+
+        JSONArray sessionArray = new JSONArray();
+        JSONArray runArray = new JSONArray();
+        JSONArray artifactArray = new JSONArray();
+        List<ExecutionRunDetail> details = new ArrayList<>();
+        int runCount = 0;
+        for (DialogueSessionView treeSession : sessions) {
+            sessionArray.add(toSessionSummary(treeSession));
+            List<DialogueRunView> runSummaries = executionLedgerQueryService.querySessionRuns(
+                    treeSession.getSessionId(),
+                    0,
+                    MAX_REQUEST_IDS + 1
+            );
+            if (runSummaries == null || runSummaries.isEmpty()) {
+                continue;
+            }
+            runCount += runSummaries.size();
+            if (runCount > MAX_REQUEST_IDS) {
+                throw new IllegalArgumentException("会话树超过 " + MAX_REQUEST_IDS + " 个 Run，无法复盘");
+            }
+            for (DialogueRunView runSummary : runSummaries) {
+                if (!isTerminal(runSummary.getStatus())) {
+                    throw new IllegalArgumentException("Run 尚未结束: " + runSummary.getRequestId());
+                }
+                ExecutionRunDetail detail = executionLedgerQueryService.queryRunDetail(runSummary.getRequestId());
+                if (detail == null) {
+                    throw new IllegalArgumentException("Run 明细不存在: " + runSummary.getRequestId());
+                }
+                details.add(detail);
+                JSONObject trace = TaskReviewTraceSanitizer.sanitize(
+                        TaskReviewTraceExportService.toTrace(detail)
+                );
+                JSONObject run = new JSONObject();
+                run.put("requestId", detail.getRun().getRequestId());
+                run.put("sessionId", detail.getRun().getSessionId());
+                run.put("trace", trace);
+                runArray.add(run);
+                JSONArray traceArtifacts = trace.getJSONArray("artifacts");
+                if (traceArtifacts != null) {
+                    artifactArray.addAll(traceArtifacts);
+                }
+            }
+        }
+        if (details.isEmpty()) {
+            throw new IllegalArgumentException("会话树中没有已结束的执行 Run");
+        }
+        bundle.put("sessions", sessionArray);
+        bundle.put("runs", runArray);
+        bundle.put("artifacts", artifactArray);
+        int bytes = bundle.toJSONString().getBytes(StandardCharsets.UTF_8).length;
+        if (bytes > MAX_TRACE_BYTES) {
+            throw new IllegalArgumentException("Trace Bundle 超过 20MB 限制");
+        }
+        return bundle;
+    }
+
+    private JSONObject toSessionSummary(DialogueSessionView session) {
+        JSONObject item = new JSONObject();
+        item.put("sessionId", session.getSessionId());
+        item.put("parentSessionId", session.getParentSessionId());
+        item.put("rootSessionId", session.getRootSessionId());
+        item.put("sessionKind", session.getSessionKind());
+        item.put("title", session.getTitle());
+        item.put("subAgentType", session.getSubAgentType());
+        item.put(
+                "isSubAgent",
+                SessionKind.SUBAGENT.code().equalsIgnoreCase(session.getSessionKind())
+        );
+        return item;
     }
 
     /**

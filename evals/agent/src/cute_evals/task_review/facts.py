@@ -402,6 +402,32 @@ def _completion(
     }
 
 
+def _tree_findings(sessions: list[dict[str, Any]], runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    session_ids = {
+        str(item.get("sessionId") or "")
+        for item in sessions
+        if isinstance(item, dict) and item.get("sessionId")
+    }
+    run_session_ids = {
+        str(run.get("sessionId") or "")
+        for run in runs
+        if isinstance(run, dict) and run.get("sessionId")
+    }
+    missing = sorted(session_ids - run_session_ids)
+    if not missing:
+        return []
+    return [
+        _finding(
+            "tree_session_without_trace",
+            "warning",
+            20 * len(missing),
+            "会话树中存在未纳入 Trace 的节点",
+            "以下子会话没有已结束的 Run，无法确认其派发结果：" + "、".join(missing),
+            [],
+        )
+    ]
+
+
 def _run_report(
     trace: RunTrace,
     *,
@@ -605,6 +631,21 @@ def build_fast_report(
         for run in runs
         for finding in run["findings"]
     ]
+    if str(bundle.get("scope") or "") == "tree":
+        all_findings.extend(
+            _tree_findings(
+                [
+                    item
+                    for item in bundle.get("sessions") or []
+                    if isinstance(item, dict)
+                ],
+                [
+                    item
+                    for item in bundle.get("runs") or []
+                    if isinstance(item, dict)
+                ],
+            )
+        )
     completion = _completion(statuses, all_findings, criteria)
     artifacts = [item for run in runs for item in run["artifacts"]]
     limitations = list(
@@ -617,6 +658,13 @@ def build_fast_report(
     return {
         "schemaVersion": "1.0",
         "subject": {
+            "scope": str((bundle.get("scope") or "run")),
+            "rootSessionId": bundle.get("rootSessionId"),
+            "sessions": [
+                item
+                for item in bundle.get("sessions") or []
+                if isinstance(item, dict)
+            ],
             "sessionId": runs[0].get("sessionId"),
             "requestIds": [run["requestId"] for run in runs],
             "runCount": len(runs),

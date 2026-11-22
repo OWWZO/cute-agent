@@ -69,6 +69,28 @@ public class AgentTaskReviewController {
         }
     }
 
+    @PostMapping("/tree-traces")
+    public Response<JSONObject> treeTraces(@RequestBody TaskReviewRequest request) {
+        try {
+            validateSession(request);
+            JSONObject data = taskReviewApplicationService.exportTreeBundle(
+                    UserRequestContext.requireUserId(),
+                    request.getSessionId()
+            );
+            return Response.<JSONObject>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(data)
+                    .build();
+        } catch (SessionOwnershipDeniedException e) {
+            return response(ResponseCode.FORBIDDEN.getCode(), e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return response(ResponseCode.ILLEGAL_PARAMETER.getCode(), e.getMessage());
+        } catch (Exception e) {
+            return response(ResponseCode.UN_ERROR.getCode(), e.getMessage());
+        }
+    }
+
     @PostMapping("/model-config")
     public Response<Map<String, Object>> modelConfig(@RequestBody TaskReviewRequest request) {
         try {

@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Clock3,
   Coins,
+  GitBranch,
   LoaderCircle,
   Play,
   Sparkles,
@@ -202,6 +203,7 @@ export default function TaskReviewPage() {
   const [preflightLoading, setPreflightLoading] = useState(false);
   const [criteria, setCriteria] = useState("");
   const [starting, setStarting] = useState(false);
+  const [reviewScope, setReviewScope] = useState<"run" | "tree">("run");
   const [error, setError] = useState("");
   const previousSessionIdRef = useRef("");
 
@@ -364,6 +366,7 @@ export default function TaskReviewPage() {
       const job = await createTaskReviewJob({
         sessionId,
         requestIds: preflightRequestIds,
+        scope: reviewScope,
         criteria: criteria.trim() || null,
       });
       navigate(`${ROUTES.TASK_REVIEW}/${encodeURIComponent(job.jobId)}`, {
@@ -623,7 +626,43 @@ export default function TaskReviewPage() {
                         {preflight.blockers.join("；")}
                       </div>
                     ) : null}
-                    <label className="mt-5 block space-y-2 text-[13px]">
+                    <div className="mt-5 space-y-2 text-[13px]">
+                      <span className="font-medium">复盘范围</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setReviewScope("run")}
+                          className={`rounded-[14px] border px-3 py-2.5 text-left text-[12px] transition ${
+                            reviewScope === "run"
+                              ? "border-[var(--chat-accent)]/30 bg-[var(--chat-accent-soft)] text-[var(--chat-text)]"
+                              : "border-black/[0.055] bg-white/75 text-[var(--chat-text-soft)]"
+                          }`}
+                        >
+                          复盘这一轮
+                          <span className="mt-0.5 block text-[10px] opacity-70">
+                            仅当前会话的请求
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReviewScope("tree")}
+                          className={`inline-flex items-start gap-1.5 rounded-[14px] border px-3 py-2.5 text-left text-[12px] transition ${
+                            reviewScope === "tree"
+                              ? "border-[var(--chat-accent)]/30 bg-[var(--chat-accent-soft)] text-[var(--chat-text)]"
+                              : "border-black/[0.055] bg-white/75 text-[var(--chat-text-soft)]"
+                          }`}
+                        >
+                          <GitBranch className="mt-0.5 size-3.5 shrink-0" />
+                          <span>
+                            复盘整棵 Agent 树
+                            <span className="mt-0.5 block text-[10px] opacity-70">
+                              主会话 + 全部子会话
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                    <label className="mt-4 block space-y-2 text-[13px]">
                       <span className="font-medium">验收标准（可选）</span>
                       <Textarea
                         value={criteria}

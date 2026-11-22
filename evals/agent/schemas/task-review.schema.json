@@ -23,6 +23,23 @@
       "type": "object",
       "required": ["requestIds", "runCount"],
       "properties": {
+        "scope": {"type": "string", "enum": ["run", "tree"]},
+        "rootSessionId": {"type": ["string", "null"]},
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sessionId": {"type": "string"},
+              "parentSessionId": {"type": ["string", "null"]},
+              "rootSessionId": {"type": ["string", "null"]},
+              "sessionKind": {"type": ["string", "null"]},
+              "title": {"type": ["string", "null"]},
+              "subAgentType": {"type": ["string", "null"]},
+              "isSubAgent": {"type": "boolean"}
+            }
+          }
+        },
         "sessionId": {"type": ["string", "null"]},
         "requestIds": {
           "type": "array",

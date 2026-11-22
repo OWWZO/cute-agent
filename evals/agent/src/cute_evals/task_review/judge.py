@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from typing import Any
 
@@ -129,6 +130,26 @@ def _combined_trace(bundle: dict[str, Any], job_id: str) -> tuple[RunTrace, list
 
 
 def _queries(bundle: dict[str, Any]) -> list[str]:
+    def query_text(run: dict[str, Any]) -> str:
+        return str(
+            (run.get("trace") or {}).get("run", {}).get("queryText") or ""
+        ).strip()
+
+    if str(bundle.get("scope") or "") == "tree":
+        tree_query = [
+            "请从整棵 Agent 树的全局视角复盘任务派发是否合理。",
+            "会话树：" + json.dumps(
+                bundle.get("sessions") or [],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        ]
+        tree_query.extend(
+            f"会话 {run.get('sessionId') or ''} / Run {run.get('requestId') or ''}：{query_text(run)}"
+            for run in bundle.get("runs") or []
+            if isinstance(run, dict) and query_text(run)
+        )
+        return tree_query
     return [
         str((run.get("trace") or {}).get("run", {}).get("queryText") or "")
         for run in bundle.get("runs") or []
