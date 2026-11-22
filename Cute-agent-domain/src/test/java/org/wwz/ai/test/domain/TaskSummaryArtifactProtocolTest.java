@@ -146,4 +146,25 @@ public class TaskSummaryArtifactProtocolTest {
         Assert.assertEquals("文件清单分隔符写作 $$$", result.getTaskSummary());
         Assert.assertTrue(result.getArtifactKeys() == null || result.getArtifactKeys().isEmpty());
     }
+
+    @Test
+    public void shouldAcceptDoubleDollarDelimiterAtLineStart() {
+        TaskSummaryResult result = TaskSummaryArtifactProtocol.parse("""
+                PDF 已读取。
+                $$ sources/11.19.26-ECRA-Information-Disclosure-of-BIS-License-Decisions.pdf
+                """);
+
+        Assert.assertEquals(
+                List.of("sources/11.19.26-ECRA-Information-Disclosure-of-BIS-License-Decisions.pdf"),
+                result.getArtifactKeys()
+        );
+    }
+
+    @Test
+    public void shouldNotTreatInlineDoubleDollarMathAsArtifactSection() {
+        TaskSummaryResult result = TaskSummaryArtifactProtocol.parse("公式 $$x^2$$ 不代表文件清单");
+
+        Assert.assertTrue(result.getArtifactKeys() == null || result.getArtifactKeys().isEmpty());
+    }
+
 }

@@ -12,7 +12,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 终答正文原样透传；{@code $$$} 点名只抽 keys，不在后端对工作区文件。
+ * 终答正文原样透传；{@code $$$}（兼容行首 {@code $$}）点名只抽 keys，不在后端对工作区文件。
  * 展示卡片由前端用会话文件表按相对路径/文件名映射。
  */
 public final class TaskSummaryArtifactProtocol {
@@ -20,9 +20,11 @@ public final class TaskSummaryArtifactProtocol {
     private static final Pattern ARTIFACT_SPLIT_PATTERN =
             Pattern.compile(ToolArtifactFormatter.ARTIFACT_KEY_SEPARATOR_REGEX);
     private static final Pattern DELIMITER_RUN_PATTERN =
-            Pattern.compile("\\$\\$\\$(?:[ \\t]*\\R[ \\t]*\\$\\$\\$)*");
+            Pattern.compile("\\$\\$\\$?(?:[ \\t]*\\R[ \\t]*\\$\\$\\$?)*");
     private static final Pattern TRAILING_DELIMITER_PATTERN =
-            Pattern.compile("(?:\\R[ \\t]*\\$\\$\\$[ \\t]*)+\\s*$");
+            Pattern.compile("(?:\\R[ \\t]*\\$\\$\\$?[ \\t]*)+\\s*$");
+    private static final Pattern DELIMITER_TOKEN_PATTERN =
+            Pattern.compile("\\$\\$\\$?");
     private static final Pattern MARKDOWN_LINK_PATTERN =
             Pattern.compile("^\\[[^\\]]*]\\(([^)]+)\\)$");
     private static final Pattern INVALID_PATH_CHAR_PATTERN =
@@ -85,7 +87,7 @@ public final class TaskSummaryArtifactProtocol {
         return payload;
     }
 
-    /** 按分隔符拆分 {@code $$$} 点名并去空；实时与历史回放共用同一份解析规则。 */
+    /** 按分隔符拆分 {@code $$$}（兼容行首 {@code $$}）点名并去空；实时与历史回放共用同一份解析规则。 */
     public static List<String> splitArtifactKeys(String artifactKeys) {
         if (StringUtils.isBlank(artifactKeys)) {
             return List.of();
@@ -117,6 +119,9 @@ public final class TaskSummaryArtifactProtocol {
 
         for (int index = candidates.size() - 1; index >= 0; index--) {
             int[] candidate = candidates.get(index);
+            if (!isDoubleDollarDelimiterAllowed(raw, candidate[0])) {
+                continue;
+            }
             String suffix = raw.substring(candidate[1]).trim();
             suffix = TRAILING_DELIMITER_PATTERN.matcher(suffix).replaceFirst("").trim();
             if (suffix.isEmpty()) {
@@ -138,6 +143,17 @@ public final class TaskSummaryArtifactProtocol {
         return List.of();
     }
 
+    /**
+     * 兼容模型把 $$$ 误写成 $$；只接受行首的双美元标记，避免把正文公式误判为文件段。
+     */
+    private static boolean isDoubleDollarDelimiterAllowed(String raw, int start) {
+        if (start + 2 < raw.length() && raw.charAt(start + 2) == '$') {
+            return true;
+        }
+        int lineStart = raw.lastIndexOf('\n', start - 1) + 1;
+        return raw.substring(lineStart, start).isBlank();
+    }
+
     private static boolean isDelimiterLine(String raw, int start, int end) {
         int lineStart = raw.lastIndexOf('\n', start - 1) + 1;
         int lineEnd = raw.indexOf('\n', end);
@@ -150,7 +166,7 @@ public final class TaskSummaryArtifactProtocol {
         if (text.isEmpty()) {
             return "";
         }
-        text = text.replace(ToolArtifactFormatter.ARTIFACT_DELIMITER, " ").trim();
+        text = DELIMITER_TOKEN_PATTERN.matcher(text).replaceAll(" ").trim();
         text = text.replaceFirst("^[-*+]\\s+", "")
                 .replaceFirst("^\\d+[.)]\\s+", "")
                 .trim();
@@ -170,7 +186,7 @@ public final class TaskSummaryArtifactProtocol {
     private static boolean isPlausibleArtifactKey(String key) {
         if (StringUtils.isBlank(key)
                 || key.length() > 512
-                || key.contains(ToolArtifactFormatter.ARTIFACT_DELIMITER)
+                || key.contains("$$")
                 || key.matches(".*[/\\\\]$")
                 || INVALID_PATH_CHAR_PATTERN.matcher(key).find()) {
             return false;
