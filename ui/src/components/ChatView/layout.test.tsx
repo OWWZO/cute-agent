@@ -172,7 +172,7 @@ describe("ChatView layout", () => {
       sessionId: "session-data-1",
       title: "数据分析会话",
       productType: "dataAgent",
-      deepThink: false,
+      collaborationMode: "normal",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       chatTitle: "",
@@ -185,7 +185,7 @@ describe("ChatView layout", () => {
         inputInfo={{
           message: "帮我分析最近7天销量",
           outputStyle: "dataAgent",
-          deepThink: false,
+          collaborationMode: "normal",
         }}
         product={product}
         conversation={conversation}
@@ -222,7 +222,7 @@ describe("ChatView layout", () => {
       sessionId: "session-2",
       title: "深度思考会话",
       productType: "task",
-      deepThink: false,
+      collaborationMode: "normal",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       chatTitle: "",
@@ -246,7 +246,7 @@ describe("ChatView layout", () => {
       <ChatView
         inputInfo={{
           message: "",
-          deepThink: false
+          collaborationMode: "normal"
         }}
         product={product}
         conversation={conversation}
@@ -257,12 +257,12 @@ describe("ChatView layout", () => {
     const lastCall = generalInputMock.mock.calls[generalInputMock.mock.calls.length - 1]?.[0];
     expect(lastCall).toMatchObject({
       product: expect.objectContaining({ type: "task" }),
-      deepThink: false,
+      collaborationMode: "normal",
       showBtn: false,
     });
   });
 
-  it("deep research conversation keeps deepThink flag in chat view input", () => {
+  it("deep research conversation keeps isClusterMode flag in chat view input", () => {
     generalInputMock.mockClear();
 
     const product: CHAT.Product = {
@@ -278,7 +278,7 @@ describe("ChatView layout", () => {
       sessionId: "session-3",
       title: "深度研究会话",
       productType: "task",
-      deepThink: true,
+      collaborationMode: "cluster",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       chatTitle: "",
@@ -302,7 +302,7 @@ describe("ChatView layout", () => {
       <ChatView
         inputInfo={{
           message: "",
-          deepThink: false
+          collaborationMode: "normal"
         }}
         product={product}
         conversation={conversation}
@@ -313,7 +313,7 @@ describe("ChatView layout", () => {
     const lastCall = generalInputMock.mock.calls[generalInputMock.mock.calls.length - 1]?.[0];
     expect(lastCall).toMatchObject({
       product: expect.objectContaining({ type: "task" }),
-      deepThink: true,
+      collaborationMode: "cluster",
       showBtn: false,
     });
   });
@@ -334,7 +334,7 @@ describe("ChatView layout", () => {
       sessionId: "session-1",
       title: "测试会话",
       productType: "task",
-      deepThink: false,
+      collaborationMode: "normal",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       chatTitle: "",
@@ -358,7 +358,7 @@ describe("ChatView layout", () => {
       <ChatView
         inputInfo={{
           message: "",
-          deepThink: false
+          collaborationMode: "normal"
         }}
         product={product}
         conversation={conversation}
@@ -373,7 +373,45 @@ describe("ChatView layout", () => {
       'class="shrink-0 bg-[var(--color-bg)] motion-reduce:translate-none pb-5 pt-4"'
     );
     expect(html).toContain('data-general-input="true"');
+    expect(html).toContain('aria-label="展开工作区"');
     expect(html).not.toContain("sticky bottom-0");
+  });
+
+  it("new conversation hides the session files entry until content exists", () => {
+    const product: CHAT.Product = {
+      type: "task",
+      name: "通用任务",
+      placeholder: "请输入问题",
+      img: "icon-chat",
+      color: "text-brand",
+    };
+    const conversation = {
+      id: "conversation-empty",
+      sessionId: "session-empty",
+      title: "新对话",
+      productType: "task",
+      collaborationMode: "normal",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      chatTitle: "",
+      chatList: [],
+      dataChatList: [],
+    } as unknown as CHAT.ConversationHistory;
+
+    const html = renderToStaticMarkup(
+      <ChatView
+        inputInfo={{
+          message: "",
+          collaborationMode: "normal",
+        }}
+        product={product}
+        conversation={conversation}
+        onConversationChange={vi.fn()}
+      />
+    );
+
+    expect(html).not.toContain('aria-label="查看当前会话的文件"');
+    expect(html).toContain('aria-label="展开工作区"');
   });
 
   it("collapsed right workspace returns to centered single-chat shell", () => {
@@ -394,7 +432,7 @@ describe("ChatView layout", () => {
         sessionId: "session-collapsed-workspace",
         title: "折叠工作区会话",
         productType: "task",
-        deepThink: false,
+        collaborationMode: "normal",
         createdAt: Date.now(),
         updatedAt: Date.now(),
         chatTitle: "",
@@ -406,7 +444,7 @@ describe("ChatView layout", () => {
         <ChatView
           inputInfo={{
             message: "",
-            deepThink: false,
+            collaborationMode: "normal",
           }}
           product={product}
           conversation={conversation}
@@ -433,7 +471,7 @@ describe("ChatView layout", () => {
       sessionId: "session-desktop-control",
       title: "桌面控制会话",
       productType: "task",
-      deepThink: false,
+      collaborationMode: "normal",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       chatTitle: "",
@@ -469,7 +507,7 @@ describe("ChatView layout", () => {
       <ChatView
         inputInfo={{
           message: "",
-          deepThink: false,
+          collaborationMode: "normal",
         }}
         conversation={conversation}
         onConversationChange={vi.fn()}
@@ -504,7 +542,7 @@ describe("ChatView layout", () => {
       sessionId: "session-readonly-1",
       title: "只读会话",
       productType: "task",
-      deepThink: false,
+      collaborationMode: "normal",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       chatTitle: "",
@@ -528,7 +566,7 @@ describe("ChatView layout", () => {
       <ChatView
         inputInfo={{
           message: "",
-          deepThink: false
+          collaborationMode: "normal"
         }}
         product={product}
         conversation={conversation}

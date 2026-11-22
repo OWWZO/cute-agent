@@ -27,6 +27,7 @@ function renderSidebarWithSession(
         recentSessionsLoading={false}
         recentSessionsLoadingMore={false}
         recentSessionsHasMore={false}
+        canOpenTaskFiles
         user={null}
         onNewChat={() => {}}
         onSelectSession={() => {}}
@@ -49,6 +50,7 @@ describe("ConversationSidebar", () => {
           recentSessionsLoading={false}
           recentSessionsLoadingMore={false}
           recentSessionsHasMore={false}
+          canOpenTaskFiles
           user={null}
           onNewChat={() => {}}
           onSelectSession={() => {}}
@@ -75,6 +77,7 @@ describe("ConversationSidebar", () => {
           recentSessionsLoading={false}
           recentSessionsLoadingMore={false}
           recentSessionsHasMore={false}
+          canOpenTaskFiles
           user={null}
           sidebarPanel="task-files"
           taskList={[]}
@@ -98,6 +101,30 @@ describe("ConversationSidebar", () => {
     const html = renderSidebarWithSession({ subSessionCount: 0 });
 
     expect(html).not.toContain("展开子会话");
+  });
+
+  it("新建会话没有内容时隐藏文件入口", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ConversationSidebar
+          activeView="chat"
+          recentSessions={[]}
+          recentSessionsLoading={false}
+          recentSessionsLoadingMore={false}
+          recentSessionsHasMore={false}
+          canOpenTaskFiles={false}
+          user={null}
+          onNewChat={() => {}}
+          onSelectSession={() => {}}
+          onLoadMoreRecentSessions={() => {}}
+          onChangeView={() => {}}
+          onManageFeaturedConversation={() => {}}
+          onLogout={() => {}}
+        />
+      </MemoryRouter>
+    );
+
+    expect(html).not.toContain("查看当前会话的文件");
   });
 
   it("有子会话时保留展开入口", () => {

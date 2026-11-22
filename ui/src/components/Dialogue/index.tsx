@@ -33,7 +33,7 @@ function stepVersionCursor(current: number, delta: -1 | 1, maxIndex: number) {
 type Props = {
   chat: CHAT.ChatItem;
   streamingThought?: string;
-  deepThink: boolean;
+  isClusterMode: boolean;
   /** 会话级产物；终答 Markdown 相对引用优先用此表，避免只认本轮 */
   sessionArtifactFiles?: CHAT.TFile[];
   changeTask?: CHAT.OpenTaskHandler;
@@ -76,7 +76,7 @@ const DialogueComponent: FC<Props> = (props) => {
   const {
     chat,
     streamingThought,
-    deepThink,
+    isClusterMode,
     sessionArtifactFiles,
     changeTask,
     changeFile,
@@ -94,7 +94,10 @@ const DialogueComponent: FC<Props> = (props) => {
     reviewSessionId,
     reviewRequestIds,
   } = props;
-  const isPlanSolveMessage = isPlanSolveConversation(chat.agentType, deepThink);
+  const isPlanSolveMessage = isPlanSolveConversation(
+    chat.agentType,
+    isClusterMode ? "cluster" : "normal"
+  );
   const isReactType = !isPlanSolveMessage;
   // 用户消息正文里可能拼着上下文尾块（# Code comments: / # Web page elements: / # userselect:）。
   // 正文只渲染剥离后的部分，尾块在这里还原成卡片，避免原始 markdown 糊在气泡里。
@@ -112,8 +115,8 @@ const DialogueComponent: FC<Props> = (props) => {
     }
     // 工作区使用 taskList，主对话使用 chat.tasks；流式快照短暂不同步时，
     // 从事实层重建一次时间线，避免主 Agent 的思考和执行步骤消失。
-    return buildConversationTaskData(chat, deepThink).currentChat;
-  }, [chat, deepThink, fallbackFactsSignature]);
+    return buildConversationTaskData(chat, isClusterMode).currentChat;
+  }, [chat, isClusterMode, fallbackFactsSignature]);
   const plannerRounds = useMemo(
     () => buildPlannerRoundsForDisplay(chat, streamingThought),
     [chat, streamingThought]
@@ -411,7 +414,7 @@ const Dialogue = memo(
   DialogueComponent,
   (prev, next) =>
     prev.chat === next.chat &&
-    prev.deepThink === next.deepThink &&
+    prev.isClusterMode === next.isClusterMode &&
     prev.streamingThought === next.streamingThought &&
     prev.sessionArtifactFiles === next.sessionArtifactFiles &&
     prev.changeTask === next.changeTask &&

@@ -105,7 +105,9 @@ export function FeaturedConversationDetailView(
           <ChatView
             inputInfo={{
               message: "",
-              deepThink: conversation?.deepThink ?? false,
+              collaborationMode:
+                conversation?.collaborationMode === "cluster" ? "cluster" : "normal",
+              agentKey: conversation?.mainAgentKey ?? null,
             }}
             product={undefined}
             conversation={conversation!}

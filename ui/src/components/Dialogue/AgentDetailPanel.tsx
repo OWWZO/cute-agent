@@ -652,7 +652,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
                   }
                   onProcessOpenChange={processOpenHandlerFor(anchorId)}
                   chat={turn.chat}
-                  deepThink={false}
+                  isClusterMode={false}
                   sessionArtifactFiles={sessionArtifactFiles}
                   changeTask={handleChangeActiveChat}
                   changeFile={handleChangeFile}

@@ -1,12 +1,13 @@
-/** 总结协议分隔符：`正文$$$ 产物路径`，正文与产物键由它切分。 */
+/** 总结协议分隔符：`正文$$$ 产物路径`，正文与产物键由它切分；兼容行首 `$$`。 */
 export const ARTIFACT_SECTION_DELIMITER = "$$$";
 
 const ARTIFACT_KEY_SPLIT_PATTERN = /[、,\r\n，]+/;
 const INVALID_ARTIFACT_PATH_PATTERN = /[\s*`?#<>|"'，,。；;：:！？!]/;
 const ARTIFACT_BASENAME_PATTERN =
   /^(?:[^/\\]+\.[A-Za-z0-9][A-Za-z0-9._-]{0,15}|[A-Za-z0-9_.-]+)$/;
-const TRAILING_DELIMITER_PATTERN = /(?:\r?\n[ \t]*\$\$\$[ \t]*)+\s*$/;
-const DELIMITER_RUN_PATTERN = /\$\$\$(?:[ \t]*\r?\n[ \t]*\$\$\$)*/g;
+const TRAILING_DELIMITER_PATTERN = /(?:\r?\n[ \t]*\${2,3}[ \t]*)+\s*$/;
+const DELIMITER_RUN_PATTERN = /\${2,3}(?:[ \t]*\r?\n[ \t]*\${2,3})*/g;
+const DELIMITER_TOKEN_PATTERN = /\${2,3}/g;
 
 export type ArtifactSection = {
   body: string;
@@ -19,7 +20,7 @@ export function normalizeArtifactKey(raw: string): string {
     return "";
   }
   // 模型偶尔把分隔符重复输出（`正文$$$\n$$$ file.md`），残留的 $$$ 不是文件键。
-  text = text.replaceAll(ARTIFACT_SECTION_DELIMITER, " ").trim();
+  text = text.replace(DELIMITER_TOKEN_PATTERN, " ").trim();
   text = text.replace(/^[-*+]\s+/, "").replace(/^\d+[.)]\s+/, "").trim();
   text = text.replace(/^[*`]+|[`*]+$/g, "").trim();
   const markdownLink = text.match(/^\[[^\]]*]\(([^)]+)\)$/);
@@ -41,7 +42,7 @@ function isPlausibleArtifactKey(key: string): boolean {
   if (
     !key ||
     key.length > 512 ||
-    key.includes(ARTIFACT_SECTION_DELIMITER) ||
+    key.includes("$$") ||
     /[\\/]$/.test(key) ||
     INVALID_ARTIFACT_PATH_PATTERN.test(key)
   ) {
@@ -66,6 +67,9 @@ export function extractArtifactSection(value: string): ArtifactSection | null {
 
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
     const candidate = candidates[index];
+    if (!isDoubleDollarDelimiterAllowed(value, candidate.start)) {
+      continue;
+    }
     let suffix = value.slice(candidate.end).trim();
     suffix = suffix.replace(TRAILING_DELIMITER_PATTERN, "").trim();
 
@@ -97,6 +101,17 @@ export function extractArtifactSection(value: string): ArtifactSection | null {
     }
   }
   return null;
+}
+
+function isDoubleDollarDelimiterAllowed(
+  value: string,
+  start: number
+) {
+  if (value.slice(start, start + 3) === "$$$") {
+    return true;
+  }
+  const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+  return !value.slice(lineStart, start).trim();
 }
 
 function isDelimiterLine(value: string, start: number, end: number) {

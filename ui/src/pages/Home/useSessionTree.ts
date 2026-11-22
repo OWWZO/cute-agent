@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { conversationHistoryApi } from "@/services/agentConversation";
 import {
@@ -25,13 +25,63 @@ export function toggleExpandedSessionId(previous: ReadonlySet<string>, sessionId
   return { next, expanding };
 }
 
-export function useSessionTree() {
+export function extractSessionTreeDescendants(
+  rows: Awaited<ReturnType<typeof conversationHistoryApi.getSessionTree>>,
+  sessionId: string
+) {
+  // 树接口返回「根 + 全部后代」，根自己已经在侧栏行里画过了，这里只要子节点。
+  // 保留 depth 供缩进使用：将来开放嵌套时不必再改这一层。
+  const { roots } = buildSessionTree(rows);
+  return flattenSessionTree(roots).filter(
+    (node) => node.session.sessionId !== sessionId
+  );
+}
+
+export function useSessionTree(revision = 0) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const expandedIdsRef = useRef<Set<string>>(new Set());
   const [childrenByParent, setChildrenByParent] = useState<
     Record<string, SessionTreeNode[]>
   >({});
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
+  const requestVersionByParentRef = useRef<Record<string, number>>({});
+
+  const loadChildren = useCallback((sessionId: string) => {
+    const requestVersion =
+      (requestVersionByParentRef.current[sessionId] || 0) + 1;
+    requestVersionByParentRef.current[sessionId] = requestVersion;
+    setLoadingIds((prev) => new Set(prev).add(sessionId));
+    return conversationHistoryApi
+      .getSessionTree(sessionId)
+      .then((rows) => {
+        if (requestVersionByParentRef.current[sessionId] !== requestVersion) {
+          return;
+        }
+        setChildrenByParent((prev) => ({
+          ...prev,
+          [sessionId]: extractSessionTreeDescendants(rows, sessionId)
+        }));
+      })
+      .catch((error) => {
+        if (requestVersionByParentRef.current[sessionId] !== requestVersion) {
+          return;
+        }
+        console.error("加载子会话失败", error);
+        setChildrenByParent((prev) => ({
+          ...prev,
+          [sessionId]: []
+        }));
+      })
+      .finally(() => {
+        if (requestVersionByParentRef.current[sessionId] === requestVersion) {
+          setLoadingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(sessionId);
+            return next;
+          });
+        }
+      });
+  }, []);
 
   const toggle = useCallback((sessionId: string) => {
     const { next, expanding } = toggleExpandedSessionId(expandedIdsRef.current, sessionId);
@@ -41,36 +91,18 @@ export function useSessionTree() {
       return;
     }
 
-    setLoadingIds((prev) => new Set(prev).add(sessionId));
-    conversationHistoryApi
-      .getSessionTree(sessionId)
-      .then((rows) => {
-        // 树接口返回「根 + 全部后代」，根自己已经在侧栏行里画过了，这里只要子节点。
-        // 保留 depth 供缩进使用：将来开放嵌套时不必再改这一层。
-        const { roots } = buildSessionTree(rows);
-        const descendants = flattenSessionTree(roots).filter(
-          (node) => node.session.sessionId !== sessionId
-        );
-        setChildrenByParent((prev) => ({
-          ...prev,
-          [sessionId]: descendants
-        }));
-      })
-      .catch((error) => {
-        console.error("加载子会话失败", error);
-        setChildrenByParent((prev) => ({
-          ...prev,
-          [sessionId]: []
-        }));
-      })
-      .finally(() => {
-        setLoadingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(sessionId);
-          return next;
-        });
-      });
-  }, []);
+    void loadChildren(sessionId);
+  }, [loadChildren]);
+
+  useEffect(() => {
+    if (revision <= 0) {
+      return;
+    }
+    // 会话刚结束或主动刷新时，已展开的树必须重新拉取；否则新子会话要等整页刷新。
+    expandedIdsRef.current.forEach((sessionId) => {
+      void loadChildren(sessionId);
+    });
+  }, [loadChildren, revision]);
 
   return {
     isExpanded: (sessionId: string) => expandedIds.has(sessionId),

@@ -66,6 +66,13 @@ function desktopTab(): WorkspaceTab {
   } as unknown as WorkspaceTab;
 }
 
+function workspaceHomeTab(): WorkspaceTab {
+  return {
+    kind: "workspace-home",
+    key: "workspace-home",
+  } as unknown as WorkspaceTab;
+}
+
 describe("resolveWorkspaceTabDisplay", () => {
   it("文件 tab：标题取文件名，图标是类型角标，类型词是扩展名", () => {
     const display = resolveWorkspaceTabDisplay(fileTab());
@@ -153,6 +160,16 @@ describe("resolveWorkspaceTabDisplay", () => {
     expect(display.diffBadge).toBe("");
   });
 
+  it("工作区首页：folder 图标 + 固定标题", () => {
+    const display = resolveWorkspaceTabDisplay(workspaceHomeTab());
+    expect(display.title).toBe("工作区");
+    expect(display.icon).toEqual({
+      kind: "glyph",
+      glyph: "folder"
+    });
+    expect(display.typeHint).toBe("工作区");
+  });
+
   it("key 与 workspaceTabKey 一致 —— 条上与浮层用同一个身份", () => {
     for (const tab of [
       fileTab(),
@@ -161,6 +178,7 @@ describe("resolveWorkspaceTabDisplay", () => {
       directoryTab(),
       taskTab(),
       desktopTab(),
+      workspaceHomeTab(),
     ]) {
       expect(resolveWorkspaceTabDisplay(tab).key).toBe(workspaceTabKey(tab));
     }

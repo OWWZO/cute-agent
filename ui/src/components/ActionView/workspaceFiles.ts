@@ -55,7 +55,8 @@ export type WorkspaceTab =
   | WorkspaceAgentTab
   | WorkspaceAgentDirectoryTab
   | WorkspaceTaskTab
-  | WorkspaceDesktopTab;
+  | WorkspaceDesktopTab
+  | WorkspaceHomeTab;
 
 /**
  * 所有 tab 共有的元数据。
@@ -119,7 +120,14 @@ export type WorkspaceDesktopTab = WorkspaceTabMeta & {
   streamUrl: string;
 };
 
+/** 工作区入口 tab：始终可打开的会话文件总览。 */
+export type WorkspaceHomeTab = WorkspaceTabMeta & {
+  kind: "workspace-home";
+  key: string;
+};
+
 export const AGENT_DIRECTORY_TAB_KEY = "agent-directory";
+export const WORKSPACE_HOME_TAB_KEY = "workspace-home";
 
 /** 子智能体详情 tab 的身份键：同一 toolCallId 只会有一个 tab */
 export function agentTabKey(toolCallId: string): string {
@@ -152,6 +160,7 @@ export function workspaceTabKey(tab: WorkspaceTab): string {
         | WorkspaceAgentDirectoryTab
         | WorkspaceTaskTab
         | WorkspaceDesktopTab
+        | WorkspaceHomeTab
     ).key;
   }
   return workspaceFileKey(tab as WorkspaceFileItem);
@@ -177,6 +186,12 @@ export function isTaskTab(tab: WorkspaceTab): tab is WorkspaceTaskTab {
 
 export function isDesktopTab(tab: WorkspaceTab): tab is WorkspaceDesktopTab {
   return (tab as WorkspaceDesktopTab).kind === "desktop";
+}
+
+export function isWorkspaceHomeTab(
+  tab: WorkspaceTab
+): tab is WorkspaceHomeTab {
+  return (tab as WorkspaceHomeTab).kind === "workspace-home";
 }
 
 /**
@@ -209,7 +224,8 @@ export function tabPreviewFileKey(tab: WorkspaceTab): string {
     isSourceTab(tab) ||
     isAgentTab(tab) ||
     isAgentDirectoryTab(tab) ||
-    isDesktopTab(tab)
+    isDesktopTab(tab) ||
+    isWorkspaceHomeTab(tab)
   ) {
     return "";
   }
@@ -283,9 +299,20 @@ export function upsertWorkspaceTab(
  */
 export function resolveWorkspacePaneMode(
   tab?: WorkspaceTab
-): "empty" | "source" | "file" | "agent" | "agent-directory" | "task" | "desktop" {
+):
+  | "empty"
+  | "source"
+  | "file"
+  | "agent"
+  | "agent-directory"
+  | "task"
+  | "desktop"
+  | "workspace-home" {
   if (!tab) {
     return "empty";
+  }
+  if (isWorkspaceHomeTab(tab)) {
+    return "workspace-home";
   }
   if (isAgentDirectoryTab(tab)) {
     return "agent-directory";

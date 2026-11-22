@@ -21,12 +21,13 @@ import {
   settleRootResultConclusion,
 } from "@/utils/chat";
 import { resolveParentToolUseId } from "@/utils/chat/subagent";
+import { readWorkspaceFileEvent } from "@/utils/chat/workspaceFileEvents";
 import { mergeRunReplayIntoConversation } from "@/utils/conversationHistory";
 import querySSE from "@/utils/querySSE";
 import { normalizeRunStatus } from "@/utils/runStatus";
 import {
-  AGENT_TYPE_DEEP_THINK,
   AGENT_TYPE_PLAN_SOLVE,
+  AGENT_TYPE_REACT,
 } from "@/utils/agentMode";
 import { parseAgentAnswer, type AgentAnswerEnvelope } from "@/utils/sseParsers";
 import {
@@ -171,6 +172,7 @@ type UseConversationStreamOptions = {
   onPrepareStreamingWorkspace?: () => void;
   onTokenUseUp?: () => void;
   onTurnSettled?: () => void;
+  onWorkspaceFilesChanged?: (sessionId: string, files: CHAT.TFile[]) => void;
 };
 
 type UseConversationStreamResult = {
@@ -364,7 +366,7 @@ type FollowReconnectContext = {
   sessionId: string;
   requestId: string;
   productType?: string;
-  deepThink?: boolean;
+  isClusterMode?: boolean;
   seedChat: CHAT.ChatItem;
 };
 
@@ -550,7 +552,7 @@ function createRunningChat(
   inputInfo: CHAT.TInputInfo,
   sessionId: string,
   requestId: string,
-  deepThink?: boolean
+  isClusterMode?: boolean
 ): CHAT.ChatItem {
   return {
     query: inputInfo.message!,
@@ -558,7 +560,7 @@ function createRunningChat(
     responseType: "txt",
     sessionId,
     requestId,
-    agentType: deepThink ? AGENT_TYPE_DEEP_THINK : AGENT_TYPE_PLAN_SOLVE,
+    agentType: isClusterMode ? AGENT_TYPE_PLAN_SOLVE : AGENT_TYPE_REACT,
     loading: true,
     forceStop: false,
     tasks: [],
@@ -658,6 +660,7 @@ export function useConversationStream(
     onPrepareStreamingWorkspace,
     onTokenUseUp,
     onTurnSettled,
+    onWorkspaceFilesChanged,
   } = options;
 
   const [taskList, setTaskList] = useState<CHAT.Task[]>([]);
@@ -709,6 +712,26 @@ export function useConversationStream(
       onTurnSettled?.();
     }
   });
+
+  /**
+   * Workspace file events are published to a session-level file list instead
+   * of becoming timeline tasks. Child relays carry workspaceOnly so they can
+   * update the file tree without crossing the sub-agent content boundary.
+   */
+  const applyStreamEventData = useMemoizedFn(
+    (eventData: MESSAGE.EventData, currentChat: CHAT.ChatItem) => {
+      const workspaceEvent = readWorkspaceFileEvent(eventData);
+      if (workspaceEvent?.files.length) {
+        onWorkspaceFilesChanged?.(
+          workspaceEvent.rootSessionId || conversation.sessionId,
+          workspaceEvent.files
+        );
+      }
+      return workspaceEvent?.workspaceOnly
+        ? currentChat
+        : combineData(eventData, currentChat);
+    }
+  );
 
   const clearFollowReconnectTimer = useMemoizedFn((requestId?: string) => {
     if (requestId) {
@@ -870,10 +893,10 @@ export function useConversationStream(
     let chat = chatList[index];
     const eventData = normalizeEventData(data.resultMap?.eventData);
     if (eventData) {
-      chat = combineData(eventData, chat);
+      chat = applyStreamEventData(eventData, chat);
       chat = handleTaskData(
         chat,
-        Boolean(snapshot.deepThink),
+        snapshot.collaborationMode === "cluster",
         chat.multiAgent
       ).currentChat;
       const isRootResult =
@@ -1060,7 +1083,7 @@ export function useConversationStream(
 
     const conversationTaskData = buildConversationTaskData(
       latestChatSnapshot,
-      conversation.deepThink
+      conversation.collaborationMode === "cluster"
     );
     const latestTask = getLatestRenderableTask(conversationTaskData.currentChat);
 
@@ -1069,7 +1092,7 @@ export function useConversationStream(
     setWorkspaceStreamTask(latestTask ? cloneWorkspaceTask(latestTask) : undefined);
     setActiveRunState(resolveLatestRunState(latestChatSnapshot));
     setShowAction(resolveActionPanelVisibility({ taskList: conversationTaskData.taskList }));
-  }, [conversation.chatList, conversation.deepThink, conversation.id, loading]);
+  }, [conversation.chatList, conversation.collaborationMode, conversation.id, loading]);
 
   useEffect(() => {
     const referenceChat = conversation.chatList[conversation.chatList.length - 1];
@@ -1144,7 +1167,8 @@ export function useConversationStream(
     const requestId = seedChat.requestId;
     const sessionId = cached?.sessionId || baseConversation.sessionId;
     const productType = cached?.productType ?? baseConversation.productType;
-    const normalizedDeepThink = Boolean(cached?.deepThink ?? baseConversation.deepThink);
+    const isClusterMode =
+      cached?.isClusterMode ?? baseConversation.collaborationMode === "cluster";
 
     const observedSeed = withoutStaleDisconnectTip({
       ...seedChat,
@@ -1158,7 +1182,7 @@ export function useConversationStream(
       sessionId,
       requestId,
       productType,
-      deepThink: normalizedDeepThink,
+      isClusterMode,
       seedChat: observedSeed,
     });
     const previous = liveStreamsRef.current.get(conversationId);
@@ -1217,7 +1241,7 @@ export function useConversationStream(
           id: conversationId,
           sessionId,
           productType: productType || conversationRef.current.productType,
-          deepThink: normalizedDeepThink,
+          collaborationMode: isClusterMode ? "cluster" : "normal",
           chatList: [currentChat],
         });
 
@@ -1268,7 +1292,7 @@ export function useConversationStream(
           lastDerivedFacts = facts;
           const derived = handleTaskData(
             currentChat,
-            normalizedDeepThink,
+            isClusterMode,
             currentChat.multiAgent
           );
           syncDerivedConversationSnapshot(derived.currentChat);
@@ -1443,7 +1467,7 @@ export function useConversationStream(
           if (streamStillActive) {
             const taskData = handleTaskData(
               currentChat,
-              normalizedDeepThink,
+              isClusterMode,
               currentChat.multiAgent
             );
             setTaskList(taskData.taskList);
@@ -1474,7 +1498,7 @@ export function useConversationStream(
             sessionId,
             requestId,
             productType: reconnectContext?.productType ?? productType,
-            deepThink: reconnectContext?.deepThink ?? normalizedDeepThink,
+            isClusterMode: reconnectContext?.isClusterMode ?? isClusterMode,
             seedChat: { ...currentChat },
           });
           commitConversation(conversationId, {
@@ -1528,7 +1552,7 @@ export function useConversationStream(
           setLoading(false);
           const taskData = handleTaskData(
             currentChat,
-            normalizedDeepThink,
+            isClusterMode,
             currentChat.multiAgent
           );
           setTaskList(taskData.taskList);
@@ -1653,7 +1677,7 @@ export function useConversationStream(
           const presence = resolveRunPresence({
             loading: true,
             chat: currentChat,
-            deepThink: normalizedDeepThink,
+            isClusterMode: isClusterMode,
             plan: currentChat.plan || currentChat.multiAgent?.plan,
           });
           // 重试等待期间心跳不要冲掉「正在重试」提示
@@ -1717,7 +1741,7 @@ export function useConversationStream(
       }
       const isPlanThoughtEvent = eventData.messageType === "plan_thought";
       const isPlanThoughtFinal = Boolean(eventData.resultMap?.isFinal || finished);
-      currentChat = combineData(eventData, currentChat);
+      currentChat = applyStreamEventData(eventData, currentChat);
       llmRetryTipActive = isLlmRetryEvent(eventData);
       // 子 Agent result 带 parentToolUseId，只挂工作区，不能覆盖主对话终答。
       // 根 result 收口：有流式段只并元数据不覆盖正文（ZCode 行模型），无流式段才建结论。
@@ -1746,7 +1770,7 @@ export function useConversationStream(
       if (streamStillActive && shouldRefreshWorkspaceTask(eventData)) {
         scheduleWorkspaceStreamTask(currentChat, finished);
       }
-      if (streamStillActive && normalizedDeepThink && isPlanThoughtEvent) {
+      if (streamStillActive && isClusterMode && isPlanThoughtEvent) {
         const latestThought = currentChat.thought || currentChat.multiAgent.plan_thought || "";
         scheduleStreamingThought(currentChat.requestId, latestThought, isPlanThoughtFinal);
       }
@@ -1780,7 +1804,7 @@ export function useConversationStream(
         if (streamStillActive) {
           setLoading(false);
         }
-        if (streamStillActive && normalizedDeepThink) {
+        if (streamStillActive && isClusterMode) {
           const finalThought = currentChat.thought || currentChat.multiAgent.plan_thought || "";
           scheduleStreamingThought(currentChat.requestId, finalThought, true);
         }
@@ -1795,7 +1819,7 @@ export function useConversationStream(
         const presence = resolveRunPresence({
           loading: true,
           chat: currentChat,
-          deepThink: normalizedDeepThink,
+          isClusterMode: isClusterMode,
           plan: currentChat.plan || currentChat.multiAgent?.plan,
         });
         currentChat = {
@@ -1951,17 +1975,18 @@ export function useConversationStream(
         return;
       }
       const sessionId = String(resultMap.sessionId || snapshot.sessionId || "");
-      const deepThink = Boolean(snapshot.deepThink);
+      const isClusterMode = snapshot.collaborationMode === "cluster";
       const wakeChat: CHAT.ChatItem = {
         ...createRunningChat(
           {
             message: String(resultMap.query || ""),
             files: [],
-            deepThink,
+            collaborationMode: isClusterMode ? "cluster" : "normal",
+            agentKey: snapshot.mainAgentKey,
           },
           sessionId,
           requestId,
-          deepThink
+          isClusterMode
         ),
         backgroundWake: true,
       };
@@ -1980,7 +2005,7 @@ export function useConversationStream(
         sessionId,
         requestId,
         productType: snapshot.productType,
-        deepThink,
+        isClusterMode,
         seedChat: wakeChat,
       });
     }
@@ -2261,7 +2286,7 @@ export function useConversationStream(
         sessionId,
         requestId: resumeRequestId,
         productType: baseConversation.productType,
-        deepThink: Boolean(baseConversation.deepThink),
+        isClusterMode: baseConversation.collaborationMode === "cluster",
         seedChat: { ...currentChat },
       });
       if (streamStillActive) {
@@ -2317,7 +2342,7 @@ export function useConversationStream(
       if (streamStillActive) {
         const taskData = handleTaskData(
           currentChat,
-          Boolean(baseConversation.deepThink),
+          baseConversation.collaborationMode === "cluster",
           currentChat.multiAgent
         );
         setTaskList(taskData.taskList);
@@ -2442,7 +2467,7 @@ export function useConversationStream(
           const presence = resolveRunPresence({
             loading: true,
             chat: currentChat,
-            deepThink: Boolean(baseConversation.deepThink),
+            isClusterMode: baseConversation.collaborationMode === "cluster",
             plan: currentChat.plan || currentChat.multiAgent?.plan,
           });
           if (presence.hint && currentChat.tip !== presence.hint) {
@@ -2480,7 +2505,7 @@ export function useConversationStream(
 
       const eventData = normalizeEventData(resultMap?.eventData);
       if (eventData) {
-        currentChat = combineData(eventData, currentChat);
+        currentChat = applyStreamEventData(eventData, currentChat);
         // 与 sendMessage / followActiveRun 对齐：根 result 一到就收口主对话 loading。
         // 后台 run_in_background 子 Agent 未完成时后端会推迟 finished
         // （defer projection complete: background tasks still running），
@@ -2516,7 +2541,7 @@ export function useConversationStream(
           const presence = resolveRunPresence({
             loading: true,
             chat: currentChat,
-            deepThink: Boolean(baseConversation.deepThink),
+            isClusterMode: baseConversation.collaborationMode === "cluster",
             plan: currentChat.plan || currentChat.multiAgent?.plan,
           });
           currentChat = {
@@ -2548,7 +2573,7 @@ export function useConversationStream(
 
       const taskData = handleTaskData(
         currentChat,
-        Boolean(baseConversation.deepThink),
+        baseConversation.collaborationMode === "cluster",
         currentChat.multiAgent
       );
       if (isActiveStream()) {
@@ -2780,8 +2805,11 @@ export function useConversationStream(
   ) => {
     const baseConversation = conversationRef.current;
     const conversationId = baseConversation.id;
-    const { message, deepThink } = inputInfo;
-    const normalizedDeepThink = Boolean(deepThink);
+    const { message, collaborationMode, agentKey } = inputInfo;
+    const isClusterMode = collaborationMode === "cluster";
+    const effectiveAgentKey = isClusterMode
+      ? null
+      : agentKey?.trim() || baseConversation.mainAgentKey || "general-purpose";
 
     const lastChat = (baseConversation.chatList || [])[baseConversation.chatList.length - 1];
     const parentLoopLive =
@@ -2845,19 +2873,19 @@ export function useConversationStream(
       inputInfo,
       baseConversation.sessionId,
       requestId,
-      normalizedDeepThink
+      isClusterMode
     );
     if (previousContextUsage) {
       currentChat.contextUsage = previousContextUsage;
     }
 
-    if (normalizedDeepThink) {
+    if (isClusterMode) {
       currentChat = {
         ...currentChat,
         tip: resolveRunPresence({
           loading: true,
           chat: currentChat,
-          deepThink: normalizedDeepThink,
+          isClusterMode: isClusterMode,
         }).hint,
       };
     }
@@ -2867,11 +2895,11 @@ export function useConversationStream(
       sessionId: baseConversation.sessionId,
       requestId,
       productType: baseConversation.productType,
-      deepThink: normalizedDeepThink,
+      isClusterMode,
       seedChat: { ...currentChat },
     });
 
-    if (normalizedDeepThink) {
+    if (isClusterMode) {
       setStreamingThoughtMap((previous) => ({
         ...previous,
         [requestId]: "",
@@ -2881,7 +2909,13 @@ export function useConversationStream(
     const initialConversation = createDraftConversation(baseConversation, {
       chatTitle: message || "",
       productType: baseConversation.productType,
-      deepThink: normalizedDeepThink,
+      collaborationMode: isClusterMode ? "cluster" : "normal",
+      mainAgentKey: effectiveAgentKey,
+      mainAgentDisplayName: isClusterMode
+        ? "协调者"
+        : effectiveAgentKey === baseConversation.mainAgentKey
+          ? baseConversation.mainAgentDisplayName
+          : effectiveAgentKey,
       chatList: [...baseConversation.chatList, { ...currentChat }],
     });
     const draftController = createConversationDraftController<CHAT.ChatItem>(
@@ -2908,7 +2942,8 @@ export function useConversationStream(
       sessionId: baseConversation.sessionId,
       requestId,
       message,
-      deepThink: normalizedDeepThink,
+      collaborationMode: isClusterMode ? "cluster" : "normal",
+      agentKey: effectiveAgentKey,
       outputStyle: inputInfo.outputStyle === "dataAgent" ? "dataAgent" : undefined,
       files: inputInfo.files,
       model: inputInfo.model,
@@ -2940,7 +2975,7 @@ export function useConversationStream(
       if (taskDataDirty) {
         const derived = handleTaskData(
           currentChat,
-          normalizedDeepThink,
+          isClusterMode,
           currentChat.multiAgent
         );
         syncDerivedConversationSnapshot(derived.currentChat);
@@ -3050,7 +3085,7 @@ export function useConversationStream(
         currentChat = applyGuardError(currentChat, errorText);
         const taskData = handleTaskData(
           currentChat,
-          normalizedDeepThink,
+          isClusterMode,
           currentChat.multiAgent
         );
         if (streamStillActive) {
@@ -3070,7 +3105,7 @@ export function useConversationStream(
         }
         const taskData = handleTaskData(
           currentChat,
-          normalizedDeepThink,
+          isClusterMode,
           currentChat.multiAgent
         );
         currentChat = {
@@ -3096,7 +3131,7 @@ export function useConversationStream(
           const presence = resolveRunPresence({
             loading: true,
             chat: currentChat,
-            deepThink: normalizedDeepThink,
+            isClusterMode: isClusterMode,
             plan: currentChat.plan || currentChat.multiAgent?.plan,
           });
           // 重试等待期间心跳不要冲掉「正在重试」提示
@@ -3147,7 +3182,7 @@ export function useConversationStream(
       const isPlanThoughtEvent = eventData.messageType === "plan_thought";
       const isPlanThoughtFinal = Boolean(eventData.resultMap?.isFinal || finished);
       // combineData 只负责把事件合并进原始会话，后续再根据事件类型触发工作区同步和最终结论覆盖。
-      currentChat = combineData(eventData, currentChat);
+      currentChat = applyStreamEventData(eventData, currentChat);
       llmRetryTipActive = isLlmRetryEvent(eventData);
       // 根 result 收口：结论区已有流式正文时只并元数据、不覆盖正文（ZCode 行模型）；
       // 没有流式段才用 result 建结论。$$$ 点名由 ConclusionSection 剥离并映射会话文件。
@@ -3181,7 +3216,7 @@ export function useConversationStream(
       if (streamStillActive && shouldRefreshWorkspaceTask(eventData)) {
         scheduleWorkspaceStreamTask(currentChat, finished);
       }
-      if (streamStillActive && normalizedDeepThink && isPlanThoughtEvent) {
+      if (streamStillActive && isClusterMode && isPlanThoughtEvent) {
         const latestThought = currentChat.thought || currentChat.multiAgent.plan_thought || "";
         scheduleStreamingThought(currentChat.requestId, latestThought, isPlanThoughtFinal);
       }
@@ -3216,7 +3251,7 @@ export function useConversationStream(
         if (streamStillActive) {
           setLoading(false);
         }
-        if (streamStillActive && normalizedDeepThink) {
+        if (streamStillActive && isClusterMode) {
           const finalThought = currentChat.thought || currentChat.multiAgent.plan_thought || "";
           scheduleStreamingThought(currentChat.requestId, finalThought, true);
         }
@@ -3227,7 +3262,7 @@ export function useConversationStream(
           sessionId: baseConversation.sessionId,
           requestId,
           productType: baseConversation.productType,
-          deepThink: normalizedDeepThink,
+          isClusterMode,
           seedChat: { ...currentChat },
         });
       } else if (isHitlYieldEvent(eventData) || hasPendingAskUserQuestion(currentChat)) {
@@ -3240,14 +3275,14 @@ export function useConversationStream(
           sessionId: baseConversation.sessionId,
           requestId,
           productType: baseConversation.productType,
-          deepThink: normalizedDeepThink,
+          isClusterMode,
           seedChat: { ...currentChat },
         });
       } else {
         const presence = resolveRunPresence({
           loading: true,
           chat: currentChat,
-          deepThink: normalizedDeepThink,
+          isClusterMode: isClusterMode,
           plan: currentChat.plan || currentChat.multiAgent?.plan,
         });
         currentChat = {
@@ -3259,7 +3294,7 @@ export function useConversationStream(
           sessionId: baseConversation.sessionId,
           requestId,
           productType: baseConversation.productType,
-          deepThink: normalizedDeepThink,
+          isClusterMode,
           seedChat: { ...currentChat },
         });
       }
@@ -3365,7 +3400,7 @@ export function useConversationStream(
         sessionId: baseConversation.sessionId,
         requestId,
         productType: baseConversation.productType,
-        deepThink: normalizedDeepThink,
+        isClusterMode,
         seedChat: { ...currentChat },
       });
       pendingConversation = draftController.replaceLastItem({ ...currentChat });
@@ -3415,7 +3450,7 @@ export function useConversationStream(
           sessionId: baseConversation.sessionId,
           requestId,
           productType: baseConversation.productType,
-          deepThink: normalizedDeepThink,
+          isClusterMode,
           seedChat: { ...currentChat },
         });
         pendingConversation = draftController.replaceLastItem({ ...currentChat });
@@ -3550,7 +3585,8 @@ export function useConversationStream(
 
     sendMessage({
       message: last.query,
-      deepThink: conversation.deepThink,
+      collaborationMode: conversation.collaborationMode,
+      agentKey: conversation.mainAgentKey,
     });
   });
 

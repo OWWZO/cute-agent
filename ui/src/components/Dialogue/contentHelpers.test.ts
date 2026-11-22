@@ -305,4 +305,35 @@ describe("contentHelpers delivery files", () => {
       "simple-showcase.html",
     ]);
   });
+
+  it("accepts a double-dollar delimiter at line start", () => {
+    const pdf = file(
+      "11.19.26-ECRA-Information-Disclosure-of-BIS-License-Decisions.pdf",
+      {
+        relativePath:
+          "sources/11.19.26-ECRA-Information-Disclosure-of-BIS-License-Decisions.pdf",
+      }
+    );
+    const task = conclusionTask(
+      "PDF 已读取。\n$$ sources/11.19.26-ECRA-Information-Disclosure-of-BIS-License-Decisions.pdf",
+      [pdf]
+    );
+
+    expect(resolveTaskSummaryText(task)).toBe("PDF 已读取。");
+    expect(resolveTaskSummaryArtifactKeys(task)).toEqual([
+      "sources/11.19.26-ECRA-Information-Disclosure-of-BIS-License-Decisions.pdf",
+    ]);
+    expect(pickFeaturedDeliveryFiles(task).map((item) => item.name)).toEqual([
+      "11.19.26-ECRA-Information-Disclosure-of-BIS-License-Decisions.pdf",
+    ]);
+  });
+
+  it("does not treat inline double-dollar math as an artifact section", () => {
+    const summary = "公式 $$x^2$$ 不代表文件清单";
+    const task = conclusionTask(summary, []);
+
+    expect(resolveTaskSummaryText(task)).toBe(summary);
+    expect(resolveTaskSummaryArtifactKeys(task)).toEqual([]);
+  });
+
 });

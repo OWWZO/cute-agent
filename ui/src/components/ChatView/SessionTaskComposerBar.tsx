@@ -7,14 +7,15 @@ import {
   ListTodoIcon,
 } from "lucide-react";
 import {
-  extractSessionTaskSnapshot,
   findLatestSessionTasks,
+  resolveSessionTaskSnapshot,
   type SessionTask,
 } from "@/components/Dialogue/sessionTaskModel";
 
 type SessionTaskComposerBarProps = {
   chat?: CHAT.ChatItem;
   taskList?: CHAT.Task[];
+  sessionTasks?: CHAT.ConversationSessionTaskSnapshot | null;
 };
 
 function StatusIcon({ status }: { status?: string }) {
@@ -29,13 +30,16 @@ function StatusIcon({ status }: { status?: string }) {
 }
 
 const SessionTaskComposerBar: FC<SessionTaskComposerBarProps> = memo(
-  ({ chat, taskList }) => {
+  ({ chat, taskList, sessionTasks }) => {
     // 先从聊天/任务事件中取最新快照，再由快照统一计算完成数和进行中任务。
     const tool = useMemo(
       () => findLatestSessionTasks(chat, taskList),
       [chat, taskList]
     );
-    const snapshot = useMemo(() => extractSessionTaskSnapshot(tool), [tool]);
+    const snapshot = useMemo(
+      () => resolveSessionTaskSnapshot(tool, sessionTasks),
+      [tool, sessionTasks]
+    );
     const [open, setOpen] = useState(false);
     const listId = useId();
 

@@ -2296,13 +2296,13 @@ const TIMELINE_MESSAGE_TYPES = new Set([
 /**
  * 处理多智能体任务数据，整合聊天、计划和任务信息
  * @param currentChat 当前聊天对象
- * @param deepThink 深度思考
+ * @param isClusterMode 深度思考
  * @param multiAgent 多智能体数据
  * @returns 处理后的数据对象
  */
 export const handleTaskData = (
   currentChat: CHAT.ChatItem,
-  deepThink?: boolean,
+  isClusterMode?: boolean,
   multiAgent?: MESSAGE.MultiAgent
 ) => {
   // 该函数是唯一的派生层：原始 multiAgent.tasks 保留事件事实，chat.tasks/taskList/conclusion 只从事实重建。
@@ -2323,7 +2323,7 @@ export const handleTaskData = (
     (item: MESSAGE.Task[]) => item && item?.length > 0
   ) ?? [];
 
-  const chatList: TimelineTaskContainer[][] = !deepThink
+  const chatList: TimelineTaskContainer[][] = !isClusterMode
     ? [
       [
         {
@@ -2491,14 +2491,14 @@ const conversationTaskCache = new WeakMap<
  */
 export const buildConversationTaskData = (
   chat: CHAT.ChatItem,
-  deepThink?: boolean
+  isClusterMode?: boolean
 ) => {
   const multiAgent = chat.multiAgent;
   const cacheable = Boolean(multiAgent && typeof multiAgent === "object");
   const conclusion = chat.conclusion;
   const signature = cacheable
     ? [
-      deepThink ? "1" : "0",
+      isClusterMode ? "1" : "0",
       buildTaskFactsSignature(multiAgent),
       JSON.stringify(multiAgent.plan ?? null),
       String(multiAgent.plan_thought || ""),
@@ -2549,7 +2549,7 @@ export const buildConversationTaskData = (
     timeline: [...(chat.timeline || [])],
   } as CHAT.ChatItem;
 
-  const data = handleTaskData(snapshotChat, deepThink, snapshotChat.multiAgent);
+  const data = handleTaskData(snapshotChat, isClusterMode, snapshotChat.multiAgent);
   if (cacheable) {
     conversationTaskCache.set(multiAgent as object, {
       signature,
@@ -2590,7 +2590,7 @@ const STATIC_TASK_ACTIONS: Record<string, Readonly<TaskAction>> = {
   },
   session_tasks: {
     action: "任务列表已更新",
-    tool: "TaskList",
+    tool: "TodoWrite",
     name: "Todo"
   },
   code: {

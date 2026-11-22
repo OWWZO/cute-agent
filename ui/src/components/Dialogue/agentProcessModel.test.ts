@@ -945,6 +945,34 @@ describe("agentProcessModel", () => {
     expect(model.totalDurationMs).toBe(10_000);
   });
 
+  it("reasoning 条目已终态时，即使整轮仍在运行也标记为 completed", () => {
+    const chat = createChat({
+      loading: true,
+      finishedAt: undefined,
+      tasks: workGroup([
+        tool({
+          id: "finished-reasoning",
+          messageType: "llm_reasoning",
+          toolThought: "分析已完成",
+          finish: true,
+          isFinal: true,
+        }),
+      ]),
+    });
+
+    const model = deriveAgentProcessModel({ chat, isPlanSolve: false });
+    const thinking = model.segments.find(
+      (segment) => segment.type === "thinking"
+    );
+
+    expect(thinking?.type).toBe("thinking");
+    if (thinking?.type !== "thinking") {
+      return;
+    }
+    expect(thinking.step.active).toBe(false);
+    expect(thinking.step.completed).toBe(true);
+  });
+
   it("keeps rendering old tasks without timing metadata", () => {
     const chat = createChat({
       tasks: workGroup([

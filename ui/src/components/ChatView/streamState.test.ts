@@ -414,7 +414,7 @@ describe("streamState presence & attention", () => {
   it("发送后首包前应为 queued/thinking 存在感", () => {
     const presence = resolveRunPresence({
       loading: true,
-      deepThink: true,
+      isClusterMode: true,
       chat: {
         loading: true,
         multiAgent: { tasks: [] },
@@ -491,7 +491,7 @@ describe("streamState presence & attention", () => {
   it("深度研究首包前、无计划无思考时仍是 queued", () => {
     const presence = resolveRunPresence({
       loading: true,
-      deepThink: true,
+      isClusterMode: true,
       chat: {
         loading: true,
         multiAgent: { tasks: [] },
@@ -845,11 +845,11 @@ describe("工作区可见性判定链", () => {
 });
 
 describe("resolveRunPhaseHint", () => {
-  it("queued + deepThink 走计划文案，与 planning 区分开", () => {
-    expect(resolveRunPhaseHint("queued", { deepThink: true })).toBe("正在制定计划…");
-    // 非 deepThink 时 queued 用自己的兜底文案
+  it("queued + isClusterMode 走计划文案，与 planning 区分开", () => {
+    expect(resolveRunPhaseHint("queued", { isClusterMode: true })).toBe("正在制定计划…");
+    // 非 isClusterMode 时 queued 用自己的兜底文案
     expect(resolveRunPhaseHint("queued")).toBe("正在理解问题…");
-    expect(resolveRunPhaseHint("queued", { deepThink: false })).toBe("正在理解问题…");
+    expect(resolveRunPhaseHint("queued", { isClusterMode: false })).toBe("正在理解问题…");
   });
 
   it("crafting / working 有产物标题时优先显示标题", () => {

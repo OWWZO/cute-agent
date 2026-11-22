@@ -15,6 +15,7 @@ import {
   isDesktopTab,
   isSourceTab,
   isTaskTab,
+  isWorkspaceHomeTab,
   workspaceTabKey,
   type WorkspaceFileItem,
   type WorkspaceTab,
@@ -33,7 +34,10 @@ import {
 /** 图标规格：文件类型角标，或 lucide 字形 */
 export type WorkspaceTabIconSpec =
   | { kind: "badge"; badge: string }
-  | { kind: "glyph"; glyph: "bot" | "list-tree" | "activity" | "monitor" };
+  | {
+      kind: "glyph";
+      glyph: "bot" | "list-tree" | "activity" | "monitor" | "folder";
+    };
 
 export type WorkspaceTabDisplay = {
   key: string;
@@ -57,6 +61,19 @@ const SOURCE_TYPE_LABEL: Record<CodeViewerSource["type"], string> = {
 
 export function resolveWorkspaceTabDisplay(tab: WorkspaceTab): WorkspaceTabDisplay {
   const key = workspaceTabKey(tab);
+
+  if (isWorkspaceHomeTab(tab)) {
+    return {
+      key,
+      title: "工作区",
+      icon: {
+        kind: "glyph",
+        glyph: "folder",
+      },
+      typeHint: "工作区",
+      diffBadge: "",
+    };
+  }
 
   if (isAgentDirectoryTab(tab)) {
     return {

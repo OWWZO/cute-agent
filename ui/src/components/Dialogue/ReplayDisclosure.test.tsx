@@ -176,7 +176,6 @@ describe("shouldHydrateRunReplay", () => {
   it("首次点击需要补回放", () => {
     expect(
       shouldHydrateRunReplay({
-        attemptedRequestId: null,
         requestId: "run-1",
         replayLoaded: false,
         replayAvailable: true,
@@ -184,21 +183,19 @@ describe("shouldHydrateRunReplay", () => {
     ).toBe(true);
   });
 
-  it("同一 requestId 已尝试过就不再补 —— 折叠/展开不会重复打后端", () => {
+  it("请求失败后仍允许再次点击补拉", () => {
     expect(
       shouldHydrateRunReplay({
-        attemptedRequestId: "run-1",
         requestId: "run-1",
         replayLoaded: false,
         replayAvailable: true,
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("回放已加载（replayLoaded）不再补", () => {
     expect(
       shouldHydrateRunReplay({
-        attemptedRequestId: null,
         requestId: "run-1",
         replayLoaded: true,
         replayAvailable: true,
@@ -209,7 +206,6 @@ describe("shouldHydrateRunReplay", () => {
   it("后端不支持回放时不补", () => {
     expect(
       shouldHydrateRunReplay({
-        attemptedRequestId: null,
         requestId: "run-1",
         replayAvailable: false,
       })
@@ -219,7 +215,6 @@ describe("shouldHydrateRunReplay", () => {
   it("换一轮（不同 requestId）仍会补", () => {
     expect(
       shouldHydrateRunReplay({
-        attemptedRequestId: "run-1",
         requestId: "run-2",
         replayLoaded: false,
         replayAvailable: true,
@@ -229,7 +224,7 @@ describe("shouldHydrateRunReplay", () => {
 
   it("没有 requestId 时不补", () => {
     expect(
-      shouldHydrateRunReplay({ attemptedRequestId: null, requestId: "" })
+      shouldHydrateRunReplay({ requestId: "" })
     ).toBe(false);
   });
 });

@@ -28,7 +28,7 @@ function createRunningPage(): ConversationHistoryPage {
     sessionId: "session-running",
     title: "执行中的会话",
     status: "RUNNING",
-    deepThink: false,
+    collaborationMode: "normal",
     runCount: 2,
     finishedRunCount: 1,
     failedRunCount: 0,
@@ -290,7 +290,7 @@ describe("sessionBootstrap", () => {
     const chat = conversation.chatList[0];
     const afterFollow = buildConversationTaskData(
       combineData(toolCall, chat),
-      conversation.deepThink
+      conversation.collaborationMode === "cluster"
     ).currentChat;
 
     expect(
@@ -322,7 +322,7 @@ describe("sessionBootstrap", () => {
     ).toHaveLength(1);
     const afterFollow = buildConversationTaskData(
       combineData(followResult, chat),
-      conversation.deepThink
+      conversation.collaborationMode === "cluster"
     ).currentChat;
 
     expect(afterFollow.conclusion?.result).toBe("最终结论");
@@ -415,6 +415,55 @@ describe("sessionBootstrap", () => {
       true,
     ]);
   });
+
+  it("续跑 RUNNING 时补齐 HITL 前提问 run 的过程", async () => {
+    const page = createRunningPage();
+    page.runCount = 2;
+    page.runs = [
+      {
+        requestId: "req-before-hitl",
+        status: "WAITING_INPUT",
+        queryPreview: "先执行再提问",
+        hasReplay: true,
+      },
+      {
+        requestId: "resume_live",
+        status: "RUNNING",
+        queryPreview: "",
+        hasReplay: true,
+      },
+    ];
+    const requested: string[] = [];
+
+    const conversation = await hydrateSessionWithRunningReplay(
+      page,
+      async (requestId) => {
+        requested.push(requestId);
+        return createReplay(
+          "WAITING_INPUT",
+          [
+            createReplayFrame(createPlanEvent()),
+            createReplayFrame(createToolCallEvent()),
+          ],
+          requestId
+        );
+      }
+    );
+
+    expect(requested).toEqual(["req-before-hitl"]);
+    expect(conversation.chatList.map((chat) => chat.requestId)).toEqual([
+      "req-before-hitl",
+      "resume_live",
+    ]);
+    expect(conversation.chatList[0].replayLoaded).toBe(true);
+    expect(
+      conversation.chatList[0].multiAgent.tasks
+        .flat()
+        .some((task) => task.messageType === "tool_call")
+    ).toBe(true);
+    expect(conversation.chatList[1].loading).toBe(true);
+    expect(conversation.chatList[1].replayLoaded).toBe(false);
+  });
 });
 
 describe("applyInlineReplays", () => {
@@ -423,7 +472,7 @@ describe("applyInlineReplays", () => {
       sessionId: "session-inline",
       title: "内联回放会话",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 2,
       finishedRunCount: 2,
       failedRunCount: 0,

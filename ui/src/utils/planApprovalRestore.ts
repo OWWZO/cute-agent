@@ -199,7 +199,12 @@ export function mergePendingPlanApprovals(
       };
     }
 
-    commitHITLChat(chatList, index, chat, conversation.deepThink);
+    commitHITLChat(
+      chatList,
+      index,
+      chat,
+      conversation.collaborationMode === "cluster"
+    );
   }
 
   return {

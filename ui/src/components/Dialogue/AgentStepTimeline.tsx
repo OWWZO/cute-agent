@@ -273,14 +273,14 @@ const CompactStepRow: FC<{
   const thoughtText = asText(step.tool.toolThought);
   const rich = isRichInlineStep(step);
 
-  // 组内原生 CoT：标题点击折叠，流式完自动收起
+  // 组内原生 CoT：条目明确结束后收起；后续工具仍在跑不应阻止本段思考收口。
   if (isThought) {
     return (
       <div className="py-0.5 pl-1" data-testid="llm-reasoning-step">
         <ThinkingBlock
           text={thoughtText || "…"}
           streaming={step.active}
-          autoCollapseOnStreamEnd={!ctx.runLive}
+          autoCollapseOnStreamEnd={step.completed}
           durationMs={step.durationMs}
           durationLabel={step.durationLabel}
         />
@@ -500,25 +500,25 @@ const UserMessageSegment: FC<{ step: ProcessStepRow }> = memo(({ step }) => (
 
 UserMessageSegment.displayName = "UserMessageSegment";
 
-/** 分段深度思考：标题点击折叠，流式完自动收起 */
+/** 分段深度思考：条目明确结束后自动收起，不用整轮 loading 代替条目状态。 */
 const ThinkingSegment: FC<{
   step: ProcessStepRow;
-  autoCollapseOnStreamEnd: boolean;
-}> = memo(({ step, autoCollapseOnStreamEnd }) => {
+  runLive: boolean;
+}> = memo(({ step, runLive }) => {
   const thoughtText = asText(step.tool.toolThought);
   const streaming = step.active;
 
   return (
     <TimelineEntrance
       entryKey={`thinking:${step.id}`}
-      active={autoCollapseOnStreamEnd === false}
+      active={runLive}
       className="py-0.5"
     >
       <div data-testid="process-thinking">
         <ThinkingBlock
           text={thoughtText || "…"}
           streaming={streaming}
-          autoCollapseOnStreamEnd={autoCollapseOnStreamEnd}
+          autoCollapseOnStreamEnd={step.completed}
           durationMs={step.durationMs}
           durationLabel={step.durationLabel}
         />
@@ -595,7 +595,7 @@ const ProcessSegmentView: FC<{
     return (
       <ThinkingSegment
         step={segment.step}
-        autoCollapseOnStreamEnd={!ctx.runLive}
+        runLive={ctx.runLive}
       />
     );
   }
@@ -768,7 +768,7 @@ const AgentStepTimelineComponent: FC<AgentStepTimelineProps> = (props) => {
           <ThinkingBlock
             text={model.thought.text}
             streaming={model.thought.streaming}
-            autoCollapseOnStreamEnd={!runLive}
+            autoCollapseOnStreamEnd={!model.thought.streaming}
             durationMs={model.thought.durationMs}
             durationLabel={model.thought.durationLabel}
             headerExtra={

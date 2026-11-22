@@ -42,7 +42,7 @@ describe("agentRequest", () => {
       sessionId: "session-1",
       requestId: "req-1",
       message: "基于这张图改成赛博朋克风",
-      deepThink: false,
+      collaborationMode: "normal",
       files: [
         {
           name: "source-image.png",
@@ -59,7 +59,7 @@ describe("agentRequest", () => {
       sessionId: "session-1",
       requestId: "req-1",
       query: "基于这张图改成赛博朋克风",
-      deepThink: 0,
+      collaborationMode: "normal",
       sessionFiles: [
         {
           fileName: "source-image.png",
@@ -74,12 +74,12 @@ describe("agentRequest", () => {
       sessionId: "session-2",
       requestId: "req-2",
       message: "重新规划",
-      deepThink: true,
+      collaborationMode: "cluster",
       forcePlanMode: true,
     });
 
     expect(request).toMatchObject({
-      deepThink: 1,
+      collaborationMode: "cluster",
       forcePlanMode: true,
     });
   });

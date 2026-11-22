@@ -66,7 +66,7 @@ function history(runs: ConversationRunSummary[]): ConversationHistoryPage {
     sessionId: "sub-1",
     title: "",
     status: "",
-    deepThink: false,
+    collaborationMode: "normal",
     runCount: runs.length,
     finishedRunCount: 0,
     failedRunCount: 0,

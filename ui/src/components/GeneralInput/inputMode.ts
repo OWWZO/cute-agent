@@ -1,5 +1,3 @@
-type InputModeKey = "think" | "research";
-
 const DEFAULT_THINKING_EFFORT = "high";
 
 /**
@@ -8,7 +6,8 @@ const DEFAULT_THINKING_EFFORT = "high";
  */
 export function buildSubmitPayload(params: {
   question: string;
-  visibleMode: InputModeKey;
+  collaborationMode: "normal" | "cluster";
+  agentKey?: string | null;
   isDataAgent: boolean;
   uploadedFiles: CHAT.TFile[];
   model?: string;
@@ -34,13 +33,16 @@ export function buildSubmitPayload(params: {
     return {
       ...base,
       outputStyle: "dataAgent" as const,
-      deepThink: false,
+      collaborationMode: "normal" as const,
     };
   }
 
   return {
     ...base,
-    deepThink: params.visibleMode === "research",
+    collaborationMode: params.collaborationMode,
+    ...(params.collaborationMode === "normal" && params.agentKey?.trim()
+      ? { agentKey: params.agentKey.trim() }
+      : {}),
     ...(params.forcePlanMode ? { forcePlanMode: true } : {}),
   };
 }

@@ -1,9 +1,15 @@
-export const AGENT_TYPE_DEEP_THINK = 3;
-export const AGENT_TYPE_PLAN_SOLVE = 5;
+export type CollaborationMode = "normal" | "cluster";
+
+export const AGENT_TYPE_PLAN_SOLVE = 3;
+export const AGENT_TYPE_REACT = 5;
+
+export function normalizeCollaborationMode(value?: string | null): CollaborationMode {
+  return value === "cluster" ? "cluster" : "normal";
+}
 
 export function isPlanSolveConversation(
   agentType?: number,
-  deepThink?: boolean
+  collaborationMode?: CollaborationMode
 ) {
-  return Boolean(deepThink) || agentType === AGENT_TYPE_DEEP_THINK;
+  return collaborationMode === "cluster" || agentType === AGENT_TYPE_PLAN_SOLVE;
 }

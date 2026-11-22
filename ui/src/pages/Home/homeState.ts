@@ -14,17 +14,20 @@ export function shouldApplyConversationToView(
 }
 
 export function deriveConversationMetaFromInput(
-  info: Pick<CHAT.TInputInfo, "outputStyle" | "deepThink">,
+  info: Pick<CHAT.TInputInfo, "outputStyle" | "collaborationMode" | "agentKey">,
   params: {
     productType: string;
   }
 ) {
   const outputStyle = info.outputStyle || params.productType;
-  const deepThink = outputStyle === "dataAgent" ? false : Boolean(info.deepThink);
+  const collaborationMode =
+    outputStyle === "dataAgent" ? "normal" : info.collaborationMode;
 
   return {
     productType: outputStyle,
-    deepThink,
+    collaborationMode,
+    mainAgentKey:
+      collaborationMode === "cluster" ? null : info.agentKey?.trim() || null,
   };
 }
 

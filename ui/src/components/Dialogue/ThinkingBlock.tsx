@@ -27,7 +27,7 @@ type ThinkingBlockProps = {
   durationMs?: number;
   /** 标题行右侧额外控件（如版本切换），点击不触发折叠 */
   headerExtra?: ReactNode;
-  /** 当前片段流式结束后是否自动收起；整轮 Agent 仍在运行时由调用方关闭。 */
+  /** 当前片段进入明确终态后是否自动收起；由调用方用条目事实判断，不看整轮是否结束。 */
   autoCollapseOnStreamEnd?: boolean;
   className?: string;
 };

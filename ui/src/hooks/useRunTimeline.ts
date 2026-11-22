@@ -5,6 +5,7 @@ import querySSE from "@/utils/querySSE";
 import { parseAgentAnswer } from "@/utils/sseParsers";
 import { isRunTerminal } from "@/utils/timelineItems";
 import {
+  isRunFinalTimelineItem,
   isRunFinalStatus,
   isRunTimelineTerminal,
   TimelineStore,
@@ -121,6 +122,34 @@ export function isWaitingInputIdleControl(frame: unknown): boolean {
     && String(frame.status || "").toUpperCase() === "WAITING_INPUT";
 }
 
+/**
+ * run-final 既可能作为无 itemId 的控制帧到达，也可能作为带 itemId 的普通
+ * 时间线条目到达。后者必须先保存内容，同时结束订阅；否则流会一直重连，
+ * 外层 loading 永远不会关闭，所有懒加载按钮都会保持禁用。
+ */
+export function resolveRunFinalItemStatus(
+  item: AgentTimelineItem | undefined
+): string {
+  if (!isRunFinalTimelineItem(item)) {
+    return "";
+  }
+  const eventStatus = item?.eventType === "run.completed"
+    ? "SUCCESS"
+    : item?.eventType === "run.failed"
+      ? "FAILED"
+      : item?.eventType === "run.stopped"
+        ? "STOPPED"
+        : "";
+  if (eventStatus) {
+    return eventStatus;
+  }
+  const itemStatus = String(item?.itemStatus || "").toUpperCase();
+  if (itemStatus === "COMPLETED") {
+    return "SUCCESS";
+  }
+  return isRunTimelineTerminal(itemStatus) ? itemStatus : "";
+}
+
 export function useRunTimeline(
   requestId: string,
   enabled = true,
@@ -174,10 +203,15 @@ export function useRunTimeline(
             const item = toTimelineItem(frame);
             if (item) {
               storeRef.current.upsertMany([item]);
+              const finalStatus = resolveRunFinalItemStatus(item);
+              if (finalStatus) {
+                terminal = true;
+              }
               setState((prev) => ({
                 ...prev,
                 items: storeRef.current.values(),
-                loading: true,
+                status: finalStatus || prev.status,
+                loading: !finalStatus,
                 reconnectAttempts: 0,
                 reconnectExhausted: false,
               }));

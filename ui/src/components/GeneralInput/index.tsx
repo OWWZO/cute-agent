@@ -1,12 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpIcon,
-  BarChart3Icon,
-  BrainCircuitIcon,
-  CheckIcon,
-  ChevronDownIcon,
   ListTodo,
-  SearchIcon,
+  NetworkIcon,
 } from "lucide-react";
 
 import { AI_CHAT_FLOATING_CLASS } from "@/components/ai-elements/aiChatSurfaceClass";
@@ -22,7 +18,6 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -35,11 +30,7 @@ import {
   resolveAdjacentPromptPlaceholder,
   type PromptSelectionRequest,
 } from "@/utils/suggestedPrompts";
-import {
-  GENERIC_TASK_PRODUCT,
-  defaultProduct,
-  productList,
-} from "@/utils/constants";
+import type { CollaborationMode } from "@/utils/agentMode";
 import UploadAttachmentChip from "./UploadAttachmentChip";
 import {
   catalogApi,
@@ -77,9 +68,11 @@ type Props = {
   onInject?: (text: string) => void | Promise<void>;
   size: string;
   product?: CHAT.Product;
-  deepThink?: boolean;
+  collaborationMode?: CollaborationMode;
+  agentKey?: string | null;
+  collaborationLocked?: boolean;
+  onCollaborationModeChange?: (mode: CollaborationMode) => void;
   send: (p: CHAT.TInputInfo) => void;
-  onSelectionChange?: (selection: { product: CHAT.Product; deepThink: boolean }) => void;
   /** 外部回填（Undo 上一轮 user query） */
   draftMessage?: string | null;
   onDraftConsumed?: () => void;
@@ -105,33 +98,6 @@ type Props = {
   sessionThinkingEffort?: string | null;
 };
 
-type InputModeKey = "think" | "research";
-
-const DATA_AGENT_PRODUCT =
-  (productList.find((item) => item.type === "dataAgent") as CHAT.Product | undefined) ?? defaultProduct;
-
-const MODE_OPTIONS: Array<{
-  key: InputModeKey;
-  label: string;
-  description: string;
-  icon: typeof BrainCircuitIcon;
-}> = [
-  {
-    key: "think",
-    label: "ReAct",
-    description: "边思考边执行工具",
-    icon: BrainCircuitIcon,
-  },
-  {
-    key: "research",
-    label: "PlanExecute",
-    description: "先规划，再执行任务",
-    icon: SearchIcon,
-  },
-];
-
-const VISIBLE_MODE_OPTIONS = MODE_OPTIONS;
-
 /** 对话附件不按扩展名拦截；上传/登记链路对任意文件落盘。空字符串表示原生 file picker 与拖拽都接受全部类型。 */
 export const ATTACHMENT_ACCEPT = "";
 
@@ -144,24 +110,6 @@ export function shouldHandleComposerEnter(event: {
 }): boolean {
   return event.key === "Enter" && !event.shiftKey;
 }
-
-const getModeKey = (_productType?: string, deepThink = false): InputModeKey => {
-  return deepThink ? "research" : "think";
-};
-
-/* ZCode 菜单规范：shell rounded-lg + border-popover-border + shadow-md，
-   item 用 rounded-md、hover 用 bg-menu-hover。 */
-const menuContentClassName =
-  "rounded-lg border border-popover-border bg-popover p-1 shadow-md";
-
-const menuTitleClassName =
-  "px-2.5 pb-1 pt-1.5 text-ui-xs font-medium text-foreground-subtlest";
-
-const menuItemClassName = (active: boolean) =>
-  cn(
-    "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors",
-    active ? "bg-menu-hover" : "hover:bg-menu-hover"
-  );
 
 const toolBtnClassName = (active?: boolean, disabled?: boolean) =>
   cn(
@@ -185,9 +133,11 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     onInject,
     size,
     product,
-    deepThink = false,
+    collaborationMode = "normal",
+    agentKey = null,
+    collaborationLocked = false,
+    onCollaborationModeChange,
     send,
-    onSelectionChange,
     draftMessage = null,
     onDraftConsumed,
     draftValue = "",
@@ -207,7 +157,6 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
   const [question, setQuestion] = useState(() =>
     draftValue.slice(0, MAX_QUERY_CHARS)
   );
-  const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
   const [models, setModels] = useState<CatalogModelRecord[]>([]);
@@ -239,7 +188,6 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
   } = useAttachmentUploads(sessionId);
   const promptContexts = useComposerPromptContexts(sessionId);
 
-  const currentMode = getModeKey(product?.type, deepThink);
   const isDataAgent = product?.type === "dataAgent";
 
   const modelStorageKey = `cute:selected-model:${sessionId}`;
@@ -289,11 +237,6 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     window.sessionStorage.setItem(modelStorageKey, modelId);
   };
 
-  const visibleMode = currentMode;
-  const currentModeOption =
-    MODE_OPTIONS.find((item) => item.key === visibleMode) ?? MODE_OPTIONS[0];
-  const CurrentModeIcon = currentModeOption.icon;
-
   const hasUploadingAttachment = attachmentOrder.some((id) => {
     const status = attachmentUploads[id]?.status;
     return status === "pending" || status === "uploading";
@@ -318,8 +261,8 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     !hasUploadingAttachment &&
     !hasFailedAttachment;
   const canSubmit = canSend || canInject;
-  const showDataAgentToggle = showBtn;
-  const showPlanToggle = !showBtn && !isDataAgent && visibleMode === "research";
+  const showPlanToggle =
+    !showBtn && !isDataAgent && collaborationMode === "cluster";
 
   const currentModelMeta = models.find(
     (m) => m.modelId === selectedModel || m.modelName === selectedModel
@@ -404,22 +347,6 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     [addAttachmentUploads]
   );
 
-  const handleSelectionChange = (nextProduct: CHAT.Product, nextDeepThink: boolean) => {
-    onSelectionChange?.({
-      product: nextProduct,
-      deepThink: nextDeepThink,
-    });
-  };
-
-  const handleModeSelect = (modeKey: InputModeKey) => {
-    // 普通模式统一走 ReAct，研究模式统一走 PlanSolve。
-    handleSelectionChange(GENERIC_TASK_PRODUCT, modeKey === "research");
-    if (modeKey !== "research") {
-      setForcePlanMode(false);
-    }
-    setModeMenuOpen(false);
-  };
-
   const handleQuestionChange = (value: string) => {
     const nextQuestion =
       value.length > MAX_QUERY_CHARS ? value.slice(0, MAX_QUERY_CHARS) : value;
@@ -450,7 +377,8 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
     send(
       buildSubmitPayload({
         question: messageWithContexts,
-        visibleMode,
+        collaborationMode,
+        agentKey,
         isDataAgent,
         uploadedFiles,
         model: selectedModel || undefined,
@@ -692,78 +620,35 @@ const GeneralInput: CuteType.FC<Props> = (props) => {
 
               {showBtn ? (
                 <>
-                  <DropdownMenu open={modeMenuOpen} onOpenChange={setModeMenuOpen}>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        className={toolBtnClassName(!isDataAgent, disabled)}
-                      >
-                        <CurrentModeIcon className="size-3.5 shrink-0" />
-                        <span className="truncate">{currentModeOption.label}</span>
-                        <ChevronDownIcon
-                          className={cn(
-                            "size-3.5 shrink-0 transition-transform",
-                            modeMenuOpen && "rotate-180"
-                          )}
-                        />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="start"
-                      side="bottom"
-                      sideOffset={10}
-                      className={cn("w-[200px]", menuContentClassName)}
-                    >
-                      <div className={menuTitleClassName}>模式</div>
-                      <div className="space-y-0.5">
-                        {VISIBLE_MODE_OPTIONS.map((option) => {
-                          const isActive = option.key === visibleMode && !isDataAgent;
-                          return (
-                            <button
-                              key={option.key}
-                              type="button"
-                              className={menuItemClassName(isActive)}
-                              onClick={() => handleModeSelect(option.key)}
-                            >
-                              <option.icon className="size-3.5 shrink-0 text-foreground-subtle" />
-                              <span className="min-w-0 flex-1">
-                                <span className="block text-ui-base font-medium text-foreground">
-                                  {option.label}
-                                </span>
-                                <span className="mt-0.5 block text-ui-xs leading-4 text-foreground-subtle">
-                                  {option.description}
-                                </span>
-                              </span>
-                              {isActive ? (
-                                <CheckIcon className="size-3.5 shrink-0 text-foreground" />
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  {showDataAgentToggle ? (
-                    <button
-                      type="button"
-                      aria-pressed={isDataAgent}
-                      disabled={disabled}
-                      className={toolBtnClassName(isDataAgent, disabled)}
-                      onClick={() => {
-                        if (isDataAgent) {
-                          handleSelectionChange(GENERIC_TASK_PRODUCT, false);
-                          return;
-                        }
-                        handleSelectionChange(DATA_AGENT_PRODUCT, false);
-                      }}
-                    >
-                      <BarChart3Icon className="size-3.5 shrink-0" />
-                      <span className="truncate">数据分析</span>
-                    </button>
-                  ) : null}
-
+                  <button
+                    type="button"
+                    aria-pressed={collaborationMode === "cluster"}
+                    disabled={disabled || collaborationLocked}
+                    className={cn(
+                      toolBtnClassName(
+                        collaborationMode === "cluster",
+                        disabled || collaborationLocked
+                      ),
+                      collaborationMode === "cluster" &&
+                        "bg-brand text-foreground-inverse hover:bg-brand/90 hover:text-foreground-inverse"
+                    )}
+                    title={
+                      collaborationLocked
+                        ? "当前会话已绑定协作模式，请新建会话后切换"
+                        : "由通用协调者统一调度多个智能体"
+                    }
+                    onClick={() => {
+                      const nextMode =
+                        collaborationMode === "cluster" ? "normal" : "cluster";
+                      onCollaborationModeChange?.(nextMode);
+                      if (nextMode === "normal") {
+                        setForcePlanMode(false);
+                      }
+                    }}
+                  >
+                    <NetworkIcon className="size-3.5 shrink-0" />
+                    <span className="truncate">集群模式</span>
+                  </button>
                   <ThinkingToggle
                     supported={supportsThinking}
                     thinking={thinking}

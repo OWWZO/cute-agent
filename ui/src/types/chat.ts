@@ -106,7 +106,9 @@ declare global {
       files?: TFile[];
       message: string;
       outputStyle?: string;
-      deepThink: boolean;
+      collaborationMode: import("@/utils/agentMode").CollaborationMode;
+      /** 普通模式选中的 Agent；集群模式为空。 */
+      agentKey?: string | null;
       /** 本轮模型 modelId 或上游 modelName；空=后端默认 */
       model?: string;
       /** 深度思考（本轮） */
@@ -202,7 +204,10 @@ declare global {
       sessionId: string;
       title: string;
       productType: string;
-      deepThink: boolean;
+      collaborationMode: import("@/utils/agentMode").CollaborationMode;
+      /** 普通模式绑定的 Agent；集群模式为空。 */
+      mainAgentKey?: string | null;
+      mainAgentDisplayName?: string | null;
       /** 会话级模型标识（库值）；null/undefined 表示用户从未显式选择过。 */
       sessionModel?: string | null;
       /** 会话级深度思考开关（库值）；null/undefined 表示未显式选择。 */
@@ -216,6 +221,8 @@ declare global {
       dataChatList: DataChatItem[];
       historyNextCursor?: string | null;
       historyHasMore?: boolean;
+      /** 刷新/切换会话时从后端恢复的 Todo 当前状态。 */
+      sessionTasks?: import("@/services/agentConversation").ConversationSessionTaskSnapshot | null;
     };
 
     export type ConversationSessionItem = import("@/services/agentConversation").ConversationSessionItem;
@@ -225,5 +232,6 @@ declare global {
     export type ConversationRunReplay = import("@/services/agentConversation").ConversationRunReplay;
     export type ConversationHistoryRunDetail = import("@/services/agentConversation").ConversationHistoryRunDetail;
     export type ConversationReplayFrame = import("@/services/agentConversation").ConversationReplayFrame;
+    export type ConversationSessionTaskSnapshot = import("@/services/agentConversation").ConversationSessionTaskSnapshot;
   }
 }

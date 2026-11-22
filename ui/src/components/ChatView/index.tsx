@@ -197,6 +197,8 @@ type Props = {
   sessionWorkspaceFiles?: CHAT.TFile[];
   onEnsureSessionFiles?: () => void;
   onRefreshSessionFiles?: () => void;
+  onTurnSettled?: () => void;
+  onWorkspaceFilesChanged?: (sessionId: string, files: CHAT.TFile[]) => void;
   onRequestRunReplay?: (requestId: string) => Promise<unknown> | void;
   onLoadMoreHistory?: () => Promise<void> | void;
   historyLoading?: boolean;
@@ -210,28 +212,28 @@ const getTaskStableKey = (task?: CHAT.Task) => {
   return getStableTaskIdentity(task);
 };
 
-const getRenderedChat = (chat: CHAT.ChatItem, deepThink: boolean) => {
+const getRenderedChat = (chat: CHAT.ChatItem, isClusterMode: boolean) => {
   if (!(chat.multiAgent?.tasks || []).some((group) => group?.length)) {
     return chat;
   }
-  return buildConversationTaskData(chat, deepThink).currentChat;
+  return buildConversationTaskData(chat, isClusterMode).currentChat;
 };
 
 /** 已落定的历史轮次投影不会继续变化；按 chat 引用缓存，避免子 Agent tab 反复建树。 */
 const renderedChatCache = new WeakMap<
   CHAT.ChatItem,
-  { deepThink: boolean; rendered: CHAT.ChatItem }
+  { isClusterMode: boolean; rendered: CHAT.ChatItem }
 >();
 
-const getCachedRenderedChat = (chat: CHAT.ChatItem, deepThink: boolean) => {
+const getCachedRenderedChat = (chat: CHAT.ChatItem, isClusterMode: boolean) => {
   const cached = renderedChatCache.get(chat);
-  if (cached?.deepThink === deepThink) {
+  if (cached?.isClusterMode === isClusterMode) {
     return cached.rendered;
   }
-  const rendered = getRenderedChat(chat, deepThink);
+  const rendered = getRenderedChat(chat, isClusterMode);
   if (rendered !== chat) {
     renderedChatCache.set(chat, {
-      deepThink,
+      isClusterMode,
       rendered,
     });
   }
@@ -443,6 +445,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
     sessionWorkspaceFiles = [],
     onEnsureSessionFiles,
     onRefreshSessionFiles,
+    onTurnSettled,
+    onWorkspaceFilesChanged,
     onRequestRunReplay,
     onLoadMoreHistory,
     historyLoading = false,
@@ -451,6 +455,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     onFocusModeChange,
   } = props;
 
+  const isClusterConversation = conversation.collaborationMode === "cluster";
   const activeMainChat = conversation.chatList?.[conversation.chatList.length - 1];
   const activeMainRequestId = activeMainChat?.requestId || "";
   const activeMainRunStatus = String(activeMainChat?.metrics?.status || "");
@@ -531,6 +536,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
     useState<OpenAgentTabPayload | null>(null);
   /** 待挂载的子智能体目录 tab（单例，与 pendingAgentTab 同机制） */
   const [pendingAgentDirectory, setPendingAgentDirectory] = useState(false);
+  /** 待挂载的工作区首页 tab（头部展开按钮推来） */
+  const [pendingWorkspaceHome, setPendingWorkspaceHome] = useState(false);
   /** 待挂载的任务预览 tab（点工具卡推来，代替旧的「动态」跟随） */
   const [pendingTaskTab, setPendingTaskTab] = useState<OpenTaskTabPayload | null>(
     null
@@ -553,6 +560,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
     : null;
   const activePendingAgentDirectory =
     pendingForCurrentWorkspace && pendingAgentDirectory;
+  const activePendingWorkspaceHome =
+    pendingForCurrentWorkspace && pendingWorkspaceHome;
   const activePendingTaskTab = pendingForCurrentWorkspace
     ? pendingTaskTab
     : null;
@@ -615,7 +624,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
     isFocusMode,
     setIsRightCollapsed,
     toggleLeftPanel,
-    toggleRightPanel: toggleWorkspaceRightPanel,
     collapseRightPanel,
     toggleFocusMode,
     exitFocusMode,
@@ -648,6 +656,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
     () => groupChatsIntoTurns(deferredChatList).map(buildChatTurnView),
     [deferredChatList]
   );
+  const canOpenConversationFiles =
+    conversation.chatList.length > 0 || conversation.dataChatList.length > 0;
   const openTaskReview = useMemoizedFn(
     (sessionId: string, requestIds: string[]) => {
       if (!sessionId) return;
@@ -708,6 +718,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       setPendingPreviewFile(undefined);
       setPendingAgentTab(null);
       setPendingAgentDirectory(false);
+      setPendingWorkspaceHome(false);
       setPendingTaskTab(null);
       setPendingDesktopTab(null);
       // 新一轮开始，「用户已关闭工作区」的记忆与自动跟随的去重键都归零 ——
@@ -724,7 +735,11 @@ const ChatView: CuteType.FC<Props> = (props) => {
         alertOnly: true,
       });
     },
-    onTurnSettled: () => onRefreshSessionFiles?.(),
+    onTurnSettled: () => {
+      onRefreshSessionFiles?.();
+      onTurnSettled?.();
+    },
+    onWorkspaceFilesChanged,
   });
 
   const requestReplay = useCallback(
@@ -773,6 +788,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     setIsRightCollapsed(false);
     setPendingAgentTab(null);
     setPendingAgentDirectory(false);
+    setPendingWorkspaceHome(false);
     setPendingTaskTab(null);
     setPendingDesktopTab(null);
     // 「待打开」意图都是**瞬时**的，不跨会话 —— 流式自动跟随会写 pendingPreviewFile，
@@ -898,6 +914,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     setPendingSourceTab(null);
     setPendingAgentTab(null);
     setPendingAgentDirectory(false);
+    setPendingWorkspaceHome(false);
     setPendingTaskTab(null);
     setPendingDesktopTab(null);
     pendingWorkspaceOwnerRef.current = "";
@@ -979,6 +996,20 @@ const ChatView: CuteType.FC<Props> = (props) => {
     openRightWorkspace();
     pendingWorkspaceOwnerRef.current = workspaceSessionKey;
     setPendingAgentDirectory(true);
+  });
+
+  /** 头部展开按钮：有旧 tab 就恢复，没有则打开工作区首页。 */
+  const openWorkspaceFromHeader = useMemoizedFn(() => {
+    const cachedHasTabs =
+      readWorkspaceTabState(workspaceSessionKey).tabs.length > 0;
+    if (workspaceHasTabs || cachedHasTabs) {
+      openRightWorkspace();
+      return;
+    }
+    resetPendingOpenIntents();
+    openRightWorkspace();
+    pendingWorkspaceOwnerRef.current = workspaceSessionKey;
+    setPendingWorkspaceHome(true);
   });
 
   /**
@@ -1122,22 +1153,10 @@ const ChatView: CuteType.FC<Props> = (props) => {
     actionViewRef.current?.openPlanView();
   });
 
-  const toggleRightPanel = useMemoizedFn(() => {
-    // 目前只有「工作区收起时头部那个展开按钮」会走到这里（展开方向）。
-    // 关闭方向统一走 `collapseWorkspace()`，保证 tab 哨兵一起复位 —— 否则下次展开
-    // 时 ActionView 首次上报的 0 会被误判成「刚把最后一个 tab 关掉」。
-    if (!isRightCollapsed) {
-      collapseWorkspace();
-      return;
-    }
-    setWorkspaceOpenRequested(true);
-    changeActionStatus(true);
-    toggleWorkspaceRightPanel();
-  });
-
   const closeMobileWorkspace = useMemoizedFn(() => {
     setPendingAgentTab(null);
     setPendingAgentDirectory(false);
+    setPendingWorkspaceHome(false);
     // 手动关闭必须清掉 pending：否则下一次 ActionView 挂载会把这条旧意图
     // 再消费一遍，工作区「自己」又弹回来。
     setPendingTaskTab(null);
@@ -1154,6 +1173,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       exitFocusMode();
       return;
     }
+    setPendingWorkspaceHome(false);
     setPendingTaskTab(null);
     setPendingDesktopTab(null);
     setPendingPreviewFile(undefined);
@@ -1176,7 +1196,9 @@ const ChatView: CuteType.FC<Props> = (props) => {
     const initialConversation = createDraftConversation(baseConversation, {
       chatTitle: inputInfo.message || "",
       productType: "dataAgent",
-      deepThink: false,
+      collaborationMode: "normal",
+      mainAgentKey: null,
+      mainAgentDisplayName: null,
       dataChatList: [...baseConversation.dataChatList, { ...currentChat }],
     });
     const draftController = createConversationDraftController<CHAT.DataChatItem>(
@@ -1235,11 +1257,10 @@ const ChatView: CuteType.FC<Props> = (props) => {
       return;
     }
     if (inputInfoProp.message?.length !== 0) {
-      // 输入路由以 outputStyle 和 deepThink 决定协议：普通/深度请求交给
-      // useConversationStream，只有非深度 dataAgent 才走独立的 DataAgent SSE。
+      // dataAgent 继续走独立 SSE；普通与集群模式统一走 Agent 执行链。
       const targetOutput =
         inputInfoProp.outputStyle || conversationRef.current.productType;
-      if (targetOutput === "dataAgent" && !inputInfoProp.deepThink) {
+      if (targetOutput === "dataAgent") {
         sendDataMessage(inputInfoProp);
       } else {
         sendMessage(inputInfoProp);
@@ -1283,7 +1304,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
     // loading 项已存在，就停止追加，避免同一条用户输入显示两次。
     const shouldRenderOptimisticPlaceholder =
       targetOutput === "dataAgent" &&
-      !inputInfoProp.deepThink &&
       inputInfoProp.message?.length > 0 &&
       !latestChatAlreadyHydrated;
 
@@ -1301,7 +1321,6 @@ const ChatView: CuteType.FC<Props> = (props) => {
   }, [
     conversation.dataChatList,
     conversation.productType,
-    inputInfoProp.deepThink,
     inputInfoProp.message,
     inputInfoProp.outputStyle,
   ]);
@@ -1517,8 +1536,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
           continue;
         }
         const liveChat = chat.loading
-          ? getRenderedChat(chat, conversation.deepThink)
-          : getCachedRenderedChat(chat, conversation.deepThink);
+          ? getRenderedChat(chat, isClusterConversation)
+          : getCachedRenderedChat(chat, isClusterConversation);
         const liveTool = findAgentTaskByToolCallId(liveChat, tab.toolCallId);
         if (liveTool) {
           source = {
@@ -1561,7 +1580,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       changeTask,
       conversation.id,
       conversation.chatList,
-      conversation.deepThink,
+      isClusterConversation,
       onOpenTaskFiles,
       openAgentPanel,
       openToolDiffPanel,
@@ -1696,6 +1715,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
       activePendingTaskTab ||
         activePendingAgentTab ||
         activePendingAgentDirectory ||
+        activePendingWorkspaceHome ||
         activePendingSourceTab ||
         activePendingDesktopTab ||
         activePendingPreviewFile
@@ -1796,6 +1816,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
         activePendingTaskTab ||
         activePendingAgentTab ||
         activePendingAgentDirectory ||
+        activePendingWorkspaceHome ||
         activePendingSourceTab ||
         activePendingPreviewFile ||
         activePendingDesktopTab
@@ -1808,13 +1829,13 @@ const ChatView: CuteType.FC<Props> = (props) => {
   });
 
   const renderWorkspaceReopenTrigger = () =>
-    hasWorkspaceContent && isRightCollapsed ? (
+    !workspaceVisible ? (
       <button
         type="button"
-        onClick={toggleRightPanel}
-        className="cute-mobile-workspace-trigger flex h-8 w-8 items-center justify-center rounded-full text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-        title="打开工作区"
-        aria-label="打开工作区"
+        onClick={openWorkspaceFromHeader}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+        title="展开工作区"
+        aria-label="展开工作区"
       >
         <PanelRightOpen className="h-4 w-4" />
       </button>
@@ -1848,7 +1869,11 @@ const ChatView: CuteType.FC<Props> = (props) => {
   /** Composer 堆栈：任务条常驻；pending HITL 替换 Composer（后台子 Agent 入口在右上角面板 + 输入框徽标） */
   const renderComposerStack = (inputKey: string) => (
     <>
-      <SessionTaskComposerBar chat={activeChat} taskList={taskList} />
+      <SessionTaskComposerBar
+        chat={activeChat}
+        taskList={taskList}
+        sessionTasks={conversation.sessionTasks}
+      />
       {hitlDockSlot === "desktop" && pendingDesktopTool ? (
         <div className="mb-1" data-testid="hitl-dock-desktop">
           <DesktopControlCard tool={pendingDesktopTool} />
@@ -1892,7 +1917,9 @@ const ChatView: CuteType.FC<Props> = (props) => {
             autoSubmitMessage={autoSubmitMessage}
             onAutoSubmitConsumed={consumeAutoSubmitMessage}
             product={currentProduct}
-            deepThink={conversation.deepThink}
+            collaborationMode={conversation.collaborationMode || "normal"}
+            agentKey={conversation.mainAgentKey}
+            collaborationLocked
             sessionModel={conversation.sessionModel}
             sessionThinking={conversation.sessionThinking}
             sessionThinkingEffort={conversation.sessionThinkingEffort}
@@ -1902,7 +1929,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
             send={(info) =>
               sendMessage({
                 ...info,
-                deepThink: conversation.deepThink,
+                collaborationMode: conversation.collaborationMode || "normal",
+                agentKey: conversation.mainAgentKey,
                 outputStyle: conversation.productType === "dataAgent" ? "dataAgent" : undefined,
               })
             }
@@ -1912,7 +1940,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     </>
   );
 
-  const renderHeaderStatus = (opts?: { showDeepThink?: boolean; badge?: string }) => (
+  const renderHeaderStatus = (opts?: { showModeBadge?: boolean; badge?: string }) => (
     <div className="flex min-w-0 items-center gap-2.5">
       <span
         className={cn(
@@ -1934,10 +1962,16 @@ const ChatView: CuteType.FC<Props> = (props) => {
           {headerTitle}
         </div>
       )}
-      {opts?.showDeepThink && conversation.deepThink ? (
+      {opts?.showModeBadge ? (
         <div className="flex shrink-0 items-center gap-1.5 rounded-xs border border-border px-2 py-1 text-ui-xs leading-none text-foreground-subtlest">
-          <i className="font_family icon-shendusikao text-ui-xs"></i>
-          <span>深度研究</span>
+          <i className="font_family icon-zhiNengti text-ui-xs"></i>
+          <span>
+            {isClusterConversation
+              ? "协调者"
+              : conversation.mainAgentDisplayName ||
+                conversation.mainAgentKey ||
+                "通用助手"}
+          </span>
         </div>
       ) : null}
       {opts?.badge ? (
@@ -2003,7 +2037,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
     <Dialogue
       chat={turn.chat}
       streamingThought={streamingThoughtMap[turn.chat.requestId]}
-      deepThink={conversation.deepThink}
+      isClusterMode={isClusterConversation}
       sessionArtifactFiles={sessionArtifactFiles}
       changeTask={changeTask}
       changeFile={changeFile}
@@ -2164,6 +2198,10 @@ const ChatView: CuteType.FC<Props> = (props) => {
               onPendingAgentDirectoryTabConsumed={
                 active ? () => setPendingAgentDirectory(false) : undefined
               }
+              pendingWorkspaceHome={active ? activePendingWorkspaceHome : false}
+              onPendingWorkspaceHomeConsumed={
+                active ? () => setPendingWorkspaceHome(false) : undefined
+              }
               pendingTaskTab={active ? activePendingTaskTab : null}
               onPendingTaskTabConsumed={
                 active ? () => setPendingTaskTab(null) : undefined
@@ -2230,10 +2268,9 @@ const ChatView: CuteType.FC<Props> = (props) => {
                 chatHeaderClassName(hasWorkspaceLayout, isFocusMode)
               )}
             >
-              {renderHeaderStatus({showDeepThink: hasWorkspaceLayout ? !isFocusMode : true,})}
+              {renderHeaderStatus({showModeBadge: hasWorkspaceLayout ? !isFocusMode : true,})}
               {(!hasWorkspaceLayout || !isFocusMode) ? (
                 <div className="flex shrink-0 items-center gap-1">
-                  {renderWorkspaceReopenTrigger()}
                   {!readOnly && hasReviewEntry ? (
                     <button
                       type="button"
@@ -2257,15 +2294,18 @@ const ChatView: CuteType.FC<Props> = (props) => {
                     onOpenAgent={openAgentPanel}
                     onOpenDirectory={openSubAgentDirectory}
                   />
-                  <button
-                    type="button"
-                    onClick={() => onOpenTaskFiles?.()}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-                    title="查看当前会话的文件"
-                    aria-label="查看当前会话的文件"
-                  >
-                    <FolderOpen className="h-4 w-4" />
-                  </button>
+                  {canOpenConversationFiles ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenTaskFiles?.()}
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                      title="查看当前会话的文件"
+                      aria-label="查看当前会话的文件"
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                  {renderWorkspaceReopenTrigger()}
                 </div>
               ) : null}
             </div>
@@ -2494,7 +2534,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
                   busy={loading}
                   disabled={loading}
                   product={currentProduct}
-                  deepThink={false}
+                  collaborationMode="normal"
+                  agentKey={null}
                   draftValue={inputDraft}
                   onDraftChange={onInputDraftChange}
                   autoSubmitMessage={autoSubmitMessage}
@@ -2503,7 +2544,8 @@ const ChatView: CuteType.FC<Props> = (props) => {
                     sendDataMessage({
                       ...info,
                       outputStyle: "dataAgent",
-                      deepThink: false,
+                      collaborationMode: "normal",
+                      agentKey: null,
                     })
                   }
                 />
@@ -2516,7 +2558,7 @@ const ChatView: CuteType.FC<Props> = (props) => {
   };
 
   const isDataConversation =
-    conversation.productType === "dataAgent" && !conversation.deepThink;
+    conversation.productType === "dataAgent";
 
   return (
     <div className="flex h-full w-full justify-center">

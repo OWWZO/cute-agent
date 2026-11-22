@@ -153,7 +153,9 @@ type ConversationSidebarProps = {
   recentSessionsLoading: boolean;
   recentSessionsLoadingMore: boolean;
   recentSessionsHasMore: boolean;
+  sessionTreeRevision?: number;
   selectedSessionId?: string;
+  canOpenTaskFiles: boolean;
   user: AuthUser | null;
   sidebarPanel?: SidebarPanel;
   taskList?: PanelItemType[];
@@ -180,7 +182,9 @@ const ConversationSidebar = memo(function ConversationSidebar(
     recentSessionsLoading,
     recentSessionsLoadingMore,
     recentSessionsHasMore,
+    sessionTreeRevision = 0,
     selectedSessionId,
+    canOpenTaskFiles,
     user,
     sidebarPanel = "sessions",
     taskList,
@@ -204,7 +208,7 @@ const ConversationSidebar = memo(function ConversationSidebar(
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(
     null
   );
-  const sessionTree = useSessionTree();
+  const sessionTree = useSessionTree(sessionTreeRevision);
   const recentSessionsListRef = useRef<HTMLDivElement>(null);
   const lastWheelLoadAtRef = useRef(0);
   const { reduce } = useMotionConfig();
@@ -289,7 +293,8 @@ const ConversationSidebar = memo(function ConversationSidebar(
     [onManageFeaturedConversation]
   );
 
-  const isTaskFilesPanel = sidebarPanel === "task-files";
+  const isTaskFilesPanel =
+    canOpenTaskFiles && sidebarPanel === "task-files";
   const searchPanelClassName = cn(
     "grid",
     searchOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
@@ -653,20 +658,22 @@ const ConversationSidebar = memo(function ConversationSidebar(
           </div>
 
           <div className="shrink-0 px-2 py-2">
-            <button
-              type="button"
-              onClick={() => onOpenTaskFiles?.()}
-              disabled={activeView !== "chat"}
-              className={cn(
-                "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui-base font-medium transition-colors",
-                activeView === "chat"
-                  ? "text-[var(--chat-text)] hover:bg-black/[0.04]"
-                  : "cursor-not-allowed text-[var(--chat-text-muted)] opacity-50"
-              )}
-            >
-              <FolderOpen className="h-4 w-4 shrink-0 text-[var(--chat-text-muted)]" />
-              <span>查看当前会话的文件</span>
-            </button>
+            {canOpenTaskFiles ? (
+              <button
+                type="button"
+                onClick={() => onOpenTaskFiles?.()}
+                disabled={activeView !== "chat"}
+                className={cn(
+                  "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui-base font-medium transition-colors",
+                  activeView === "chat"
+                    ? "text-[var(--chat-text)] hover:bg-black/[0.04]"
+                    : "cursor-not-allowed text-[var(--chat-text-muted)] opacity-50"
+                )}
+              >
+                <FolderOpen className="h-4 w-4 shrink-0 text-[var(--chat-text-muted)]" />
+                <span>查看当前会话的文件</span>
+              </button>
+            ) : null}
             <AccountSummary user={user} onLogout={onLogout} />
           </div>
         </>

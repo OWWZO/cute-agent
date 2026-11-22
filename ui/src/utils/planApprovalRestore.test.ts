@@ -25,7 +25,7 @@ function conversation(): CHAT.ConversationHistory {
     sessionId: "session-1",
     title: "计划任务",
     productType: "docs",
-    deepThink: false,
+    collaborationMode: "normal",
     createdAt: 1,
     updatedAt: 1,
     chatTitle: "计划任务",

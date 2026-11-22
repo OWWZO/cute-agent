@@ -177,7 +177,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-summary-001",
       title: "摘要会话",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal" as const,
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -207,7 +207,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-full-summary-001",
       title: "完整终答",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -232,7 +232,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-timing-001",
       title: "时间信息",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal" as const,
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -274,7 +274,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-page-001",
       title: "分页会话",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -294,7 +294,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-page-001",
       title: "分页会话",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 2,
       finishedRunCount: 2,
       failedRunCount: 0,
@@ -332,7 +332,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-merge-001",
       title: "单 run 回放",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -370,7 +370,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-history-001",
       title: "项目风险分析",
       status: "FAILED",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 2,
       finishedRunCount: 1,
       failedRunCount: 1,
@@ -406,7 +406,7 @@ describe("conversationHistory hydrate", () => {
       "tool_thought"
     );
 
-    const taskData = buildConversationTaskData(history.chatList[0], history.deepThink);
+    const taskData = buildConversationTaskData(history.chatList[0], history.collaborationMode === "cluster");
     expect(taskData.taskList).toHaveLength(2);
     expect(taskData.taskList[0].messageType).toBe("tool_result");
     expect(taskData.taskList[1].messageType).toBe("result");
@@ -417,7 +417,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-timeline-only-001",
       title: "时间线历史",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -459,12 +459,70 @@ describe("conversationHistory hydrate", () => {
     expect(resolveTaskSummaryText(chat.conclusion)).toBe("时间线最终结论");
   });
 
+  it("hydrates an independent child session without dropping parent-tagged tools", () => {
+    const conversation = hydrateConversationFromSummaryPage({
+      sessionId: "sub_agent-child-1",
+      title: "独立子会话",
+      status: "SUCCESS",
+      collaborationMode: "normal",
+      runCount: 1,
+      finishedRunCount: 1,
+      failedRunCount: 0,
+      runs: [{
+        requestId: "req-child-1",
+        status: "SUCCESS",
+        queryPreview: "子任务",
+        hasReplay: true,
+      }],
+    });
+    const toolEvent = {
+      taskId: "task-child-tool",
+      taskOrder: 1,
+      messageType: "task",
+      messageOrder: 1,
+      messageId: "msg-child-tool",
+      resultMap: {
+        requestId: "req-child-1",
+        messageId: "msg-child-tool",
+        messageType: "tool_result",
+        toolCallId: "child-call-1",
+        parentToolUseId: "parent-agent-card",
+        toolName: "workspace_read",
+        result: "读取完成",
+        isFinal: true,
+        finish: true,
+      },
+    } as unknown as MESSAGE.EventData;
+
+    const merged = mergeRunReplayIntoConversation(conversation, {
+      requestId: "req-child-1",
+      status: "SUCCESS",
+      queryText: "子任务",
+      replayFrames: [{
+        reqId: "req-child-1",
+        status: "success",
+        finished: true,
+        resultMap: { eventData: toolEvent },
+      }],
+      timelineItems: [],
+    });
+    const chat = merged.chatList[0];
+    const taskData = buildConversationTaskData(chat, false);
+
+    expect(
+      taskData.taskList.some((task) => task.messageType === "tool_result")
+    ).toBe(true);
+    expect(
+      JSON.stringify(chat.tasks)
+    ).not.toContain("parent-agent-card");
+  });
+
   it("canonical 非 run-final 的 result 不会进入主 Agent 结论区", () => {
     const detail: ConversationHistoryDetail = {
       sessionId: "session-timeline-internal-001",
       title: "内部 ask",
       status: "RUNNING",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 0,
       failedRunCount: 0,
@@ -496,7 +554,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-history-deep-001",
       title: "深度研究历史",
       status: "SUCCESS",
-      deepThink: true,
+      collaborationMode: "cluster",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -538,7 +596,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-history-rounds-001",
       title: "多轮规划历史",
       status: "SUCCESS",
-      deepThink: true,
+      collaborationMode: "cluster",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -580,7 +638,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-empty-001",
       title: "新对话",
       status: "RUNNING",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 0,
       finishedRunCount: 0,
       failedRunCount: 0,
@@ -602,7 +660,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-plan-resume-001",
       title: "新对话",
       status: "SUCCESS",
-      deepThink: true,
+      collaborationMode: "cluster",
       runCount: 2,
       finishedRunCount: 2,
       failedRunCount: 0,
@@ -633,7 +691,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-generic-001",
       title: "通用任务历史",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 0,
       finishedRunCount: 0,
       failedRunCount: 0,
@@ -650,7 +708,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-stop-001",
       title: "停止中的会话",
       status: "STOPPED",
-      deepThink: true,
+      collaborationMode: "cluster",
       runCount: 1,
       finishedRunCount: 0,
       failedRunCount: 0,
@@ -699,11 +757,11 @@ describe("conversationHistory hydrate", () => {
       ],
     });
 
-    expect(history.deepThink).toBe(true);
+    expect(history.collaborationMode === "cluster").toBe(true);
     expect(history.chatList).toHaveLength(1);
     expect(history.chatList[0].forceStop).toBe(true);
 
-    const taskData = buildConversationTaskData(history.chatList[0], history.deepThink);
+    const taskData = buildConversationTaskData(history.chatList[0], history.collaborationMode === "cluster");
     expect(taskData.taskList).toHaveLength(2);
     expect(taskData.taskList[0].artifactRefs?.[0]?.missing).toBe(true);
     expect(taskData.taskList[0].artifactRefs?.[0]?.missingReason).toBe(
@@ -719,7 +777,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-row-model-001",
       title: "多轮行模型回放",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -788,7 +846,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-settle-001",
       title: "终稿不覆盖",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -853,7 +911,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-code-history-001",
       title: "代码解释器历史",
       status: "SUCCESS",
-      deepThink: true,
+      collaborationMode: "cluster",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -895,7 +953,7 @@ describe("conversationHistory hydrate", () => {
       ],
     });
 
-    const taskData = buildConversationTaskData(history.chatList[0], history.deepThink);
+    const taskData = buildConversationTaskData(history.chatList[0], history.collaborationMode === "cluster");
 
     expect(taskData.taskList).toHaveLength(2);
     expect(taskData.taskList[0].messageType).toBe("code");
@@ -908,7 +966,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-summary-fallback-001",
       title: "总结兜底会话",
       status: "SUCCESS",
-      deepThink: true,
+      collaborationMode: "cluster",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -952,7 +1010,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-summary-files-001",
       title: "历史文件映射",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -1031,7 +1089,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-context-usage-001",
       title: "上下文恢复",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,
@@ -1060,7 +1118,7 @@ describe("conversationHistory hydrate", () => {
       sessionId: "session-context-usage-002",
       title: "旧会话上下文恢复",
       status: "SUCCESS",
-      deepThink: false,
+      collaborationMode: "normal",
       runCount: 1,
       finishedRunCount: 1,
       failedRunCount: 0,

@@ -192,7 +192,12 @@ export function mergePendingAskUserQuestions(
     }
 
     // Dialogue 渲染 chat.tasks，必须像历史 hydrate 一样从 multiAgent 重建派生层
-    commitHITLChat(chatList, index, chat, conversation.deepThink);
+    commitHITLChat(
+      chatList,
+      index,
+      chat,
+      conversation.collaborationMode === "cluster"
+    );
   }
 
   return {

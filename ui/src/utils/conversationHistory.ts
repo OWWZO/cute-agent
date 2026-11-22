@@ -6,14 +6,16 @@ import type {
 } from "@/services/agentConversation";
 import { GENERIC_TASK_PRODUCT } from "@/utils/constants";
 import {
-  AGENT_TYPE_DEEP_THINK,
   AGENT_TYPE_PLAN_SOLVE,
+  AGENT_TYPE_REACT,
+  normalizeCollaborationMode,
 } from "@/utils/agentMode";
 import {
   hasRenderableTimelineItems,
   isRunReplay,
   resolveRunReplayFrames,
 } from "@/utils/timelineItems";
+import { isSubAgentSessionId } from "@/utils/sessionTree";
 import { buildSessionTimelineChat } from "./chat/sessionTimelineChat";
 
 type ConversationHistoryTitleDetail = Pick<
@@ -90,7 +92,7 @@ export function hydrateRunSummary(
     sessionId: detail.sessionId,
     run: toRunSummary(run),
     fallbackQuery: getRunQuery(run),
-    agentType: resolveConversationAgentType(detail.deepThink),
+    agentType: resolveConversationAgentType(detail.collaborationMode),
   });
 }
 
@@ -98,6 +100,7 @@ export function hydrateRunReplay(
   detail: ConversationHistoryPage | ConversationHistoryDetail,
   run: ConversationRunReplay
 ): CHAT.ChatItem {
+  const isolatedSession = isSubAgentSessionId(detail.sessionId);
   return buildSessionTimelineChat({
     sessionId: detail.sessionId,
     run: toRunSummary(run),
@@ -108,9 +111,9 @@ export function hydrateRunReplay(
       loaded: true,
     },
     fallbackQuery: getRunQuery(run),
-    agentType: resolveConversationAgentType(detail.deepThink),
+    agentType: resolveConversationAgentType(detail.collaborationMode),
     settleResultMetadata: true,
-    isolatedSession: false,
+    isolatedSession,
   });
 }
 
@@ -135,7 +138,8 @@ export function mergeConversationHistoryPage(
     ...conversation,
     sessionId: page.sessionId || conversation.sessionId,
     title,
-    deepThink: Boolean(page.deepThink),
+    collaborationMode: normalizeCollaborationMode(page.collaborationMode),
+    mainAgentKey: page.mainAgentKey ?? conversation.mainAgentKey,
     createdAt,
     updatedAt,
     chatTitle: title,
@@ -157,7 +161,8 @@ export function mergeRunReplayIntoConversation(
     sessionId: conversation.sessionId,
     title: conversation.title,
     status: "",
-    deepThink: conversation.deepThink,
+    collaborationMode: conversation.collaborationMode,
+    mainAgentKey: conversation.mainAgentKey,
     runCount: conversation.chatList.length,
     finishedRunCount: 0,
     failedRunCount: 0,
@@ -209,7 +214,9 @@ function buildConversationHistory(
     sessionId: detail.sessionId,
     title,
     productType: GENERIC_TASK_PRODUCT.type,
-    deepThink: Boolean(detail.deepThink),
+    collaborationMode: normalizeCollaborationMode(detail.collaborationMode),
+    mainAgentKey: detail.mainAgentKey ?? null,
+    mainAgentDisplayName: null,
     sessionModel: detail.model ?? null,
     sessionThinking: detail.thinking ?? null,
     sessionThinkingEffort: detail.thinkingEffort ?? null,
@@ -298,6 +305,8 @@ function toTimestamp(value?: string | null, fallback = Date.now()) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function resolveConversationAgentType(deepThink?: boolean) {
-  return deepThink ? AGENT_TYPE_DEEP_THINK : AGENT_TYPE_PLAN_SOLVE;
+function resolveConversationAgentType(collaborationMode?: string | null) {
+  return normalizeCollaborationMode(collaborationMode) === "cluster"
+    ? AGENT_TYPE_PLAN_SOLVE
+    : AGENT_TYPE_REACT;
 }

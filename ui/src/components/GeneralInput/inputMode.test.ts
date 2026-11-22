@@ -3,21 +3,21 @@ import { describe, expect, it } from "vitest";
 import { buildSubmitPayload } from "./inputMode";
 
 describe("inputMode", () => {
-  it("深度研究模式不再透传输出格式，仅打开 deepThink", () => {
+  it("深度研究模式不再透传输出格式，仅打开 isClusterMode", () => {
     expect(
       buildSubmitPayload({
         question: "帮我调研竞品",
-        visibleMode: "research",
+        collaborationMode: "cluster",
         isDataAgent: false,
         uploadedFiles: [],
       })
     ).toMatchObject({
-      deepThink: true,
+      collaborationMode: "cluster",
     });
     expect(
       buildSubmitPayload({
         question: "帮我调研竞品",
-        visibleMode: "research",
+        collaborationMode: "cluster",
         isDataAgent: false,
         uploadedFiles: [],
       })
@@ -28,19 +28,19 @@ describe("inputMode", () => {
     expect(
       buildSubmitPayload({
         question: "重新规划",
-        visibleMode: "research",
+        collaborationMode: "cluster",
         isDataAgent: false,
         uploadedFiles: [],
         forcePlanMode: true,
       })
     ).toMatchObject({
-      deepThink: true,
+      collaborationMode: "cluster",
       forcePlanMode: true,
     });
     expect(
       buildSubmitPayload({
         question: "继续执行",
-        visibleMode: "research",
+        collaborationMode: "cluster",
         isDataAgent: false,
         uploadedFiles: [],
       })
@@ -51,17 +51,17 @@ describe("inputMode", () => {
     expect(
       buildSubmitPayload({
         question: "先帮我分析这个问题",
-        visibleMode: "think",
+        collaborationMode: "normal",
         isDataAgent: false,
         uploadedFiles: [],
       })
     ).toMatchObject({
-      deepThink: false,
+      collaborationMode: "normal",
     });
     expect(
       buildSubmitPayload({
         question: "先帮我分析这个问题",
-        visibleMode: "think",
+        collaborationMode: "normal",
         isDataAgent: false,
         uploadedFiles: [],
       })
@@ -72,7 +72,7 @@ describe("inputMode", () => {
     expect(
       buildSubmitPayload({
         question: "分析这个问题",
-        visibleMode: "think",
+        collaborationMode: "normal",
         isDataAgent: false,
         uploadedFiles: [],
         thinking: true,
@@ -87,7 +87,7 @@ describe("inputMode", () => {
     expect(
       buildSubmitPayload({
         question: "分析这个问题",
-        visibleMode: "think",
+        collaborationMode: "normal",
         isDataAgent: false,
         uploadedFiles: [],
         thinking: true,

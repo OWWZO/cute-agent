@@ -42,6 +42,7 @@ import {
   type SuggestedQuestion,
 } from "@/utils/constants";
 import type { PromptSelectionRequest } from "@/utils/suggestedPrompts";
+import type { CollaborationMode } from "@/utils/agentMode";
 
 const SUGGESTION_ICON_MAP: Partial<Record<SuggestedQuestionIcon, LucideIcon>> = {
   creator: UsersRound,
@@ -93,10 +94,7 @@ export default function WelcomeView(props: {
   product: CHAT.Product;
   videoModalOpen?: string;
   featuredCards: FeaturedConversationCardModel[];
-  onSelectionChange: (selection: {
-    product: CHAT.Product;
-    deepThink: boolean;
-  }) => void;
+  onCollaborationModeChange: (mode: CollaborationMode) => void;
   inputDraft?: string;
   onInputDraftChange?: (draft: string) => void;
   initialFiles?: File[];
@@ -296,7 +294,11 @@ export default function WelcomeView(props: {
                 size="big"
                 disabled={false}
                 product={props.product}
-                deepThink={props.currentConversation.deepThink}
+                collaborationMode={
+                  props.currentConversation.collaborationMode || "normal"
+                }
+                agentKey={props.currentConversation.mainAgentKey}
+                onCollaborationModeChange={props.onCollaborationModeChange}
                 draftValue={props.inputDraft}
                 onDraftChange={props.onInputDraftChange}
                 initialFiles={props.initialFiles}
@@ -305,7 +307,6 @@ export default function WelcomeView(props: {
                 }
                 promptSelectionRequest={props.suggestedPromptSelection}
                 send={props.onSend}
-                onSelectionChange={props.onSelectionChange}
               />
             </div>
           </motion.div>

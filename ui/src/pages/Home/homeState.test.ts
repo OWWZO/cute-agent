@@ -22,12 +22,12 @@ describe("homeState", () => {
     expect(shouldApplyConversationToView(undefined, "conv-a")).toBe(false);
   });
 
-  it("切到 dataAgent 时关闭 deepThink", () => {
+  it("切到 dataAgent 时回到普通协作模式", () => {
     expect(
       deriveConversationMetaFromInput(
         {
           outputStyle: "dataAgent",
-          deepThink: true,
+          collaborationMode: "cluster",
         },
         {
           productType: "task",
@@ -35,15 +35,17 @@ describe("homeState", () => {
       )
     ).toMatchObject({
       productType: "dataAgent",
-      deepThink: false,
+      collaborationMode: "normal",
+      mainAgentKey: null,
     });
   });
 
-  it("未显式选择输出格式时应保留通用任务态", () => {
+  it("普通模式保留当前 Agent 和协作模式", () => {
     expect(
       deriveConversationMetaFromInput(
         {
-          deepThink: true,
+          collaborationMode: "cluster",
+          agentKey: "data-analysis",
         },
         {
           productType: "task",
@@ -51,7 +53,8 @@ describe("homeState", () => {
       )
     ).toMatchObject({
       productType: "task",
-      deepThink: true,
+      collaborationMode: "cluster",
+      mainAgentKey: null,
     });
   });
 

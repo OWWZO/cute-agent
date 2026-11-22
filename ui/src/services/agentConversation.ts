@@ -142,7 +142,8 @@ export interface ConversationHistoryPage {
   sessionId: string;
   title: string;
   status: string;
-  deepThink: boolean;
+  collaborationMode: "normal" | "cluster";
+  mainAgentKey?: string | null;
   /** 会话级模型标识；null/undefined 表示用户从未显式选择过。 */
   model?: string | null;
   /** 是否开启深度思考；null/undefined 表示未显式选择。 */
@@ -164,6 +165,16 @@ export interface ConversationHistoryPage {
 
 export type ConversationHistoryRunDetail = ConversationRunReplay;
 
+/** 会话当前 Todo 快照；结构与实时 session_tasks 事件一致。 */
+export interface ConversationSessionTaskSnapshot {
+  listId?: string;
+  tasks: Record<string, unknown>[];
+  total: number;
+  pending?: number;
+  inProgress: number;
+  completed: number;
+}
+
 /** 会话切换 bootstrap：一次返回恢复会话所需的全部数据。 */
 export interface ConversationSessionBootstrap {
   detail: ConversationHistoryPage;
@@ -171,6 +182,7 @@ export interface ConversationSessionBootstrap {
   askUser: Record<string, unknown>[];
   desktopControl: Record<string, unknown>[];
   planApproval: Record<string, unknown>[];
+  sessionTasks?: ConversationSessionTaskSnapshot | null;
   /** 末尾 turn 的 run 回放，key = requestId。 */
   replays: Record<string, ConversationRunReplay>;
   /** false 表示未内联（超预算或无可用回放），需走并行补拉。 */
@@ -298,7 +310,8 @@ export const conversationHistoryApi = {
       model?: string;
       thinking?: boolean;
       thinkingEffort?: string;
-      deepThink?: number;
+      collaborationMode?: "normal" | "cluster";
+      agentKey?: string | null;
     }
   ): Promise<AgentSessionQueryResult> => {
     try {

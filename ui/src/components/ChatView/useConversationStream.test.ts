@@ -202,7 +202,7 @@ describe("useConversationStream helpers", () => {
           query: "先跑后台"
         } as CHAT.ChatItem,
       ],
-    } as CHAT.ConversationHistory;
+    } as unknown as CHAT.ConversationHistory;
     const controller = createConversationDraftController<CHAT.ChatItem>(
       "c1",
       latest,
@@ -357,7 +357,7 @@ describe("useConversationStream helpers", () => {
     const conversation = {
       id: "c1",
       sessionId: "s1",
-      deepThink: false,
+      collaborationMode: "normal",
       chatList: [
         {
           sessionId: "s1",

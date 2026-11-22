@@ -71,7 +71,7 @@ describe("FeaturedConversationDetailView", () => {
               sessionId: "session-detail-001",
               title: "原会话",
               status: "SUCCESS",
-              deepThink: false,
+              collaborationMode: "normal",
               runCount: 1,
               finishedRunCount: 1,
               failedRunCount: 0,

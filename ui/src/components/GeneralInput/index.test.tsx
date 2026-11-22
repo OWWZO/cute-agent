@@ -72,7 +72,7 @@ describe("GeneralInput", () => {
     expect(html).toContain(">你好</textarea>");
   });
 
-  it("输入工具条不再展示输出格式入口", () => {
+  it("输入工具条展示集群模式入口而不是输出格式入口", () => {
     const html = renderToStaticMarkup(
       <GeneralInput
         sessionId="session-1"
@@ -93,11 +93,10 @@ describe("GeneralInput", () => {
 
     expect(html).not.toContain("输出格式");
     expect(html).not.toContain("网页模式");
-    expect(html).toContain("深度思考");
-    expect(html).toContain("数据分析");
+    expect(html).toContain("集群模式");
   });
 
-  it("欢迎页选 PlanExecute 不展示计划按钮", () => {
+  it("欢迎页开启集群模式时不展示本轮计划按钮", () => {
     const html = renderToStaticMarkup(
       <GeneralInput
         sessionId="session-1"
@@ -105,7 +104,7 @@ describe("GeneralInput", () => {
         showBtn
         disabled={false}
         size="default"
-        deepThink
+        collaborationMode="cluster"
         send={vi.fn()}
       />
     );
@@ -113,7 +112,7 @@ describe("GeneralInput", () => {
     expect(html).not.toContain(">计划<");
   });
 
-  it("PlanExecute 会话展示本轮计划按钮", () => {
+  it("集群会话展示本轮计划按钮", () => {
     const html = renderToStaticMarkup(
       <GeneralInput
         sessionId="session-1"
@@ -121,7 +120,7 @@ describe("GeneralInput", () => {
         showBtn={false}
         disabled={false}
         size="default"
-        deepThink
+        collaborationMode="cluster"
         send={vi.fn()}
       />
     );

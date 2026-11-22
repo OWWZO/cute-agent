@@ -3,7 +3,7 @@ import { normalizeFileUrlForBrowser } from "@/utils/fileUrl";
 /**
  * Agent SSE 请求体适配器。
  *
- * <p>该模块把页面输入和附件引用转换为 Cute 后端契约，集中处理 deepThink 数值
+ * <p>该模块把页面输入和附件引用转换为 Cute 后端契约，集中处理协作模式
  * 标识和浏览器可访问 URL，避免组件层重复维护协议字段。</p>
  */
 export type AgentSessionFile = {
@@ -22,7 +22,8 @@ type BuildAgentStreamRequestInput = {
   sessionId: string
   requestId: string
   message: string
-  deepThink: boolean
+  collaborationMode: "normal" | "cluster"
+  agentKey?: string | null
   outputStyle?: "dataAgent"
   files?: CHAT.TFile[]
   /** modelId 或上游 modelName */
@@ -69,7 +70,8 @@ export const buildAgentStreamRequest = ({
   sessionId,
   requestId,
   message,
-  deepThink,
+  collaborationMode,
+  agentKey,
   outputStyle,
   files,
   model,
@@ -80,12 +82,16 @@ export const buildAgentStreamRequest = ({
   const sessionFiles = mapSessionFiles(files)
   const modelRef = model?.trim()
   const effort = thinkingEffort?.trim()
+  const normalizedAgentKey = agentKey?.trim()
 
   return {
     sessionId,
     requestId,
     query: message,
-    deepThink: deepThink ? 1 : 0,
+    collaborationMode,
+    ...(collaborationMode === "normal" && normalizedAgentKey
+      ? { agentKey: normalizedAgentKey }
+      : {}),
     ...(outputStyle === "dataAgent" ? { outputStyle } : {}),
     ...(sessionFiles.length ? { sessionFiles } : {}),
     ...(modelRef ? { model: modelRef } : {}),

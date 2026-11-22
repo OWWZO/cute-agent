@@ -20,7 +20,7 @@ function wakeChat(loading: boolean): CHAT.ChatItem {
 describe("Dialogue background wake", () => {
   it("隐藏唤醒消息的用户气泡和撤销入口，并明确显示继续处理状态", () => {
     const running = renderToStaticMarkup(
-      <Dialogue chat={wakeChat(true)} deepThink={false} onUndo={() => undefined} />
+      <Dialogue chat={wakeChat(true)} isClusterMode={false} onUndo={() => undefined} />
     );
 
     expect(running).not.toContain("data-user-message-anchor");
@@ -29,7 +29,7 @@ describe("Dialogue background wake", () => {
 
   it("唤醒轮完成后只显示来源徽标", () => {
     const finished = renderToStaticMarkup(
-      <Dialogue chat={wakeChat(false)} deepThink={false} onUndo={() => undefined} />
+      <Dialogue chat={wakeChat(false)} isClusterMode={false} onUndo={() => undefined} />
     );
 
     expect(finished).not.toContain("data-user-message-anchor");

@@ -160,9 +160,9 @@ export function commitHITLChat(
   chatList: CHAT.ChatItem[],
   index: number,
   chat: CHAT.ChatItem,
-  deepThink?: boolean
+  isClusterMode?: boolean
 ): void {
-  const derived = buildConversationTaskData(chat, deepThink);
+  const derived = buildConversationTaskData(chat, isClusterMode);
   chatList[index] = {
     ...derived.currentChat,
     tip: chat.tip,

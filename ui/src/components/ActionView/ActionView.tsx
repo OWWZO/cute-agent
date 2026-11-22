@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { iconType } from "@/utils/constants";
 import {
   AGENT_DIRECTORY_TAB_KEY,
+  WORKSPACE_HOME_TAB_KEY,
   agentTabKey,
   collectWorkspaceFiles,
   desktopTabKey,
@@ -42,6 +43,7 @@ import {
   isDesktopTab,
   isSourceTab,
   isTaskTab,
+  isWorkspaceHomeTab,
   resolveWorkspacePaneMode,
   taskTabKey,
   upsertWorkspaceTab,
@@ -64,6 +66,7 @@ import { ToolPreviewPanel } from "../Dialogue/ToolPreviewPanel";
 import { FilePreviewHeaderSlotContext } from "../ActionPanel/filePreviewHeaderSlot";
 import { SubAgentDirectoryPanel } from "../Dialogue/SubAgentDirectoryPanel";
 import DesktopPreviewPanel from "./DesktopPreviewPanel";
+import WorkspaceHomePanel from "./WorkspaceHomePanel";
 import { WorkspaceTabOverview } from "./WorkspaceTabOverview";
 import { WorkspaceTabIcon } from "./WorkspaceTabIcon";
 import { TabTitleTooltip } from "./TabTitleTooltip";
@@ -138,6 +141,8 @@ export type OpenAgentTabPayload = {
 
 export type ActionViewRef = PlanViewAction & {
   setFilePreview: (file?: CHAT.TFile) => void;
+  /** 打开（或激活）工作区首页 tab */
+  openWorkspaceHome: () => void;
   /**
    * 打开一个 `CodeViewerSource` tab（Stage 4）。
    * 会话产物文件仍走 `setFilePreview`；patch / 内联文本 / 无 URL 的 file 走这里。
@@ -206,6 +211,9 @@ type ActionViewProps = {
   /** 父级待打开的子智能体目录 tab（右上角面板页脚点来的） */
   pendingAgentDirectoryTab?: boolean;
   onPendingAgentDirectoryTabConsumed?: () => void;
+  /** 父级待打开的工作区首页 tab（头部展开按钮推来） */
+  pendingWorkspaceHome?: boolean;
+  onPendingWorkspaceHomeConsumed?: () => void;
   /** 父级待打开的任务预览 tab（点工具卡推来，代替旧的「动态」跟随） */
   pendingTaskTab?: OpenTaskTabPayload | null;
   onPendingTaskTabConsumed?: () => void;
@@ -257,6 +265,8 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
     onPendingAgentTabConsumed,
     pendingAgentDirectoryTab,
     onPendingAgentDirectoryTabConsumed,
+    pendingWorkspaceHome,
+    onPendingWorkspaceHomeConsumed,
     pendingTaskTab,
     onPendingTaskTabConsumed,
     pendingDesktopTab,
@@ -325,7 +335,8 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
         isAgentTab(tab) ||
         isAgentDirectoryTab(tab) ||
         isTaskTab(tab) ||
-        isDesktopTab(tab)
+        isDesktopTab(tab) ||
+        isWorkspaceHomeTab(tab)
       ) {
         return tab;
       }
@@ -456,6 +467,25 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       ];
     });
     selectTab(AGENT_DIRECTORY_TAB_KEY);
+  });
+
+  /** 打开 / 激活工作区首页（单例，固定在最左侧）。 */
+  const openWorkspaceHomeInTab = useMemoizedFn(() => {
+    setOpenTabs((prev) => {
+      const existing = prev.findIndex(isWorkspaceHomeTab);
+      if (existing >= 0) {
+        return prev;
+      }
+      return [
+        {
+          kind: "workspace-home",
+          key: WORKSPACE_HOME_TAB_KEY,
+          openedAt: Date.now(),
+        },
+        ...prev,
+      ];
+    });
+    selectTab(WORKSPACE_HOME_TAB_KEY);
   });
 
   /**
@@ -660,6 +690,16 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
   ]);
 
   useEffect(() => {
+    if (!pendingWorkspaceHome) return;
+    openWorkspaceHomeInTab();
+    onPendingWorkspaceHomeConsumed?.();
+  }, [
+    openWorkspaceHomeInTab,
+    onPendingWorkspaceHomeConsumed,
+    pendingWorkspaceHome,
+  ]);
+
+  useEffect(() => {
     if (!pendingTaskTab) return;
     openTaskInTab(pendingTaskTab);
     onPendingTaskTabConsumed?.();
@@ -765,6 +805,7 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
         }
         openFileInTab(file);
       },
+      openWorkspaceHome: openWorkspaceHomeInTab,
       openSourceTab: (tab) => {
         // parent 的 chat 轮次尚未挂载时，tab 也得先落盘，因此复用 pending 通道：
         // 这里直接写 state（ActionView 已挂载才会被调用），无需父级缓存。
@@ -802,7 +843,8 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       !isTaskTab(selectedTab) &&
       !isDesktopTab(selectedTab) &&
       !isAgentTab(selectedTab) &&
-      !isAgentDirectoryTab(selectedTab)
+      !isAgentDirectoryTab(selectedTab) &&
+      !isWorkspaceHomeTab(selectedTab)
   );
   const selectedFile: WorkspaceFileItem | undefined = isFileTabSelected
     ? (selectedTab as WorkspaceFileItem)
@@ -1086,7 +1128,9 @@ const ActionViewInner = forwardRef<ActionViewRef, ActionViewProps>((props, ref) 
       {/* 工作区内容：工具条 + 预览。
           ZCode PreviewPane.tsx:1729 —— 内容区不套内缩卡片，直接 min-h-0 flex-1 铺满面板。 */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-        {paneMode === "agent-directory" ? (
+        {paneMode === "workspace-home" ? (
+          <WorkspaceHomePanel files={catalog} onOpenFile={openFileInTab} />
+        ) : paneMode === "agent-directory" ? (
           // 子智能体目录：与右上角「智能体」面板同源的名册，按「正在运行 / 已结束」分段。
           <div className="min-h-0 flex-1 overflow-hidden">
             <SubAgentDirectoryPanel items={agentRoster || []} onOpen={onOpenAgent} />

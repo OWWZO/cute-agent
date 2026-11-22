@@ -51,27 +51,45 @@ export function extractSessionTaskSnapshot(tool?: CHAT.Task | null): SessionTask
   if (!tool || tool.messageType !== "session_tasks") {
     return null;
   }
-  const resultMap = asRecord(tool.resultMap);
+  return asSessionTaskSnapshot(tool);
+}
+
+export function asSessionTaskSnapshot(raw?: unknown): SessionTaskSnapshot | null {
+  const root = asRecord(raw);
+  const resultMap = asRecord(root.resultMap);
   const nested = asRecord(resultMap.resultMap);
-  const toolAny = tool as unknown as Record<string, unknown>;
-  const tasks = asSessionTasks(nested.tasks || resultMap.tasks || toolAny.tasks);
+  const tasks = asSessionTasks(nested.tasks || resultMap.tasks || root.tasks);
   if (!tasks.length) {
     return null;
   }
-  const total = Number(nested.total ?? resultMap.total ?? toolAny.total ?? tasks.length);
+  const total = Number(nested.total ?? resultMap.total ?? root.total ?? tasks.length);
   const completed = Number(
     nested.completed ??
       resultMap.completed ??
-      toolAny.completed ??
+      root.completed ??
       tasks.filter((task) => task.status === "completed").length
   );
   const inProgress = Number(
     nested.inProgress ??
       resultMap.inProgress ??
-      toolAny.inProgress ??
+      root.inProgress ??
       tasks.filter((task) => task.status === "in_progress").length
   );
   return { tasks, total, completed, inProgress };
+}
+
+/**
+ * 实时事件一旦存在，即使它是空列表也优先于刷新时恢复的快照。
+ * 否则用户显式清空 Todo 后，旧的持久化快照会重新出现。
+ */
+export function resolveSessionTaskSnapshot(
+  live?: CHAT.Task | null,
+  restored?: unknown
+): SessionTaskSnapshot | null {
+  if (live?.messageType === "session_tasks") {
+    return asSessionTaskSnapshot(live);
+  }
+  return asSessionTaskSnapshot(restored);
 }
 
 function flattenTasks(chat?: CHAT.ChatItem, taskList?: CHAT.Task[]): CHAT.Task[] {

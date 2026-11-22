@@ -585,9 +585,9 @@ const PHASE_HINTS: Record<RunPhase, string> = {
 
 export function resolveRunPhaseHint(
   phase: RunPhase,
-  options?: { deepThink?: boolean; workspaceTitle?: string }
+  options?: { isClusterMode?: boolean; workspaceTitle?: string }
 ) {
-  if (phase === "queued" && options?.deepThink) {
+  if (phase === "queued" && options?.isClusterMode) {
     return "正在制定计划…";
   }
   // 有具体产物标题时，crafting / working 都直接显示标题（两者的文案来源相同）
@@ -603,11 +603,11 @@ export function resolveRunPhaseHint(
 export function resolveRunPresence(params: {
   loading: boolean;
   chat?: CHAT.ChatItem;
-  deepThink?: boolean;
+  isClusterMode?: boolean;
   plan?: CHAT.Plan;
   taskList?: CHAT.Task[];
 }): RunPresence {
-  const { loading, chat, deepThink, plan, taskList } = params;
+  const { loading, chat, isClusterMode, plan, taskList } = params;
   const status = String(chat?.metrics?.status || "").toUpperCase();
   const attentionTask =
     (taskList || []).find((task) => isWorkspaceAttentionTask(task) && isTimelineToolActive(task)) ||
@@ -676,12 +676,12 @@ export function resolveRunPresence(params: {
     phase = "crafting";
   } else if (hasActiveTool || tools.length > 0) {
     phase = "working";
-  } else if (hasPlan && deepThink) {
+  } else if (hasPlan && isClusterMode) {
     phase = "planning";
   } else if (hasThought) {
     phase = "thinking";
   }
-  // deepThink 首包前保持 queued，文案走“制定计划”（即 phase 的初值）
+  // isClusterMode 首包前保持 queued，文案走“制定计划”（即 phase 的初值）
 
   // crafting 且能定位到产物时指向工作区，其余阶段一律看时间线
   const attention: RunAttention =
@@ -690,7 +690,7 @@ export function resolveRunPresence(params: {
   return {
     phase,
     hint: resolveRunPhaseHint(phase, {
-      deepThink,
+      isClusterMode,
       workspaceTitle,
     }),
     attention,

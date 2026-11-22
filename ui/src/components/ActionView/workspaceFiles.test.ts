@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AGENT_DIRECTORY_TAB_KEY,
+  WORKSPACE_HOME_TAB_KEY,
   agentTabKey,
   buildSessionFileManifestTask,
   buildWorkspaceTree,
@@ -15,6 +16,7 @@ import {
   isDesktopTab,
   isSourceTab,
   isTaskTab,
+  isWorkspaceHomeTab,
   resolveWorkspacePaneMode,
   tabPreviewFileKey,
   taskTabKey,
@@ -439,7 +441,11 @@ describe("resolveWorkspacePaneMode", () => {
     expect(resolveWorkspacePaneMode(undefined)).toBe("empty");
   });
 
-  it("按选中 tab 的类型分派：source / file / task / desktop / agent / agent-directory", () => {
+  it("按选中 tab 的类型分派：工作区首页 / source / file / task / desktop / agent / agent-directory", () => {
+    const home = {
+      kind: "workspace-home",
+      key: WORKSPACE_HOME_TAB_KEY,
+    } as unknown as WorkspaceTab;
     const source = {
       kind: "source",
       key: "patch:src/a.ts:h1",
@@ -480,6 +486,7 @@ describe("resolveWorkspacePaneMode", () => {
       key: AGENT_DIRECTORY_TAB_KEY,
     } as unknown as WorkspaceTab;
 
+    expect(resolveWorkspacePaneMode(home)).toBe("workspace-home");
     expect(resolveWorkspacePaneMode(source)).toBe("source");
     expect(resolveWorkspacePaneMode(file)).toBe("file");
     expect(resolveWorkspacePaneMode(task)).toBe("task");
@@ -597,6 +604,19 @@ describe("桌面控制预览 tab 身份", () => {
       AGENT_DIRECTORY_TAB_KEY,
     ];
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe("工作区首页 tab 身份", () => {
+  it("单例键固定，且不会参与产物预览合并", () => {
+    const home = {
+      kind: "workspace-home",
+      key: WORKSPACE_HOME_TAB_KEY,
+    } as unknown as WorkspaceTab;
+
+    expect(isWorkspaceHomeTab(home)).toBe(true);
+    expect(workspaceTabKey(home)).toBe(WORKSPACE_HOME_TAB_KEY);
+    expect(tabPreviewFileKey(home)).toBe("");
   });
 });
 

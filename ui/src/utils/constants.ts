@@ -61,7 +61,6 @@ export type SuggestedQuestion = {
   template: string;
   icon: SuggestedQuestionIcon;
   placeholders?: string[];
-  deepThink?: boolean;
 };
 
 const socialMediaQuestions: SuggestedQuestion[] = [
@@ -373,7 +372,6 @@ const deepResearchQuestions: SuggestedQuestion[] = [
       "调研公司【公司名称】，梳理业务、产品、商业模式、财务、组织、客户、竞争格局和最近一年动态，并标注关键信息来源。",
     icon: "company",
     placeholders: ["【公司名称】"],
-    deepThink: true,
   },
   {
     id: "competitor-side-by-side",
@@ -383,7 +381,6 @@ const deepResearchQuestions: SuggestedQuestion[] = [
       "并排对比【公司 A】、【公司 B】和【公司 C】，从产品、客户、定价、渠道、商业模式、团队和发展方向进行研究，最后给出判断。",
     icon: "linkedin",
     placeholders: ["【公司 A】", "【公司 B】", "【公司 C】"],
-    deepThink: true,
   },
   {
     id: "company-industry-news",
@@ -393,7 +390,6 @@ const deepResearchQuestions: SuggestedQuestion[] = [
       "追踪【公司或行业】最近【时间范围】的新闻和重要事件，按时间线整理，并分析这些事件对业务、竞争和市场的影响。",
     icon: "news",
     placeholders: ["【公司或行业】", "【时间范围】"],
-    deepThink: true,
   },
   {
     id: "local-competitor-reviews",
@@ -403,7 +399,6 @@ const deepResearchQuestions: SuggestedQuestion[] = [
       "分析【城市或地区】的竞争对手【行业或商家类型】评价，整理用户满意点、抱怨、服务差距和可以切入的机会。",
     icon: "map",
     placeholders: ["【城市或地区】", "【行业或商家类型】"],
-    deepThink: true,
   },
   {
     id: "person-career-background",
@@ -413,7 +408,6 @@ const deepResearchQuestions: SuggestedQuestion[] = [
       "调研人物【人物姓名或主页链接】的职业背景，梳理教育、任职经历、代表项目、公开观点、影响力和近期动态，并标注信息来源。",
     icon: "person",
     placeholders: ["【人物姓名或主页链接】"],
-    deepThink: true,
   },
   {
     id: "technology-research",
@@ -423,7 +417,6 @@ const deepResearchQuestions: SuggestedQuestion[] = [
       "调研技术【技术名称】，解释它的原理、发展历史、主要实现、应用场景、生态、限制和与替代方案的差异，输出一份技术研究报告。",
     icon: "industry",
     placeholders: ["【技术名称】"],
-    deepThink: true,
   },
   {
     id: "hiring-strategy",
@@ -433,7 +426,6 @@ const deepResearchQuestions: SuggestedQuestion[] = [
       "分析公司【公司名称】近期招聘职位，从岗位类型、技能要求、地点、团队结构和职位变化推断公司的业务重点与战略方向。",
     icon: "briefcase",
     placeholders: ["【公司名称】"],
-    deepThink: true,
   },
   {
     id: "app-review-research",
@@ -443,7 +435,6 @@ const deepResearchQuestions: SuggestedQuestion[] = [
       "分析应用【应用名称或商店链接】的用户评论，提取高频好评、差评、功能需求、使用场景和竞品替代原因，最后给出产品改进建议。",
     icon: "app",
     placeholders: ["【应用名称或商店链接】"],
-    deepThink: true,
   },
 ];
 

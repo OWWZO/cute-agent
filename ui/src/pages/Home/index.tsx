@@ -37,7 +37,15 @@ import {
   type ConversationSessionItem,
 } from "@/services/agentConversation";
 import { authApi } from "@/services/auth";
+import { catalogApi } from "@/services/catalog";
 import { useAuth } from "@/stores/auth";
+import {
+  normalizeCollaborationMode,
+  type CollaborationMode,
+} from "@/utils/agentMode";
+import AgentProfilePicker, {
+  type AgentProfileOption,
+} from "@/components/AgentProfilePicker";
 import {
   buildFeaturedConversationDetailPath,
   ROUTES,
@@ -56,7 +64,7 @@ import {
   mergeConversationHistoryPage,
   mergeRunReplayIntoConversation,
 } from "@/utils/conversationHistory";
-import { applySessionHitlPending, restoreHitlForSession } from "@/utils/hitlRestore";
+import { applySessionHitlPending } from "@/utils/hitlRestore";
 import { readActiveRun } from "@/utils/activeRunStorage";
 import { isSubAgentSessionId } from "@/utils/sessionTree";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -75,6 +83,7 @@ import {
 } from "./homeState";
 import FeaturedConversationAdminPanel from "./FeaturedConversationAdminPanel";
 import {
+  hydrateSessionWithRunningReplay,
   resolveInitialSession,
 } from "./sessionBootstrap";
 import { useRecentSessions } from "./useRecentSessions";
@@ -92,6 +101,7 @@ import {
   type WorkspaceFileItem,
 } from "@/components/ActionView/workspaceFiles";
 import { normalizeSessionArtifactFiles } from "@/utils/taskArtifacts";
+import { mergeWorkspaceFiles } from "@/utils/chat/workspaceFileEvents";
 import type { ToolTaskDraft } from "@/pages/ToolCatalog/toolCatalog";
 import {
   buildFeaturedConversationFormState,
@@ -131,7 +141,14 @@ const WorkspaceContent: CuteType.FC<{ children: ReactNode }> = ({ children }) =>
 
 const EMPTY_INPUT: CHAT.TInputInfo = {
   message: "",
-  deepThink: false,
+  collaborationMode: "normal",
+  agentKey: null,
+};
+
+const GENERAL_AGENT_PROFILE: AgentProfileOption = {
+  agentKey: "general-purpose",
+  displayName: "通用助手",
+  whenToUse: "通用多步骤任务：检索、分析、代码、办公与报告交付。",
 };
 const EMPTY_FEATURED_FORM: FeaturedConversationFormState = {
   sessionId: "",
@@ -183,12 +200,25 @@ const createConversation = (
   partial: Partial<CHAT.ConversationHistory> = {}
 ): CHAT.ConversationHistory => {
   const now = Date.now();
+  const collaborationMode = partial.collaborationMode || "normal";
+  const mainAgentKey =
+    collaborationMode === "cluster"
+      ? null
+      : partial.mainAgentKey ?? GENERAL_AGENT_PROFILE.agentKey;
   return {
     id: partial.id || `conversation-${getUniqId()}`,
     sessionId: partial.sessionId || createSessionId(),
     title: partial.title || "新对话",
     productType: partial.productType || GENERIC_TASK_PRODUCT.type,
-    deepThink: Boolean(partial.deepThink),
+    collaborationMode,
+    mainAgentKey,
+    mainAgentDisplayName:
+      collaborationMode === "cluster"
+        ? "协调者"
+        : partial.mainAgentDisplayName ??
+          (mainAgentKey && mainAgentKey !== GENERAL_AGENT_PROFILE.agentKey
+            ? mainAgentKey
+            : GENERAL_AGENT_PROFILE.displayName),
     createdAt: partial.createdAt ?? now,
     updatedAt: partial.updatedAt ?? now,
     chatTitle: partial.chatTitle || "",
@@ -255,6 +285,13 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
   const chatViewApiRef = useRef<ChatViewApi | null>(null);
   const [featuredEntryId, setFeaturedEntryId] = useState("");
   const [inputInfo, setInputInfo] = useState<CHAT.TInputInfo>(EMPTY_INPUT);
+  const [agentProfiles, setAgentProfiles] = useState<AgentProfileOption[]>([
+    GENERAL_AGENT_PROFILE,
+  ]);
+  const [agentProfilesLoading, setAgentProfilesLoading] = useState(true);
+  const [agentProfilesError, setAgentProfilesError] = useState<string | null>(
+    null
+  );
   const [suggestedPromptSelection, setSuggestedPromptSelection] =
     useState<PromptSelectionRequest | null>(null);
   const suggestedPromptRequestIdRef = useRef(0);
@@ -279,6 +316,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     null
   );
   const [historyPageLoading, setHistoryPageLoading] = useState(false);
+  const [sessionTreeRevision, setSessionTreeRevision] = useState(0);
   /** 当前打开会话所属的渠道绑定；非空时启动 QQ 侧新轮次监听。 */
   const [activeChannelSession, setActiveChannelSession] = useState<{
     sessionId: string;
@@ -341,6 +379,49 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     );
   const currentConversationRef = useRef(currentConversation);
   currentConversationRef.current = currentConversation;
+  const currentCollaborationMode = normalizeCollaborationMode(
+    currentConversation.collaborationMode
+  );
+  const selectedAgentProfile = useMemo(
+    () =>
+      agentProfiles.find(
+        (agent) => agent.agentKey === currentConversation.mainAgentKey
+      ) ||
+      agentProfiles[0] ||
+      GENERAL_AGENT_PROFILE,
+    [agentProfiles, currentConversation.mainAgentKey]
+  );
+  const loadAgentProfiles = useCallback(async () => {
+    setAgentProfilesLoading(true);
+    setAgentProfilesError(null);
+    try {
+      const records = await catalogApi.listSubAgents();
+      const configured = (Array.isArray(records) ? records : [])
+        .filter(
+          (record) =>
+            Boolean(record?.agentKey) &&
+            (record.status ?? 1) === 1 &&
+            record.agentKey !== GENERAL_AGENT_PROFILE.agentKey
+        )
+        .map((record) => ({
+          agentKey: record.agentKey,
+          displayName: record.displayName?.trim() || record.agentKey,
+          whenToUse: record.whenToUse,
+        }));
+      setAgentProfiles([GENERAL_AGENT_PROFILE, ...configured]);
+    } catch (error) {
+      console.error("加载 Agent 目录失败", error);
+      setAgentProfiles([GENERAL_AGENT_PROFILE]);
+      setAgentProfilesError(
+        error instanceof Error ? error.message : "Agent 目录加载失败"
+      );
+    } finally {
+      setAgentProfilesLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void loadAgentProfiles();
+  }, [loadAgentProfiles]);
   const currentInputDraft = getConversationDraft(
     conversationDrafts,
     currentConversation.sessionId
@@ -371,7 +452,10 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       sessionWorkspaceFileRequestsRef.current,
       async (id) => {
         const files = await conversationHistoryApi.getSessionFiles(id);
-        return normalizeSessionArtifactFiles(files, id);
+        return mergeWorkspaceFiles(
+          sessionWorkspaceFilesCacheRef.current.get(id) || [],
+          normalizeSessionArtifactFiles(files, id)
+        );
       },
       force
     )
@@ -392,6 +476,29 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
         return [] as CHAT.TFile[];
       });
   }, []);
+
+  const applyLiveWorkspaceFiles = useCallback(
+    (sessionId: string, files: CHAT.TFile[]) => {
+      const normalizedSessionId = sessionId?.trim();
+      if (!normalizedSessionId || !files.length) {
+        return;
+      }
+      const existing =
+        sessionWorkspaceFilesCacheRef.current.get(normalizedSessionId) || [];
+      const next = mergeWorkspaceFiles(existing, files);
+      if (next === existing) {
+        return;
+      }
+      sessionWorkspaceFilesCacheRef.current.set(normalizedSessionId, next);
+      if (currentConversationRef.current.sessionId === normalizedSessionId) {
+        setSessionWorkspaceFilesState({
+          sessionId: normalizedSessionId,
+          files: next,
+        });
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     setSessionWorkspaceFilesState({
@@ -429,6 +536,9 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     sessionWorkspaceFilesState.sessionId === currentConversation.sessionId
       ? sessionWorkspaceFilesState.files
       : [];
+  const currentConversationHasContent = hasConversationContent(
+    currentConversation
+  );
 
   const displayedRecentSessions = useMemo(
     () =>
@@ -515,7 +625,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           allowRemoteLookup: Boolean(activeRun),
           loadSessionDetail: (sessionId) =>
             conversationHistoryApi.getSessionDetail(sessionId, { limit: HISTORY_PAGE_SIZE }),
-        }).then(({ sessionId: initialSessionId, detail: restoredDetail }) => {
+        }).then(({ sessionId: initialSessionId }) => {
           if (disposed) {
             return;
           }
@@ -540,22 +650,45 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
 
           void loadSessionWorkspaceFiles(initialSessionId);
 
-          return (restoredDetail
-            ? Promise.resolve(restoredDetail)
-            : conversationHistoryApi.getSessionDetail(initialSessionId, { limit: HISTORY_PAGE_SIZE })
-          )
-            .then(async (detail) => {
+          return conversationHistoryApi
+            .getSessionBootstrap(initialSessionId, {
+              limit: HISTORY_PAGE_SIZE,
+              includeFiles: false,
+              includeReplays: false,
+            })
+            .then(async (bootstrap) => {
+              const detail = bootstrap?.detail;
               if (disposed || !detail || isHistoryDetailEmpty(detail)) {
                 return;
               }
-              const hydrated = hydrateConversationFromSummaryPage(detail);
-              setCurrentConversation(hydrated);
-              const restored = await restoreHitlForSession(hydrated);
+              const hydrated = await hydrateSessionWithRunningReplay(
+                detail,
+                (requestId) => loadRunReplay(initialSessionId, requestId),
+                (requestId, error) => {
+                  console.error(
+                    `加载刷新前过程回放失败 (requestId=${requestId})`,
+                    error
+                  );
+                }
+              );
+              if (disposed) {
+                return;
+              }
+              const withSessionTasks = {
+                ...hydrated,
+                sessionTasks: bootstrap.sessionTasks ?? null,
+              };
+              setCurrentConversation(withSessionTasks);
+              const restored = applySessionHitlPending(withSessionTasks, {
+                askUser: bootstrap.askUser || [],
+                desktopControl: bootstrap.desktopControl || [],
+                planApproval: bootstrap.planApproval || [],
+              });
               if (disposed) {
                 return;
               }
               setCurrentConversation((previous) =>
-                previous.sessionId === hydrated.sessionId ? restored : previous
+                previous.sessionId === withSessionTasks.sessionId ? restored : previous
               );
             })
             .catch((error) => {
@@ -589,6 +722,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     };
   }, [
     refreshRecentSessions,
+    loadRunReplay,
     loadSessionWorkspaceFiles,
   ]);
 
@@ -661,12 +795,27 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       const nextConversation = createConversation({
         sessionId: nextSessionId,
         productType: nextProductType,
-        deepThink: nextProductType === "dataAgent" ? false : override?.deepThink ?? false,
+        collaborationMode:
+          nextProductType === "dataAgent"
+            ? "normal"
+            : override?.collaborationMode ?? "normal",
+        mainAgentKey:
+          override?.mainAgentKey ??
+          (nextProductType === "dataAgent"
+            ? null
+            : GENERAL_AGENT_PROFILE.agentKey),
+        mainAgentDisplayName:
+          override?.mainAgentDisplayName ??
+          (nextProductType === "dataAgent"
+            ? null
+            : GENERAL_AGENT_PROFILE.displayName),
         ...override,
       });
       setCurrentConversation(nextConversation);
       setWorkspaceTaskList([]);
       setSelectedTaskFileKey("");
+      setSessionWorkspaceFilesState({ sessionId: nextSessionId, files: [] });
+      setSidebarPanel("sessions");
       setToolTaskFilesBySession({});
       upsertLocalRecentSession(nextConversation);
       resetInput();
@@ -684,6 +833,33 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     },
     []
   );
+
+  useEffect(() => {
+    if (currentCollaborationMode === "cluster") {
+      return;
+    }
+    const agentKey = currentConversation.mainAgentKey?.trim();
+    if (!agentKey) {
+      return;
+    }
+    const profile = agentProfiles.find((agent) => agent.agentKey === agentKey);
+    if (!profile) {
+      return;
+    }
+    setCurrentConversation((prev) => {
+      if (
+        prev.mainAgentKey !== agentKey ||
+        prev.mainAgentDisplayName === profile.displayName
+      ) {
+        return prev;
+      }
+      return { ...prev, mainAgentDisplayName: profile.displayName };
+    });
+  }, [
+    agentProfiles,
+    currentCollaborationMode,
+    currentConversation.mainAgentKey,
+  ]);
 
   const onInputConsumed = useCallback(() => {
     resetInput();
@@ -764,14 +940,18 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
             planApproval: bootstrap.planApproval || [],
           };
 
-          // 首屏只消费摘要壳。过程 replay 留给用户展开「已工作」时按轮加载，
-          // 不再在切换会话后自动下载并合并 1MB 级时间线。
+          // 首屏只消费摘要壳。过程 replay 由用户展开「已工作」时按轮懒加载，
+          // 避免切换会话后自动下载并合并大时间线。
           const summarized = hydrateConversationFromSummaryPage(detail);
-          setCurrentConversation(summarized);
+          const withSessionTasks = {
+            ...summarized,
+            sessionTasks: bootstrap.sessionTasks ?? null,
+          };
+          setCurrentConversation(withSessionTasks);
           setSessionSwitchPending(null);
           resetInput();
           const nextConversation = applySessionHitlPending(
-            summarized,
+            withSessionTasks,
             hitlPending
           );
           setCurrentConversation((previous) =>
@@ -809,6 +989,13 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     ]
   );
 
+  const handleTurnSettled = useCallback(() => {
+    // 子 Agent 会先落库、再结束父轮；父轮收口后刷新一次列表与已展开的树，
+    // 侧栏才能立即拿到新的 subSessionCount 和子会话行。
+    void refreshRecentSessions(true);
+    setSessionTreeRevision((revision) => revision + 1);
+  }, [refreshRecentSessions]);
+
   /**
    * QQ 侧新起一轮时，把当前会话从后端重新拉一遍并合并：
    * 不显示切换骨架、不重置输入，已有 chat 原样保留，只追加 Web 还不知道的 run。
@@ -841,7 +1028,11 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           return previous;
         }
         const merged = mergeConversationHistoryPage(previous, detail);
-        const withHitl = applySessionHitlPending(merged, {
+        const withSessionTasks = {
+          ...merged,
+          sessionTasks: bootstrap.sessionTasks ?? merged.sessionTasks ?? null,
+        };
+        const withHitl = applySessionHitlPending(withSessionTasks, {
           askUser: bootstrap.askUser || [],
           desktopControl: bootstrap.desktopControl || [],
           planApproval: bootstrap.planApproval || [],
@@ -954,29 +1145,55 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       setInputInfo({
         ...info,
         outputStyle: info.outputStyle,
-        deepThink: nextMeta.deepThink,
+        collaborationMode: nextMeta.collaborationMode,
+        agentKey: nextMeta.mainAgentKey,
       });
     },
     [product.type, updateCurrentConversationMeta]
   );
 
-  const handleInputSelectionChange = useCallback(
-    ({
-      product: nextProduct,
-      deepThink: nextDeepThink,
-    }: {
-      product: CHAT.Product;
-      deepThink: boolean;
-    }) => {
-      const resolved = nextProduct;
-      setProduct(resolved);
-
+  const handleAgentProfileChange = useCallback(
+    (agentKey: string) => {
+      if (currentConversationHasContent) {
+        toast.warning("当前会话已开始，请新建会话后再切换智能体");
+        return;
+      }
+      if (currentCollaborationMode === "cluster") {
+        return;
+      }
+      const hit = agentProfiles.find((agent) => agent.agentKey === agentKey);
       updateCurrentConversationMeta({
-        productType: resolved.type,
-        deepThink: resolved.type === "dataAgent" ? false : nextDeepThink,
+        mainAgentKey: agentKey,
+        mainAgentDisplayName: hit?.displayName || agentKey,
       });
     },
-    [updateCurrentConversationMeta]
+    [
+      agentProfiles,
+      currentCollaborationMode,
+      currentConversationHasContent,
+      updateCurrentConversationMeta,
+    ]
+  );
+
+  const handleCollaborationModeChange = useCallback(
+    (mode: CollaborationMode) => {
+      if (currentConversationHasContent) {
+        toast.warning("当前会话已绑定协作模式，请新建会话后再切换");
+        return;
+      }
+      updateCurrentConversationMeta({
+        collaborationMode: mode,
+        mainAgentKey:
+          mode === "cluster" ? null : selectedAgentProfile.agentKey,
+        mainAgentDisplayName:
+          mode === "cluster" ? "协调者" : selectedAgentProfile.displayName,
+      });
+    },
+    [
+      currentConversationHasContent,
+      selectedAgentProfile,
+      updateCurrentConversationMeta,
+    ]
   );
 
   const toSendMessage = useCallback(
@@ -992,7 +1209,6 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       // 输入框真正提交时产生，否则 Home 会立即切到 ChatView 并自动发送。
       updateCurrentConversationMeta({
         productType: product.type,
-        deepThink: product.type === "dataAgent" ? false : Boolean(query.deepThink),
       });
     },
     [product.type, updateCurrentConversationMeta, updateCurrentInputDraft]
@@ -1261,12 +1477,20 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
   }, [navigate]);
 
   const handleSidebarOpenTaskFiles = useCallback(() => {
+    if (!currentConversationHasContent) {
+      setSidebarPanel("sessions");
+      return;
+    }
     sessionSelectionVersionRef.current += 1;
-    ensureCurrentSessionWorkspaceFiles();
+    ensureCurrentSessionWorkspaceFiles(true);
     setActiveView("chat");
     setWorkspaceImmersive(false);
     setSidebarPanel("task-files");
-  }, [ensureCurrentSessionWorkspaceFiles, setActiveView]);
+  }, [
+    currentConversationHasContent,
+    ensureCurrentSessionWorkspaceFiles,
+    setActiveView,
+  ]);
 
   const handleSidebarCloseTaskFiles = useCallback(() => {
     setSidebarPanel("sessions");
@@ -1282,8 +1506,9 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
   );
 
   const handleSidebarRefreshTaskFiles = useCallback(() => {
+    ensureCurrentSessionWorkspaceFiles(true);
     setWorkspaceTaskList((prev) => [...prev]);
-  }, []);
+  }, [ensureCurrentSessionWorkspaceFiles]);
 
   const sidebarSharedProps = useMemo(
     () => ({
@@ -1292,7 +1517,9 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       recentSessionsLoading,
       recentSessionsLoadingMore,
       recentSessionsHasMore,
+      sessionTreeRevision,
       selectedSessionId: currentConversation.sessionId,
+      canOpenTaskFiles: currentConversationHasContent,
       user: auth.user,
       sidebarPanel,
       taskList: workspaceTaskList,
@@ -1311,6 +1538,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
     [
       activeView,
       auth.user,
+      currentConversationHasContent,
       currentConversation.sessionId,
       displayedRecentSessions,
       handleOpenFeaturedAdmin,
@@ -1326,6 +1554,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
       recentSessionsLoading,
       recentSessionsLoadingMore,
       recentSessionsHasMore,
+      sessionTreeRevision,
       selectedTaskFileKey,
       sidebarPanel,
       workspaceTaskList,
@@ -1362,7 +1591,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
           </div>
         ) : null}
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
           {!workspaceImmersive ? (
             <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--chat-border)] bg-[var(--chat-nav)]/90 px-3 lg:hidden">
               <button
@@ -1388,6 +1617,23 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
               >
                 新建
               </button>
+            </div>
+          ) : null}
+          {activeView === "chat" && !canRenderChatView ? (
+            <div className="pointer-events-none absolute inset-x-0 top-[60px] z-20 flex px-4 lg:top-5 lg:px-6">
+              <div className="pointer-events-auto min-w-0">
+                <AgentProfilePicker
+                  agents={agentProfiles}
+                  value={currentConversation.mainAgentKey}
+                  collaborationMode={
+                    currentConversation.collaborationMode || "normal"
+                  }
+                  loading={agentProfilesLoading}
+                  error={agentProfilesError}
+                  onRetry={() => void loadAgentProfiles()}
+                  onChange={handleAgentProfileChange}
+                />
+              </div>
             </div>
           ) : null}
           <div className={contentContainerClassName}>
@@ -1454,15 +1700,19 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
                       onInputConsumed={onInputConsumed}
                       onTaskListChange={setWorkspaceTaskList}
                       sessionWorkspaceFiles={visibleSessionWorkspaceFiles}
-                      onEnsureSessionFiles={ensureCurrentSessionWorkspaceFiles}
+                      onEnsureSessionFiles={() =>
+                        ensureCurrentSessionWorkspaceFiles(true)
+                      }
                       onRefreshSessionFiles={() =>
                         ensureCurrentSessionWorkspaceFiles(true)
                       }
+                      onTurnSettled={handleTurnSettled}
+                      onWorkspaceFilesChanged={applyLiveWorkspaceFiles}
                       onRegisterApi={(api) => {
                         chatViewApiRef.current = api;
                       }}
                       onOpenTaskFiles={() => {
-                        ensureCurrentSessionWorkspaceFiles();
+                        ensureCurrentSessionWorkspaceFiles(true);
                         setWorkspaceImmersive(false);
                         setSidebarPanel("task-files");
                         setMobileSidebarOpen(true);
@@ -1494,7 +1744,7 @@ const Home: CuteType.FC<HomeProps> = memo(() => {
                       )}
                       product={product}
                       videoModalOpen={videoModalOpen}
-                      onSelectionChange={handleInputSelectionChange}
+                      onCollaborationModeChange={handleCollaborationModeChange}
                       onInputDraftChange={updateCurrentInputDraft}
                       onInitialFilesConsumed={handleToolTaskFilesConsumed}
                       suggestedPromptSelection={suggestedPromptSelection}

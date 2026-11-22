@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { AgentTimelineItem } from "@/types/timeline";
 import {
   isTerminalRunControl,
   isWaitingInputIdleControl,
+  resolveRunFinalItemStatus,
   shouldObserveRunTimeline,
   toTimelineItem,
 } from "./useRunTimeline";
@@ -54,6 +56,30 @@ describe("useRunTimeline canonical envelope", () => {
       eventType: "stream.follow_idle",
       status: "running",
     })).toBe(false);
+  });
+
+  it("recognizes a run-final item as the end of the live stream", () => {
+    expect(resolveRunFinalItemStatus({
+      eventType: "item.completed",
+      itemId: "run:req-1:final",
+      kind: "ASSISTANT_MESSAGE",
+      phase: "FINAL",
+      itemStatus: "COMPLETED",
+    } as AgentTimelineItem)).toBe("SUCCESS");
+    expect(resolveRunFinalItemStatus({
+      eventType: "item.completed",
+      itemId: "run:req-2:final",
+      kind: "ASSISTANT_MESSAGE",
+      phase: "FINAL",
+      itemStatus: "FAILED",
+    } as AgentTimelineItem)).toBe("FAILED");
+    expect(resolveRunFinalItemStatus({
+      eventType: "item.completed",
+      itemId: "tool:call-1",
+      kind: "TOOL_CALL",
+      phase: "INTERMEDIATE",
+      itemStatus: "COMPLETED",
+    } as AgentTimelineItem)).toBe("");
   });
 
   it("only opens timeline streams for non-terminal runs", () => {

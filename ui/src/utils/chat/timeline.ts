@@ -6,7 +6,7 @@ export type TimelineTaskContainer = {
 } & Partial<MESSAGE.Task>;
 
 /**
- * 历史回放里即便不是 deepThink，也可能存在多个任务组。
+ * 历史回放里即便不是 isClusterMode，也可能存在多个任务组。
  * 这里按索引兜底创建时间线分组，避免后续容器逻辑读到 undefined。
  */
 export function ensureTimelineTaskGroup(

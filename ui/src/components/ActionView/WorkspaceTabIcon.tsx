@@ -1,5 +1,11 @@
 import { cn } from "@/lib/utils";
-import { ActivityIcon, BotIcon, ListTree, MonitorIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  BotIcon,
+  FolderTree,
+  ListTree,
+  MonitorIcon,
+} from "lucide-react";
 import { FILE_KIND_TONE } from "@/utils/fileKind";
 import type { WorkspaceTabIconSpec } from "./workspaceTabDisplay";
 
@@ -8,6 +14,7 @@ const GLYPH_ICONS = {
   "list-tree": ListTree,
   activity: ActivityIcon,
   monitor: MonitorIcon,
+  folder: FolderTree,
 } as const;
 
 /**

@@ -55,15 +55,11 @@ function isPromiseLike(value: void | PromiseLike<unknown>): value is PromiseLike
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function shouldHydrateRunReplay(params: {
-  attemptedRequestId: string | null;
   requestId: string;
   replayLoaded?: boolean;
   replayAvailable?: boolean;
 }): boolean {
   if (!params.requestId) {
-    return false;
-  }
-  if (params.attemptedRequestId === params.requestId) {
     return false;
   }
   if (params.replayLoaded) {
@@ -130,8 +126,6 @@ const ReplayDisclosure: FC<ReplayDisclosureProps> = (props) => {
   const [requestPending, setRequestPending] = useState(false);
   const [openAfterHydrate, setOpenAfterHydrate] = useState(false);
   const requestGateRef = useRef<ReplayRequestGate | null>(null);
-  /** 已经为哪个 requestId 补过回放（不论成败），避免折叠/展开反复打后端 */
-  const attemptedReplayIdRef = useRef<string | null>(null);
   if (requestGateRef.current === null) {
     requestGateRef.current = createReplayRequestGate();
   }
@@ -166,18 +160,15 @@ const ReplayDisclosure: FC<ReplayDisclosureProps> = (props) => {
     }
 
     // 回放只补一次：补完仍保留本组件，供后续折叠/展开。
-    if (
-      shouldHydrateRunReplay({
-        attemptedRequestId: attemptedReplayIdRef.current,
-        requestId: chat.requestId,
-        replayLoaded: chat.replayLoaded,
-        replayAvailable: chat.replayAvailable,
-      })
-    ) {
-      attemptedReplayIdRef.current = chat.requestId;
-      if (!open) {
-        setOpenAfterHydrate(true);
-      }
+    const needsHydrate = shouldHydrateRunReplay({
+      requestId: chat.requestId,
+      replayLoaded: chat.replayLoaded,
+      replayAvailable: chat.replayAvailable,
+    });
+    if (needsHydrate) {
+      // 旧 run 可能是 STOPPED/FAILED，过程区默认 open，但此时只有摘要壳、
+      // 尚无可渲染内容。首次点击必须先补回放，不能顺手把 open 翻成 false。
+      setOpenAfterHydrate(true);
       const started = requestGate.request(
         chat.requestId,
         onRequestReplay,
@@ -186,6 +177,7 @@ const ReplayDisclosure: FC<ReplayDisclosureProps> = (props) => {
       if (started) {
         setRequestPending(true);
       }
+      return;
     }
 
     onToggle?.(!open);

@@ -66,4 +66,69 @@ describe("AgentStepTimeline", () => {
       )
     ).toBe(true);
   });
+
+  it("reasoning 条目完成后，即使整轮仍在运行也自动收起", () => {
+    const chat = {
+      sessionId: "s1",
+      requestId: "r1",
+      query: "分析问题",
+      loading: true,
+      startedAt: "1714041600000",
+      files: [],
+      tasks: [[
+        {
+          id: "container-1",
+          children: [{
+            id: "reasoning-1",
+            messageId: "reasoning-1",
+            messageType: "llm_reasoning",
+            messageTime: "1714041601000",
+            toolThought: "这段思考已经结束",
+            finish: true,
+            isFinal: true,
+            resultMap: { isFinal: true },
+          }],
+        },
+      ]],
+      multiAgent: { tasks: [] },
+    } as unknown as CHAT.ChatItem;
+
+    const html = renderToStaticMarkup(
+      <AgentStepTimeline
+        chat={chat}
+        isPlanSolveMessage={false}
+        changeActiveChat={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('data-testid="process-thinking"');
+    expect(html).toContain('data-open="false"');
+    expect(html).not.toContain("kimi-think-live");
+  });
+
+  it("顶部的计划思考完成后，即使整轮仍在运行也自动收起", () => {
+    const chat = {
+      sessionId: "s1",
+      requestId: "r1",
+      query: "制定计划",
+      loading: true,
+      startedAt: "1714041600000",
+      files: [],
+      tasks: [],
+      multiAgent: { tasks: [] },
+    } as unknown as CHAT.ChatItem;
+
+    const html = renderToStaticMarkup(
+      <AgentStepTimeline
+        chat={chat}
+        isPlanSolveMessage
+        thoughtText="计划思考已经结束"
+        thoughtStreaming={false}
+        changeActiveChat={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('data-open="false"');
+    expect(html).not.toContain("kimi-think-live");
+  });
 });
