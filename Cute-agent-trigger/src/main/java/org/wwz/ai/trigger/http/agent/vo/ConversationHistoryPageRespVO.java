@@ -24,7 +24,9 @@ public class ConversationHistoryPageRespVO {
 
     private String status;
 
-    private Boolean deepThink;
+    private String collaborationMode;
+
+    private String mainAgentKey;
 
     /** 会话级模型标识；{@code null} 表示用户从未显式选择过。 */
     private String model;

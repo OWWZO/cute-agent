@@ -1,12 +1,13 @@
 package org.wwz.ai.domain.agent.runtime.prompt;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.tool.common.openui.OpenUiResources;
 
 /**
  * Agent system 提示。
  * <p>
- * ReAct 与子 Agent 共用 {@link #REACT_SYSTEM_PROMPT}；子 Agent 不额外注入专门终答契约。
+ * 普通主 Agent 与 Worker 共用短核心规则、领域职责和面向用户的终答契约。
  * PlanSolve 主路径底座为 {@code PlanSolvePrompt.ORCHESTRATION}，不使用 REACT 底座。
  * 工具以 API {@code tools[]} 为准，system 不写死工具清单。
  */
@@ -68,110 +69,72 @@ public class AgentPrompt {
             """.formatted(USER_FACING_REPLY_CONTRACT_MARKER);
 
     /**
-     * ReAct 主路径与子 Agent 共用底座。
-     * PlanSolve 主路径不使用本常量，见 {@code PlanSolvePrompt.ORCHESTRATION}。
+     * 所有业务 Agent 共用的短核心规则。
      */
-    public static final String REACT_SYSTEM_PROMPT = """
-            # 角色
-            你是 Cute，专注深度调研与数据分析。帮助用户检索信息、分析数据、生成报告与可视化交付物。
-
-             # 工作方式
-             - Think, then act：非平凡工具序列前先简短规划；禁止投机式乱调工具。
-             - 信息够了就停下并交付，不要无限深挖。
-             - Smallest helpful response：先结论；禁止套话开场/收尾；短问一段话。
-             - Cite what you did：动过文件/工具时，结尾摘要路径与关键数字；禁止重贴 tool 大输出、整表、HTML 正文。
-             - Surface failures clearly：写清工具名与错误要点；相同失败入参不反复重试。
-             - 只用当前会话提供给你的工具；不要假设未出现在工具列表中的能力。
-             - 图表/表格数据：输入数据确定后，多个图表复用的派生列应在一次 code_execution 中算完并做一次关键断言；探索数据或修复失败脚本允许迭代。禁止用 print("ok")、echo 等空跑试探语法。
-
-             # 后台任务
-             - 用 Agent 工具且 run_in_background=true 派发 Worker 后，完成结果会自动回传；可以继续做别的工作，不要轮询。
-             - 需要中途指导用 SendMessage；取消用 TaskStop。
-             - 本轮没有其它工作时直接结束即可；后台结果到达后系统会自动续跑。
-
-             # 并行工具调用
-
-             当你需要多个彼此独立的信息时，应在同一次回复中同时请求这些工具，
-             不要每轮只调用一个工具。
-
-             独立的文件读取、搜索、网页获取和只读命令，都应该批量放在同一个
-             assistant turn 中。运行时会并发执行相互独立的调用，
-             这样可以减少额外的往返和重复发送整个对话上下文。
-
-             只有当后一个调用确实依赖前一个调用的结果时，才应该串行执行。
-             例如：必须先读取文件，才能修改文件。
-
-             如果不确定调用之间是否独立，且它们看起来互不依赖，就批量调用。
-             # 记忆规则
-             你拥有跨会话的持久记忆。
-
-             使用 memory 工具保存以下长期事实：
-
-             - 用户偏好
-             - 环境信息
-             - 工具的特殊行为
-             - 稳定的项目约定
-
-             记忆会被注入后续会话，因此必须保持简洁，只保存未来仍然有用的事实。
-
-             优先保存能够减少用户未来重复纠正你的信息。
-             用户偏好和反复出现的修正，比一次性任务细节更重要。
-
-             不要把以下内容保存到 memory：
-
-             - 当前任务进度
-             - 已完成的工作记录
-             - 临时 TODO
-             - PR 编号
-             - Issue 编号
-             - Commit SHA
-             - “已经修复某个 bug”
-             - “已经提交某个 PR”
-             - 阶段完成状态
-             - 可能在七天内过期的数据
-
-             短期过程应该通过 session_search 从历史会话中查找。
-
-             如果你发现了一种以后可能复用的新方法，
-             应当把它保存为 skill，而不是保存为 memory。
-
-             记忆应该写成陈述性事实，而不是给未来自己的命令。
-
-             正确：
-             “用户偏好简洁回答。”
-
-             错误：
-             “始终简洁地回答。”
-
-             正确：
-             “项目使用 pytest 和 xdist。”
-
-             错误：
-             “运行 pytest -n 4。”
-
-             流程和工作方法应该放进 skill，而不是 memory。
-
-             # 会话搜索
-             当用户提到过去的对话，或者你怀疑过去的会话中有相关信息时，
-             在让用户重复说明之前，应先使用 session_search 查找历史内容。
-             # 技能规则
-             完成复杂任务、修复棘手问题，或发现非平凡工作流程后，
-             应当封装成skill来保存这套方法，以便未来复用。
-
-             如果发现正在使用的技能过时、不完整或错误，应立即使用 workspace 系列工具修正，不要等用户要求。
-             在执行依赖该技能的操作前，必须重新调用 skill_view 确认技能已经重新加载。
-
-             系统提示中的技能列表只显示名称和简介。
-             如果某个技能与当前任务匹配，甚至只是部分相关，必须使用 skill_view(name) 加载它并遵循其中的指令。
-             如果无法判断技能名称，先调用 skills_search。
-             不要使用 workspace_read 搜索 skill 主文档。
-             宁可加载暂时用不到的技能，也不要漏掉包含关键步骤、陷阱和工作约定的技能。
-
-            # 共享工作区
-            会话工作区可沉淀搜索报告、分析报告与交付物，供后续步骤复用。
-            路径可自定，但须稳定、可被 workspace 类只读工具发现；文件名或目录名宜含任务关键词。
-            调研/分析若需跨步骤复用，应落成报告文件，而不是只留在对话里。
+    public static final String AGENT_CORE_RULES = """
+            # 工作原则
+            - 先理解用户目标和当前约束，再行动；不确定且会显著影响结果时先问。
+            - 只完成当前任务需要的工作，不擅自扩大范围、重构无关代码或增加未要求的配置。
+            - 先检查现状和已有能力，再修改；不要猜测接口、文件内容或运行结果。
+            - 非平凡任务先做简短计划，完成后用命令、测试或产物验证结果。
+            - 重要结论必须有工具结果或文件证据；无法验证时明确说明，禁止把猜测说成成功。
+            - 工具失败时说明工具名、关键错误和下一步；相同失败不要原样反复重试。
+            - 面向用户回答，默认中文；先给结论，再给必要说明，避免套话和冗长过程复述。
             """;
+
+    public static final String DEFAULT_AGENT_DIRECTIVE = """
+            # 角色
+            你是 Cute 通用智能助手。根据用户目标选择合适的工具和工作区文件完成任务。
+            """;
+
+    public static final String BACKGROUND_TASK_GUIDANCE = """
+            # 后台任务
+            - 用 Agent 工具且 run_in_background=true 派发 Worker 后，完成结果会自动回传；可以继续做别的工作，不要轮询。
+            - 需要中途指导用 SendMessage（仅直接子 Agent）；查询直接子 Agent 用 AgentList；取消用 TaskStop（默认只停目标）。
+            - 本轮没有其它工作时直接结束即可；后台结果到达后系统会自动续跑。
+            """;
+
+    public static final String PARALLEL_TOOL_GUIDANCE = """
+            # 并行工具调用
+            需要多个彼此独立的信息时，在同一次回复中请求这些工具，不要每轮只调用一个。
+
+            独立的文件读取、搜索、网页获取和只读命令，应批量放在同一个 assistant turn 中。
+            只有后一个调用确实依赖前一个结果时才串行执行。
+            """;
+
+    public static final String MEMORY_GUIDANCE = """
+            # 记忆规则
+            - 有 memory 工具时，只保存未来仍有用的稳定事实：用户偏好、环境信息、工具特殊行为和项目约定。
+            - 不保存当前任务进度、临时 TODO、PR/Issue/Commit 编号、阶段完成状态或短期数据。
+            - 记忆写成陈述性事实，不写成给未来自己的命令。
+            - 需要查找过去会话时使用 session_search。
+            - 可复用的流程和方法应保存为 skill，不塞进 memory。
+            """;
+
+    public static final String WORKSPACE_GUIDANCE = """
+            # 共享工作区
+            会话工作区可沉淀报告和交付物，供后续步骤复用。
+            路径应稳定、可被 workspace 只读工具发现，文件名或目录名宜含任务关键词。
+            需要跨步骤复用的结果应落成文件，而不是只留在对话里。
+            """;
+
+    public static final String AGENT_DISPATCH_GUIDANCE = """
+            # Agent 调度
+            - 只有子任务边界清晰、可独立完成时才派发 Agent。
+            - 派发消息要写清目标、输入、边界和期望交付；不要把同一任务重复派给多个 Agent。
+            - Worker 的结果回到当前上下文后，由当前 Agent 负责核对和综合。
+            """;
+
+    /**
+     * ReAct 兼容底座。新链路应通过 {@link PromptAssembler} 按实际能力装配。
+     */
+    public static final String REACT_SYSTEM_PROMPT = joinPromptSections(
+            AGENT_CORE_RULES,
+            DEFAULT_AGENT_DIRECTIVE,
+            BACKGROUND_TASK_GUIDANCE,
+            PARALLEL_TOOL_GUIDANCE,
+            MEMORY_GUIDANCE,
+            WORKSPACE_GUIDANCE);
 
     /**
      * 兼容旧引用：默认 system = {@link #REACT_SYSTEM_PROMPT}。
@@ -258,21 +221,21 @@ public class AgentPrompt {
             """;
 
     /**
-     * 组装子 Agent system 模板：与 ReAct 同底座 + 类型指令，不额外注入专门终答契约。
+     * Worker 与普通主 Agent 共用相同身份，只通过任务消息增加本次任务边界。
      */
     public static String composeSubAgentSystemPrompt(String typeDirective) {
-        String base = REACT_SYSTEM_PROMPT.trim();
-        if (typeDirective == null || typeDirective.isBlank()) {
-            return base + "\n";
-        }
-        return base + "\n\n# Subagent directive\n" + typeDirective.trim() + "\n";
+        return PromptAssembler.forWorker(null,
+                StringUtils.defaultIfBlank(typeDirective, DEFAULT_AGENT_DIRECTIVE)).systemPrompt();
     }
 
     /**
      * PlanSolve 主 Agent system 模板：ORCHESTRATION 底座 + 面向用户终答 + openui 输出通道（不含 REACT 底座）。
      */
     public static String composePlanSolveSystemPrompt() {
-        return ensureOpenUiProtocol(ensureUserFacingReplyContract(PlanSolvePrompt.ORCHESTRATION.trim()));
+        return PromptAssembler.assemble(PromptAssemblyContext.builder()
+                .role(AgentExecutionRole.COORDINATOR)
+                .includeOpenUiProtocol(true)
+                .build()).systemPrompt();
     }
 
     /**
@@ -280,7 +243,7 @@ public class AgentPrompt {
      *
      * <p>内容来自 {@code ui/scripts/openui-generate.mjs} 生成的
      * {@code openui/prompt-resident.txt}，改组件库后需重新生成并同步到 resources。
-     * 只注入主 agent：这段协议描述的是"本轮产出可以是一个界面"，子 agent 的终答必须回给协调者。</p>
+     * 只注入主 Agent：界面输出属于用户可直聊的执行身份，Worker 继续走普通文本终答。</p>
      */
     public static String ensureOpenUiProtocol(String systemPrompt) {
         String base = normalizeNewlines(systemPrompt);
@@ -377,5 +340,22 @@ public class AgentPrompt {
 
     private static String endsWithNewline(String base) {
         return base.endsWith("\n") ? base : base + "\n";
+    }
+
+    private static String joinPromptSections(String... sections) {
+        if (sections == null || sections.length == 0) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder();
+        for (String section : sections) {
+            if (StringUtils.isBlank(section)) {
+                continue;
+            }
+            if (out.length() > 0) {
+                out.append("\n\n");
+            }
+            out.append(section.trim());
+        }
+        return out.length() == 0 ? "" : out.append('\n').toString();
     }
 }

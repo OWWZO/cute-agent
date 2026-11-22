@@ -3,6 +3,7 @@ package org.wwz.ai.trigger.http.agent.mapper;
 import org.springframework.stereotype.Component;
 import org.wwz.ai.application.agent.query.GptQueryCommand;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionFile;
+import org.wwz.ai.domain.agent.runtime.enums.CollaborationMode;
 import org.wwz.ai.trigger.http.agent.vo.GptQueryRequestVO;
 
 import java.util.List;
@@ -17,11 +18,16 @@ public class GptQueryRequestMapper {
         if (request == null) {
             return null;
         }
+        String collaborationMode = request.getCollaborationMode();
+        if (collaborationMode == null && request.getDeepThink() != null) {
+            collaborationMode = CollaborationMode.fromLegacyDeepThink(request.getDeepThink()).getValue();
+        }
         return GptQueryCommand.builder()
                 .query(request.getQuery())
                 .sessionId(request.getSessionId())
                 .requestId(request.getRequestId())
-                .deepThink(request.getDeepThink())
+                .collaborationMode(collaborationMode)
+                .agentKey(request.getAgentKey())
                 .outputStyle(request.getOutputStyle())
                 .traceId(request.getTraceId())
                 .user(request.getUser())

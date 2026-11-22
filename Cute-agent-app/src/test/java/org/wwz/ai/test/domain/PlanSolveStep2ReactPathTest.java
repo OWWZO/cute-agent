@@ -14,6 +14,7 @@ import org.wwz.ai.domain.agent.runtime.enums.AgentType;
 import org.wwz.ai.domain.agent.runtime.enums.RoleType;
 import org.wwz.ai.domain.agent.runtime.llm.LLMSettings;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
+import org.wwz.ai.domain.agent.runtime.prompt.AgentPrompt;
 import org.wwz.ai.domain.agent.runtime.prompt.PlanSolvePrompt;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.agent.ReactFinalAnswerResolver;
@@ -65,6 +66,20 @@ public class PlanSolveStep2ReactPathTest {
         String twice = PlanSolvePrompt.ensureOrchestration(agent.getSystemPrompt());
         int count = twice.split(PlanSolvePrompt.ORCHESTRATION_MARKER, -1).length - 1;
         Assert.assertEquals(1, count);
+    }
+
+    @Test
+    public void resolvedSystemPromptIsUsedOnFirstConstruction() {
+        AgentContext context = newContext("resolved-prompt-session");
+        context.setResolvedSystemPrompt(
+                AgentPrompt.AGENT_CORE_RULES
+                        + "\n\n你是数据分析子代理，负责数据准备、查询与分析结论。\n"
+        );
+
+        ReactImplAgent agent = new ReactImplAgent(context);
+
+        Assert.assertTrue(agent.getSystemPrompt().contains("你是数据分析子代理"));
+        Assert.assertFalse(agent.getSystemPrompt().contains(AgentPrompt.DEFAULT_AGENT_DIRECTIVE));
     }
 
     @Test

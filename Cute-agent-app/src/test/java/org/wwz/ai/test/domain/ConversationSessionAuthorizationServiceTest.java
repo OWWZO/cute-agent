@@ -138,7 +138,7 @@ public class ConversationSessionAuthorizationServiceTest {
                 .model("gpt-test")
                 .thinking(true)
                 .thinkingEffort("high")
-                .deepThink(1)
+                .collaborationMode("cluster")
                 .build();
         Mockito.when(readRepository.querySessionEntity("session-full")).thenReturn(existing);
         ConversationSessionAuthorizationService service =
@@ -163,7 +163,7 @@ public class ConversationSessionAuthorizationServiceTest {
         Assert.assertEquals("gpt-test", record.getModel());
         Assert.assertEquals(Boolean.TRUE, record.getThinking());
         Assert.assertEquals("high", record.getThinkingEffort());
-        Assert.assertEquals(Integer.valueOf(1), record.getDeepThink());
+        Assert.assertEquals(Integer.valueOf(1), record.getCollaborationMode());
     }
 
     @Test(expected = SessionOwnershipDeniedException.class)

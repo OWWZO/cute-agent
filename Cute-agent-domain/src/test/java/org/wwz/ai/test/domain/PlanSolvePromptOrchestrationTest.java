@@ -68,21 +68,20 @@ public class PlanSolvePromptOrchestrationTest {
     @Test
     public void planSolveBaseIsOrchestrationNotReact() {
         String plan = AgentPrompt.composePlanSolveSystemPrompt();
+        Assert.assertTrue(plan.contains(AgentPrompt.AGENT_CORE_RULES));
         Assert.assertTrue(plan.contains(PlanSolvePrompt.ORCHESTRATION_MARKER));
         Assert.assertTrue(plan.contains(AgentPrompt.USER_FACING_REPLY_CONTRACT_MARKER));
         Assert.assertFalse(plan.contains("你是 Cute，专注深度调研与数据分析"));
-        Assert.assertTrue(plan.startsWith("# Plan-Execute 主代理职责")
-                || plan.contains("# Plan-Execute 主代理职责"));
+        Assert.assertTrue(plan.contains("# Plan-Execute 主代理职责"));
     }
 
     @Test
-    public void subAgentSharesReactBaseWithoutDedicatedReplyContract() {
+    public void subAgentSharesAgentIdentityAndKeepsUserFacingReplyContract() {
         String sub = AgentPrompt.composeSubAgentSystemPrompt("专属指令");
-        Assert.assertTrue(sub.contains("你是 Cute，专注深度调研与数据分析"));
+        Assert.assertTrue(sub.contains(AgentPrompt.AGENT_CORE_RULES));
         Assert.assertFalse(sub.contains("COORDINATOR_FACING_REPLY_CONTRACT_V1"));
         Assert.assertFalse(sub.contains("# 面向协调者的回复约定"));
-        Assert.assertFalse(sub.contains(AgentPrompt.USER_FACING_REPLY_CONTRACT_MARKER));
-        Assert.assertTrue(sub.contains("# Subagent directive"));
+        Assert.assertTrue(sub.contains(AgentPrompt.USER_FACING_REPLY_CONTRACT_MARKER));
         Assert.assertTrue(sub.contains("专属指令"));
         Assert.assertFalse(sub.contains("执行型子代理（Worker）"));
     }
@@ -99,7 +98,7 @@ public class PlanSolvePromptOrchestrationTest {
     public void generalPurposeDirectiveIsTypeSupplementOnly() {
         SubAgentRegistry registry = new SubAgentRegistry();
         SubAgentDefinition def = registry.require(SubAgentRegistry.TYPE_GENERAL_PURPOSE);
-        Assert.assertTrue(def.getSystemPrompt().contains("通用调研/分析执行补充"));
-        Assert.assertTrue(def.getWhenToUse().contains("Deep Search"));
+        Assert.assertTrue(def.getSystemPrompt().contains("通用执行补充"));
+        Assert.assertTrue(def.getWhenToUse().contains("检索"));
     }
 }

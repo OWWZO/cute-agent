@@ -30,6 +30,13 @@ public class AgentSessionQueryReqVO {
     /** low | medium | high；空=沿用会话已存值。 */
     private String thinkingEffort;
 
-    /** Deep Think 开关；空=沿用会话已存值。1 → plan_solve，0 → react。 */
+    /** 主模式：normal / cluster；空=沿用会话已存值。 */
+    private String collaborationMode;
+
+    /** 普通模式主 Agent key；空=沿用会话已存值。 */
+    private String agentKey;
+
+    /** @deprecated 兼容旧客户端，仅用于映射为 collaborationMode。 */
+    @Deprecated
     private Integer deepThink;
 }

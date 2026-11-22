@@ -26,7 +26,11 @@ public class ConversationHistoryDetail {
 
     private Integer status;
 
-    private Boolean deepThink;
+    /** 会话绑定的主模式：normal / cluster。 */
+    private String collaborationMode;
+
+    /** 普通模式绑定的主 Agent key；集群模式为空。 */
+    private String mainAgentKey;
 
     /**
      * 会话累计 run 数。注意 {@link #runs} 可能因缺少 requestId 被过滤，

@@ -6,6 +6,7 @@ import org.wwz.ai.application.agent.query.GptQueryCommand;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.enums.CollaborationMode;
 
 import javax.annotation.Resource;
 
@@ -22,7 +23,7 @@ public class AgentExecutionCommandMapper {
         if (command == null) {
             return null;
         }
-        int deepThink = command.getDeepThink() == null ? 0 : command.getDeepThink();
+        CollaborationMode collaborationMode = CollaborationMode.from(command.getCollaborationMode());
         String user = command.getUser() == null ? "cute" : command.getUser();
         String traceId = StringUtils.isBlank(command.getTraceId())
                 ? buildTraceId(user, command.getSessionId(), command.getRequestId())
@@ -30,7 +31,7 @@ public class AgentExecutionCommandMapper {
         String requestId = StringUtils.isNotBlank(command.getRequestId())
                 ? command.getRequestId().trim()
                 : traceId;
-        boolean planSolve = deepThink != 0;
+        boolean planSolve = collaborationMode.isCluster();
 
         return AgentExecutionCommand.builder()
                 .requestId(requestId)
@@ -38,6 +39,8 @@ public class AgentExecutionCommandMapper {
                 .userId(userId)
                 .query(command.getQuery())
                 .agentType(planSolve ? AgentType.PLAN_SOLVE.getValue() : AgentType.REACT.getValue())
+                .collaborationMode(collaborationMode.getValue())
+                .mainAgentKey(command.getAgentKey())
                 .outputStyle("dataAgent".equals(command.getOutputStyle()) ? "dataAgent" : null)
                 .sessionFiles(command.getSessionFiles())
                 .model(StringUtils.trimToNull(command.getModel()))

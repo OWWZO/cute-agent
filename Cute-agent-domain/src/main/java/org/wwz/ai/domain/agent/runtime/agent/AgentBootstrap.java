@@ -35,7 +35,10 @@ public final class AgentBootstrap {
         agent.setName(profile.name());
         agent.setDescription(profile.description());
         agent.setContext(context);
-        agent.initializeSystemPrompt(profile.systemPromptMap().apply(config), profile.defaultSystemPrompt());
+        String resolvedSystemPrompt = StringUtils.trimToNull(context.getResolvedSystemPrompt());
+        agent.initializeSystemPrompt(
+                profile.systemPromptMap().apply(config),
+                StringUtils.defaultIfBlank(resolvedSystemPrompt, profile.defaultSystemPrompt()));
         agent.setPrinter(context.printer);
         agent.setMaxSteps(profile.maxSteps().applyAsInt(config));
         String modelRef = StringUtils.isNotBlank(context.getModel())

@@ -754,8 +754,12 @@ public final class ExecutionLedgerFixtureFactory {
                         .parentSessionId(record.getParentSessionId())
                         .rootSessionId(record.getRootSessionId())
                         .subAgentType(record.getSubAgentType())
-                        // 与生产 SQL 的 IFNULL(#{deepThink}, 0) 一致
-                        .deepThink(record.getDeepThink() == null ? 0 : record.getDeepThink())
+                        .mainAgentKey(record.getMainAgentKey())
+                        .promptVersion(record.getPromptVersion())
+                        .promptHash(record.getPromptHash())
+                        .promptSnapshot(record.getPromptSnapshot())
+                        // 与生产 SQL 的 IFNULL(#{collaborationMode}, 'normal') 一致
+                        .collaborationMode(record.getCollaborationMode() == null ? "normal" : record.getCollaborationMode())
                         .createTime(LocalDateTime.now())
                         .deleted(0)
                         .build();
@@ -791,8 +795,8 @@ public final class ExecutionLedgerFixtureFactory {
             if (record.getThinkingEffort() != null) {
                 session.setThinkingEffort(record.getThinkingEffort());
             }
-            if (record.getDeepThink() != null) {
-                session.setDeepThink(record.getDeepThink());
+            if (record.getCollaborationMode() != null) {
+                session.setCollaborationMode(record.getCollaborationMode());
             }
             session.setUpdateTime(LocalDateTime.now());
             return 1;
@@ -823,6 +827,10 @@ public final class ExecutionLedgerFixtureFactory {
                     .parentSessionId(record.getParentSessionId())
                     .rootSessionId(record.getRootSessionId())
                     .subAgentType(record.getSubAgentType())
+                        .mainAgentKey(record.getMainAgentKey())
+                        .promptVersion(record.getPromptVersion())
+                        .promptHash(record.getPromptHash())
+                        .promptSnapshot(record.getPromptSnapshot())
                     .title(record.getTitle())
                     .status(record.getStatus())
                     .latestRequestId(record.getLatestRequestId())
@@ -836,7 +844,7 @@ public final class ExecutionLedgerFixtureFactory {
                     .model(record.getModel())
                     .thinking(record.getThinking())
                     .thinkingEffort(record.getThinkingEffort())
-                    .deepThink(record.getDeepThink() == null ? 0 : record.getDeepThink())
+                    .collaborationMode(record.getCollaborationMode() == null ? "normal" : record.getCollaborationMode())
                     .createTime(LocalDateTime.now())
                     .updateTime(LocalDateTime.now())
                     .deleted(0)
@@ -867,6 +875,10 @@ public final class ExecutionLedgerFixtureFactory {
                         .parentSessionId(record.getParentSessionId())
                         .rootSessionId(record.getRootSessionId())
                         .subAgentType(record.getSubAgentType())
+                        .mainAgentKey(record.getMainAgentKey())
+                        .promptVersion(record.getPromptVersion())
+                        .promptHash(record.getPromptHash())
+                        .promptSnapshot(record.getPromptSnapshot())
                         .runCount(1)
                         .finishedRunCount(0)
                         .failedRunCount(0)
@@ -907,7 +919,7 @@ public final class ExecutionLedgerFixtureFactory {
                                             String model,
                                             Boolean thinking,
                                             String thinkingEffort,
-                                            Integer deepThink) {
+                                            String collaborationMode) {
             DialogueSession session = store.sessions.values().stream()
                     .filter(item -> item.getDeleted() == 0
                             && sessionId != null
@@ -927,8 +939,43 @@ public final class ExecutionLedgerFixtureFactory {
             if (thinkingEffort != null) {
                 session.setThinkingEffort(thinkingEffort);
             }
-            if (deepThink != null) {
-                session.setDeepThink(deepThink);
+            if (collaborationMode != null) {
+                session.setCollaborationMode(collaborationMode);
+            }
+            session.setUpdateTime(LocalDateTime.now());
+            return 1;
+        }
+
+        @Override
+        public int updateSessionRuntimeBinding(String sessionId,
+                                               String mainAgentKey,
+                                               String collaborationMode,
+                                               String promptVersion,
+                                               String promptHash,
+                                               String promptSnapshot) {
+            DialogueSession session = store.sessions.values().stream()
+                    .filter(item -> item.getDeleted() == 0
+                            && sessionId != null
+                            && sessionId.equals(item.getSessionId()))
+                    .findFirst()
+                    .orElse(null);
+            if (session == null) {
+                return 0;
+            }
+            if (session.getMainAgentKey() == null) {
+                session.setMainAgentKey(mainAgentKey);
+            }
+            if (session.getCollaborationMode() == null) {
+                session.setCollaborationMode(collaborationMode);
+            }
+            if (session.getPromptVersion() == null) {
+                session.setPromptVersion(promptVersion);
+            }
+            if (session.getPromptHash() == null) {
+                session.setPromptHash(promptHash);
+            }
+            if (session.getPromptSnapshot() == null) {
+                session.setPromptSnapshot(promptSnapshot);
             }
             session.setUpdateTime(LocalDateTime.now());
             return 1;
@@ -1829,6 +1876,9 @@ public final class ExecutionLedgerFixtureFactory {
                 .parentSessionId(session.getParentSessionId())
                 .rootSessionId(session.getRootSessionId())
                 .subAgentType(session.getSubAgentType())
+                .mainAgentKey(session.getMainAgentKey())
+                .promptVersion(session.getPromptVersion())
+                .promptHash(session.getPromptHash())
                 .title(session.getTitle())
                 .status(session.getStatus())
                 .latestRequestId(session.getLatestRequestId())
@@ -1842,7 +1892,7 @@ public final class ExecutionLedgerFixtureFactory {
                 .model(session.getModel())
                 .thinking(session.getThinking())
                 .thinkingEffort(session.getThinkingEffort())
-                .deepThink(session.getDeepThink())
+                .collaborationMode(session.getCollaborationMode())
                 .eventSeq(session.getEventSeq())
                 .createTime(session.getCreateTime())
                 .updateTime(session.getUpdateTime())
@@ -2106,6 +2156,9 @@ public final class ExecutionLedgerFixtureFactory {
                 .parentSessionId(session.getParentSessionId())
                 .rootSessionId(session.getRootSessionId())
                 .subAgentType(session.getSubAgentType())
+                .mainAgentKey(session.getMainAgentKey())
+                .promptVersion(session.getPromptVersion())
+                .promptHash(session.getPromptHash())
                 .title(session.getTitle())
                 .status(session.getStatus())
                 .latestRequestId(session.getLatestRequestId())
@@ -2119,7 +2172,7 @@ public final class ExecutionLedgerFixtureFactory {
                 .model(session.getModel())
                 .thinking(session.getThinking())
                 .thinkingEffort(session.getThinkingEffort())
-                .deepThink(session.getDeepThink())
+                .collaborationMode(session.getCollaborationMode())
                 .createTime(session.getCreateTime())
                 .build();
     }

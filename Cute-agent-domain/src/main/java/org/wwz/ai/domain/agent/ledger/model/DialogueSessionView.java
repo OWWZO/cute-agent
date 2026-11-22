@@ -35,6 +35,9 @@ public class DialogueSessionView {
     /** 子智能体类型，决定该会话的工具池；{@code null} 表示未记录。 */
     private String subAgentType;
 
+    /** 普通模式主 Agent key；cluster 模式为空。 */
+    private String mainAgentKey;
+
     /** 该会话下的子会话数量（按 {@code root_session_id} 统计全部后代）；侧栏列表据此决定是否展示展开入口。 */
     private Integer subSessionCount;
 
@@ -73,11 +76,11 @@ public class DialogueSessionView {
     /** 思考强度（low/medium/high）；{@code null} 表示用默认。 */
     private String thinkingEffort;
 
-    /**
-     * Deep Think 开关；派生 {@code agentType}（{@code 1} → plan_solve，{@code 0} → react）。
-     * <p>作为查询视图可能为 {@code null}（未记录），比较前必须判空，不能直接拆箱。</p>
-     */
-    private Integer deepThink;
+    /** 主模式：normal=普通 Agent；cluster=通用协调者。 */
+    private String collaborationMode;
+
+    private String promptVersion;
+    private String promptHash;
 
     /** 会话行创建时间，仅审计用；活跃度排序请用 {@link #lastActiveAt}。 */
     private LocalDateTime createTime;

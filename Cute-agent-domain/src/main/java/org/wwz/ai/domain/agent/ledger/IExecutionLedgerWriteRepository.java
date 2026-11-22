@@ -52,7 +52,7 @@ public interface IExecutionLedgerWriteRepository {
     void insertSessionIfAbsent(DialogueSessionUpsertRecord record);
 
     /**
-     * 只更新会话偏好四列（model / thinking / thinking_effort / deep_think）。
+     * 只更新会话偏好列（model / thinking / thinking_effort / collaboration_mode）。
      * <p>与 {@link #upsertSession} 的区别：那个会整行覆盖 title/status/run_count 等列，
      * 传入 null 就把库里的值清空；本方法只碰偏好列，null 表示「不清空」。</p>
      */
@@ -60,7 +60,18 @@ public interface IExecutionLedgerWriteRepository {
                                   String model,
                                   Boolean thinking,
                                   String thinkingEffort,
-                                  Integer deepThink);
+                                  String collaborationMode);
+
+    /**
+     * 首次绑定时写入主 Agent 与提示词快照。
+     * <p>已有值不会被覆盖，保证同一会话的模式和 system 前缀稳定。</p>
+     */
+    void updateSessionRuntimeBinding(String sessionId,
+                                     String mainAgentKey,
+                                     String collaborationMode,
+                                     String promptVersion,
+                                     String promptHash,
+                                     String promptSnapshot);
 
     /**
      * run 启动：会话 run_count 原子 +1（行不存在则新建），不做读-改-写。

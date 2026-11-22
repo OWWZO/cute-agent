@@ -60,6 +60,9 @@ public class DialogueSessionUpsertRecord {
      */
     private String subAgentType;
 
+    /** 普通模式主 Agent key；cluster 模式为空。 */
+    private String mainAgentKey;
+
     private String title;
 
     private Integer status;
@@ -92,7 +95,7 @@ public class DialogueSessionUpsertRecord {
      * <p>与 {@code session_kind} 相反，以下三列（{@code model} / {@code thinking} /
      * {@code thinkingEffort}）<b>要</b>进 ON DUPLICATE 段——用户切换模型时必须能更新。
      * {@code null} 表示「本轮未显式选择」，SQL 用 COALESCE 保留库里已有的值。
-     * 紧邻的 {@code deepThink} 不走 COALESCE，见其自身注释。</p>
+     * 协作模式与提示词快照按会话身份处理。</p>
      */
     private String model;
 
@@ -102,6 +105,10 @@ public class DialogueSessionUpsertRecord {
     /** 思考强度；{@code null} = 未显式选择，不清空已有值。 */
     private String thinkingEffort;
 
-    /** Deep Think 开关。NOT NULL 且前端永远传，直接覆盖，不走 COALESCE。 */
-    private Integer deepThink;
+    /** 主模式：normal=普通 Agent；cluster=通用协调者。 */
+    private String collaborationMode;
+
+    private String promptVersion;
+    private String promptHash;
+    private String promptSnapshot;
 }

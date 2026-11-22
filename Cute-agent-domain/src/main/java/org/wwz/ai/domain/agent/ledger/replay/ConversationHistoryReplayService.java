@@ -142,7 +142,8 @@ public class ConversationHistoryReplayService {
                 .sessionId(session.getSessionId())
                 .title(session.getTitle())
                 .status(resolveSessionStatus(session, pageRuns))
-                .deepThink(resolveDeepThink(latestRun))
+                .collaborationMode(resolveCollaborationMode(session, latestRun))
+                .mainAgentKey(session.getMainAgentKey())
                 .model(session.getModel())
                 .thinking(session.getThinking())
                 .thinkingEffort(session.getThinkingEffort())
@@ -401,7 +402,6 @@ public class ConversationHistoryReplayService {
         }
         List<ConversationHistoryDetail.ConversationRunDetail> runDetails = new ArrayList<>();
         Map<Long, ContextUsagePayload> contextUsageByRunId = queryContextUsage(runs);
-        HistoryModeSnapshot historyModeSnapshot = HistoryModeSnapshot.defaultReact();
         // 按 requestId 关联批量明细，避免依赖 queryRunDetails 的返回顺序造成跨 run 串数据。
         Map<String, ExecutionRunDetail> runDetailByRequestId = new HashMap<>();
         for (ExecutionRunDetail detail : batchRunDetails) {
@@ -426,7 +426,6 @@ public class ConversationHistoryReplayService {
                 List<AgentStreamResult> replayFrames = capReplayFrames(replayProjector == null
                         ? List.of()
                         : replayProjector.projectHistoryFrames(bundle));
-                historyModeSnapshot = resolveHistoryModeSnapshot(run);
                 runDetails.add(ConversationHistoryDetail.ConversationRunDetail.builder()
                         .requestId(run.getRequestId())
                         .status(run.getStatus())
@@ -442,11 +441,15 @@ public class ConversationHistoryReplayService {
             }
         }
 
+        DialogueRunView latestRun = CollectionUtils.isEmpty(runs)
+                ? null
+                : runs.get(runs.size() - 1);
         return ConversationHistoryDetail.builder()
                 .sessionId(session.getSessionId())
                 .title(session.getTitle())
                 .status(resolveSessionStatus(session, runs))
-                .deepThink(historyModeSnapshot.getDeepThink())
+                .collaborationMode(resolveCollaborationMode(session, latestRun))
+                .mainAgentKey(session.getMainAgentKey())
                 .runCount(session.getRunCount())
                 .finishedRunCount(session.getFinishedRunCount())
                 .failedRunCount(session.getFailedRunCount())
@@ -527,9 +530,15 @@ public class ConversationHistoryReplayService {
         return StringUtils.abbreviate(StringUtils.trim(value), SUMMARY_PREVIEW_LENGTH);
     }
 
-    private Boolean resolveDeepThink(DialogueRunView run) {
+    private String resolveCollaborationMode(DialogueSessionView session, DialogueRunView run) {
+        if (session != null && StringUtils.isNotBlank(session.getCollaborationMode())) {
+            return org.wwz.ai.domain.agent.runtime.enums.CollaborationMode
+                    .normalize(session.getCollaborationMode());
+        }
         return run != null && ExecutionLedgerConstants.ENTRY_AGENT_PLAN_SOLVE.equals(
-                StringUtils.trimToEmpty(run.getEntryAgent()));
+                StringUtils.trimToEmpty(run.getEntryAgent()))
+                ? org.wwz.ai.domain.agent.runtime.enums.CollaborationMode.CLUSTER_VALUE
+                : org.wwz.ai.domain.agent.runtime.enums.CollaborationMode.NORMAL_VALUE;
     }
 
     private Map<Long, ContextUsagePayload> queryContextUsage(List<DialogueRunView> runs) {
@@ -546,22 +555,6 @@ public class ConversationHistoryReplayService {
         }
         Map<Long, ContextUsagePayload> usage = executionLedgerQueryService.queryRunContextUsage(runIds);
         return usage == null ? Map.of() : usage;
-    }
-
-    /** 根据账本入口恢复仅有的两种 Agent 模式。 */
-    private HistoryModeSnapshot resolveHistoryModeSnapshot(DialogueRunView run) {
-        if (run == null) {
-            return HistoryModeSnapshot.defaultReact();
-        }
-
-        String entryAgent = StringUtils.trimToEmpty(run.getEntryAgent());
-        if (ExecutionLedgerConstants.ENTRY_AGENT_PLAN_SOLVE.equals(entryAgent)) {
-            return new HistoryModeSnapshot(Boolean.TRUE);
-        }
-        if (ExecutionLedgerConstants.ENTRY_AGENT_REACT.equals(entryAgent)) {
-            return new HistoryModeSnapshot(Boolean.FALSE);
-        }
-        return HistoryModeSnapshot.defaultReact();
     }
 
     /**
@@ -581,20 +574,4 @@ public class ConversationHistoryReplayService {
                 : latestRun.getStatus();
     }
 
-    private static final class HistoryModeSnapshot {
-
-        private final Boolean deepThink;
-
-        private HistoryModeSnapshot(Boolean deepThink) {
-            this.deepThink = deepThink;
-        }
-
-        private static HistoryModeSnapshot defaultReact() {
-            return new HistoryModeSnapshot(Boolean.FALSE);
-        }
-
-        private Boolean getDeepThink() {
-            return deepThink;
-        }
-    }
 }

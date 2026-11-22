@@ -25,11 +25,11 @@ public class ConversationHistoryPage {
 
     private Integer status;
 
-    /**
-     * 展示用派生标志：取自本页最新 run 的入口 Agent，不是会话级用户选择；
-     * 用户选择请读 {@link #thinking}。
-     */
-    private Boolean deepThink;
+    /** 会话绑定的主模式：normal / cluster。 */
+    private String collaborationMode;
+
+    /** 普通模式绑定的主 Agent key；集群模式为空。 */
+    private String mainAgentKey;
 
     /** 会话级模型标识；{@code null} 表示用户从未显式选择过。 */
     private String model;

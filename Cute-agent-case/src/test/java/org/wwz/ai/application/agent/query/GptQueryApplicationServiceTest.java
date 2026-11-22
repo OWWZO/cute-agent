@@ -8,10 +8,17 @@ import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskCompletionEvent;
 import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
+import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.prompt.AgentPrompt;
+import org.wwz.ai.domain.agent.runtime.prompt.PlanSolvePrompt;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentDefinition;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
+import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.Set;
 
 public class GptQueryApplicationServiceTest {
 
@@ -59,6 +66,81 @@ public class GptQueryApplicationServiceTest {
         Assert.assertEquals("request-1", wakePort.requestId);
     }
 
+    @Test
+    public void firstTurnBindsSelectedAgentAndSnapshotsNormalPrompt() throws Exception {
+        GptQueryApplicationService service = new GptQueryApplicationService();
+        SubAgentRegistry registry = registryWithDataAgent();
+        setField(service, "subAgentRegistry", registry);
+        AgentExecutionCommand request = AgentExecutionCommand.builder()
+                .sessionId("session-normal")
+                .collaborationMode("normal")
+                .mainAgentKey("data-analysis")
+                .build();
+        DialogueSession session = DialogueSession.builder()
+                .sessionId("session-normal")
+                .collaborationMode("normal")
+                .runCount(0)
+                .build();
+
+        bindPrompt(service, session, request);
+
+        Assert.assertEquals("data-analysis", request.getMainAgentKey());
+        Assert.assertEquals("normal", request.getCollaborationMode());
+        Assert.assertEquals(AgentType.REACT.getValue(), request.getAgentType());
+        Assert.assertTrue(request.getPromptSnapshot().contains("数据分析职责"));
+        Assert.assertTrue(request.getPromptSnapshot().contains(
+                AgentPrompt.USER_FACING_REPLY_CONTRACT_MARKER));
+        Assert.assertFalse(request.getPromptSnapshot().contains(
+                PlanSolvePrompt.ORCHESTRATION_MARKER));
+    }
+
+    @Test
+    public void firstTurnBindsClusterCoordinatorWithWorkerCatalog() throws Exception {
+        GptQueryApplicationService service = new GptQueryApplicationService();
+        setField(service, "subAgentRegistry", registryWithDataAgent());
+        AgentExecutionCommand request = AgentExecutionCommand.builder()
+                .sessionId("session-cluster")
+                .collaborationMode("cluster")
+                .build();
+        DialogueSession session = DialogueSession.builder()
+                .sessionId("session-cluster")
+                .collaborationMode("cluster")
+                .runCount(0)
+                .build();
+
+        bindPrompt(service, session, request);
+
+        Assert.assertNull(request.getMainAgentKey());
+        Assert.assertEquals("cluster", request.getCollaborationMode());
+        Assert.assertEquals(AgentType.PLAN_SOLVE.getValue(), request.getAgentType());
+        Assert.assertTrue(request.getPromptSnapshot().contains(PlanSolvePrompt.ORCHESTRATION_MARKER));
+        Assert.assertTrue(request.getPromptSnapshot().contains("`data-analysis`: 数据分析"));
+    }
+
+    @Test
+    public void subAgentSessionUsesItsOwnAgentIdentity() throws Exception {
+        GptQueryApplicationService service = new GptQueryApplicationService();
+        setField(service, "subAgentRegistry", registryWithDataAgent());
+        AgentExecutionCommand request = AgentExecutionCommand.builder()
+                .sessionId("session-child")
+                .build();
+        DialogueSession session = DialogueSession.builder()
+                .sessionId("session-child")
+                .sessionKind("subagent")
+                .subAgentType("data-analysis")
+                .collaborationMode("normal")
+                .runCount(0)
+                .build();
+
+        bindPrompt(service, session, request);
+
+        Assert.assertEquals("data-analysis", request.getMainAgentKey());
+        Assert.assertEquals(AgentType.REACT.getValue(), request.getAgentType());
+        Assert.assertTrue(request.getPromptSnapshot().contains("数据分析职责"));
+        Assert.assertTrue(request.getPromptSnapshot().contains(
+                AgentPrompt.USER_FACING_REPLY_CONTRACT_MARKER));
+    }
+
     private static GptQueryApplicationService service(ActiveAgentRunRegistry registry,
                                                       SessionProjectionRegistry projections,
                                                       AgentRunLaunchGate gate) {
@@ -86,6 +168,26 @@ public class GptQueryApplicationServiceTest {
                 .query("hello")
                 .isStream(true)
                 .build();
+    }
+
+    private static void bindPrompt(GptQueryApplicationService service,
+                                   DialogueSession session,
+                                   AgentExecutionCommand request) throws Exception {
+        Method method = GptQueryApplicationService.class.getDeclaredMethod(
+                "applyPromptBinding", DialogueSession.class, AgentExecutionCommand.class);
+        method.setAccessible(true);
+        method.invoke(service, session, request);
+    }
+
+    private static SubAgentRegistry registryWithDataAgent() {
+        SubAgentRegistry registry = new SubAgentRegistry();
+        registry.register(SubAgentDefinition.builder()
+                .agentType("data-analysis")
+                .whenToUse("数据分析")
+                .systemPrompt("数据分析职责")
+                .allowedTools(Set.of("*"))
+                .build());
+        return registry;
     }
 
     private static void setField(Object target, String name, Object value) {

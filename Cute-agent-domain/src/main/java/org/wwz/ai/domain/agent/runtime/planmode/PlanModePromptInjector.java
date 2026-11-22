@@ -8,6 +8,9 @@ import org.wwz.ai.domain.agent.runtime.prompt.PlanSolvePrompt;
 
 /**
  * Plan Mode 提示注入。
+ *
+ * <p>完整规则和周期提醒都放在消息上下文中，不能改写运行期 system prompt，
+ * 否则会话稳定前缀和提示词快照会失效。</p>
  */
 public final class PlanModePromptInjector {
 
@@ -56,7 +59,7 @@ public final class PlanModePromptInjector {
     public static final String PLAN_MODE_EXIT = """
             <system-reminder>
             (%s) You have exited plan mode. You can now make edits, run tools, and implement.
-            Start with TaskCreate / TodoWrite if the plan has multiple steps, then implement the approved plan.
+            Start with TodoWrite if the plan has multiple steps, then implement the approved plan.
             The approved plan text is in the previous ExitPlanMode tool result (## Approved Plan).
             </system-reminder>
             """.formatted(PLAN_MODE_EXIT_MARKER);
@@ -77,21 +80,10 @@ public final class PlanModePromptInjector {
         return base.trim() + "\n\n" + block + "\n";
     }
 
-    public static void applyIfPlanMode(AgentContext context, BaseAgent agent) {
-        if (context == null || agent == null || context.isSubAgent()) {
-            return;
-        }
-        PlanModeState state = context.getPlanModeState();
-        if (state == null || !state.isPlanMode()) {
-            return;
-        }
-        agent.setSystemPrompt(ensurePlanModeInstructions(agent.getSystemPrompt()));
-    }
-
     /**
      * 每步前调用：按 throttle 注入 sparse/full 提醒，或注入 plan_mode_exit。
-     * <p>
-     * 全文只在 system 里没有契约时（system 注入失败）才发消息版，避免进入 plan 第一步就双份。
+     *
+     * <p>完整规则只进入消息上下文，不修改 system prompt。</p>
      */
     public static void injectStepReminders(BaseAgent agent) {
         if (agent == null || agent.getContext() == null || agent.getMemory() == null) {
@@ -116,8 +108,6 @@ public final class PlanModePromptInjector {
             return;
         }
 
-        applyIfPlanMode(context, agent);
-
         state.tickStep();
         int steps = state.getStepsSincePlanAttachment();
         boolean first = state.getPlanAttachmentCount() == 0;
@@ -126,10 +116,8 @@ public final class PlanModePromptInjector {
         }
 
         int attachments = state.getPlanAttachmentCount();
-        // system 已带完整契约时默认用 sparse；但每满 FULL_EVERY_N_ATTACHMENTS 条仍周期性补一次全文，
-        // 因为这条消息会被持久化并在后续轮次重发，需要防止模型在长会话里淡忘完整约束。
-        // 只有 system 没注入成功时才每轮都用全文兜底。
-        boolean useFull = shouldAttachFull(agent.getSystemPrompt(), attachments);
+        // 首条必须带全文；之后用 sparse，周期性补全文防止长会话淡忘。
+        boolean useFull = shouldAttachFull(attachments);
         String body = useFull
                 ? "<system-reminder>\n" + PLAN_MODE_INSTRUCTIONS.trim() + "\n</system-reminder>"
                 : PLAN_MODE_SPARSE.trim();
@@ -140,19 +128,16 @@ public final class PlanModePromptInjector {
     /**
      * 本次提醒是否要带全文。
      *
-     * @param systemPrompt 当前 system（用于判断契约是否已在 system 里）
-     * @param attachments  已注入的提醒条数（首条为 0）
+     * @param attachments 已注入的提醒条数（首条为 0）
      */
-    public static boolean shouldAttachFull(String systemPrompt, int attachments) {
-        boolean systemHasContract = StringUtils.contains(systemPrompt, PLAN_MODE_INSTRUCTIONS_MARKER);
-        return !systemHasContract
-                || (attachments > 0 && attachments % FULL_EVERY_N_ATTACHMENTS == 0);
+    public static boolean shouldAttachFull(int attachments) {
+        return attachments <= 0 || attachments % FULL_EVERY_N_ATTACHMENTS == 0;
     }
 
     public static String buildApprovedPlanToolResult(String planContent, String planFilePath, String restoredMode) {
         StringBuilder sb = new StringBuilder();
         sb.append("User has approved your plan. You can now start coding.\n");
-        sb.append("Start with updating your todo list (TaskCreate / TodoWrite) if applicable.\n");
+        sb.append("Start with updating your todo list (TodoWrite) if applicable.\n");
         sb.append("Restored mode=").append(StringUtils.defaultIfBlank(restoredMode, "default")).append(".\n");
         if (StringUtils.isNotBlank(planFilePath)) {
             // 只展示相对/虚拟路径；任何绝对路径（含 Windows 盘符与规范化 UNC）都视为敏感，统一脱敏。

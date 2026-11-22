@@ -3,6 +3,7 @@ package org.wwz.ai.domain.agent.service.execute.react.step;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
@@ -15,7 +16,8 @@ import org.wwz.ai.domain.agent.runtime.desktopcontrol.DesktopControlRequiredExce
 import org.wwz.ai.domain.agent.runtime.desktopcontrol.DesktopControlYieldService;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanApprovalRequiredException;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanApprovalYieldService;
-import org.wwz.ai.domain.agent.runtime.planmode.PlanModePromptInjector;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentDefinition;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
 import org.wwz.ai.domain.agent.service.execute.react.step.factory.DefaultReactAgentExecuteStrategyFactory;
 
 /**
@@ -49,10 +51,7 @@ public class RunReactLoopNode extends AbstractExecuteSupport {
 
         ReactImplAgent executor = new ReactImplAgent(agentContext);
         dynamicContext.setExecutor(executor);
-        PlanModePromptInjector.applyIfPlanMode(agentContext, executor);
-        // openui 输出通道：普通对话走 ReAct 链路，而协议原本只挂在 PlanSolve 主 agent 上，
-        // 不补这一句的话模型拿不到 marker 协议和核心组件签名，只能靠幻觉编 DSL。
-        executor.applyOpenUiProtocol();
+        applySelectedMaxSteps(agentContext, requestParameter, executor);
         try {
             String runResult = executor.run(requestParameter.getQuery());
             String finalAnswer = ReactFinalAnswerResolver.resolve(executor, runResult);
@@ -88,6 +87,27 @@ public class RunReactLoopNode extends AbstractExecuteSupport {
             );
             dynamicContext.setWaitingUserInput(Boolean.TRUE);
             return router(requestParameter, dynamicContext);
+        }
+    }
+
+    /** 所选 Agent 的步数上限是执行配置，不参与 system 提示词装配。 */
+    private static void applySelectedMaxSteps(AgentContext context,
+                                               AgentExecutionCommand request,
+                                               ReactImplAgent executor) {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return;
+        }
+        SubAgentRegistry registry = context.getRuntimeDependencies().getOptionalSubAgentRegistry();
+        if (registry == null) {
+            return;
+        }
+        String agentKey = context.isSubAgent()
+                ? context.getSubAgentType()
+                : request.getMainAgentKey();
+        SubAgentDefinition definition = registry.find(StringUtils.defaultIfBlank(
+                agentKey, SubAgentRegistry.TYPE_GENERAL_PURPOSE)).orElse(null);
+        if (definition != null && definition.getMaxSteps() != null && definition.getMaxSteps() > 0) {
+            executor.setMaxSteps(definition.getMaxSteps());
         }
     }
 

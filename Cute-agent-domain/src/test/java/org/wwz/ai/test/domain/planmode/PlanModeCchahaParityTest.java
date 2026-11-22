@@ -63,21 +63,13 @@ public class PlanModeCchahaParityTest {
         Assert.assertNull(PlanModeToolPolicy.denyReason(state, "ExitPlanMode", Map.of()));
     }
 
-    /**
-     * system 已带契约时，首条提醒必须是 sparse（否则进入 plan 第一步就双份全文）。
-     */
+    /** 首条提醒带完整规则，之后按节流使用 sparse，并周期性补全文。 */
     @Test
-    public void firstReminderIsSparseWhenSystemAlreadyHasContract() {
-        String systemWithContract = PlanModePromptInjector.ensurePlanModeInstructions("# base");
-        Assert.assertTrue(systemWithContract.contains(PlanModePromptInjector.PLAN_MODE_INSTRUCTIONS_MARKER));
-
-        Assert.assertFalse(PlanModePromptInjector.shouldAttachFull(systemWithContract, 0));
-        Assert.assertFalse(PlanModePromptInjector.shouldAttachFull(systemWithContract, 1));
-        // 每第 5 条提醒仍用全文刷新一次
-        Assert.assertTrue(PlanModePromptInjector.shouldAttachFull(systemWithContract, 5));
-        // system 没有契约（注入失败）时用全文兜底
-        Assert.assertTrue(PlanModePromptInjector.shouldAttachFull("# base", 0));
-        Assert.assertTrue(PlanModePromptInjector.shouldAttachFull(null, 0));
+    public void remindersUseFullFirstThenSparseWithPeriodicRefresh() {
+        Assert.assertTrue(PlanModePromptInjector.shouldAttachFull(0));
+        Assert.assertFalse(PlanModePromptInjector.shouldAttachFull(1));
+        Assert.assertFalse(PlanModePromptInjector.shouldAttachFull(4));
+        Assert.assertTrue(PlanModePromptInjector.shouldAttachFull(5));
     }
 
     /**

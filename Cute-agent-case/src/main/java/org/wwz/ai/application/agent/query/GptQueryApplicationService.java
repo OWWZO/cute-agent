@@ -19,10 +19,13 @@ import org.wwz.ai.application.agent.authorization.SessionOwnershipDeniedExceptio
 import org.wwz.ai.application.agent.query.mapper.AgentExecutionCommandMapper;
 import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerWriteRepository;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
+import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.enums.CollaborationMode;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
 import org.wwz.ai.domain.agent.runtime.handler.AgentStreamEventHandler;
@@ -30,6 +33,12 @@ import org.wwz.ai.domain.agent.runtime.llm.LlmModelCatalog;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionNotificationHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.StreamSettlePolicy;
+import org.wwz.ai.domain.agent.runtime.prompt.AgentExecutionRole;
+import org.wwz.ai.domain.agent.runtime.prompt.PromptAssembler;
+import org.wwz.ai.domain.agent.runtime.prompt.PromptAssemblyContext;
+import org.wwz.ai.domain.agent.runtime.prompt.PromptBundle;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentDefinition;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
 import org.wwz.ai.types.agent.config.AgentExecutorNames;
 import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
 import org.wwz.ai.types.agent.exception.AgentExecutorBusyException;
@@ -100,6 +109,12 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
     private IExecutionLedgerReadRepository executionLedgerReadRepository;
 
     @Resource
+    private IExecutionLedgerWriteRepository executionLedgerWriteRepository;
+
+    @Resource
+    private SubAgentRegistry subAgentRegistry;
+
+    @Resource
     private BackgroundTaskWakePort backgroundTaskWakePort;
 
     @Resource
@@ -132,6 +147,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                 agentRequest.getSessionId(),
                 agentRequest.getQuery()
         );
+        applyPromptBinding(session, agentRequest);
         if (existing.isPresent()) {
             return acceptedResult(agentRequest);
         }
@@ -145,7 +161,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                 agentRequest.getModel(),
                 agentRequest.getThinking(),
                 agentRequest.getThinkingEffort(),
-                params.getDeepThink());
+                agentRequest.getCollaborationMode());
         if (StringUtils.isBlank(agentRequest.getResumeQuestionId())
                 && StringUtils.isBlank(agentRequest.getResumeApprovalId())
                 && askUserQuestionApplicationService != null
@@ -217,8 +233,9 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
         String thinkingEffort = chosen.thinkingEffort() != null
                 ? chosen.thinkingEffort()
                 : session.getThinkingEffort();
-        Integer deepThinkFlag = chosen.deepThink() != null ? chosen.deepThink() : session.getDeepThink();
-        boolean deepThink = deepThinkFlag != null && deepThinkFlag != 0;
+        CollaborationMode requestedMode = chosen.collaborationMode() == null
+                ? null
+                : CollaborationMode.from(chosen.collaborationMode());
 
         AgentExecutionCommand agentRequest = AgentExecutionCommand.builder()
                 .requestId(normalizedRequestId)
@@ -228,9 +245,12 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                 .model(model)
                 .thinking(thinking)
                 .thinkingEffort(thinkingEffort)
-                .agentType(deepThink ? AgentType.PLAN_SOLVE.getValue() : AgentType.REACT.getValue())
+                .collaborationMode(requestedMode == null ? null : requestedMode.getValue())
+                .mainAgentKey(chosen.agentKey())
+                .agentType(AgentType.REACT.getValue())
                 .isStream(Boolean.TRUE)
                 .build();
+        applyPromptBinding(session, agentRequest);
         validateRequestedModel(agentRequest);
         // 只落库用户本轮真正选过的值：未选时不写库，SQL 的 COALESCE 保留库里原值。
         if (chosen.hasAny()) {
@@ -239,7 +259,7 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                     chosen.model(),
                     chosen.thinking(),
                     chosen.thinkingEffort(),
-                    chosen.deepThink());
+                    chosen.collaborationMode());
         }
 
         ActiveAgentRunRegistry.ActiveRun activeRun =
@@ -262,6 +282,88 @@ public class GptQueryApplicationService implements IGptQueryApplicationService {
                 .sessionId(agentRequest.getSessionId())
                 .requestId(agentRequest.getRequestId())
                 .build();
+    }
+
+    /**
+     * 首轮绑定模式、主 Agent 和 system 快照；已有会话只允许恢复，不允许静默切换。
+     */
+    private void applyPromptBinding(DialogueSession session, AgentExecutionCommand request) {
+        if (session == null || request == null) {
+            throw new IllegalArgumentException("会话不能为空");
+        }
+        boolean subAgent = SessionKind.fromCode(session.getSessionKind()).isSubAgent();
+        CollaborationMode requestedMode = CollaborationMode.from(request.getCollaborationMode());
+        CollaborationMode storedMode = CollaborationMode.from(session.getCollaborationMode());
+        int runCount = session.getRunCount() == null ? 0 : session.getRunCount();
+        if (runCount > 0 && StringUtils.isNotBlank(request.getCollaborationMode())
+                && requestedMode != storedMode) {
+            throw new IllegalStateException("当前会话已绑定协作模式，请新建会话后再切换");
+        }
+
+        CollaborationMode effectiveMode = subAgent
+                ? CollaborationMode.NORMAL
+                : (runCount > 0 ? storedMode : requestedMode);
+        String storedAgentKey = StringUtils.trimToNull(session.getMainAgentKey());
+        String requestedAgentKey = StringUtils.trimToNull(request.getMainAgentKey());
+        if (effectiveMode.isCluster()) {
+            if (requestedAgentKey != null && runCount > 0) {
+                throw new IllegalStateException("集群模式会话不能绑定普通主 Agent");
+            }
+        } else if (runCount > 0 && storedAgentKey != null && requestedAgentKey != null
+                && !storedAgentKey.equals(requestedAgentKey)) {
+            throw new IllegalStateException("当前会话已绑定主 Agent，请新建会话后再切换");
+        }
+
+        String agentKey = effectiveMode.isCluster()
+                ? null
+                : StringUtils.defaultIfBlank(
+                        subAgent ? session.getSubAgentType() : null,
+                        StringUtils.defaultIfBlank(
+                                StringUtils.defaultIfBlank(storedAgentKey, requestedAgentKey),
+                                SubAgentRegistry.TYPE_GENERAL_PURPOSE));
+        if (!effectiveMode.isCluster() && (subAgentRegistry == null || subAgentRegistry.find(agentKey).isEmpty())) {
+            throw new IllegalArgumentException("主 Agent 不存在或未启用: " + agentKey);
+        }
+
+        String snapshot = StringUtils.trimToNull(session.getPromptSnapshot());
+        String version = session.getPromptVersion();
+        String hash = session.getPromptHash();
+        if (snapshot == null) {
+            SubAgentDefinition definition = effectiveMode.isCluster() || subAgentRegistry == null
+                    ? null
+                    : subAgentRegistry.require(agentKey);
+            AgentExecutionRole role = subAgent
+                    ? AgentExecutionRole.WORKER
+                    : (effectiveMode.isCluster() ? AgentExecutionRole.COORDINATOR : AgentExecutionRole.MAIN);
+            PromptBundle bundle = PromptAssembler.assemble(PromptAssemblyContext.builder()
+                    .role(role)
+                    .agentKey(agentKey)
+                    .agentDirective(definition == null ? null : definition.getSystemPrompt())
+                    .workerCatalog(effectiveMode.isCluster() && subAgentRegistry != null
+                            ? PromptAssembler.formatWorkerCatalog(subAgentRegistry.list())
+                            : null)
+                    .includeAgentDispatchGuidance(true)
+                    .includeOpenUiProtocol(!subAgent)
+                    .includeMemoryGuidance(false)
+                    .build());
+            snapshot = bundle.systemPrompt();
+            version = bundle.promptVersion();
+            hash = bundle.promptHash();
+            if (executionLedgerWriteRepository != null) {
+                executionLedgerWriteRepository.updateSessionRuntimeBinding(
+                        session.getSessionId(), agentKey, effectiveMode.getValue(),
+                        version, hash, snapshot);
+            }
+        }
+
+        request.setCollaborationMode(effectiveMode.getValue());
+        request.setMainAgentKey(agentKey);
+        request.setPromptSnapshot(snapshot);
+        request.setPromptVersion(version);
+        request.setPromptHash(hash);
+        request.setAgentType(effectiveMode.isCluster() && !subAgent
+                ? AgentType.PLAN_SOLVE.getValue()
+                : AgentType.REACT.getValue());
     }
 
     /**

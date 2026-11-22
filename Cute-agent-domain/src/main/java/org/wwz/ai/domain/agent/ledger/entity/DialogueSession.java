@@ -74,6 +74,9 @@ public class DialogueSession {
      */
     private String subAgentType;
 
+    /** 普通模式主 Agent key；cluster 模式为空。 */
+    private String mainAgentKey;
+
     private String title;
 
     private Integer status;
@@ -106,8 +109,13 @@ public class DialogueSession {
     /** 思考强度（low/medium/high）；{@code null} 表示用默认。 */
     private String thinkingEffort;
 
-    /** Deep Think 开关；派生 {@code agentType}（1 → plan_solve，0 → react）。 */
-    private Integer deepThink;
+    /** 主模式：normal=普通 Agent；cluster=通用协调者。 */
+    private String collaborationMode;
+
+    /** 会话首轮冻结的稳定提示词版本与内容。 */
+    private String promptVersion;
+    private String promptHash;
+    private String promptSnapshot;
 
     private Long eventSeq;
 

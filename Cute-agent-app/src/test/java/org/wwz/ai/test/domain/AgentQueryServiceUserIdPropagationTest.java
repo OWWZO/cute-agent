@@ -22,7 +22,7 @@ public class AgentQueryServiceUserIdPropagationTest {
                 .sessionId("session-user-001")
                 .requestId("req-user-001")
                 .query("帮我生成总结")
-                .deepThink(0)
+                .collaborationMode("normal")
                 .build();
 
         Assert.assertNull(request.getUser());
@@ -46,7 +46,7 @@ public class AgentQueryServiceUserIdPropagationTest {
                 .sessionId("session-plan-001")
                 .requestId("req-plan-001")
                 .query("重新规划")
-                .deepThink(1)
+                .collaborationMode("cluster")
                 .forcePlanMode(true)
                 .user("cute")
                 .build();

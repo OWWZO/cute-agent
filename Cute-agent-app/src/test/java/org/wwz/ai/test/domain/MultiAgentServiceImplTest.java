@@ -47,7 +47,7 @@ public class MultiAgentServiceImplTest {
                 .sessionId("session-1")
                 .requestId("req-1")
                 .query("基于上传图片改成赛博朋克风")
-                .deepThink(0)
+                .collaborationMode("normal")
                 .user("cute")
                 .sessionFiles(sessionFiles)
                 .build();
@@ -68,7 +68,7 @@ public class MultiAgentServiceImplTest {
                 .requestId("req-plan-solve-1")
                 .sessionId("session-plan-solve-1")
                 .query("请先制定执行计划")
-                .deepThink(1)
+                .collaborationMode("cluster")
                 .build(), null);
 
         Assert.assertEquals(AgentType.PLAN_SOLVE.getValue(), agentRequest.getAgentType());

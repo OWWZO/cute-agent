@@ -18,8 +18,6 @@ import org.wwz.ai.domain.agent.runtime.desktopcontrol.DesktopControlYieldService
 import org.wwz.ai.domain.agent.runtime.llm.LLM;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanApprovalRequiredException;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanApprovalYieldService;
-import org.wwz.ai.domain.agent.runtime.planmode.PlanModePromptInjector;
-import org.wwz.ai.domain.agent.runtime.prompt.PlanSolvePrompt;
 import org.wwz.ai.domain.agent.service.execute.planexecute.step.factory.DefaultPlanSolveAgentExecuteStrategyFactory;
 
 /**
@@ -98,16 +96,6 @@ public class RunReactLoopNode extends AbstractExecuteSupport {
         ReactImplAgent planner = new ReactImplAgent(agentContext);
         planner.setName("plan-solve");
         planner.setDescription("plan-execute main agent: plan mode, dispatch Agent subagents, final user reply");
-        // ORCHESTRATION 为唯一角色底座，不用 REACT_SYSTEM_PROMPT
-        planner.applyPlanSolveSystemPrompt();
-        if (agentContext.requirePlanModeState().isPlanMode()) {
-            planner.setSystemPrompt(PlanModePromptInjector.ensurePlanModeInstructions(
-                    planner.getSystemPrompt()));
-            PlanModePromptInjector.applyIfPlanMode(agentContext, planner);
-        } else {
-            planner.setSystemPrompt(PlanSolvePrompt.ensureApprovedExecution(planner.getSystemPrompt()));
-        }
-
         if (cuteConfig != null) {
             Integer maxSteps = cuteConfig.getPlannerMaxSteps();
             if (maxSteps != null && maxSteps > 0) {

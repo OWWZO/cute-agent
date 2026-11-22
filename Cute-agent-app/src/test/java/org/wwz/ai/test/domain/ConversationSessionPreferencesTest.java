@@ -23,13 +23,13 @@ public class ConversationSessionPreferencesTest {
         ConversationSessionPreferencesApplicationService service =
                 new ConversationSessionPreferencesApplicationService(ctx.writeRepository);
 
-        service.upsertPreferences("sess-pref-1", "gpt-5", Boolean.TRUE, "high", 1);
+        service.upsertPreferences("sess-pref-1", "gpt-5", Boolean.TRUE, "high", "cluster");
 
         DialogueSession row = ctx.readRepository.querySessionEntity("sess-pref-1");
         Assert.assertEquals("gpt-5", row.getModel());
         Assert.assertEquals(Boolean.TRUE, row.getThinking());
         Assert.assertEquals("high", row.getThinkingEffort());
-        Assert.assertEquals(Integer.valueOf(1), row.getDeepThink());
+        Assert.assertEquals("cluster", row.getCollaborationMode());
     }
 
     @Test
@@ -40,7 +40,7 @@ public class ConversationSessionPreferencesTest {
         ConversationSessionPreferencesApplicationService service =
                 new ConversationSessionPreferencesApplicationService(ctx.writeRepository);
 
-        service.upsertPreferences("sess-pref-2", "gpt-5", Boolean.TRUE, "high", 1);
+        service.upsertPreferences("sess-pref-2", "gpt-5", Boolean.TRUE, "high", "cluster");
         // 第二轮用户只换了模型，其余三个没传：库里原值必须保留
         service.upsertPreferences("sess-pref-2", "gpt-5-mini", null, null, null);
 
@@ -48,7 +48,7 @@ public class ConversationSessionPreferencesTest {
         Assert.assertEquals("gpt-5-mini", row.getModel());
         Assert.assertEquals(Boolean.TRUE, row.getThinking());
         Assert.assertEquals("high", row.getThinkingEffort());
-        Assert.assertEquals(Integer.valueOf(1), row.getDeepThink());
+        Assert.assertEquals("cluster", row.getCollaborationMode());
     }
 
     @Test
@@ -67,7 +67,7 @@ public class ConversationSessionPreferencesTest {
         Assert.assertNull(row.getThinking());
         Assert.assertNull(row.getThinkingEffort());
         // 建行时 SQL 默认 0，未显式传值时保持不变
-        Assert.assertEquals(Integer.valueOf(0), row.getDeepThink());
+        Assert.assertEquals("normal", row.getCollaborationMode());
     }
 
     @Test
@@ -89,7 +89,7 @@ public class ConversationSessionPreferencesTest {
         ConversationSessionPreferencesApplicationService service =
                 new ConversationSessionPreferencesApplicationService(ctx.writeRepository);
 
-        service.upsertPreferences("sub_pref-4", "gpt-5", Boolean.FALSE, "low", 0);
+        service.upsertPreferences("sub_pref-4", "gpt-5", Boolean.FALSE, "low", "normal");
 
         DialogueSession row = ctx.readRepository.querySessionEntity("sub_pref-4");
         Assert.assertEquals("gpt-5", row.getModel());

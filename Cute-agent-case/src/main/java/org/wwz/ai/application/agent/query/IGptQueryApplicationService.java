@@ -10,7 +10,7 @@ public interface IGptQueryApplicationService {
      * 提交一轮 Agent 执行。不占用 SSE；观察走 GET session stream。
      *
      * @param params 请求参数，必须非 null；实现会立即读取 query、sessionId、
-     *               requestId、deepThink 等字段，缺少必需字段时按输入错误拒绝
+     *               requestId、collaborationMode 等字段，缺少必需字段时按输入错误拒绝
      */
     AgentQuerySubmitResult submitAgentQuery(GptQueryCommand params);
 

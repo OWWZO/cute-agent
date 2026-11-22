@@ -197,6 +197,14 @@ public class AgentContext {
      */
     String basePrompt;
 
+    /**
+     * 装配阶段确定的最终 system 提示词。
+     *
+     * <p>工具池绑定后才能按实际能力组装，因此该字段由 Prepare 在创建 Agent 前写入。
+     * Agent 构造时直接用它完成首次初始化与冻结，避免先冻结默认提示词再覆盖。</p>
+     */
+    String resolvedSystemPrompt;
+
     // ---- 5. 跨轮记忆（run 前 hydrate）----
     /**
      * 跨轮工作记忆消息链（ledger hydrate 结果），run 前 preload 进 Memory。
@@ -287,6 +295,27 @@ public class AgentContext {
     /** 子 Agent 任务短描述 */
     String subAgentDescription;
 
+    /** 整棵子 Agent 树的根会话；根 Agent 为自身 sessionId。 */
+    String rootSessionId;
+
+    /** 根 Agent 为 0，子 Agent 为 1，以此类推。 */
+    @Builder.Default
+    Integer delegationDepth = 0;
+
+    /** 当前 Agent 的直接父 Agent；根 Agent 为空。 */
+    String parentAgentId;
+
+    /** 当前 Agent 所属的跨 turn 逻辑任务；同步前台调用可为空。 */
+    String logicalRunId;
+
+    /**
+     * 工具池是否已经按子 Agent 定义裁剪。
+     * <p>直聊子会话需要同时具备“子 Agent 身份”和“待裁剪工具池”，不能把两者
+     * 都塞进 {@link #isSubAgent()} 一个判断。</p>
+     */
+    @Builder.Default
+    Boolean toolScopeApplied = Boolean.FALSE;
+
     /**
      * 子 Agent 对应的真实子会话 ID（{@code sub_{agentId}}）。
      * 仅 SubAgentContextFactory 写入；用于把子帧路由到独立子会话流（Phase 3）。
@@ -360,7 +389,7 @@ public class AgentContext {
     /**
      * 会话级共享控制面：Todo 任务列表与后台任务注册表。
      *
-     * <p><b>父子 Agent 共享同一实例</b>（TaskStop / TaskOutput / TaskCreate 必须命中子
+     * <p><b>父子 Agent 共享同一实例</b>（TaskStop / TaskOutput / TodoWrite 必须命中子
      * Agent），由 spawn 方在 {@code SubAgentContextFactory} 用父 sessionKey eager 物化——
      * 子 Agent 的 sessionId 是 {@code sub_<agentId>}，惰性补建会把子 key 绑进共享面。</p>
      */
@@ -450,6 +479,11 @@ public class AgentContext {
         this.workspaceRoot = workspaceRoot;
     }
 
+    /** Prepare 在工具池绑定后写入最终 system 提示词；Agent 构造时只读取一次。 */
+    public void setResolvedSystemPrompt(String resolvedSystemPrompt) {
+        this.resolvedSystemPrompt = resolvedSystemPrompt;
+    }
+
     /** resume 需要唯一 requestId，否则 working_memory persist 幂等跳过。 */
     public void setRequestId(String requestId) {
         this.requestId = requestId;
@@ -458,6 +492,37 @@ public class AgentContext {
     /** 子 Agent 的 working_memory 投影作用域。 */
     public void setMemoryScope(String memoryScope) {
         this.memoryScope = memoryScope;
+    }
+
+    /** 子 Agent 树身份由创建方在 spawn 时补齐。 */
+    public void setTreeIdentity(String rootSessionId,
+                                Integer delegationDepth,
+                                String parentAgentId,
+                                String logicalRunId) {
+        this.rootSessionId = rootSessionId;
+        this.delegationDepth = delegationDepth == null ? 0 : delegationDepth;
+        this.parentAgentId = parentAgentId;
+        this.logicalRunId = logicalRunId;
+    }
+
+    public void setToolScopeApplied(Boolean toolScopeApplied) {
+        this.toolScopeApplied = Boolean.TRUE.equals(toolScopeApplied);
+    }
+
+    /** 跨会话 continuation 时绑定原逻辑任务所在的会话控制面。 */
+    public void setSessionControl(SessionControl sessionControl) {
+        this.sessionControl = sessionControl;
+    }
+
+    /** 直聊/唤醒子会话时从活跃逻辑任务恢复模型侧与账本侧身份。 */
+    public void setSubAgentIdentity(String subAgentId,
+                                    String subAgentType,
+                                    String subAgentChildSessionId,
+                                    String parentToolUseId) {
+        this.subAgentId = subAgentId;
+        this.subAgentType = subAgentType;
+        this.subAgentChildSessionId = subAgentChildSessionId;
+        this.parentToolUseId = parentToolUseId;
     }
 
     /** 测试与装配路径补齐运行时依赖。 */
@@ -798,7 +863,7 @@ public class AgentContext {
                 // run 级控制面必须独立：fork 是并发子任务，它的 finishRun 不得关闭父回合，
                 // 也不得与父共用 inject 队列（否则并发子任务的步进边界会互相吃掉对方的指导）。
                 // 父的取消令牌经 parentCancellation 只读透传：/stop 仍杀得到并发子任务。
-                // 会话级控制面共享：TaskList / 后台任务表必须命中同一份。
+                // 会话级控制面共享：TodoWrite / 后台任务表必须命中同一份。
                 .control(new RunControl().withParentCancellation(getRunCancellation()))
                 .runBudget(runBudget)
                 .toolAccessPolicy(toolAccessPolicy)

@@ -19,6 +19,12 @@ public class GptQueryRequestVO {
     private String query;
     private String sessionId;
     private String requestId;
+    /** 主模式：normal / cluster。 */
+    private String collaborationMode;
+    /** 普通模式主 Agent key。 */
+    private String agentKey;
+    /** @deprecated 兼容旧客户端，仅用于映射为 collaborationMode。 */
+    @Deprecated
     private Integer deepThink;
     private String outputStyle;
     private String traceId;

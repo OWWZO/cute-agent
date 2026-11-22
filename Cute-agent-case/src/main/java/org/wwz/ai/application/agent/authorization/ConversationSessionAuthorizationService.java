@@ -210,7 +210,7 @@ public class ConversationSessionAuthorizationService {
 
     /**
      * upsertSession 是整行写入：认领无主会话时必须携带现有身份列和偏好列，
-     * 不能依赖 SQL 对部分列做兜底。尤其 deep_think 会被 VALUES 直接覆盖。
+     * 不能依赖 SQL 对部分列做兜底。
      */
     private static DialogueSessionUpsertRecord buildOwnedSessionSnapshot(
             DialogueSession session,
@@ -228,6 +228,7 @@ public class ConversationSessionAuthorizationService {
                 .parentSessionId(session.getParentSessionId())
                 .rootSessionId(session.getRootSessionId())
                 .subAgentType(session.getSubAgentType())
+                .mainAgentKey(session.getMainAgentKey())
                 .title(title)
                 .status(session.getStatus())
                 .latestRequestId(session.getLatestRequestId())
@@ -241,7 +242,10 @@ public class ConversationSessionAuthorizationService {
                 .model(session.getModel())
                 .thinking(session.getThinking())
                 .thinkingEffort(session.getThinkingEffort())
-                .deepThink(session.getDeepThink())
+                .collaborationMode(session.getCollaborationMode())
+                .promptVersion(session.getPromptVersion())
+                .promptHash(session.getPromptHash())
+                .promptSnapshot(session.getPromptSnapshot())
                 .build();
     }
 

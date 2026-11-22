@@ -72,7 +72,7 @@ public class ChannelInboundDispatchService implements ChannelInboundPort {
                     .sessionId(sessionId)
                     .requestId(requestId)
                     // 强制 REACT：PLAN_SOLVE 会要求计划审批，而 IM 里没人能点「批准」。
-                    .deepThink(0)
+                    .collaborationMode(org.wwz.ai.domain.agent.runtime.enums.CollaborationMode.NORMAL_VALUE)
                     .forcePlanMode(false)
                     .build();
             gptQueryApplicationService.submitAgentQuery(command);

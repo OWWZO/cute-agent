@@ -22,7 +22,8 @@ public class GptQueryCommand {
     private String query;
     private String sessionId;
     private String requestId;
-    private Integer deepThink;
+    private String collaborationMode;
+    private String agentKey;
     private String outputStyle;
     private String traceId;
     private String user;
@@ -32,10 +33,7 @@ public class GptQueryCommand {
     private List<AgentExecutionFile> sessionFiles;
 
     /**
-     * 当前仅透传给运行时，不参与本用例的 {@code agentType} 推导，也没有与
-     * {@code deepThink}/{@code thinking} 的组合校验。
-     * <p>{@code agentType} 只由 {@code deepThink != 0} 决定；该字段为 true 时仍可同时提交
-     * {@code deepThink=0}。修改组合语义前需要同时核对映射器和运行时策略。</p>
+     * 当前仅透传给运行时，不参与 {@code collaborationMode} 校验。
      */
     private Boolean forcePlanMode;
 }

@@ -314,7 +314,8 @@ public class AgentConversationHistoryController {
                 .sessionId(page.getSessionId())
                 .title(page.getTitle())
                 .status(ConversationRunReplayVoMapper.toStatusLabel(page.getStatus()))
-                .deepThink(page.getDeepThink())
+                .collaborationMode(page.getCollaborationMode())
+                .mainAgentKey(page.getMainAgentKey())
                 .model(page.getModel())
                 .thinking(page.getThinking())
                 .thinkingEffort(page.getThinkingEffort())
@@ -368,6 +369,7 @@ public class AgentConversationHistoryController {
                 .askUser(emptyIfNull(bootstrap.getAskUser()))
                 .desktopControl(emptyIfNull(bootstrap.getDesktopControl()))
                 .planApproval(emptyIfNull(bootstrap.getPlanApproval()))
+                .sessionTasks(bootstrap.getSessionTasks() == null ? Map.of() : bootstrap.getSessionTasks())
                 .replays(toReplayRespVOMap(bootstrap.getReplays()))
                 .replaysIncluded(bootstrap.isReplaysIncluded())
                 .build();

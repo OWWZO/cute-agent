@@ -427,7 +427,7 @@ public class ConversationHistoryControllerTest {
 
         Assert.assertEquals(ResponseCode.SUCCESS.getCode(), response.getCode());
         Assert.assertNotNull(response.getData());
-        Assert.assertEquals(Boolean.FALSE, response.getData().getDeepThink());
+        Assert.assertEquals(Boolean.FALSE, response.getData().getCollaborationMode());
     }
 
     @Test
@@ -458,7 +458,7 @@ public class ConversationHistoryControllerTest {
 
         Assert.assertEquals(ResponseCode.SUCCESS.getCode(), response.getCode());
         Assert.assertNotNull(response.getData());
-        Assert.assertEquals(Boolean.TRUE, response.getData().getDeepThink());
+        Assert.assertEquals(Boolean.TRUE, response.getData().getCollaborationMode());
     }
 
     @Test

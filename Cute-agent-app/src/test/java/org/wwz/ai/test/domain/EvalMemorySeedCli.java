@@ -117,7 +117,7 @@ public final class EvalMemorySeedCli {
                     .failedRunCount(0)
                     .startedAt(timestamp)
                     .lastActiveAt(timestamp)
-                    .deepThink(0)
+                    .collaborationMode("normal")
                     .build());
 
             if (turnDao.selectByRequestId(requestId) != null) {

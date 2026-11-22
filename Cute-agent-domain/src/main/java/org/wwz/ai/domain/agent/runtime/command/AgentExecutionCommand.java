@@ -28,6 +28,14 @@ public class AgentExecutionCommand {
      */
     private String ledgerQueryText;
     private Integer agentType;
+    /** 主模式：normal=普通 Agent；cluster=通用协调者。 */
+    private String collaborationMode;
+    /** 普通模式绑定的主 Agent key；集群模式为空。 */
+    private String mainAgentKey;
+    /** 会话首轮冻结的稳定 system 前缀。 */
+    private String promptSnapshot;
+    private String promptVersion;
+    private String promptHash;
     private String outputStyle;
     private String basePrompt;
     /**

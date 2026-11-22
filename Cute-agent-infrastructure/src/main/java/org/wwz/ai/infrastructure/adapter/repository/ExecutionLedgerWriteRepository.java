@@ -102,9 +102,21 @@ public class ExecutionLedgerWriteRepository implements IExecutionLedgerWriteRepo
                                          String model,
                                          Boolean thinking,
                                          String thinkingEffort,
-                                         Integer deepThink) {
+                                         String collaborationMode) {
         dialogueSessionLedgerDao.updateSessionPreferences(
-                sessionId, model, thinking, thinkingEffort, deepThink);
+                sessionId, model, thinking, thinkingEffort, collaborationMode);
+    }
+
+    @Override
+    public void updateSessionRuntimeBinding(String sessionId,
+                                            String mainAgentKey,
+                                            String collaborationMode,
+                                            String promptVersion,
+                                            String promptHash,
+                                            String promptSnapshot) {
+        dialogueSessionLedgerDao.updateSessionRuntimeBinding(
+                sessionId, mainAgentKey, collaborationMode,
+                promptVersion, promptHash, promptSnapshot);
     }
 
     @Override

@@ -94,12 +94,19 @@ public interface IDialogueSessionLedgerDao {
     long queryLastInsertId();
 
     /**
-     * 只更新会话偏好四列；{@code null} 表示「不清空已有值」。
+     * 只更新会话偏好列；{@code null} 表示「不清空已有值」。
      * <p>不用 {@code upsertSession}：那个整行覆盖 title/status/run_count，传 null 会清空。</p>
      */
     int updateSessionPreferences(@Param("sessionId") String sessionId,
                                  @Param("model") String model,
                                  @Param("thinking") Boolean thinking,
                                  @Param("thinkingEffort") String thinkingEffort,
-                                 @Param("deepThink") Integer deepThink);
+                                 @Param("collaborationMode") String collaborationMode);
+
+    int updateSessionRuntimeBinding(@Param("sessionId") String sessionId,
+                                    @Param("mainAgentKey") String mainAgentKey,
+                                    @Param("collaborationMode") String collaborationMode,
+                                    @Param("promptVersion") String promptVersion,
+                                    @Param("promptHash") String promptHash,
+                                    @Param("promptSnapshot") String promptSnapshot);
 }

@@ -23,6 +23,7 @@ import org.wwz.ai.application.agent.ingress.AgentIngressStatus;
 import org.wwz.ai.application.agent.ingress.AgentIngressType;
 import org.wwz.ai.application.agent.ingress.IAgentIngressApplicationService;
 import org.wwz.ai.application.agent.query.SessionPreferences;
+import org.wwz.ai.domain.agent.runtime.enums.CollaborationMode;
 import org.wwz.ai.trigger.http.agent.mapper.AgentIngressHttpMapper;
 import org.wwz.ai.trigger.http.agent.vo.AgentSessionQueryReqVO;
 import org.wwz.ai.types.agent.exception.AgentConcurrentRunException;
@@ -78,7 +79,8 @@ public class AgentSessionQueryController {
                             .model(body.getModel())
                             .thinking(body.getThinking())
                             .thinkingEffort(body.getThinkingEffort())
-                            .deepThink(body.getDeepThink())
+                            .collaborationMode(resolveMode(body))
+                            .agentKey(body.getAgentKey())
                             .build())
                     .build());
             if (result.getStatus() == AgentIngressStatus.INJECT_FAILED) {
@@ -121,6 +123,18 @@ public class AgentSessionQueryController {
                             .info(e.getMessage())
                             .build());
         }
+    }
+
+    private static String resolveMode(AgentSessionQueryReqVO body) {
+        if (body == null) {
+            return null;
+        }
+        if (StringUtils.isNotBlank(body.getCollaborationMode())) {
+            return CollaborationMode.normalize(body.getCollaborationMode());
+        }
+        return body.getDeepThink() == null
+                ? null
+                : CollaborationMode.fromLegacyDeepThink(body.getDeepThink()).getValue();
     }
 
     private static ResponseEntity<Response<Map<String, Object>>> injectFailedResponse(AgentIngressResult result) {

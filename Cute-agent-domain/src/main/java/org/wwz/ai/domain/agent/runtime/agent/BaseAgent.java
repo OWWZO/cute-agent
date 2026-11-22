@@ -28,13 +28,18 @@ import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPayloads;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanModePromptInjector;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
+import org.wwz.ai.domain.agent.runtime.prompt.AgentExecutionRole;
 import org.wwz.ai.domain.agent.runtime.prompt.AgentPrompt;
+import org.wwz.ai.domain.agent.runtime.prompt.PromptAssembler;
+import org.wwz.ai.domain.agent.runtime.prompt.PromptAssemblyContext;
+import org.wwz.ai.domain.agent.runtime.prompt.PromptBundle;
 import org.wwz.ai.domain.agent.runtime.tool.BaseTool;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.runtime.tool.ToolObservationSerializer;
 import org.wwz.ai.domain.agent.runtime.tool.common.MemoryTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.SessionSearchTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.skill.SkillViewTool;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
 import org.wwz.ai.domain.agent.runtime.tasklist.BackgroundTaskNotificationFormatter;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
@@ -308,7 +313,7 @@ public abstract class BaseAgent {
                     drainBackgroundTaskNotificationsIntoMemory();
                     // 每步进入前都刷新一次当前位置，供 LLM / tool 账本读取。
                     context.markExecutionPosition(getName(), currentStep);
-                    // Plan Mode：sparse/full 提醒 + mid-run Enter 时补 system 指引
+                    // Plan Mode：sparse/full 提醒只进入消息上下文
                     PlanModePromptInjector.injectStepReminders(this);
                     //每步 LLM 前再判一次上下文水位（含 tool 后中途）
                     compactWorkingMemoryIfNeeded("step");
@@ -742,19 +747,59 @@ public abstract class BaseAgent {
     }
 
     /**
-     * 子 Agent：REACT 底座 + 类型指令，不额外注入专门终答契约。
+     * 普通主 Agent 与同名 Worker 共用同一套身份提示词。
      */
+    public void applyAgentSystemPrompt(String agentKey, String agentDirective) {
+        applyPromptBundle(PromptAssembler.assemble(promptAssemblyContext(
+                AgentExecutionRole.MAIN, agentKey, agentDirective).build()));
+    }
+
     public void applySubAgentSystemPrompt(String typeDirective) {
-        String template = AgentPrompt.composeSubAgentSystemPrompt(typeDirective);
-        setSystemPrompt(buildStableSystemPrompt(template, null, null));
+        applyPromptBundle(PromptAssembler.assemble(promptAssemblyContext(
+                AgentExecutionRole.WORKER, null, typeDirective).build()));
     }
 
     /**
-     * PlanSolve 主：ORCHESTRATION 底座 + USER_FACING，整段替换（不用 REACT 底座）。
+     * 集群模式主 Agent：唯一通用协调者。
      */
+    public void applyCoordinatorSystemPrompt(String workerCatalog) {
+        String effectiveWorkerCatalog = StringUtils.defaultIfBlank(workerCatalog, resolveWorkerCatalog());
+        PromptAssemblyContext assembly = promptAssemblyContext(
+                AgentExecutionRole.COORDINATOR, null, null)
+                .workerCatalog(effectiveWorkerCatalog)
+                .includeAgentDispatchGuidance(true)
+                .includeOpenUiProtocol(true)
+                .build();
+        applyPromptBundle(PromptAssembler.assemble(assembly));
+    }
+
     public void applyPlanSolveSystemPrompt() {
-        String template = AgentPrompt.composePlanSolveSystemPrompt();
-        setSystemPrompt(buildStableSystemPrompt(template, null, null));
+        applyCoordinatorSystemPrompt(null);
+    }
+
+    private void applyPromptBundle(PromptBundle bundle) {
+        String prompt = bundle == null ? null : bundle.systemPrompt();
+        setSystemPrompt(buildStableSystemPrompt(prompt, null, null));
+    }
+
+    /**
+     * 会话快照仍需经过稳定化，以保留行尾规范化、技能索引和 LTM 等会话能力块。
+     */
+    public void applyPromptSnapshot(String snapshot) {
+        setSystemPrompt(buildStableSystemPrompt(snapshot, null, null));
+    }
+
+    private String resolveWorkerCatalog() {
+        if (context == null || context.getRuntimeDependencies() == null) {
+            return null;
+        }
+        SubAgentRegistry registry = context.getRuntimeDependencies().getOptionalSubAgentRegistry();
+        return registry == null ? null : PromptAssembler.formatWorkerCatalog(registry.list());
+    }
+
+    private PromptAssemblyContext.PromptAssemblyContextBuilder promptAssemblyContext(
+            AgentExecutionRole role, String agentKey, String agentDirective) {
+        return PromptAssembler.runtimeContext(context, role, agentKey, agentDirective);
     }
 
     /**
