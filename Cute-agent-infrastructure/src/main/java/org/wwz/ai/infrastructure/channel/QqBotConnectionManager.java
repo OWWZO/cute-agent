@@ -47,11 +47,8 @@ public class QqBotConnectionManager implements ChannelConnectionPort, ChannelAct
     private final Map<Long, QqBotWsClient> connections = new ConcurrentHashMap<>();
     private final Map<Long, ChannelAdapter> adapters = new ConcurrentHashMap<>();
     private final Map<Long, Object> bindingMonitors = new ConcurrentHashMap<>();
-    private final ExecutorService connectExecutor = Executors.newFixedThreadPool(4, runnable -> {
-        Thread thread = new Thread(runnable, "channel-connect");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final ExecutorService connectExecutor = Executors.newFixedThreadPool(
+            4, Thread.ofVirtual().name("channel-connect").factory());
 
     public QqBotConnectionManager(ChannelBindingRepository bindingRepository,
                                   ChannelInboundPort dispatchService,

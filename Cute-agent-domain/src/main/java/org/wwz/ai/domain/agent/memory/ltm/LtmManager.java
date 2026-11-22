@@ -26,21 +26,15 @@ public class LtmManager {
     private final Map<String, MemoryProvider> toolRoutes = Collections.synchronizedMap(new LinkedHashMap<>());
     private final AtomicBoolean hasExternal = new AtomicBoolean(false);
     private final long prefetchTimeoutMs;
-    private final ExecutorService background = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "ltm-bg");
-        t.setDaemon(true);
-        return t;
-    });
+    private final ExecutorService background = Executors.newSingleThreadExecutor(
+            Thread.ofVirtual().name("ltm-bg").factory());
     /**
      * 同步 pre-fetch 专用执行器：与 background 队列隔离。
      * <p>background 上可能排着 syncTurn / session 边界等慢任务；共用单线程会让
      * 受超时保护的 pre-fetch 排在它们后面，造成本不该有的超时。</p>
      */
-    private final ExecutorService prefetchWorker = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "ltm-prefetch");
-        t.setDaemon(true);
-        return t;
-    });
+    private final ExecutorService prefetchWorker = Executors.newSingleThreadExecutor(
+            Thread.ofVirtual().name("ltm-prefetch").factory());
 
     public LtmManager() {
         this(8000L);

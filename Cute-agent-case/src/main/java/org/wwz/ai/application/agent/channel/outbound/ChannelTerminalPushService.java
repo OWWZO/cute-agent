@@ -56,11 +56,8 @@ public class ChannelTerminalPushService {
         }
     };
 
-    private final ExecutorService pushExecutor = Executors.newFixedThreadPool(2, runnable -> {
-        Thread thread = new Thread(runnable, "channel-terminal-push");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final ExecutorService pushExecutor = Executors.newFixedThreadPool(
+            2, Thread.ofVirtual().name("channel-terminal-push").factory());
 
     public void pushSuccess(String sessionId, String requestId, String text) {
         if (StringUtils.isBlank(text)) {

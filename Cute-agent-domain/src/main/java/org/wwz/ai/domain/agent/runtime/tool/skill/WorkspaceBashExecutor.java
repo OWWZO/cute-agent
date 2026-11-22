@@ -112,12 +112,8 @@ public class WorkspaceBashExecutor {
             process = pb.start();
             StreamCollector stdout = new StreamCollector(process.getInputStream(), options.getBashOutputMaxChars());
             StreamCollector stderr = new StreamCollector(process.getErrorStream(), options.getBashOutputMaxChars());
-            Thread outThread = new Thread(stdout, "bash-stdout");
-            Thread errThread = new Thread(stderr, "bash-stderr");
-            outThread.setDaemon(true);
-            errThread.setDaemon(true);
-            outThread.start();
-            errThread.start();
+            Thread outThread = Thread.ofVirtual().name("bash-stdout").start(stdout);
+            Thread errThread = Thread.ofVirtual().name("bash-stderr").start(stderr);
 
             boolean finished = process.waitFor(effectiveTimeout, TimeUnit.MILLISECONDS);
             if (!finished) {

@@ -6,7 +6,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
@@ -30,6 +31,9 @@ import java.util.concurrent.RejectedExecutionException;
  */
 public class BskSessionQueue {
 
+    private static final ExecutorService VIRTUAL_EXECUTOR = Executors.newThreadPerTaskExecutor(
+            Thread.ofVirtual().name("bsk-session-", 1).factory());
+
     /** 每 session 一条待执行队列。 */
     private final ConcurrentHashMap<String, SessionLane> lanes = new ConcurrentHashMap<>();
 
@@ -39,7 +43,7 @@ public class BskSessionQueue {
 
     /** 默认：排队并串行（021 spec 语义）。 */
     public BskSessionQueue() {
-        this(false, ForkJoinPool.commonPool(), ForkJoinPool.commonPool());
+        this(false, VIRTUAL_EXECUTOR, VIRTUAL_EXECUTOR);
     }
 
     /** 指定执行器的构造，测试用。 */
@@ -58,7 +62,7 @@ public class BskSessionQueue {
      */
     public static BskSessionQueue newRejectingWhenBusy() {
         return new BskSessionQueue(
-                true, ForkJoinPool.commonPool(), ForkJoinPool.commonPool());
+                true, VIRTUAL_EXECUTOR, VIRTUAL_EXECUTOR);
     }
 
     private BskSessionQueue(boolean rejectWhenBusy,

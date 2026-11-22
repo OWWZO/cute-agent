@@ -63,8 +63,9 @@ public class BskRelayBeansConfig {
     /**
      * CLI 侧的串行车道。
      *
-     * <p>与扩展侧的队列分开，且用<b>可增长线程池</b>而不是 ForkJoinPool：
-     * 车道里的任务要阻塞等待扩展的应答，阻塞公共池会把整个 JVM 的并行任务拖住。</p>
+     * <p>与扩展侧的队列分开：CLI 车道使用按任务创建的虚拟线程，
+     * 控制面仍保留 8 并发 + 64 排队上限。两条链路都会阻塞等待扩展应答，
+     * 不应占用公共 ForkJoinPool。</p>
      */
     @Bean
     public BskSessionQueue bskCliSessionQueue(
@@ -75,11 +76,8 @@ public class BskRelayBeansConfig {
 
     @Bean(destroyMethod = "shutdown")
     public ExecutorService bskCliExecutor() {
-        return Executors.newCachedThreadPool(runnable -> {
-            Thread thread = new Thread(runnable, "bsk-cli-relay");
-            thread.setDaemon(true);
-            return thread;
-        });
+        return Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("bsk-cli-relay-", 1).factory());
     }
 
     @Bean(destroyMethod = "shutdown")
@@ -87,11 +85,7 @@ public class BskRelayBeansConfig {
         return new ThreadPoolExecutor(
                 8, 8, 0L, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(64),
-                runnable -> {
-                    Thread thread = new Thread(runnable, "bsk-cli-control");
-                    thread.setDaemon(true);
-                    return thread;
-                },
+                Thread.ofVirtual().name("bsk-cli-control-", 1).factory(),
                 new ThreadPoolExecutor.AbortPolicy());
     }
 }

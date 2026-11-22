@@ -23,7 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,13 +35,14 @@ public class BackgroundReviewServiceImpl implements BackgroundReviewService {
 
     private static final int BACKGROUND_REVIEW_THREADS = 4;
     private static final int BACKGROUND_REVIEW_QUEUE_SIZE = 64;
+    // 保留原有并发/排队/拒绝语义，只把工作线程切换为虚拟线程。
     private static final ExecutorService REVIEW_EXECUTOR = new ThreadPoolExecutor(
             BACKGROUND_REVIEW_THREADS,
             BACKGROUND_REVIEW_THREADS,
             0L,
             java.util.concurrent.TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<>(BACKGROUND_REVIEW_QUEUE_SIZE),
-            new ReviewThreadFactory(),
+            Thread.ofVirtual().name("ltm-bg-review-", 1).factory(),
             new ThreadPoolExecutor.AbortPolicy());
 
     private final ObjectProvider<CuteRuntimeDependencies> runtimeDependenciesProvider;
@@ -249,14 +249,4 @@ public class BackgroundReviewServiceImpl implements BackgroundReviewService {
         }
     }
 
-    private static final class ReviewThreadFactory implements ThreadFactory {
-        private final AtomicInteger sequence = new AtomicInteger();
-
-        @Override
-        public Thread newThread(Runnable runnable) {
-            Thread thread = new Thread(runnable, "ltm-bg-review-" + sequence.incrementAndGet());
-            thread.setDaemon(true);
-            return thread;
-        }
-    }
 }

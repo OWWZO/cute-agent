@@ -188,7 +188,7 @@ public class HostProcessCliAdapter implements CliExecutionPort {
     }
 
     private static Thread startCollector(InputStream stream, StreamCollector collector) {
-        Thread thread = new Thread(() -> {
+        return Thread.ofVirtual().name("cli-stream").start(() -> {
             try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
                 char[] buffer = new char[4096];
                 int read;
@@ -197,10 +197,7 @@ public class HostProcessCliAdapter implements CliExecutionPort {
                 }
             } catch (Exception ignore) {
             }
-        }, "cli-stream");
-        thread.setDaemon(true);
-        thread.start();
-        return thread;
+        });
     }
 
     private static CliResult fail(String tool, String error, int exit, boolean timedOut, boolean truncated, long duration) {

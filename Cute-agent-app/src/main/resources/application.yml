@@ -44,20 +44,20 @@ autobots:
     max-idle-connections: 32
     keep-alive-minutes: 5
   execution:
-    # 虚拟线程默认关闭；可在部署环境按执行器灰度开启
-    virtual-threads-enabled: false
+    # 默认使用虚拟线程；平台线程仅作为显式回滚分支，定时调度器不受此开关影响。
+    virtual-threads-enabled: true
     dispatch:
       max-concurrency: 32
-      virtual-threads-enabled: false
+      virtual-threads-enabled: true
     llm:
       max-concurrency: 32
-      virtual-threads-enabled: false
+      virtual-threads-enabled: true
     task:
       max-concurrency: 16
-      virtual-threads-enabled: false
+      virtual-threads-enabled: true
     tool:
       max-concurrency: 16
-      virtual-threads-enabled: false
+      virtual-threads-enabled: true
     # 工具批次最长等待 1.5 小时；超时后会取消尚未完成的工具任务
     tool-batch-timeout-seconds: 5400
     visitor-cookie:

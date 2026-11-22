@@ -27,9 +27,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * LTM fork：对齐 Hermes background_review 前缀缓存策略。
@@ -44,22 +42,14 @@ public final class LtmAgentForkSupport {
 
     private static final int FORK_THREADS = 4;
     private static final int FORK_QUEUE_SIZE = 32;
+    // 保留原有并发/排队/拒绝语义，只把工作线程切换为虚拟线程。
     private static final ExecutorService FORK_POOL = new ThreadPoolExecutor(
             FORK_THREADS,
             FORK_THREADS,
             0L,
             TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<>(FORK_QUEUE_SIZE),
-            new ThreadFactory() {
-        private final AtomicInteger n = new AtomicInteger();
-
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, "ltm-fork-" + n.incrementAndGet());
-            t.setDaemon(true);
-            return t;
-        }
-    },
+            Thread.ofVirtual().name("ltm-fork-", 1).factory(),
             new ThreadPoolExecutor.AbortPolicy() {
                 @Override
                 public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
