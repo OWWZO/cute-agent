@@ -8,6 +8,7 @@ import org.wwz.ai.domain.agent.runtime.printer.Printer;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionTaskListPublisher;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionTaskListStore;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -18,7 +19,7 @@ public class SessionTaskListPublisherTest {
     @Test
     public void failingPrinterDoesNotEscapePublish() {
         SessionTaskListStore store = new SessionTaskListStore("list");
-        store.create("任务", "详情", null, null);
+        store.replaceAll(List.of(Map.of("content", "任务", "status", "pending")));
         AgentContext context = AgentContext.builder()
                 .requestId("req-publish")
                 .sessionId("sess-publish")

@@ -89,10 +89,17 @@ public final class SubAgentContextFactory {
         String effectiveChildRequestId = StringUtils.isNotBlank(childRequestIdOverride)
                 ? childRequestIdOverride.trim()
                 : newChildRequestId(agentId);
+        String rootSessionId = rootSessionId(parent);
+        int delegationDepth = childDelegationDepth(parent);
+        String parentAgentId = currentAgentId(parent);
 
         AgentContext child = AgentContext.builder()
                 .requestId(effectiveChildRequestId)
                 .sessionId(childSessionId)
+                .rootSessionId(rootSessionId)
+                .delegationDepth(delegationDepth)
+                .parentAgentId(parentAgentId)
+                .toolScopeApplied(Boolean.FALSE)
                 // 子会话是独立会话，但资源归属必须与父会话用户一致；记忆归属仍由下面的 ltmOwner=null 隔离。
                 .userId(parent.getUserId())
                 .query(prompt)
@@ -109,7 +116,7 @@ public final class SubAgentContextFactory {
                 .toolArtifactRegistry(parent.getToolArtifactRegistry())
                 // 会话级控制面：spawn 时就用父 sessionKey eager 物化 Todo 列表与后台任务表——
                 // 子 sessionId 是 sub_<agentId>，等子 Agent 首次读取时惰性补建会把子 key
-                // 绑进共享面，父侧 TaskList / TaskOutput 从此全部 miss。
+                // 绑进共享面，父侧 TodoWrite / TaskOutput 从此全部 miss。
                 // run 级控制面必须独立：turnClosed / inject 队列是 run 的事实，子 finishRun
                 // 不得关闭父回合；父的取消令牌经 parentCancellation 只读透传，/stop 杀得到子
                 // Agent，子 Agent 的任务级令牌（TaskStop）也不会误伤父。
@@ -194,6 +201,30 @@ public final class SubAgentContextFactory {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 16);
     }
 
+    public static String rootSessionId(AgentContext context) {
+        if (context == null) {
+            return null;
+        }
+        return StringUtils.defaultIfBlank(
+                context.getRootSessionId(),
+                StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId()));
+    }
+
+    public static String currentAgentId(AgentContext context) {
+        if (context == null) {
+            return null;
+        }
+        return context.isSubAgent()
+                ? StringUtils.defaultIfBlank(context.getSubAgentId(), context.getSessionId())
+                : StringUtils.defaultIfBlank(context.getSessionId(), context.getRequestId());
+    }
+
+    public static int childDelegationDepth(AgentContext parent) {
+        return (parent == null || parent.getDelegationDepth() == null
+                ? 0
+                : parent.getDelegationDepth()) + 1;
+    }
+
     /**
      * 子 Agent 运行 requestId（首跑/续跑/快照共用）。
      * 形态 {@code sub:{agentId}:{8hex}}，长度远低于 64/128 列宽；父 requestId 只写日志不嵌入。
@@ -210,6 +241,17 @@ public final class SubAgentContextFactory {
      * 不要混用。
      */
     public static final String CHILD_SESSION_ID_PREFIX = "sub_";
+
+    public static boolean isChildSessionId(String sessionId) {
+        return StringUtils.startsWith(StringUtils.trimToNull(sessionId), CHILD_SESSION_ID_PREFIX)
+                && StringUtils.length(sessionId) > CHILD_SESSION_ID_PREFIX.length();
+    }
+
+    public static String agentIdFromChildSessionId(String childSessionId) {
+        return isChildSessionId(childSessionId)
+                ? StringUtils.substring(childSessionId, CHILD_SESSION_ID_PREFIX.length())
+                : null;
+    }
 
     /**
      * 子会话 ID（<b>确定性</b>，可由 agentId 反推）：{@code sub_{agentId}}。

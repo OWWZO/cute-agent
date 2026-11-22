@@ -16,6 +16,11 @@ public final class SubAgentConcurrencyGate {
     private final Semaphore semaphore;
     private final int maxConcurrent;
     private final long acquireTimeoutSeconds;
+    /**
+     * 同一线程内的父/子/孙调用复用最外层许可。
+     * 否则父节点持有许可后再等子节点抢许可，会在 maxConcurrent 用尽时形成等待环。
+     */
+    private final ThreadLocal<Integer> heldDepth = ThreadLocal.withInitial(() -> 0);
 
     /**
      * @param acquireTimeoutSeconds 获取许可的等待秒数；0 表示不等待（tryAcquire 立即返回），
@@ -53,15 +58,31 @@ public final class SubAgentConcurrencyGate {
      * 在许可内执行；拿不到许可时返回 null（由调用方转失败结果）。
      */
     public <T> T runWithPermit(Supplier<T> action) throws InterruptedException {
+        int depth = heldDepth.get();
+        if (depth > 0) {
+            heldDepth.set(depth + 1);
+            try {
+                return action.get();
+            } finally {
+                int remaining = heldDepth.get() - 1;
+                if (remaining == 0) {
+                    heldDepth.remove();
+                } else {
+                    heldDepth.set(remaining);
+                }
+            }
+        }
         boolean acquired = acquireTimeoutSeconds == 0L
                 ? semaphore.tryAcquire()
                 : semaphore.tryAcquire(acquireTimeoutSeconds, TimeUnit.SECONDS);
         if (!acquired) {
             return null;
         }
+        heldDepth.set(1);
         try {
             return action.get();
         } finally {
+            heldDepth.remove();
             semaphore.release();
         }
     }

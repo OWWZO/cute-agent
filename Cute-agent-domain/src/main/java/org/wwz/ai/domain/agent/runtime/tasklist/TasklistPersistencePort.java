@@ -13,17 +13,6 @@ public interface TasklistPersistencePort {
     List<SessionTaskItem> loadTodos(String sessionId);
 
     /**
-     * 返回生成 todo id 所用的单调高水位。
-     * <p>实现必须包含软删除行：{@code replaceTodos} 会软删旧行后重新发放 id，
-     * 若这里退回为当前可见行的最大值，后续生成的新 id 会与软删除行冲突。</p>
-     */
-    int loadTodoHighWaterMark(String sessionId);
-
-    void upsertTodo(String sessionId, SessionTaskItem item);
-
-    void deleteTodo(String sessionId, String taskId);
-
-    /**
      * 整表替换：软删旧行后写入新列表（可为空列表表示清空）。
      */
     void replaceTodos(String sessionId, List<SessionTaskItem> items);
@@ -32,6 +21,17 @@ public interface TasklistPersistencePort {
     List<RuntimeBackgroundTask> loadBackgroundTasks(String sessionId);
 
     Optional<RuntimeBackgroundTask> findBackgroundTask(String sessionId, String taskId);
+
+    /** 直聊/唤醒按子会话反查仍在运行或等待的逻辑任务。 */
+    default Optional<RuntimeBackgroundTask> findActiveBackgroundTaskByChildSessionId(String childSessionId) {
+        return Optional.empty();
+    }
+
+    /** 单实例树控用的 owner 过滤；旧实现未支持时返回空列表。 */
+    default List<RuntimeBackgroundTask> findRunningBackgroundTasksByOwner(String rootSessionId,
+                                                                          String ownerAgentId) {
+        return List.of();
+    }
 
     /**
      * 后台任务只做 upsert，没有删除操作：完成/失败/停止的任务行会保留并随会话重新 hydrate。

@@ -12,6 +12,8 @@ public class SubAgentResult {
 
     public static final String STATUS_COMPLETED = "completed";
     public static final String STATUS_FAILED = "failed";
+    /** 本轮已给出候选回复，但名下仍有后台工作，暂不向父 Agent 回传。 */
+    public static final String STATUS_WAITING = "waiting";
 
     private String status;
     private String agentId;
@@ -36,5 +38,9 @@ public class SubAgentResult {
 
     public boolean isCompleted() {
         return STATUS_COMPLETED.equals(status);
+    }
+
+    public boolean isWaiting() {
+        return STATUS_WAITING.equals(status);
     }
 }

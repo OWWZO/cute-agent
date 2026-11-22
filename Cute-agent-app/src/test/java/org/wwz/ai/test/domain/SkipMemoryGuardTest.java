@@ -77,7 +77,7 @@ public class SkipMemoryGuardTest {
         parent.addTool(new StubTool("fact_store"));
         parent.addTool(new StubTool("viking_memory"));
 
-        ToolCollection child = SubAgentToolFilter.filter(parent, defWithAllowAll(), false);
+        ToolCollection child = SubAgentToolFilter.filter(parent, defWithAllowAll());
         Assert.assertNull(child.getToolMap().get(MemoryTool.TOOL_NAME));
         Assert.assertNull(child.getToolMap().get("fact_store"));
         Assert.assertNull(child.getToolMap().get("viking_memory"));

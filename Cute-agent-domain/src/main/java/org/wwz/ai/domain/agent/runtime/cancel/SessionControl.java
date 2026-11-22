@@ -8,12 +8,12 @@ import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 /**
  * 会话级共享控制面：Todo 任务列表与后台任务注册表。
  *
- * <p><b>不变量：</b>本类实例被父 Agent 与子 Agent 共享（TaskStop / TaskOutput / TaskCreate
+ * <p><b>不变量：</b>本类实例被父 Agent 与子 Agent 共享（TaskStop / TaskOutput / TodoWrite
  * 必须命中子 Agent）；run 级独占状态（取消令牌、turnClosed、注入队列）在 {@link RunControl}。</p>
  *
  * <p><b>必须由 spawn 方用父 sessionKey eager 物化：</b>子 Agent 的 sessionId 是
  * {@code sub_<agentId>}，若等子 Agent 首次读取时惰性补建，会用子 key 建表并绑进本共享面，
- * 父侧的 TaskList / TaskOutput 从此全部 miss。{@code SubAgentContextFactory} 在 spawn 时
+ * 父侧的 TodoWrite / TaskOutput 从此全部 miss。{@code SubAgentContextFactory} 在 spawn 时
  * 就调用父的 {@code requireSessionTaskList()} / {@code requireBackgroundTasks()} 把实例钉进来。</p>
  *
  * <p><b>并发约束：</b>绑定与「读-判-建」都以本类实例自身为 monitor。不能依赖
@@ -23,7 +23,7 @@ import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
  */
 public final class SessionControl {
 
-    /** 会话 Todo 任务列表（TaskCreate/TaskGet）。主/子 Agent 共享同一引用。 */
+    /** 会话 Todo 任务列表（TodoWrite）。主/子 Agent 共享同一引用。 */
     private volatile SessionTaskListStore sessionTaskList;
 
     /**

@@ -31,6 +31,17 @@ public class ExecutionLedgerReconcileRepositoryTest {
             }
 
             @Override
+            public BackgroundTaskPO selectActiveByChildSessionId(String childSessionId) {
+                return null;
+            }
+
+            @Override
+            public List<BackgroundTaskPO> selectRunningByOwnerAgentId(String rootSessionId,
+                                                                      String ownerAgentId) {
+                return List.of();
+            }
+
+            @Override
             public int upsert(BackgroundTaskPO row) {
                 return 1;
             }

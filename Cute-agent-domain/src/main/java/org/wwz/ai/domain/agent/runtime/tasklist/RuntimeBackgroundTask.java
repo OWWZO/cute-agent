@@ -37,6 +37,12 @@ public class RuntimeBackgroundTask {
     public static final String TYPE_LOCAL_SHELL = "local_shell";
     public static final String TYPE_GENERIC = "generic";
 
+    public static final String PHASE_RUNNING = "running";
+    public static final String PHASE_WAITING_BACKGROUND = "waiting_background";
+
+    public static final String EXECUTION_MODE_INLINE = "inline";
+    public static final String EXECUTION_MODE_POOL = "pool";
+
     private String id;
     private String type;
     /**
@@ -55,6 +61,22 @@ public class RuntimeBackgroundTask {
     /** 子 Agent 对应的真实子会话 ID（{@code sub_{agentId}}）；前端据此打开只读详情 */
     private volatile String childSessionId;
     private String prompt;
+
+    /** 收到最终回传通知的直接父会话。 */
+    private String parentSessionId;
+    private String parentRequestId;
+    private String parentToolUseId;
+    private String parentAgentId;
+    /** 创建这条后台任务的当前 Agent，用于隔离同一树内的任务。 */
+    private String ownerAgentId;
+    private String rootSessionId;
+    private Integer delegationDepth;
+    /** running / waiting_background；任务终态仍由 status 表达。 */
+    private String phase;
+    /** inline / pool。 */
+    private String executionMode;
+    /** 后台结果触发的新回合次数，用于限制静默收尾轮。 */
+    private Integer closingTurnCount;
 
     /** 终态输出 / 错误 */
     private volatile String output;

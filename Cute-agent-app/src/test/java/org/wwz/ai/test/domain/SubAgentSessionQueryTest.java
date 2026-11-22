@@ -34,14 +34,14 @@ import java.util.Collections;
 public class SubAgentSessionQueryTest {
 
     @Test
-    public void deepThinkDerivesPlanSolveAgentType() {
-        Captured captured = runQuery(sessionWithDeepThink(1));
+    public void clusterModeDerivesPlanSolveAgentType() {
+        Captured captured = runQuery(conversationSession("cluster"));
         Assert.assertEquals(AgentType.PLAN_SOLVE.getValue(), captured.command.getAgentType());
     }
 
     @Test
-    public void reactWhenDeepThinkOff() {
-        Captured captured = runQuery(sessionWithDeepThink(0));
+    public void normalModeDerivesReactAgentType() {
+        Captured captured = runQuery(conversationSession("normal"));
         Assert.assertEquals(AgentType.REACT.getValue(), captured.command.getAgentType());
     }
 
@@ -72,7 +72,7 @@ public class SubAgentSessionQueryTest {
 
     @Test
     public void queryRunsOnSameChildSession() {
-        Captured captured = runQuery(sessionWithDeepThink(0));
+        Captured captured = runQuery(conversationSession("normal"));
         Assert.assertEquals("sub_agent-1", captured.command.getSessionId());
         Assert.assertEquals("继续这个子会话", captured.command.getQuery());
     }
@@ -97,21 +97,19 @@ public class SubAgentSessionQueryTest {
     }
 
     @Test
-    public void explicitPreferenceOverridesStoredValueAndIsPersisted() {
+    public void explicitModelPreferenceOverridesStoredValueAndIsPersisted() {
         DialogueSession session = baseSession();
         session.setModel("gpt-5");
-        session.setDeepThink(0);
         Captured captured = runQuery(session, SessionPreferences.builder()
                 .model("gpt-6")
-                .deepThink(1)
                 .build());
 
         // 运行时用本轮选择
         Assert.assertEquals("gpt-6", captured.command.getModel());
-        Assert.assertEquals(AgentType.PLAN_SOLVE.getValue(), captured.command.getAgentType());
+        Assert.assertEquals(AgentType.REACT.getValue(), captured.command.getAgentType());
         // 落库只写用户真正选过的两列，其余为 null 由 COALESCE 保留
         Mockito.verify(captured.preferencesService).upsertPreferences(
-                "sub_agent-1", "gpt-6", null, null, 1);
+                "sub_agent-1", "gpt-6", null, null, null);
     }
 
     @Test
@@ -174,9 +172,11 @@ public class SubAgentSessionQueryTest {
                         service, "conversationSessionPreferencesApplicationService"));
     }
 
-    private static DialogueSession sessionWithDeepThink(int deepThink) {
+    private static DialogueSession conversationSession(String mode) {
         DialogueSession session = baseSession();
-        session.setDeepThink(deepThink);
+        session.setSessionKind(SessionKind.CONVERSATION.code());
+        session.setParentSessionId(null);
+        session.setCollaborationMode(mode);
         return session;
     }
 
@@ -186,7 +186,7 @@ public class SubAgentSessionQueryTest {
                 .sessionKind(SessionKind.SUBAGENT.code())
                 .parentSessionId("session-parent")
                 .rootSessionId("session-parent")
-                .deepThink(0)
+                .collaborationMode("normal")
                 .build();
     }
 

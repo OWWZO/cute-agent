@@ -515,21 +515,6 @@ public class BackgroundRunReconcilerTest {
         }
 
         @Override
-        public int loadTodoHighWaterMark(String sessionId) {
-            return 0;
-        }
-
-        @Override
-        public void upsertTodo(String sessionId, SessionTaskItem item) {
-            // no-op
-        }
-
-        @Override
-        public void deleteTodo(String sessionId, String taskId) {
-            // no-op
-        }
-
-        @Override
         public void replaceTodos(String sessionId, List<SessionTaskItem> items) {
             // no-op
         }

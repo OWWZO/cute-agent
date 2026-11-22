@@ -61,6 +61,16 @@ public class SubAgentSessionPortAdapter implements SubAgentSessionPort {
         return session == null ? null : StringUtils.trimToNull(session.getUserId());
     }
 
+    @Override
+    public String findParentSessionId(String sessionId) {
+        String normalizedSessionId = StringUtils.trimToNull(sessionId);
+        if (normalizedSessionId == null) {
+            return null;
+        }
+        DialogueSession session = executionLedgerWriteRepository.querySessionBySessionId(normalizedSessionId);
+        return session == null ? null : StringUtils.trimToNull(session.getParentSessionId());
+    }
+
     /**
      * 解析树根：父会话自己的 {@code rootSessionId} 非空就沿用它，否则父就是根。
      * <p>{@code parent_session_id} 是权威血缘链，本列只是缓存；父行尚未回填时退化为

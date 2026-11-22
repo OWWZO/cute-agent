@@ -57,7 +57,7 @@ public class CuteConfig {
      * 注意：默认值必须包含 get_ui_components —— 主 agent 的 system prompt 里注入了 openui 通道，
      * 提到这个工具；只改 yml 无效（application-*.yml 里该键的层级与这里不一致）。
      */
-    @Value("${autobots.autoagent.plan-solve-main-tool-list:Agent,TaskCreate,TaskGet,TaskUpdate,TaskList,TodoWrite,TaskStop,SendMessage,EnterPlanMode,ExitPlanMode,AskUserQuestion,ToolSearch,ToolDescribe,ToolCall,ListMcpResources,ReadMcpResource,workspace_read,workspace_list,workspace_glob,workspace_grep,workspace_write,workspace_edit,code_mode,skill_view,skills_search,memory,session_search,image_ocr,canvas_publish,pdf_reader,pdf_structure,word_reader,text_processor,markdown_processor,html_processor,excel_reader,csv_processor,get_ui_components}")
+    @Value("${autobots.autoagent.plan-solve-main-tool-list:Agent,TodoWrite,TaskStop,AgentList,SendMessage,EnterPlanMode,ExitPlanMode,AskUserQuestion,ToolSearch,ToolDescribe,ToolCall,ListMcpResources,ReadMcpResource,workspace_read,workspace_list,workspace_glob,workspace_grep,workspace_write,workspace_edit,code_mode,skill_view,skills_search,memory,session_search,image_ocr,canvas_publish,pdf_reader,pdf_structure,word_reader,text_processor,markdown_processor,html_processor,excel_reader,csv_processor,get_ui_components}")
     private String planSolveMainToolList;
 
     public void setPlanSolveMainToolList(String planSolveMainToolList) {

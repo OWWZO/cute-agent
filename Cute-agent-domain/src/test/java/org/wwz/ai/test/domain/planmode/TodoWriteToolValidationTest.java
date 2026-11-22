@@ -20,12 +20,14 @@ public class TodoWriteToolValidationTest {
     private final TodoWriteTool tool = new TodoWriteTool();
 
     @Test
-    public void emptyTodosAreRejectedAndExistingListSurvives() {
+    public void emptyTodosExplicitlyClearTheList() {
         SessionTaskListStore store = storeWithExistingTask();
 
-        assertRejected(store, Map.of("todos", List.of()), "不能为空");
+        ToolResultPayload payload = (ToolResultPayload) tool.execute(
+                Map.of("todos", List.of()), context(store));
 
-        assertListIntact(store);
+        Assert.assertEquals(Boolean.FALSE, payload.getFailed());
+        Assert.assertTrue(store.list().isEmpty());
     }
 
     @Test
@@ -73,11 +75,11 @@ public class TodoWriteToolValidationTest {
     }
 
     @Test
-    public void schemaRequiresNonEmptyTodosAndContentOrSubject() {
+    public void schemaAllowsEmptyListAndRequiresContentOrSubject() {
         Map<String, Object> properties = (Map<String, Object>) tool.toParams().get("properties");
         Map<String, Object> todos = (Map<String, Object>) properties.get("todos");
 
-        Assert.assertEquals(1, todos.get("minItems"));
+        Assert.assertNull(todos.get("minItems"));
         Map<String, Object> item = (Map<String, Object>) todos.get("items");
         Assert.assertNotNull("content / subject 至少一个必填", item.get("anyOf"));
     }
@@ -96,7 +98,7 @@ public class TodoWriteToolValidationTest {
 
     private static SessionTaskListStore storeWithExistingTask() {
         SessionTaskListStore store = new SessionTaskListStore("list-todo");
-        store.create("旧任务", "旧描述", null, null);
+        store.replaceAll(List.of(Map.of("content", "旧任务", "status", "pending")));
         return store;
     }
 

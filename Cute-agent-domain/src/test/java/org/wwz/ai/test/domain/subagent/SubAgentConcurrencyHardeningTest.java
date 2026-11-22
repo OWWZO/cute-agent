@@ -2,7 +2,13 @@ package org.wwz.ai.test.domain.subagent;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
+import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentExecutionScope;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentConcurrencyGate;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
+import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -91,5 +97,46 @@ public class SubAgentConcurrencyHardeningTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    @Test
+    public void nestedCallsOnSameThreadReuseOuterPermit() throws Exception {
+        SubAgentConcurrencyGate gate = new SubAgentConcurrencyGate(1, 0L);
+
+        String result = gate.runWithPermit(() -> {
+            try {
+                return gate.runWithPermit(() -> {
+                    try {
+                        return gate.runWithPermit(() -> "nested-ok");
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return "interrupted";
+                    }
+                });
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "interrupted";
+            }
+        });
+
+        Assert.assertEquals("nested-ok", result);
+        Assert.assertEquals("最外层退出后许可必须归还", 1, gate.availablePermits());
+    }
+
+    @Test
+    public void callerRunsPathDoesNotAcquireSecondSubAgentPermit() throws Exception {
+        SubAgentConcurrencyGate gate = Mockito.mock(SubAgentConcurrencyGate.class);
+        SubAgentRunner runner = new SubAgentRunner(new SubAgentRegistry(), gate);
+        AgentContext parent = AgentContext.builder()
+                .requestId("req-inline")
+                .sessionId("sess-inline")
+                .query("q")
+                .toolCollection(new ToolCollection())
+                .build();
+
+        SubAgentExecutionScope.runInline(() -> runner.run(
+                parent, "desc", "prompt", SubAgentRegistry.TYPE_GENERAL_PURPOSE));
+
+        Mockito.verify(gate, Mockito.never()).runWithPermit(Mockito.any());
     }
 }

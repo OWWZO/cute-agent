@@ -19,6 +19,23 @@ public class BackgroundTaskPO {
     private String command;
     private String agentId;
     private String agentType;
+    /** 子 Agent 对应的真实子会话 ID。 */
+    private String childSessionId;
+    /** 收到最终回传通知的直接父会话。 */
+    private String parentSessionId;
+    private String parentRequestId;
+    private String parentToolUseId;
+    private String parentAgentId;
+    /** 创建这条后台任务的当前 Agent。 */
+    private String ownerAgentId;
+    private String rootSessionId;
+    private Integer delegationDepth;
+    /** running / waiting_background；任务终态仍由 status 表达。 */
+    private String phase;
+    /** inline / pool。 */
+    private String executionMode;
+    /** 后台结果触发的新回合次数。 */
+    private Integer closingTurnCount;
     @ToString.Exclude
     private String prompt;
     @ToString.Exclude

@@ -80,7 +80,6 @@ public class SendMessageResumeTest {
     @Test
     public void completedTargetResumesWithNewTaskIdSameAgent() throws Exception {
         String sessionId = "sess-resume-" + System.nanoTime();
-        SessionAgentMailboxHub.clearAll();
         RuntimeBackgroundTaskRegistry registry = new RuntimeBackgroundTaskRegistry();
         RuntimeBackgroundTask old = registry.registerLocalAgent("done", "general-purpose", "work");
         registry.bindAgentId(old.getId(), "agent-done");
@@ -115,7 +114,7 @@ public class SendMessageResumeTest {
         Assert.assertEquals("agent-done", runner.capturedResumeAgentId);
         Assert.assertEquals("sm-1", runner.capturedParentToolUseId);
         Assert.assertEquals("继续写报告", runner.capturedPrompt);
-        SessionAgentMailboxHub.clearAll();
+        SessionAgentMailboxHub.evict(sessionId, "agent-done");
     }
 
     @Test
@@ -193,7 +192,8 @@ public class SendMessageResumeTest {
                                   String resumeAgentId,
                                   RunCancellation cancellationOverride,
                                   String preferredAgentId,
-                                  String explicitParentToolUseId) {
+                                  String explicitParentToolUseId,
+                                  String logicalRunId) {
             runCount.incrementAndGet();
             capturedResumeAgentId = resumeAgentId;
             capturedParentToolUseId = explicitParentToolUseId;

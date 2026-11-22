@@ -22,19 +22,36 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class TasklistPersistenceHookTest {
 
     @Test
-    public void todoStorePersistsCreateUpdateDelete() {
+    public void todoStorePersistsWholeListReplacement() {
         InMemoryPort port = new InMemoryPort();
         SessionTaskListStore store = new SessionTaskListStore("sess-1", port);
-        SessionTaskItem created = store.create("写单测", "覆盖登录", null, null);
-        Assert.assertEquals(1, port.todoUpserts.get());
-        Assert.assertTrue(port.todos.containsKey("sess-1:" + created.getId()));
+        store.replaceAll(List.of(
+                Map.of("content", "写单测", "status", "in_progress"),
+                Map.of("content", "跑测试", "status", "pending")
+        ));
+        Assert.assertEquals(2, port.todos.size());
 
-        store.update(created.getId(), null, null, SessionTaskItem.STATUS_COMPLETED, null, null);
-        Assert.assertEquals(2, port.todoUpserts.get());
+        SessionTaskListStore reloaded = new SessionTaskListStore("sess-1", port);
+        Assert.assertEquals(2, reloaded.list().size());
+        Assert.assertEquals("写单测", reloaded.list().get(0).getSubject());
+        Assert.assertEquals(SessionTaskItem.STATUS_IN_PROGRESS, reloaded.list().get(0).getStatus());
+    }
 
-        store.delete(created.getId());
-        Assert.assertEquals(1, port.todoDeletes.get());
-        Assert.assertFalse(port.todos.containsKey("sess-1:" + created.getId()));
+    @Test
+    public void completedTodosSurviveReloadUntilExplicitClear() {
+        InMemoryPort port = new InMemoryPort();
+        SessionTaskListStore store = new SessionTaskListStore("sess-completed", port);
+
+        store.replaceAll(List.of(
+                Map.of("content", "已完成 A", "status", "completed"),
+                Map.of("content", "已完成 B", "status", "completed")));
+
+        SessionTaskListStore reloaded = new SessionTaskListStore("sess-completed", port);
+        Assert.assertEquals(2, reloaded.list().size());
+        Assert.assertEquals(SessionTaskItem.STATUS_COMPLETED, reloaded.list().get(0).getStatus());
+
+        reloaded.replaceAll(List.of());
+        Assert.assertTrue(new SessionTaskListStore("sess-completed", port).list().isEmpty());
     }
 
     @Test
@@ -46,13 +63,13 @@ public class TasklistPersistenceHookTest {
                 .description("desc")
                 .status(SessionTaskItem.STATUS_PENDING)
                 .build());
-        port.highWater = 1;
-
         SessionTaskListStore store = new SessionTaskListStore("sess-2", port);
         Assert.assertEquals(1, store.list().size());
-        Assert.assertEquals("已有任务", store.get("1").orElseThrow().getSubject());
-        SessionTaskItem next = store.create("新任务", "详情", null, null);
-        Assert.assertEquals("2", next.getId());
+        Assert.assertEquals("已有任务", store.list().get(0).getSubject());
+
+        store.replaceAll(List.of(Map.of("content", "新任务", "status", "in_progress")));
+        Assert.assertEquals(1, port.todos.size());
+        Assert.assertTrue(port.todos.containsKey("sess-2:1"));
     }
 
     @Test
@@ -76,7 +93,7 @@ public class TasklistPersistenceHookTest {
     }
 
     @Test
-    public void hydrateMarksOrphanRunningAsLostWithoutPersisting() {
+    public void hydratePreservesRunningForStartupReconciliation() {
         InMemoryPort port = new InMemoryPort();
         RuntimeBackgroundTask orphan = RuntimeBackgroundTask.builder()
                 .id("orphan1")
@@ -89,20 +106,34 @@ public class TasklistPersistenceHookTest {
 
         RuntimeBackgroundTaskRegistry reg = new RuntimeBackgroundTaskRegistry("sess-x", port);
         RuntimeBackgroundTask loaded = reg.get("orphan1").orElseThrow();
-        // 重启孤儿标 lost（"没人知道结果"），不是任务级 failed。
-        Assert.assertEquals(RuntimeBackgroundTask.STATUS_LOST, loaded.getStatus());
-        Assert.assertTrue(loaded.getErrorMsg().contains("restart"));
-        // 只修内存视图：DB 行可能属于另一个 JVM，终态收敛交给 BackgroundRunReconciler。
+        // running 行可能属于仍在运行的 Future 或另一个 JVM；registry hydrate 不能误杀。
+        // 重启后的 lost 收敛只由启动对账器统一完成。
+        Assert.assertEquals(RuntimeBackgroundTask.STATUS_RUNNING, loaded.getStatus());
         Assert.assertEquals(0, port.bgUpserts.get());
+    }
+
+    @Test
+    public void markNotifiedPersistsConsumedFlag() {
+        InMemoryPort port = new InMemoryPort();
+        RuntimeBackgroundTaskRegistry reg = new RuntimeBackgroundTaskRegistry("sess-notified", port);
+        RuntimeBackgroundTask task = reg.registerLocalAgent("inspect", "general-purpose", "prompt");
+        reg.complete(task.getId(), SubAgentResult.builder()
+                .status(SubAgentResult.STATUS_COMPLETED)
+                .agentId("agent-notified")
+                .content("done")
+                .build());
+        int before = port.bgUpserts.get();
+
+        reg.markNotified(List.of(task.getId()));
+
+        Assert.assertTrue(Boolean.TRUE.equals(task.getNotified()));
+        Assert.assertTrue(port.bgUpserts.get() > before);
     }
 
     private static final class InMemoryPort implements TasklistPersistencePort {
         final Map<String, SessionTaskItem> todos = new ConcurrentHashMap<>();
         final Map<String, RuntimeBackgroundTask> background = new ConcurrentHashMap<>();
-        final AtomicInteger todoUpserts = new AtomicInteger();
-        final AtomicInteger todoDeletes = new AtomicInteger();
         final AtomicInteger bgUpserts = new AtomicInteger();
-        int highWater;
 
         @Override
         public List<SessionTaskItem> loadTodos(String sessionId) {
@@ -117,33 +148,12 @@ public class TasklistPersistenceHookTest {
         }
 
         @Override
-        public int loadTodoHighWaterMark(String sessionId) {
-            return highWater;
-        }
-
-        @Override
-        public void upsertTodo(String sessionId, SessionTaskItem item) {
-            todoUpserts.incrementAndGet();
-            todos.put(sessionId + ":" + item.getId(), item);
-            try {
-                highWater = Math.max(highWater, Integer.parseInt(item.getId()));
-            } catch (NumberFormatException ignored) {
-            }
-        }
-
-        @Override
-        public void deleteTodo(String sessionId, String taskId) {
-            todoDeletes.incrementAndGet();
-            todos.remove(sessionId + ":" + taskId);
-        }
-
-        @Override
         public void replaceTodos(String sessionId, List<SessionTaskItem> items) {
             String prefix = sessionId + ":";
             todos.keySet().removeIf(k -> k.startsWith(prefix));
             if (items != null) {
                 for (SessionTaskItem item : items) {
-                    upsertTodo(sessionId, item);
+                    todos.put(prefix + item.getId(), item);
                 }
             }
         }

@@ -1056,7 +1056,7 @@ public class ToolObservationFormatterTest {
     // ---- 新增覆盖：任务 / 画布 / 检索元工具 ----
 
     @Test
-    public void taskListRendersCompactRows() {
+    public void todoWriteRendersCompactRows() {
         Map<String, Object> task = new LinkedHashMap<>();
         task.put("id", "1");
         task.put("status", "pending");
@@ -1065,7 +1065,7 @@ public class ToolObservationFormatterTest {
         data.put("ok", Boolean.TRUE);
         data.put("tasks", List.of(task));
 
-        Assert.assertEquals("- [1] pending 写计划", ToolObservationFormatter.format("TaskList", data));
+        Assert.assertEquals("- [1] pending 写计划", ToolObservationFormatter.format("TodoWrite", data));
     }
 
     @Test

@@ -5,7 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskCompletionEvent;
 import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
+import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
+import org.wwz.ai.domain.agent.ledger.entity.ToolInvocation;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.model.ToolInvocationFinishRecord;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
@@ -13,6 +16,7 @@ import org.wwz.ai.domain.agent.runtime.stream.ToolResultStreamPayload;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.cancel.RunCancellation;
+import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPayloads;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
@@ -32,15 +36,13 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 后台子 Agent 提交与结算。创建（Agent）与续跑（SendMessage）共用。
@@ -48,27 +50,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public final class BackgroundSubAgentExecutor {
 
-    /** 后台子 Agent 执行线程上限与排队上限：SubAgentRunner 内部还有并发 permit，这里只做资源兜底。 */
-    private static final int BACKGROUND_THREADS = 16;
-    private static final int BACKGROUND_QUEUE_SIZE = 256;
-
-    private static final ExecutorService BACKGROUND_EXECUTOR = new ThreadPoolExecutor(
-            BACKGROUND_THREADS,
-            BACKGROUND_THREADS,
-            60L,
-            TimeUnit.SECONDS,
-            new ArrayBlockingQueue<>(BACKGROUND_QUEUE_SIZE),
-            new ThreadFactory() {
-                private final AtomicInteger seq = new AtomicInteger();
-
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r, "bg-subagent-" + seq.incrementAndGet());
-                    t.setDaemon(true);
-                    return t;
-                }
-            },
-            new ThreadPoolExecutor.AbortPolicy());
+    /**
+     * 后台子 Agent 以 LLM、网络和文件等待为主，使用虚拟线程避免阻塞平台线程。
+     * 业务并发仍由 SubAgentRunner 的许可和后续树级配额控制。
+     */
+    private static final ExecutorService BACKGROUND_EXECUTOR = Executors.newThreadPerTaskExecutor(
+            Thread.ofVirtual().name("bg-subagent-", 1).factory());
 
     private BackgroundSubAgentExecutor() {
     }
@@ -82,16 +69,48 @@ public final class BackgroundSubAgentExecutor {
                                            String resumeAgentId,
                                            String parentToolUseId,
                                            String parentToolName) {
+        return submit(parent, subAgentRunner, runRegistry, description, prompt, subagentType,
+                resumeAgentId, null, parentToolUseId, parentToolName);
+    }
+
+    public static ToolResultPayload submit(AgentContext parent,
+                                           SubAgentRunner subAgentRunner,
+                                           ActiveAgentRunRegistry runRegistry,
+                                           String description,
+                                           String prompt,
+                                           String subagentType,
+                                           String resumeAgentId,
+                                           String preferredAgentIdOverride,
+                                           String parentToolUseId,
+                                           String parentToolName) {
         RuntimeBackgroundTaskRegistry registry = parent.requireBackgroundTasks();
         final String toolName = StringUtils.defaultIfBlank(parentToolName, AgentDispatchTool.NAME);
         boolean resume = StringUtils.isNotBlank(resumeAgentId);
         final String preferredAgentId = resume
                 ? resumeAgentId.trim()
-                : SubAgentContextFactory.newAgentId();
+                : StringUtils.defaultIfBlank(preferredAgentIdOverride, SubAgentContextFactory.newAgentId());
         // 先原子占位再登记任务：isActive / isBackgroundRunning 的检查与 submit 之间没有原子性，
         // 两次并发的 SendMessage 会各自登记一条 run，并共享同一 childSessionId/working memory。
         if (!registry.tryClaimAgentRun(preferredAgentId)) {
             return ToolResultPayload.softFailData(toolName, softBusy(toolName, preferredAgentId));
+        }
+        int childDepth = SubAgentContextFactory.childDelegationDepth(parent);
+        if (childDepth > SubAgentTreeLimits.MAX_DELEGATION_DEPTH) {
+            registry.releaseAgentRun(preferredAgentId);
+            return ToolResultPayload.failureFrom(
+                    "Agent 执行失败：子 Agent 深度上限为 "
+                            + SubAgentTreeLimits.MAX_DELEGATION_DEPTH,
+                    quotaDeniedData(toolName, preferredAgentId, "max_depth"));
+        }
+        RuntimeBackgroundTaskRegistry.TreeQuotaDecision quota = registry.reserveTreeAgent(
+                SubAgentContextFactory.rootSessionId(parent),
+                SubAgentContextFactory.currentAgentId(parent),
+                preferredAgentId);
+        if (!quota.allowed()) {
+            registry.releaseAgentRun(preferredAgentId);
+            return ToolResultPayload.failureFrom(
+                    "Agent 执行失败：" + quota.reason(),
+                    quotaDeniedData(toolName, preferredAgentId, quota.reason()));
         }
 
         RuntimeBackgroundTask task;
@@ -99,6 +118,8 @@ public final class BackgroundSubAgentExecutor {
             task = registry.registerLocalAgent(description, subagentType, prompt);
         } catch (RuntimeException e) {
             registry.releaseAgentRun(preferredAgentId);
+            registry.releaseTreeAgent(
+                    SubAgentContextFactory.rootSessionId(parent), preferredAgentId);
             throw e;
         }
         RunCancellation taskCancel = task.getCancellation() != null
@@ -111,6 +132,22 @@ public final class BackgroundSubAgentExecutor {
         // 先写入 task，运行中/终态投影即可带上它，无需等待子会话行真正落库。
         final String childSessionId = SubAgentContextFactory.newChildSessionId(preferredAgentId);
         task.setChildSessionId(childSessionId);
+        String parentAgentId = parent.isSubAgent()
+                ? parent.getSubAgentId()
+                : StringUtils.defaultIfBlank(parent.getSessionId(), parent.getRequestId());
+        String rootSessionId = StringUtils.defaultIfBlank(parent.getRootSessionId(), parent.getSessionId());
+        task.setParentSessionId(parent.getSessionId());
+        task.setParentRequestId(parent.getRequestId());
+        task.setParentToolUseId(parentToolUseId);
+        task.setParentAgentId(parentAgentId);
+        task.setOwnerAgentId(parentAgentId);
+        task.setRootSessionId(rootSessionId);
+        task.setDelegationDepth((parent.getDelegationDepth() == null ? 0 : parent.getDelegationDepth()) + 1);
+        task.setPhase(RuntimeBackgroundTask.PHASE_RUNNING);
+        // 该入口始终提交到后台虚拟线程执行器；上游 task 池的 CallerRuns
+        // 只代表 Agent 工具调用回到当前线程，不代表后台任务本身被内联执行。
+        task.setExecutionMode(RuntimeBackgroundTask.EXECUTION_MODE_POOL);
+        task.setClosingTurnCount(0);
         registry.bindAgentId(task.getId(), preferredAgentId);
 
         final String desc = description;
@@ -126,7 +163,8 @@ public final class BackgroundSubAgentExecutor {
             future = BACKGROUND_EXECUTOR.submit(() -> {
             try {
                 SubAgentResult result = subAgentRunner.run(
-                        parent, desc, pmt, type, resumeId, taskCancel, preferredAgentId, parentToolUseId);
+                        parent, desc, pmt, type, resumeId, taskCancel, preferredAgentId,
+                        parentToolUseId, taskId);
                 registry.bindAgentId(taskId, result.getAgentId());
                 if (taskCancel.isCancelled()
                         || RuntimeBackgroundTask.STATUS_STOPPED.equals(
@@ -158,6 +196,18 @@ public final class BackgroundSubAgentExecutor {
                     boolean wakeHandled = notifyCompletion(parent, completedTask, parentToolUseId);
                     emitBackgroundSettlement(parent, parentToolUseId, toolName, desc, pmt, type, result, true,
                             runRegistry, childSessionId, !wakeHandled);
+                } else if (result.isWaiting()) {
+                    // 候选回复只留在子会话；线程释放，父 Agent 继续等同一个逻辑任务。
+                    registry.markWaiting(taskId);
+                    BackgroundTaskWakePort wakePort = backgroundWakePort(parent);
+                    if (wakePort != null) {
+                        try {
+                            wakePort.onInboxChanged(childSessionId);
+                        } catch (Exception wakeError) {
+                            log.warn("{} waiting subagent wake check failed taskId={}",
+                                    parent.getRequestId(), taskId, wakeError);
+                        }
+                    }
                 } else {
                     registry.fail(taskId, result);
                     RuntimeBackgroundTask failedTask = registry.get(taskId).orElse(task);
@@ -193,13 +243,24 @@ public final class BackgroundSubAgentExecutor {
                         runRegistry, childSessionId, !wakeHandled);
             } finally {
                 // 无论正常结束、取消还是异常，都必须释放 agentId 占位，否则该子 Agent 永远无法再次唤醒。
-                registry.releaseAgentRun(preferredAgentId);            }
+                RuntimeBackgroundTask current = registry.get(taskId).orElse(task);
+                if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(current.getStatus())) {
+                    registry.releaseTreeAgent(
+                            StringUtils.defaultIfBlank(
+                                    current.getRootSessionId(), SubAgentContextFactory.rootSessionId(parent)),
+                            preferredAgentId);
+                }
+                registry.releaseAgentRun(preferredAgentId);
+            }
             });
         } catch (RejectedExecutionException e) {
-            // 有界池饱和：必须结算已登记的 RUNNING 任务，否则 TaskOutput 永远等不到终态。
+            // 执行器关闭等拒绝场景：必须结算已登记的 RUNNING 任务，否则 TaskOutput 永远等不到终态。
             log.warn("{} background subagent rejected, taskId={}, agentId={}",
                     parent.getRequestId(), taskId, preferredAgentId);
             registry.fail(taskId, "background executor rejected");
+            registry.releaseTreeAgent(
+                    StringUtils.defaultIfBlank(task.getRootSessionId(), SubAgentContextFactory.rootSessionId(parent)),
+                    preferredAgentId);
             registry.releaseAgentRun(preferredAgentId);
             SessionAgentMailboxHub.evict(sessionKey, preferredAgentId);
             return ToolResultPayload.fromData(rejectedData(toolName, preferredAgentId, childSessionId,
@@ -218,6 +279,7 @@ public final class BackgroundSubAgentExecutor {
         data.put("description", description);
         data.put("agentType", StringUtils.defaultIfBlank(subagentType, SubAgentRegistry.TYPE_GENERAL_PURPOSE));
         data.put("run_in_background", true);
+        data.put("executionMode", task.getExecutionMode());
         if (resume) {
             data.put("resumed", true);
             data.put("message", "已在后台唤醒子 Agent。任务完成结果会自动回传主 Agent；SendMessage(to=\""
@@ -252,6 +314,69 @@ public final class BackgroundSubAgentExecutor {
                                               String parentToolUseId,
                                               String runningObservation) {
         settleLedgerIfTerminal(parent, parentToolUseId, AgentDispatchTool.NAME, runningObservation);
+    }
+
+    /**
+     * 跨线程/跨 run 完成 WAITING 逻辑任务：父目标、toolCallId 和 registry 都从任务行恢复，
+     * 不依赖最初派发线程的闭包。
+     */
+    public static Optional<RuntimeBackgroundTask> completePersistedTask(
+            RuntimeBackgroundTask task,
+            SubAgentResult result,
+            CuteRuntimeDependencies dependencies,
+            AgentExecutionRecorder recorder,
+            IExecutionLedgerReadRepository readRepository) {
+        return finishPersistedTask(task, result, dependencies, recorder, readRepository, true);
+    }
+
+    /** 后台收尾轮耗尽等无法继续执行的情况，按失败终态回传父 Agent。 */
+    public static Optional<RuntimeBackgroundTask> failPersistedTask(
+            RuntimeBackgroundTask task,
+            SubAgentResult result,
+            CuteRuntimeDependencies dependencies,
+            AgentExecutionRecorder recorder,
+            IExecutionLedgerReadRepository readRepository) {
+        return finishPersistedTask(task, result, dependencies, recorder, readRepository, false);
+    }
+
+    private static Optional<RuntimeBackgroundTask> finishPersistedTask(
+            RuntimeBackgroundTask task,
+            SubAgentResult result,
+            CuteRuntimeDependencies dependencies,
+            AgentExecutionRecorder recorder,
+            IExecutionLedgerReadRepository readRepository,
+            boolean completed) {
+        if (task == null || result == null || dependencies == null
+                || StringUtils.isBlank(task.getParentSessionId())) {
+            return Optional.empty();
+        }
+        // 子 Agent 与父 Agent 共享根会话的 registry；直接拿 parentSessionId 会在
+        // 孙 Agent 场景下落到另一个 registry，导致任务查不到或重复实例。
+        RuntimeBackgroundTaskRegistry registry = SessionBackgroundTaskHub.getOrCreate(
+                StringUtils.defaultIfBlank(task.getRootSessionId(), task.getParentSessionId()),
+                dependencies.getOptionalTasklistPersistencePort());
+        RuntimeBackgroundTask current = registry.get(task.getId()).orElse(task);
+        if (!RuntimeBackgroundTask.STATUS_RUNNING.equals(current.getStatus())) {
+            return Optional.of(current);
+        }
+        if (completed) {
+            registry.complete(task.getId(), result);
+        } else {
+            registry.fail(task.getId(), result);
+        }
+        RuntimeBackgroundTask settled = registry.get(task.getId()).orElse(current);
+        AgentContext parent = AgentContext.builder()
+                .sessionId(settled.getParentSessionId())
+                .requestId(settled.getParentRequestId())
+                .rootSessionId(StringUtils.defaultIfBlank(
+                        settled.getRootSessionId(), settled.getParentSessionId()))
+                .runtimeDependencies(dependencies)
+                .sessionControl(new SessionControl().withBackgroundTasks(registry))
+                .build();
+        notifyCompletion(parent, settled, settled.getParentToolUseId());
+        settlePersistedParentLedger(settled, recorder, readRepository);
+        registry.releaseTreeAgent(settled.getRootSessionId(), settled.getAgentId());
+        return Optional.of(settled);
     }
 
     public static void settleLedgerIfTerminal(AgentContext parent,
@@ -443,6 +568,65 @@ public final class BackgroundSubAgentExecutor {
         }
     }
 
+    private static void settlePersistedParentLedger(RuntimeBackgroundTask task,
+                                                    AgentExecutionRecorder recorder,
+                                                    IExecutionLedgerReadRepository readRepository) {
+        if (task == null || recorder == null || readRepository == null
+                || StringUtils.isBlank(task.getParentRequestId())
+                || StringUtils.isBlank(task.getParentToolUseId())) {
+            return;
+        }
+        try {
+            var run = readRepository.queryRunByRequestId(task.getParentRequestId());
+            if (run == null || run.getId() == null) {
+                return;
+            }
+            List<ToolInvocation> invocations = readRepository.queryToolInvocationsByRunId(run.getId());
+            ToolInvocation invocation = invocations == null ? null : invocations.stream()
+                    .filter(item -> item != null
+                            && task.getParentToolUseId().equals(item.getToolCallId()))
+                    .findFirst()
+                    .orElse(null);
+            if (invocation == null || invocation.getId() == null) {
+                return;
+            }
+            boolean completed = RuntimeBackgroundTask.STATUS_COMPLETED.equals(task.getStatus());
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("tool", AgentDispatchTool.NAME);
+            data.put("ok", completed);
+            data.put("status", task.getStatus());
+            data.put("agentId", task.getAgentId());
+            data.put("agentType", task.getAgentType());
+            data.put("childSessionId", task.getChildSessionId());
+            data.put("description", task.getDescription());
+            data.put("content", task.getOutput());
+            data.put("totalToolUseCount", task.getTotalToolUseCount());
+            data.put("totalDurationMs", task.getTotalDurationMs());
+            data.put("run_in_background", true);
+            if (StringUtils.isNotBlank(task.getErrorMsg())) {
+                data.put("errorMsg", task.getErrorMsg());
+            }
+            String observation = ToolObservationSerializer.serializeSuccess(data);
+            recorder.finishToolInvocation(ToolInvocationFinishRecord.builder()
+                    .toolInvocationId(invocation.getId())
+                    .runId(run.getId())
+                    .requestId(task.getParentRequestId())
+                    .sessionId(task.getParentSessionId())
+                    .toolCallId(task.getParentToolUseId())
+                    .toolName(AgentDispatchTool.NAME)
+                    .status(completed
+                            ? ExecutionLedgerConstants.STATUS_SUCCESS
+                            : ExecutionLedgerConstants.STATUS_FAILED)
+                    .llmObservation(observation)
+                    .toolResult(observation)
+                    .errorMsg(task.getErrorMsg())
+                    .finishedAt(resolveFinishedAt(task))
+                    .build());
+        } catch (Exception e) {
+            log.warn("persisted subagent parent ledger settle failed taskId={}", task.getId(), e);
+        }
+    }
+
     private static LocalDateTime resolveFinishedAt(RuntimeBackgroundTask task) {
         if (task != null && task.getEndedAtMs() != null) {
             return LocalDateTime.ofInstant(
@@ -554,7 +738,7 @@ public final class BackgroundSubAgentExecutor {
         data.put("ok", false);
         data.put("status", RuntimeBackgroundTask.STATUS_RUNNING);
         data.put("agentId", agentId);
-        data.put("message", "子 Agent 正在运行，请用 TaskOutput 等待后再操作。");
+        data.put("message", "该子 Agent 正在启动或收尾，请稍后重试。");
         return data;
     }
 
@@ -572,7 +756,19 @@ public final class BackgroundSubAgentExecutor {
         data.put("task_type", RuntimeBackgroundTask.TYPE_LOCAL_AGENT);
         data.put("description", description);
         data.put("agentType", StringUtils.defaultIfBlank(subagentType, SubAgentRegistry.TYPE_GENERAL_PURPOSE));
-        data.put("errorMsg", "background executor rejected: queue full");
+        data.put("errorMsg", "background executor rejected");
+        return data;
+    }
+
+    private static Map<String, Object> quotaDeniedData(String toolName,
+                                                       String agentId,
+                                                       String reason) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("tool", toolName);
+        data.put("ok", false);
+        data.put("status", RuntimeBackgroundTask.STATUS_FAILED);
+        data.put("agentId", agentId);
+        data.put("errorMsg", reason);
         return data;
     }
 

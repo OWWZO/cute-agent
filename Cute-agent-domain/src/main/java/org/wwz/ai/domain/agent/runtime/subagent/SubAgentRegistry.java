@@ -151,11 +151,11 @@ public class SubAgentRegistry {
     private static SubAgentDefinition buildGeneralPurpose() {
         return SubAgentDefinition.builder()
                 .agentType(TYPE_GENERAL_PURPOSE)
-                .whenToUse("通用多步骤调研与数据分析：Deep Search、MySQL/CSV 分析、阅读既有报告并生成交付物；需要较全工具的子任务。不确定类型时用它。")
+                .whenToUse("通用多步骤任务：检索、分析、代码、办公与报告交付；需要较全工具或不确定类型时使用。")
                 .systemPrompt("""
-                        通用调研/分析执行补充：
+                        通用执行补充：
                         - 一切以本任务 prompt 为准；看不到用户与协调者的完整对话。
-                        - 适合 Deep Search、MySQL/CSV 分析、阅读既有报告并生成交付物。
+                        - 根据任务需要选择检索、分析、代码、办公或文档工具。
                         - 不确定完成标准时，优先产出可被后续 Agent 发现的工作区报告，并在结论文本中给出路径。
                         """)
                 .allowedTools(Set.of("*"))

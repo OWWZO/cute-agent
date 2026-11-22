@@ -133,7 +133,14 @@ public class SubAgentSessionPortRaceTest {
 
         @Override
         public void updateSessionPreferences(String sessionId, String model, Boolean thinking,
-                                             String thinkingEffort, Integer deepThink) {
+                                             String thinkingEffort, String collaborationMode) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void updateSessionRuntimeBinding(String sessionId, String mainAgentKey,
+                                                String collaborationMode, String promptVersion,
+                                                String promptHash, String promptSnapshot) {
             throw new UnsupportedOperationException();
         }
 

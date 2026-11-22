@@ -23,10 +23,6 @@ public final class PlanModeToolPolicy {
     private static final Set<String> ALWAYS_ALLOWED = Set.of(
             TaskToolNames.ENTER_PLAN_MODE,
             TaskToolNames.EXIT_PLAN_MODE,
-            TaskToolNames.TASK_CREATE,
-            TaskToolNames.TASK_GET,
-            TaskToolNames.TASK_UPDATE,
-            TaskToolNames.TASK_LIST,
             TaskToolNames.TODO_WRITE,
             TaskToolNames.TASK_STOP,
             TaskToolNames.SEND_MESSAGE,

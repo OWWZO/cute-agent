@@ -15,12 +15,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * hydrate 只修内存视图：不能把可能属于其它 JVM 的 running 行改写成 failed。
+ * hydrate 只恢复持久化快照，不能把可能仍有 Future 的 running 行误判成 lost。
  */
 public class RuntimeBackgroundTaskRegistryHydrateTest {
 
     @Test
-    public void runningRowBecomesLostInMemoryWithoutPersisting() {
+    public void runningRowRemainsRunningUntilReconcilerProvesItOrphaned() {
         TasklistPersistencePort persistence = mock(TasklistPersistencePort.class);
         RuntimeBackgroundTask task = RuntimeBackgroundTask.builder()
                 .id("task-1")
@@ -32,9 +32,9 @@ public class RuntimeBackgroundTaskRegistryHydrateTest {
         RuntimeBackgroundTaskRegistry registry = new RuntimeBackgroundTaskRegistry("s1", persistence);
 
         RuntimeBackgroundTask hydrated = registry.get("task-1").orElseThrow();
-        Assert.assertEquals("重启孤儿应标 lost 而不是 failed",
-                RuntimeBackgroundTask.STATUS_LOST, hydrated.getStatus());
-        Assert.assertNotNull(hydrated.getEndedAtMs());
+        Assert.assertEquals("hydrate 不能误杀同进程仍在运行的任务",
+                RuntimeBackgroundTask.STATUS_RUNNING, hydrated.getStatus());
+        Assert.assertNull(hydrated.getEndedAtMs());
         Assert.assertNotNull("内存视图仍需可取消令牌", hydrated.getCancellation());
         verify(persistence, never()).upsertBackgroundTask(any(), any());
     }

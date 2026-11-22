@@ -25,6 +25,9 @@ import org.wwz.ai.domain.agent.runtime.planmode.PlanApprovalDecision;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanApprovalRecord;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanModeState;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
+import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
+import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.model.DialogueRunView;
@@ -204,6 +207,66 @@ public class PrepareAgentContextAssemblyTest {
         Mockito.verify(workspaceService, Mockito.never()).resolveAndEnsureRoot(Mockito.anyString());
     }
 
+    @Test
+    public void directChatToWaitingSubAgentConsumesClosingTurn() throws Exception {
+        String rootSessionId = "root-direct-waiting";
+        String childSessionId = "sub_agent-direct-waiting";
+        RuntimeBackgroundTask task = waitingTask(rootSessionId, childSessionId, 0);
+        TasklistPersistencePort persistence = persistenceFor(task, rootSessionId, childSessionId);
+        PrepareAgentContextAssembly assembly = assembly(DisabledSets.empty(), null, null);
+        set(assembly, "tasklistPersistencePort", persistence);
+        set(assembly, "executionLedgerReadRepository", emptyLedgerReader());
+        org.wwz.ai.domain.agent.service.execute.react.step.PrepareAgentContextNode node =
+                new org.wwz.ai.domain.agent.service.execute.react.step.PrepareAgentContextNode();
+        set(node, "prepareAgentContextAssembly", assembly);
+        set(node, "runReactLoopNode", Mockito.mock(
+                org.wwz.ai.domain.agent.service.execute.react.step.RunReactLoopNode.class));
+
+        SessionBackgroundTaskHub.evict(rootSessionId);
+        try {
+            DefaultReactAgentExecuteStrategyFactory.DynamicContext ctx =
+                    DefaultReactAgentExecuteStrategyFactory.DynamicContext.builder()
+                            .printer(noopPrinter())
+                            .build();
+            node.apply(request("req-direct-waiting", childSessionId), ctx);
+
+            Assert.assertEquals(RuntimeBackgroundTask.PHASE_RUNNING, task.getPhase());
+            Assert.assertEquals(Integer.valueOf(1), task.getClosingTurnCount());
+        } finally {
+            SessionBackgroundTaskHub.evict(rootSessionId);
+        }
+    }
+
+    @Test
+    public void directChatToExhaustedWaitingSubAgentFailsLogicalTask() throws Exception {
+        String rootSessionId = "root-direct-exhausted";
+        String childSessionId = "sub_agent-direct-exhausted";
+        RuntimeBackgroundTask task = waitingTask(rootSessionId, childSessionId,
+                org.wwz.ai.domain.agent.runtime.subagent.SubAgentTreeLimits.MAX_CLOSING_TURNS);
+        TasklistPersistencePort persistence = persistenceFor(task, rootSessionId, childSessionId);
+        PrepareAgentContextAssembly assembly = assembly(DisabledSets.empty(), null, null);
+        set(assembly, "tasklistPersistencePort", persistence);
+        set(assembly, "executionLedgerReadRepository", emptyLedgerReader());
+        org.wwz.ai.domain.agent.service.execute.react.step.PrepareAgentContextNode node =
+                new org.wwz.ai.domain.agent.service.execute.react.step.PrepareAgentContextNode();
+        set(node, "prepareAgentContextAssembly", assembly);
+        set(node, "runReactLoopNode", Mockito.mock(
+                org.wwz.ai.domain.agent.service.execute.react.step.RunReactLoopNode.class));
+
+        SessionBackgroundTaskHub.evict(rootSessionId);
+        try {
+            Assert.assertThrows(IllegalStateException.class, () -> node.apply(
+                    request("req-direct-exhausted", childSessionId),
+                    DefaultReactAgentExecuteStrategyFactory.DynamicContext.builder()
+                            .printer(noopPrinter())
+                            .build()));
+            Assert.assertEquals(RuntimeBackgroundTask.STATUS_FAILED, task.getStatus());
+            Assert.assertTrue(task.getErrorMsg().contains("收尾轮数已达上限"));
+        } finally {
+            SessionBackgroundTaskHub.evict(rootSessionId);
+        }
+    }
+
     // ---------- fixtures ----------
 
     private static AgentExecutionCommand request(String requestId, String sessionId) {
@@ -356,6 +419,37 @@ public class PrepareAgentContextAssemblyTest {
         WorkspaceService service = Mockito.mock(WorkspaceService.class);
         Mockito.when(service.isEnabled()).thenReturn(false);
         return service;
+    }
+
+    private static RuntimeBackgroundTask waitingTask(String rootSessionId,
+                                                     String childSessionId,
+                                                     int closingTurnCount) {
+        return RuntimeBackgroundTask.builder()
+                .id("logical-" + childSessionId)
+                .type(RuntimeBackgroundTask.TYPE_LOCAL_AGENT)
+                .status(RuntimeBackgroundTask.STATUS_RUNNING)
+                .phase(RuntimeBackgroundTask.PHASE_WAITING_BACKGROUND)
+                .agentId(childSessionId.substring("sub_".length()))
+                .agentType("general-purpose")
+                .childSessionId(childSessionId)
+                .parentSessionId(rootSessionId)
+                .parentRequestId("parent-request")
+                .parentToolUseId("parent-tool")
+                .parentAgentId(rootSessionId)
+                .ownerAgentId(rootSessionId)
+                .rootSessionId(rootSessionId)
+                .closingTurnCount(closingTurnCount)
+                .build();
+    }
+
+    private static TasklistPersistencePort persistenceFor(RuntimeBackgroundTask task,
+                                                          String rootSessionId,
+                                                          String childSessionId) {
+        TasklistPersistencePort persistence = Mockito.mock(TasklistPersistencePort.class);
+        Mockito.when(persistence.findActiveBackgroundTaskByChildSessionId(childSessionId))
+                .thenReturn(Optional.of(task));
+        Mockito.when(persistence.loadBackgroundTasks(rootSessionId)).thenReturn(List.of(task));
+        return persistence;
     }
 
     private static void set(Object target, String field, Object value) {

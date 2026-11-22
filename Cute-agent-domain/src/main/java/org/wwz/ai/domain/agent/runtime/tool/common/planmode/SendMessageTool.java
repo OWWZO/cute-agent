@@ -3,10 +3,15 @@ package org.wwz.ai.domain.agent.runtime.tool.common.planmode;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
+import org.wwz.ai.domain.agent.adapter.port.BackgroundTaskWakePort;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.cancel.PendingInjectMessage;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPayloads;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
 import org.wwz.ai.domain.agent.runtime.subagent.BackgroundSubAgentExecutor;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentContextFactory;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentOwnershipResolver;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRunner;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionAgentMailboxHub;
@@ -18,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 主 Agent → 子 Agent：运行中注入 mailbox；已结束则后台续跑。
@@ -89,7 +95,35 @@ public class SendMessageTool implements BaseTool {
                         "hint", "Agent(run_in_background=true) 后使用返回的 agentId"
                 ));
             }
+            String callerAgentId = SubAgentOwnershipResolver.currentAgentId(agentContext);
+            boolean directChild = SubAgentOwnershipResolver.ownsDirectChild(
+                    agentContext, target.task, target.agentId);
+            boolean legacyTask = SubAgentOwnershipResolver.ownsLegacyChild(
+                    agentContext, target.task, target.agentId);
+            if (target.task != null && !directChild && !legacyTask) {
+                String owningParent = SubAgentOwnershipResolver.findOwningParentAgentId(
+                        agentContext, target.task, target.agentId);
+                String hint = StringUtils.isBlank(owningParent)
+                        ? "请先唤醒/联系派发该 Agent 的父 Agent，再由父 Agent 转发。"
+                        : "请先唤醒/联系直接父 Agent " + owningParent
+                                + "，再由父 Agent 转发。";
+                Map<String, Object> fields = new LinkedHashMap<>();
+                fields.put("ok", false);
+                fields.put("to", to);
+                fields.put("agentId", target.agentId);
+                fields.put("callerAgentId", callerAgentId);
+                fields.put("owningParentAgentId", owningParent);
+                fields.put("hint", hint);
+                return ToolResultPayload.failure(
+                        "SendMessage 失败：agentId=" + target.agentId + " 不是你的直接子 Agent。" + hint,
+                        "SendMessage 失败：agentId=" + target.agentId + " 不是你的直接子 Agent。" + hint,
+                        null,
+                        "not_owned");
+            }
 
+            if (isWaitingBackground(target)) {
+                return injectWaiting(agentContext, to, target, message, summary);
+            }
             if (SessionAgentMailboxHub.isActive(sessionId, target.agentId)
                     || isBackgroundRunning(agentContext, target)) {
                 return injectRunning(agentContext, sessionId, to, target, message, summary);
@@ -164,6 +198,68 @@ public class SendMessageTool implements BaseTool {
         return ToolResultPayload.okData(TaskToolNames.SEND_MESSAGE, fields);
     }
 
+    /**
+     * WAITING 没有活动线程/邮箱，不能写内存 mailbox；消息必须落 Session Inbox，
+     * 再唤醒同一个 childSessionId 的逻辑任务继续跑。
+     */
+    private Object injectWaiting(AgentContext agentContext,
+                                 String to,
+                                 ResolvedTarget target,
+                                 String message,
+                                 String summary) {
+        String childSessionId = StringUtils.defaultIfBlank(
+                target.task == null ? null : target.task.getChildSessionId(),
+                SubAgentContextFactory.newChildSessionId(target.agentId));
+        SessionInboxPort inbox = agentContext.sessionInboxPort();
+        if (inbox == null) {
+            return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, Map.of(
+                    "ok", false,
+                    "to", to,
+                    "agentId", target.agentId,
+                    "message", "目标正在等待后台任务，但 Session Inbox 未装配，消息无法持久投递。"
+            ));
+        }
+        String text = StringUtils.isNotBlank(summary)
+                ? ("[" + summary + "] " + message)
+                : message;
+        SessionInboxItem queued = inbox.offer(SessionInboxItem.builder()
+                .sessionId(childSessionId)
+                .kind(SessionInboxItem.KIND_USER_MESSAGE)
+                .visibility(SessionInboxItem.VISIBILITY_MODEL_ONLY)
+                .state(SessionInboxItem.STATE_PENDING)
+                .idempotencyKey("coordinator:" + UUID.randomUUID())
+                .payloadJson(SessionInboxPayloads.userMessage(text))
+                .sourceRunId(agentContext.getRequestId())
+                .build());
+        if (queued == null) {
+            return ToolResultPayload.softFailData(TaskToolNames.SEND_MESSAGE, Map.of(
+                    "ok", false,
+                    "to", to,
+                    "agentId", target.agentId,
+                    "message", "消息写入 Session Inbox 失败。"
+            ));
+        }
+        boolean wakeScheduled = false;
+        BackgroundTaskWakePort wakePort = agentContext.getRuntimeDependencies() == null
+                ? null
+                : agentContext.getRuntimeDependencies().getOptionalBackgroundTaskWakePort();
+        if (wakePort != null) {
+            try {
+                wakeScheduled = wakePort.onInboxChanged(childSessionId);
+            } catch (Exception e) {
+                log.warn("SendMessage waiting wake failed agentId={}", target.agentId, e);
+            }
+        }
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("ok", true);
+        fields.put("to", to);
+        fields.put("agentId", target.agentId);
+        fields.put("phase", RuntimeBackgroundTask.PHASE_WAITING_BACKGROUND);
+        fields.put("wakeScheduled", wakeScheduled);
+        fields.put("message", "目标正在等待后台任务，消息已持久入队；完成后会在同一逻辑任务中处理。");
+        return ToolResultPayload.okData(TaskToolNames.SEND_MESSAGE, fields);
+    }
+
     private Object resumeStopped(AgentContext agentContext, String to, ResolvedTarget target,
                                  String message, String summary) {
         SubAgentRunner subAgentRunner = agentContext.subAgentRunner();
@@ -221,6 +317,12 @@ public class SendMessageTool implements BaseTool {
             }
         }
         return false;
+    }
+
+    private static boolean isWaitingBackground(ResolvedTarget target) {
+        return target != null && target.task != null
+                && RuntimeBackgroundTask.STATUS_RUNNING.equals(target.task.getStatus())
+                && RuntimeBackgroundTask.PHASE_WAITING_BACKGROUND.equals(target.task.getPhase());
     }
 
     private record ResolvedTarget(String agentId, RuntimeBackgroundTask task) {

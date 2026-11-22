@@ -62,10 +62,6 @@ public final class ToolObservationFormatter {
             Map.entry(AgentDispatchTool.NAME, ToolObservationFormatter::projectAgent),
             Map.entry(TaskToolNames.SEND_MESSAGE, ToolObservationFormatter::projectSendMessage),
             Map.entry(TaskToolNames.TASK_STOP, ToolObservationFormatter::projectTaskStop),
-            Map.entry(TaskToolNames.TASK_CREATE, ToolObservationFormatter::projectTaskRecord),
-            Map.entry(TaskToolNames.TASK_UPDATE, ToolObservationFormatter::projectTaskRecord),
-            Map.entry(TaskToolNames.TASK_GET, ToolObservationFormatter::projectTaskRecord),
-            Map.entry(TaskToolNames.TASK_LIST, ToolObservationFormatter::projectTaskList),
             Map.entry(TaskToolNames.TODO_WRITE, ToolObservationFormatter::projectTaskList),
             Map.entry(TaskToolNames.ENTER_PLAN_MODE, ToolObservationFormatter::projectEnterPlanMode),
             Map.entry(TaskToolNames.EXIT_PLAN_MODE, ToolObservationFormatter::projectExitPlanMode),
@@ -824,17 +820,7 @@ public final class ToolObservationFormatter {
         return out.toString();
     }
 
-    // ---- TaskCreate / TaskUpdate / TaskGet / TaskList / TodoWrite ----
-
-    private static String projectTaskRecord(Map<?, ?> data) {
-        Object task = data.get("task");
-        if (!(task instanceof Map<?, ?> row)) {
-            return text(data.get("message"));
-        }
-        String rendered = renderTask(row);
-        String message = text(data.get("message"));
-        return StringUtils.isBlank(message) ? rendered : message + "\n" + rendered;
-    }
+    // ---- TodoWrite ----
 
     private static String projectTaskList(Map<?, ?> data) {
         List<?> tasks = list(data.get("tasks"));
@@ -855,7 +841,7 @@ public final class ToolObservationFormatter {
         return out.toString();
     }
 
-    /** 任务行只保留 id / 状态 / 标题 / 依赖，其余编排元数据模型用不上。 */
+    /** 任务行只保留 id / 状态 / 标题。 */
     private static String renderTask(Map<?, ?> row) {
         String id = StringUtils.firstNonBlank(text(row.get("id")), text(row.get("task_id")));
         String status = text(row.get("status"));
@@ -868,10 +854,6 @@ public final class ToolObservationFormatter {
             out.append(status).append(' ');
         }
         out.append(StringUtils.defaultString(subject));
-        Object blockedBy = row.get("blockedBy");
-        if (blockedBy instanceof List<?> deps && !deps.isEmpty()) {
-            out.append(" (blockedBy: ").append(StringUtils.join(deps, ", ")).append(')');
-        }
         return out.toString();
     }
 

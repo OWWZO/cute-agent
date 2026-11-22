@@ -93,7 +93,7 @@ public class SubAgentControlIsolationTest {
         AgentContext parent = newParent("sess-iso-4");
         AgentContext child = spawnChild(parent, "agent-iso-4");
 
-        Assert.assertSame("Todo 列表必须父子共享（TaskCreate/TaskGet 同一列表）",
+        Assert.assertSame("Todo 列表必须父子共享（TodoWrite 同一列表）",
                 parent.requireSessionTaskList(), child.requireSessionTaskList());
         Assert.assertSame("后台任务表必须父子共享（TaskStop/TaskOutput 命中子 Agent）",
                 parent.requireBackgroundTasks(), child.requireBackgroundTasks());
@@ -104,7 +104,7 @@ public class SubAgentControlIsolationTest {
         AgentContext parent = newParent("sess-iso-5");
         AgentContext child = spawnChild(parent, "agent-iso-5");
 
-        // 子 Agent 先触碰共享面（真实时序：子步进中先用到 TaskList / 后台任务表）
+        // 子 Agent 先触碰共享面（真实时序：子步进中先用到 TodoWrite / 后台任务表）
         child.requireSessionTaskList();
         child.requireBackgroundTasks();
 

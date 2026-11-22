@@ -1,7 +1,5 @@
 package org.wwz.ai.infrastructure.tasklist;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -15,10 +13,7 @@ import org.wwz.ai.infrastructure.dao.cute.po.BackgroundTaskPO;
 import org.wwz.ai.infrastructure.dao.cute.po.SessionTodoPO;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -49,31 +44,6 @@ public class MyBatisTasklistPersistence implements TasklistPersistencePort {
             }
         }
         return items;
-    }
-
-    @Override
-    public int loadTodoHighWaterMark(String sessionId) {
-        if (StringUtils.isBlank(sessionId)) {
-            return 0;
-        }
-        Integer max = sessionTodoDao.selectMaxSeqNo(sessionId.trim());
-        return max == null ? 0 : Math.max(0, max);
-    }
-
-    @Override
-    public void upsertTodo(String sessionId, SessionTaskItem item) {
-        if (StringUtils.isBlank(sessionId) || item == null || StringUtils.isBlank(item.getId())) {
-            return;
-        }
-        sessionTodoDao.upsert(toTodoPo(sessionId.trim(), item));
-    }
-
-    @Override
-    public void deleteTodo(String sessionId, String taskId) {
-        if (StringUtils.isBlank(sessionId) || StringUtils.isBlank(taskId)) {
-            return;
-        }
-        sessionTodoDao.softDelete(sessionId.trim(), taskId.trim());
     }
 
     @Override
@@ -123,6 +93,36 @@ public class MyBatisTasklistPersistence implements TasklistPersistencePort {
     }
 
     @Override
+    public Optional<RuntimeBackgroundTask> findActiveBackgroundTaskByChildSessionId(String childSessionId) {
+        if (StringUtils.isBlank(childSessionId)) {
+            return Optional.empty();
+        }
+        BackgroundTaskPO row = backgroundTaskDao.selectActiveByChildSessionId(childSessionId.trim());
+        return Optional.ofNullable(toBackgroundTask(row));
+    }
+
+    @Override
+    public List<RuntimeBackgroundTask> findRunningBackgroundTasksByOwner(String rootSessionId,
+                                                                         String ownerAgentId) {
+        if (StringUtils.isBlank(rootSessionId) || StringUtils.isBlank(ownerAgentId)) {
+            return List.of();
+        }
+        List<BackgroundTaskPO> rows = backgroundTaskDao.selectRunningByOwnerAgentId(
+                rootSessionId.trim(), ownerAgentId.trim());
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        List<RuntimeBackgroundTask> tasks = new ArrayList<>(rows.size());
+        for (BackgroundTaskPO row : rows) {
+            RuntimeBackgroundTask task = toBackgroundTask(row);
+            if (task != null) {
+                tasks.add(task);
+            }
+        }
+        return tasks;
+    }
+
+    @Override
     public void upsertBackgroundTask(String sessionId, RuntimeBackgroundTask task) {
         if (StringUtils.isBlank(sessionId) || task == null || StringUtils.isBlank(task.getId())) {
             return;
@@ -145,11 +145,7 @@ public class MyBatisTasklistPersistence implements TasklistPersistencePort {
                 .subject(row.getSubject())
                 .description(row.getDescription())
                 .activeForm(row.getActiveForm())
-                .owner(row.getOwner())
                 .status(row.getStatus())
-                .blocks(parseStringList(row.getBlocksJson()))
-                .blockedBy(parseStringList(row.getBlockedByJson()))
-                .metadata(parseMap(row.getMetadataJson()))
                 .build();
     }
 
@@ -160,11 +156,7 @@ public class MyBatisTasklistPersistence implements TasklistPersistencePort {
         po.setSubject(item.getSubject());
         po.setDescription(item.getDescription());
         po.setActiveForm(item.getActiveForm());
-        po.setOwner(item.getOwner());
         po.setStatus(item.getStatus());
-        po.setBlocksJson(toJson(item.getBlocks()));
-        po.setBlockedByJson(toJson(item.getBlockedBy()));
-        po.setMetadataJson(toJson(item.getMetadata()));
         int seq = 0;
         try {
             seq = Integer.parseInt(item.getId());
@@ -190,6 +182,17 @@ public class MyBatisTasklistPersistence implements TasklistPersistencePort {
                 .command(row.getCommand())
                 .agentId(row.getAgentId())
                 .agentType(row.getAgentType())
+                .childSessionId(row.getChildSessionId())
+                .parentSessionId(row.getParentSessionId())
+                .parentRequestId(row.getParentRequestId())
+                .parentToolUseId(row.getParentToolUseId())
+                .parentAgentId(row.getParentAgentId())
+                .ownerAgentId(row.getOwnerAgentId())
+                .rootSessionId(row.getRootSessionId())
+                .delegationDepth(row.getDelegationDepth())
+                .phase(row.getPhase())
+                .executionMode(row.getExecutionMode())
+                .closingTurnCount(row.getClosingTurnCount())
                 .prompt(row.getPrompt())
                 .output(row.getOutput())
                 .errorMsg(row.getErrorMsg())
@@ -211,6 +214,17 @@ public class MyBatisTasklistPersistence implements TasklistPersistencePort {
         po.setCommand(task.getCommand());
         po.setAgentId(task.getAgentId());
         po.setAgentType(task.getAgentType());
+        po.setChildSessionId(task.getChildSessionId());
+        po.setParentSessionId(task.getParentSessionId());
+        po.setParentRequestId(task.getParentRequestId());
+        po.setParentToolUseId(task.getParentToolUseId());
+        po.setParentAgentId(task.getParentAgentId());
+        po.setOwnerAgentId(task.getOwnerAgentId());
+        po.setRootSessionId(task.getRootSessionId());
+        po.setDelegationDepth(task.getDelegationDepth());
+        po.setPhase(task.getPhase());
+        po.setExecutionMode(task.getExecutionMode());
+        po.setClosingTurnCount(task.getClosingTurnCount());
         po.setPrompt(task.getPrompt());
         po.setOutput(task.getOutput());
         po.setErrorMsg(task.getErrorMsg());
@@ -222,42 +236,4 @@ public class MyBatisTasklistPersistence implements TasklistPersistencePort {
         return po;
     }
 
-    private static List<String> parseStringList(String json) {
-        if (StringUtils.isBlank(json)) {
-            return new ArrayList<>();
-        }
-        try {
-            List<String> list = JSON.parseObject(json, new TypeReference<List<String>>() {
-            });
-            return list == null ? new ArrayList<>() : new ArrayList<>(list);
-        } catch (Exception e) {
-            return new ArrayList<>();
-        }
-    }
-
-    private static Map<String, Object> parseMap(String json) {
-        if (StringUtils.isBlank(json)) {
-            return new LinkedHashMap<>();
-        }
-        try {
-            Map<String, Object> map = JSON.parseObject(json, new TypeReference<Map<String, Object>>() {
-            });
-            return map == null ? new LinkedHashMap<>() : new LinkedHashMap<>(map);
-        } catch (Exception e) {
-            return new LinkedHashMap<>();
-        }
-    }
-
-    private static String toJson(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof List<?> list && list.isEmpty()) {
-            return "[]";
-        }
-        if (value instanceof Map<?, ?> map && map.isEmpty()) {
-            return "{}";
-        }
-        return JSON.toJSONString(value);
-    }
 }

@@ -226,7 +226,7 @@ public class StatelessToolSharingTest {
         AgentContext child = SubAgentContextFactory.create(
                 parent, "子任务", "描述", new ToolCollection(), "agent-control", "general-purpose");
 
-        Assert.assertSame("会话级 Todo 列表必须父子共享（TaskCreate/TaskGet 同一列表）",
+        Assert.assertSame("会话级 Todo 列表必须父子共享（TodoWrite 同一列表）",
                 parent.requireSessionTaskList(), child.requireSessionTaskList());
         Assert.assertSame("会话级后台任务表必须父子共享（TaskStop/TaskOutput 命中子 Agent）",
                 parent.requireBackgroundTasks(), child.requireBackgroundTasks());

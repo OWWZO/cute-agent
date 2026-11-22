@@ -47,7 +47,7 @@ public class SubAgentRunnerLifecycleTest {
             SubAgentResult result = runner.run(parent, "desc", "prompt",
                     SubAgentRegistry.TYPE_GENERAL_PURPOSE, AGENT_ID);
 
-            Assert.assertTrue(result.getErrorMsg().contains("仍在运行"));
+            Assert.assertTrue(result.getErrorMsg().contains("正在启动或收尾"));
             ArgumentCaptor<DialogueRunFinishRecord> captor =
                     ArgumentCaptor.forClass(DialogueRunFinishRecord.class);
             verify(recorder).finishRun(captor.capture());

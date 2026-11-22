@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
+import org.wwz.ai.domain.agent.runtime.cancel.SessionControl;
 import org.wwz.ai.domain.agent.runtime.capability.SessionCapabilityService;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionFile;
@@ -14,20 +15,33 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.planmode.IPlanApprovalRepository;
 import org.wwz.ai.domain.agent.runtime.planmode.PlanArtifactStore;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
+import org.wwz.ai.domain.agent.runtime.subagent.BackgroundSubAgentExecutor;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentResult;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentDefinition;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
+import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
+import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
+import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 import org.wwz.ai.domain.agent.runtime.tool.factory.AgentToolCollectionFactory;
 import org.wwz.ai.domain.agent.runtime.tool.common.openui.OpenUiCatalogLoadStateStore;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceService;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceSessionFileMaterializer;
 import org.wwz.ai.domain.agent.runtime.tool.workspace.WorkspaceReadStateStore;
 import org.wwz.ai.domain.agent.runtime.util.DateUtil;
+import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.prompt.AgentExecutionRole;
+import org.wwz.ai.domain.agent.runtime.prompt.PromptAssembler;
 import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
+import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
 import org.wwz.ai.domain.agent.ledger.ExecutionLedgerRunSupport;
 import org.wwz.ai.domain.agent.memory.ltm.LtmRuntimeBootstrap;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * React / PlanSolve 共用的 AgentContext 装配体。
@@ -75,6 +89,12 @@ public class PrepareAgentContextAssembly {
     @Resource
     private PlanArtifactStore planArtifactStore;
 
+    @Resource
+    private TasklistPersistencePort tasklistPersistencePort;
+
+    @Resource
+    private IExecutionLedgerReadRepository executionLedgerReadRepository;
+
     /**
      * 工具池形态。与「用哪个工厂入口」是两个关注点，故不用一个布尔同时表达。
      */
@@ -105,6 +125,7 @@ public class PrepareAgentContextAssembly {
         AgentContext agentContext = AgentContext.builder()
                 .requestId(request.getRequestId())
                 .sessionId(request.getSessionId())
+                .rootSessionId(request.getSessionId())
                 .userId(request.getUserId())
                 .printer(printer)
                 .query(request.getQuery())
@@ -126,6 +147,7 @@ public class PrepareAgentContextAssembly {
                 .runtimeDependencies(cuteRuntimeDependencies)
                 .build();
 
+        hydrateActiveSubAgentTask(agentContext);
         materializeSessionFiles(agentContext, request.getSessionFiles());
         hydrateWorkspaceReadState(agentContext);
         hydrateOpenUiCatalogState(agentContext);
@@ -142,8 +164,136 @@ public class PrepareAgentContextAssembly {
                 entryAgent
         );
         bindTools(agentContext, request, toolScope);
+        bindResolvedSystemPrompt(agentContext, request);
         bindActiveRunIfPresent(agentContext);
         return new Assembled(agentContext, resumedApprovedPlan);
+    }
+
+    /**
+     * 在 Agent 构造前一次性确定 system 提示词。
+     *
+     * <p>工具的可用性在这里已经确定，因此可以选择正确的角色、能力块和输出协议。
+     * 后续 Agent 构造只做规范化与冻结，不再先写默认提示词再覆盖。</p>
+     */
+    private void bindResolvedSystemPrompt(AgentContext context, AgentExecutionCommand request) {
+        if (context == null || request == null) {
+            return;
+        }
+        String snapshot = StringUtils.trimToNull(request.getPromptSnapshot());
+        if (snapshot != null) {
+            context.setResolvedSystemPrompt(snapshot);
+            return;
+        }
+
+        SubAgentRegistry registry = context.getRuntimeDependencies() == null
+                ? null
+                : context.getRuntimeDependencies().getOptionalSubAgentRegistry();
+        if (context.isSubAgent()) {
+            String agentKey = StringUtils.defaultIfBlank(
+                    context.getSubAgentType(), SubAgentRegistry.TYPE_GENERAL_PURPOSE);
+            SubAgentDefinition definition = registry == null
+                    ? null
+                    : registry.find(agentKey).orElse(null);
+            context.setResolvedSystemPrompt(PromptAssembler.assembleForContext(
+                    context,
+                    AgentExecutionRole.WORKER,
+                    agentKey,
+                    definition == null ? null : definition.getSystemPrompt(),
+                    null).systemPrompt());
+            return;
+        }
+
+        if (AgentType.PLAN_SOLVE.getValue().equals(request.getAgentType())) {
+            String workerCatalog = registry == null
+                    ? null
+                    : PromptAssembler.formatWorkerCatalog(registry.list());
+            context.setResolvedSystemPrompt(PromptAssembler.assembleForContext(
+                    context,
+                    AgentExecutionRole.COORDINATOR,
+                    null,
+                    null,
+                    workerCatalog).systemPrompt());
+            return;
+        }
+
+        String agentKey = StringUtils.defaultIfBlank(
+                request.getMainAgentKey(), SubAgentRegistry.TYPE_GENERAL_PURPOSE);
+        SubAgentDefinition definition = registry == null
+                ? null
+                : registry.find(agentKey).orElse(null);
+        context.setResolvedSystemPrompt(PromptAssembler.assembleForContext(
+                context,
+                AgentExecutionRole.MAIN,
+                agentKey,
+                definition == null ? null : definition.getSystemPrompt(),
+                null).systemPrompt());
+    }
+
+    /**
+     * 直聊子会话时，如果有活跃逻辑任务，必须沿用原树身份和父回传目标；
+     * 没有活跃任务则保持 rootSessionId=自身会话，作为新的本地树根。
+     */
+    private void hydrateActiveSubAgentTask(AgentContext context) {
+        if (context == null || tasklistPersistencePort == null
+                || StringUtils.isBlank(context.getSessionId())) {
+            return;
+        }
+        Optional<RuntimeBackgroundTask> activeTask;
+        try {
+            activeTask = tasklistPersistencePort
+                    .findActiveBackgroundTaskByChildSessionId(context.getSessionId());
+        } catch (Exception e) {
+            // 查询失败不能阻断直聊；无活跃任务时本来就走本地普通 run。
+            log.warn("hydrate active subagent task failed sessionId={}", context.getSessionId(), e);
+            return;
+        }
+        // 绑定/收尾轮校验失败不能吞掉，否则失败任务会永远留在 WAITING。
+        activeTask.ifPresent(task -> bindActiveSubAgentTask(context, task));
+    }
+
+    private void bindActiveSubAgentTask(AgentContext context, RuntimeBackgroundTask task) {
+        if (task == null || StringUtils.isBlank(task.getAgentId())) {
+            return;
+        }
+        RuntimeBackgroundTaskRegistry registry = SessionBackgroundTaskHub.getOrCreate(
+                StringUtils.defaultIfBlank(task.getRootSessionId(), task.getParentSessionId()),
+                tasklistPersistencePort);
+        // WAITING 被用户直聊或自动唤醒时，都算同一个逻辑任务的收尾轮。
+        // 已达到上限则先给父 Agent 一个失败终态，避免留下永远 WAITING 的孤儿。
+        if (!registry.tryBeginClosingTurn(task.getId())) {
+            failClosingTurnExhausted(task);
+            throw new IllegalStateException("后台收尾轮数已达上限，子 Agent 已终止");
+        }
+        context.setSubAgentIdentity(
+                task.getAgentId(),
+                task.getAgentType(),
+                context.getSessionId(),
+                task.getParentToolUseId());
+        context.setTreeIdentity(
+                StringUtils.defaultIfBlank(task.getRootSessionId(), context.getSessionId()),
+                task.getDelegationDepth() == null ? 0 : task.getDelegationDepth(),
+                task.getParentAgentId(),
+                task.getId());
+        context.setSessionControl(new SessionControl().withBackgroundTasks(registry));
+        context.setToolScopeApplied(Boolean.FALSE);
+    }
+
+    private void failClosingTurnExhausted(RuntimeBackgroundTask task) {
+        SubAgentResult result = SubAgentResult.builder()
+                .status(SubAgentResult.STATUS_FAILED)
+                .agentId(task.getAgentId())
+                .agentType(task.getAgentType())
+                .childSessionId(task.getChildSessionId())
+                .description(task.getDescription())
+                .prompt(task.getPrompt())
+                .errorMsg("后台收尾轮数已达上限，子 Agent 已终止")
+                .build();
+        BackgroundSubAgentExecutor.failPersistedTask(
+                task,
+                result,
+                cuteRuntimeDependencies,
+                agentExecutionRecorder,
+                executionLedgerReadRepository);
     }
 
     /**

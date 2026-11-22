@@ -81,10 +81,6 @@ public class SubAgentDefinitionAdminController {
                 "session_search",
                 // plan mode / task
                 "TodoWrite",
-                "TaskCreate",
-                "TaskGet",
-                "TaskUpdate",
-                "TaskList",
                 "TaskStop",
                 "EnterPlanMode",
                 "ExitPlanMode",

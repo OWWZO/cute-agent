@@ -17,8 +17,7 @@ import java.util.Map;
 
 /**
  * 整表写入 Todo 列表。
- * 与 TaskCreate/Update/List（V2 细粒度）并存：适合一次同步整份清单。
- * 全部 completed 时清空列表。
+ * 空数组表示清空列表。
  */
 @Slf4j
 public class TodoWriteTool implements BaseTool {
@@ -33,8 +32,7 @@ public class TodoWriteTool implements BaseTool {
         return "用完整 todo 列表覆盖当前会话任务清单。每项含 content（或 subject）、status（pending|in_progress|completed），"
                 + "可选 activeForm。"
                 + "复杂多步/计划获批后跟踪进度时使用；简单对话不要用。"
-                + "若全部为 completed，列表会被清空。"
-                + "细粒度增改也可用 TaskCreate / TaskUpdate。";
+                + "传空数组表示清空列表。";
     }
 
     @Override
@@ -66,7 +64,6 @@ public class TodoWriteTool implements BaseTool {
         Map<String, Object> todos = new LinkedHashMap<>();
         todos.put("type", "array");
         todos.put("items", item);
-        todos.put("minItems", 1);
         todos.put("description", "更新后的完整 todo 列表");
 
         Map<String, Object> properties = new LinkedHashMap<>();
@@ -86,9 +83,6 @@ public class TodoWriteTool implements BaseTool {
             Object rawTodos = params.get("todos");
             if (!(rawTodos instanceof List<?> list)) {
                 return failure("todos 必须为数组");
-            }
-            if (list.isEmpty()) {
-                return failure("todos 不能为空");
             }
             List<Map<String, Object>> todoMaps = new ArrayList<>(list.size());
             for (int i = 0; i < list.size(); i++) {

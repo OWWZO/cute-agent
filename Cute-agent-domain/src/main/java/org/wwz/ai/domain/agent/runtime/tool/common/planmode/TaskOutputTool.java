@@ -119,6 +119,9 @@ public class TaskOutputTool implements BaseTool {
             fields.put("agent_id", task.getAgentId());
             fields.put("task_type", task.getType());
             fields.put("status", status);
+            if (StringUtils.isNotBlank(task.getPhase())) {
+                fields.put("phase", task.getPhase());
+            }
             fields.put("description", task.getDescription());
             if (StringUtils.isNotBlank(task.getAgentType())) {
                 fields.put("agentType", task.getAgentType());
@@ -149,6 +152,9 @@ public class TaskOutputTool implements BaseTool {
 
     private static String buildMessage(String retrieval, String status, RuntimeBackgroundTask task) {
         if ("not_ready".equals(retrieval)) {
+            if (RuntimeBackgroundTask.PHASE_WAITING_BACKGROUND.equals(task.getPhase())) {
+                return "子 Agent 正在等待后台任务完成；线程已释放，完成后会自动继续。";
+            }
             return "任务仍在运行。block=false 可再次查看；block=true 将等到终态。";
         }
         if ("not_found".equals(retrieval)) {

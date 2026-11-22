@@ -14,6 +14,7 @@ import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
 import org.wwz.ai.domain.agent.catalog.model.CatalogSubAgent;
 import org.wwz.ai.types.enums.ResponseCode;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -30,6 +31,7 @@ public class SubAgentCatalogApplicationService {
 
     private final ISubAgentDefinitionRepository repository;
     private final SubAgentDefinitionLoader loader;
+    private final SubAgentRegistry registry;
 
     public ApplicationResult<List<CatalogSubAgent>> listSubAgents() {
         try {
@@ -37,10 +39,26 @@ public class SubAgentCatalogApplicationService {
             if (records == null) {
                 return ApplicationResult.success(List.of());
             }
-            return ApplicationResult.success(records.stream()
+            List<CatalogSubAgent> configured = records.stream()
                     .filter(record -> record != null && StringUtils.isNotBlank(record.getAgentKey()))
                     .map(SubAgentCatalogApplicationService::toCatalogSubAgent)
-                    .toList());
+                    .toList();
+            List<CatalogSubAgent> all = new ArrayList<>(configured);
+            if (configured.stream().noneMatch(agent ->
+                    SubAgentRegistry.TYPE_GENERAL_PURPOSE.equalsIgnoreCase(agent.getAgentKey()))) {
+                registry.find(SubAgentRegistry.TYPE_GENERAL_PURPOSE).ifPresent(definition ->
+                        all.add(0, CatalogSubAgent.builder()
+                                .agentKey(definition.getAgentType())
+                                .displayName("通用助手")
+                                .whenToUse(definition.getWhenToUse())
+                                .allowedTools(definition.getAllowedTools())
+                                .disallowedTools(definition.getDisallowedTools())
+                                .toolPolicyMode(definition.getToolPolicyMode())
+                                .maxSteps(definition.getMaxSteps())
+                                .status(1)
+                                .build()));
+            }
+            return ApplicationResult.success(all);
         } catch (Exception e) {
             log.error("查询 SubAgent 目录失败", e);
             return ApplicationResult.failure(ResponseCode.UN_ERROR, ResponseCode.UN_ERROR.getInfo(), null);

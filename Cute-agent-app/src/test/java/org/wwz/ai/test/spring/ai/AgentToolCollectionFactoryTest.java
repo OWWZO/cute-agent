@@ -150,7 +150,11 @@ public class AgentToolCollectionFactoryTest {
         Assert.assertTrue(toolCollection.getToolMap().containsKey("deep_search"));
         Assert.assertFalse("定义外的工具不得进入子会话",
                 toolCollection.getToolMap().containsKey("code_execution"));
-        Assert.assertFalse(toolCollection.getToolMap().containsKey("Agent"));
+        Assert.assertTrue("直聊子会话也必须能继续派发下级",
+                toolCollection.getToolMap().containsKey("Agent"));
+        Assert.assertTrue(toolCollection.getToolMap().containsKey("TaskStop"));
+        Assert.assertTrue(toolCollection.getToolMap().containsKey("AgentList"));
+        Assert.assertTrue(toolCollection.getToolMap().containsKey("SendMessage"));
     }
 
     @Test
@@ -485,7 +489,7 @@ public class AgentToolCollectionFactoryTest {
         Mockito.when(mcpToolExecutor.discoverConfiguredTools()).thenReturn(List.of());
 
         CuteConfig cuteConfig = buildCuteConfig();
-        cuteConfig.setPlanSolveMainToolList("Agent,TaskCreate");
+        cuteConfig.setPlanSolveMainToolList("Agent,TodoWrite");
         AgentToolCollectionFactory factory = newFactory(
                 cuteConfig,
                 mcpToolExecutor,
@@ -501,7 +505,7 @@ public class AgentToolCollectionFactoryTest {
         Assert.assertTrue(full.getToolMap().containsKey("deep_search"));
         Assert.assertTrue(full.getToolMap().containsKey("Agent"));
         Assert.assertTrue(main.getToolMap().containsKey("Agent"));
-        Assert.assertTrue(main.getToolMap().containsKey("TaskCreate"));
+        Assert.assertTrue(main.getToolMap().containsKey("TodoWrite"));
         Assert.assertFalse(main.getToolMap().containsKey("deep_search"));
         Assert.assertFalse(main.getToolMap().containsKey("web_search"));
     }

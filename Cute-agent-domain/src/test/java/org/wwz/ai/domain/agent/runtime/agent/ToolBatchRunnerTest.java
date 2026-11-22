@@ -2,6 +2,7 @@ package org.wwz.ai.domain.agent.runtime.agent;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -47,5 +48,16 @@ public class ToolBatchRunnerTest {
         runner.await(List.of(failed), List.of(pending), List.of());
 
         Assert.assertTrue("工具自身超时同样要终止未完成兄弟任务", pending.isCancelled());
+    }
+
+    @Test
+    public void agentDispatchIsAlwaysTreatedAsLongRunning() {
+        ToolCall call = new ToolCall();
+        ToolCall.Function function = new ToolCall.Function();
+        function.setName("Agent");
+        call.setFunction(function);
+
+        Assert.assertTrue(ToolBatchRunner.containsLongRunningTool(List.of(call)));
+        Assert.assertFalse(ToolBatchRunner.containsLongRunningTool(List.of()));
     }
 }

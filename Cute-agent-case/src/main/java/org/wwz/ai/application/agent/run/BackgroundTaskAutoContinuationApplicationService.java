@@ -15,14 +15,24 @@ import org.wwz.ai.application.agent.stream.AgentTimelineFrameEnricher;
 import org.wwz.ai.application.agent.stream.SessionEventClock;
 import org.wwz.ai.application.agent.stream.SessionProjectionRegistry;
 import org.wwz.ai.domain.agent.cute.config.CuteConfig;
+import org.wwz.ai.domain.agent.ledger.AgentExecutionRecorder;
 import org.wwz.ai.domain.agent.ledger.IExecutionLedgerReadRepository;
+import org.wwz.ai.domain.agent.ledger.entity.DialogueRun;
 import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.ledger.model.SessionKind;
 import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
+import org.wwz.ai.domain.agent.runtime.CuteRuntimeDependencies;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.enums.AgentType;
+import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem;
 import org.wwz.ai.domain.agent.runtime.inbox.SessionInboxPort;
+import org.wwz.ai.domain.agent.runtime.subagent.BackgroundSubAgentExecutor;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentResult;
+import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
+import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
+import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 import org.wwz.ai.domain.agent.runtime.executor.AgentExecutorSupport;
 import org.wwz.ai.domain.agent.runtime.handler.AgentStreamEventHandler;
 import org.wwz.ai.types.agent.config.AgentExecutorNames;
@@ -33,6 +43,7 @@ import javax.annotation.Resource;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -69,6 +80,15 @@ public class BackgroundTaskAutoContinuationApplicationService {
     @Autowired(required = false)
     private SessionInboxPort sessionInboxPort;
 
+    @Resource
+    private TasklistPersistencePort tasklistPersistencePort;
+
+    @Resource
+    private CuteRuntimeDependencies cuteRuntimeDependencies;
+
+    @Resource
+    private AgentExecutionRecorder agentExecutionRecorder;
+
     /**
      * @param displayQuery 唤醒控制帧展示文本；实际投递仍以 Session Inbox claim 为准。
      * @param onRunSettled 唤醒轮收口回调，参数是本次唤醒 requestId。
@@ -92,16 +112,23 @@ public class BackgroundTaskAutoContinuationApplicationService {
             log.warn("background wake: session not found sessionId={}", sessionId);
             return false;
         }
-        if (SessionKind.SUBAGENT.code().equals(session.getSessionKind())) {
-            return false;
-        }
-
-        AgentExecutionCommand request = buildWakeRequest(session, triggerSource, displayQuery);
+        boolean subAgent = SessionKind.SUBAGENT.code().equals(session.getSessionKind());
+        RuntimeBackgroundTask logicalTask = subAgent
+                ? tasklistPersistencePort.findActiveBackgroundTaskByChildSessionId(sessionId).orElse(null)
+                : null;
+        // 已结束逻辑任务的子会话仍可能被用户直聊，并以自身作为新的本地树根
+        // 派发后台孙 Agent。没有 active logicalTask 时照常唤醒，只是不回传旧父。
+        AgentExecutionCommand request = buildWakeRequest(session, triggerSource, displayQuery, subAgent);
         try {
             activeAgentRunRegistry.begin(request.getRequestId(), sessionId, request.getUserId());
         } catch (AgentConcurrentRunException e) {
             log.info("background wake skipped, session busy sessionId={} activeRequestId={}",
                     sessionId, e.getActiveRequestId());
+            return false;
+        }
+        if (logicalTask != null && !registryFor(logicalTask).tryBeginClosingTurn(logicalTask.getId())) {
+            activeAgentRunRegistry.end(request.getRequestId());
+            failClosingTurnExhausted(logicalTask);
             return false;
         }
 
@@ -118,18 +145,18 @@ public class BackgroundTaskAutoContinuationApplicationService {
             agentRunLaunchGate.defer(request.getRequestId(), sessionId, () -> {
                 try {
                     AgentExecutorSupport.execute(dispatchExecutor, "backgroundTaskWake", request.getRequestId(),
-                            () -> dispatch(request, projectingStream, onRunSettled));
+                            () -> dispatch(request, projectingStream, onRunSettled, logicalTask));
                 } catch (AgentExecutorBusyException e) {
                     log.warn("background wake deferred launch busy requestId={}", request.getRequestId(), e);
-                    failWake(sessionId, request.getRequestId(), projectingStream, e);
+                    failWake(sessionId, request.getRequestId(), projectingStream, logicalTask, true, e);
                 } catch (RuntimeException e) {
                     log.error("background wake deferred launch failed requestId={}", request.getRequestId(), e);
-                    failWake(sessionId, request.getRequestId(), projectingStream, e);
+                    failWake(sessionId, request.getRequestId(), projectingStream, logicalTask, true, e);
                 }
             });
         } catch (RuntimeException e) {
             log.error("background wake launch scheduling failed requestId={}", request.getRequestId(), e);
-            failWake(sessionId, request.getRequestId(), projectingStream, e);
+            failWake(sessionId, request.getRequestId(), projectingStream, logicalTask, true, e);
         }
         log.info("background wake dispatched sessionId={} requestId={} taskId={}",
                 sessionId, request.getRequestId(), taskId);
@@ -138,7 +165,8 @@ public class BackgroundTaskAutoContinuationApplicationService {
 
     private void dispatch(AgentExecutionCommand request,
                           AgentStreamProjection projectingStream,
-                          Consumer<String> onRunSettled) {
+                          Consumer<String> onRunSettled,
+                          RuntimeBackgroundTask logicalTask) {
         boolean runStarted = false;
         try {
             agentDispatchService.dispatch(request, projectingStream);
@@ -147,13 +175,67 @@ public class BackgroundTaskAutoContinuationApplicationService {
                     request, projectingStream, activeAgentRunRegistry, sessionInboxPort);
         } catch (Exception e) {
             log.error("{} background wake failed", request.getRequestId(), e);
-            failWake(request.getSessionId(), request.getRequestId(), projectingStream, e);
+            failWake(request.getSessionId(), request.getRequestId(), projectingStream, logicalTask, !runStarted, e);
         } finally {
             // 唤醒轮也是普通 run：释放 ActiveRun 后必须重新判活，避免终答期间到达的通知滞留。
             if (runStarted) {
+                if (logicalTask != null) {
+                    try {
+                        settleSubAgentIfQuiet(request);
+                    } catch (Exception settleError) {
+                        log.error("{} background wake settle failed taskId={}",
+                                request.getRequestId(), logicalTask.getId(), settleError);
+                        failSettlement(logicalTask, settleError);
+                    }
+                }
                 notifyRunSettled(request.getRequestId(), onRunSettled);
             }
         }
+    }
+
+    private void settleSubAgentIfQuiet(AgentExecutionCommand request) {
+        if (request == null || tasklistPersistencePort == null) {
+            return;
+        }
+        Optional<RuntimeBackgroundTask> found =
+                tasklistPersistencePort.findActiveBackgroundTaskByChildSessionId(request.getSessionId());
+        if (found.isEmpty()) {
+            return;
+        }
+        RuntimeBackgroundTask task = found.get();
+        RuntimeBackgroundTaskRegistry registry = registryFor(task);
+        if (!registry.listRunningOwnedBy(task.getAgentId()).isEmpty()
+                || registry.hasUnconsumedOwnedBy(task.getAgentId())) {
+            registry.markWaiting(task.getId());
+            return;
+        }
+        if (sessionInboxPort != null
+                && (sessionInboxPort.hasDeliverableKind(request.getSessionId(),
+                        SessionInboxItem.KIND_BACKGROUND_NOTIFICATION)
+                || sessionInboxPort.hasDeliverableKind(request.getSessionId(),
+                        SessionInboxItem.KIND_USER_MESSAGE))) {
+            registry.markWaiting(task.getId());
+            return;
+        }
+        DialogueRun run = executionLedgerReadRepository.queryRunByRequestId(request.getRequestId());
+        if (run == null || !run.isTerminal()) {
+            return;
+        }
+        boolean completed = run.getStatus() != null
+                && run.getStatus() == org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants.STATUS_SUCCESS;
+        SubAgentResult result = SubAgentResult.builder()
+                .status(completed ? SubAgentResult.STATUS_COMPLETED : SubAgentResult.STATUS_FAILED)
+                .agentId(task.getAgentId())
+                .agentType(task.getAgentType())
+                .childSessionId(task.getChildSessionId())
+                .description(task.getDescription())
+                .prompt(task.getPrompt())
+                .content(run.getFinalSummaryText())
+                .errorMsg(completed ? null : run.getErrorMsg())
+                .totalDurationMs(task.getTotalDurationMs())
+                .build();
+        BackgroundSubAgentExecutor.completePersistedTask(
+                task, result, cuteRuntimeDependencies, agentExecutionRecorder, executionLedgerReadRepository);
     }
 
     private void notifyRunSettled(String requestId, Consumer<String> onRunSettled) {
@@ -170,6 +252,8 @@ public class BackgroundTaskAutoContinuationApplicationService {
     private void failWake(String sessionId,
                           String requestId,
                           AgentStreamProjection projectingStream,
+                          RuntimeBackgroundTask logicalTask,
+                          boolean rollbackClosingTurn,
                           Exception failure) {
         // 先发失败控制帧，再关流；否则 completeWithError 会先把会话连接收掉。
         publishWakeFailed(sessionId, requestId, failure);
@@ -182,15 +266,86 @@ public class BackgroundTaskAutoContinuationApplicationService {
         if (activeAgentRunRegistry.findBySessionId(sessionId).isPresent()) {
             return;
         }
+        restoreWaiting(logicalTask, rollbackClosingTurn);
         // 只收口快照内的旧投影；检查期间新建的投影留给接班的 run。
         StaleSessionProjections.complete(sessionId, stale, projectingStream, log);
     }
 
+    private RuntimeBackgroundTaskRegistry registryFor(RuntimeBackgroundTask task) {
+        return SessionBackgroundTaskHub.getOrCreate(
+                StringUtils.defaultIfBlank(task.getRootSessionId(), task.getParentSessionId()),
+                tasklistPersistencePort);
+    }
+
+    private void restoreWaiting(RuntimeBackgroundTask task, boolean rollbackClosingTurn) {
+        if (task == null) {
+            return;
+        }
+        try {
+            RuntimeBackgroundTaskRegistry registry = registryFor(task);
+            if (rollbackClosingTurn) {
+                registry.rollbackClosingTurn(task.getId());
+            }
+            registry.markWaiting(task.getId());
+        } catch (Exception e) {
+            log.warn("background wake failed to restore waiting taskId={}", task.getId(), e);
+        }
+    }
+
+    private void failClosingTurnExhausted(RuntimeBackgroundTask task) {
+        SubAgentResult result = SubAgentResult.builder()
+                .status(SubAgentResult.STATUS_FAILED)
+                .agentId(task.getAgentId())
+                .agentType(task.getAgentType())
+                .childSessionId(task.getChildSessionId())
+                .description(task.getDescription())
+                .prompt(task.getPrompt())
+                .errorMsg("后台收尾轮数已达上限，子 Agent 已终止")
+                .build();
+        BackgroundSubAgentExecutor.failPersistedTask(
+                task,
+                result,
+                cuteRuntimeDependencies,
+                agentExecutionRecorder,
+                executionLedgerReadRepository);
+    }
+
+    private void failSettlement(RuntimeBackgroundTask task, Exception failure) {
+        String reason = failure == null || StringUtils.isBlank(failure.getMessage())
+                ? "后台子 Agent 收口失败"
+                : "后台子 Agent 收口失败：" + failure.getMessage();
+        SubAgentResult result = SubAgentResult.builder()
+                .status(SubAgentResult.STATUS_FAILED)
+                .agentId(task.getAgentId())
+                .agentType(task.getAgentType())
+                .childSessionId(task.getChildSessionId())
+                .description(task.getDescription())
+                .prompt(task.getPrompt())
+                .errorMsg(reason)
+                .build();
+        try {
+            BackgroundSubAgentExecutor.failPersistedTask(
+                    task,
+                    result,
+                    cuteRuntimeDependencies,
+                    agentExecutionRecorder,
+                    executionLedgerReadRepository);
+        } catch (Exception terminalError) {
+            log.error("background wake failed to persist terminal error taskId={}",
+                    task.getId(), terminalError);
+        }
+    }
+
     private AgentExecutionCommand buildWakeRequest(DialogueSession session,
                                                    String triggerSource,
-                                                   String displayQuery) {
-        boolean deepThink = session.getDeepThink() != null && session.getDeepThink() != 0;
-        String basePrompt = deepThink ? "" : StringUtils.defaultString(cuteConfig.getCuteBasePrompt());
+                                                   String displayQuery,
+                                                   boolean subAgent) {
+        org.wwz.ai.domain.agent.runtime.enums.CollaborationMode mode =
+                org.wwz.ai.domain.agent.runtime.enums.CollaborationMode.from(session.getCollaborationMode());
+        boolean cluster = mode.isCluster();
+        String basePrompt = cluster || subAgent
+                ? ""
+                : StringUtils.defaultString(cuteConfig.getCuteBasePrompt());
         return AgentExecutionCommand.builder()
                 .requestId(newRequestId())
                 .sessionId(session.getSessionId())
@@ -200,7 +355,14 @@ public class BackgroundTaskAutoContinuationApplicationService {
                 .model(session.getModel())
                 .thinking(session.getThinking())
                 .thinkingEffort(session.getThinkingEffort())
-                .agentType(deepThink ? AgentType.PLAN_SOLVE.getValue() : AgentType.REACT.getValue())
+                .agentType(cluster && !subAgent
+                        ? AgentType.PLAN_SOLVE.getValue()
+                        : AgentType.REACT.getValue())
+                .collaborationMode(mode.getValue())
+                .mainAgentKey(session.getMainAgentKey())
+                .promptSnapshot(session.getPromptSnapshot())
+                .promptVersion(session.getPromptVersion())
+                .promptHash(session.getPromptHash())
                 .basePrompt(basePrompt)
                 .isStream(true)
                 .triggerSource(StringUtils.defaultIfBlank(triggerSource, "background_task"))

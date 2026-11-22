@@ -10,6 +10,9 @@ import org.wwz.ai.domain.agent.runtime.tool.common.mcp.McpToolNames;
 import org.wwz.ai.domain.agent.runtime.tool.common.mcp.ToolCallTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.mcp.ToolDescribeTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.mcp.ToolSearchTool;
+import org.wwz.ai.domain.agent.runtime.tool.common.planmode.AgentListTool;
+import org.wwz.ai.domain.agent.runtime.tool.common.planmode.SendMessageTool;
+import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskStopTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskToolNames;
 import org.wwz.ai.domain.agent.runtime.tool.deferred.DeferredToolCatalog;
 import org.wwz.ai.domain.agent.runtime.tool.deferred.DeferredToolEntry;
@@ -30,17 +33,6 @@ public final class SubAgentToolFilter {
     }
 
     public static ToolCollection filter(ToolCollection parentTools, SubAgentDefinition definition) {
-        return filter(parentTools, definition, false);
-    }
-
-    /**
-     * @param allowDispatch 是否允许子 Agent 继续派发子 Agent。
-     *                      当前模式 1（父派发）与模式 2（用户直聊）都传 {@code false}；
-     *                      该参数只为将来开放嵌套预留决策点，不改变现有行为。
-     */
-    public static ToolCollection filter(ToolCollection parentTools,
-                                        SubAgentDefinition definition,
-                                        boolean allowDispatch) {
         ToolCollection child = new ToolCollection();
         if (parentTools == null || definition == null) {
             return child;
@@ -48,33 +40,50 @@ public final class SubAgentToolFilter {
         child.setMcpToolExecutor(parentTools.getMcpToolExecutor());
         child.restoreTaskScopedState(parentTools.snapshotTaskScopedState());
 
-        Set<String> disallowed = buildDisallowed(definition, allowDispatch);
+        Set<String> disallowed = buildDisallowed(definition);
         if (definition.usesCustomToolPolicy()) {
             copyCustomView(parentTools, child, definition, disallowed);
         } else {
             copyInheritedView(parentTools, child, definition, disallowed);
         }
         alignBridgeTools(child, parentTools, disallowed);
+        attachManagementTools(child, definition);
         return child;
     }
 
-    private static Set<String> buildDisallowed(SubAgentDefinition definition, boolean allowDispatch) {
+    private static Set<String> buildDisallowed(SubAgentDefinition definition) {
         Set<String> disallowed = new HashSet<>();
-        if (!allowDispatch) {
-            disallowed.add(AgentDispatchTool.NAME);
-        }
-        disallowed.add(TaskToolNames.TASK_STOP);
-        disallowed.add(TaskToolNames.SEND_MESSAGE);
         disallowed.add(TaskToolNames.ENTER_PLAN_MODE);
         disallowed.add(TaskToolNames.EXIT_PLAN_MODE);
         disallowed.add(org.wwz.ai.domain.agent.runtime.tool.common.planmode.AskUserQuestionTool.NAME);
         disallowed.add(org.wwz.ai.domain.agent.runtime.tool.common.planmode.RequestDesktopControlTool.NAME);
         disallowed.addAll(LtmMemoryGuard.MEMORY_WRITE_TOOLS);
         disallowed.add(SessionSearchTool.TOOL_NAME);
+        if ("dataAgent".equals(definition.getAgentType())) {
+            // dataAgent 不参与派发树；即使它继承的是父级全量工具视图，
+            // 也不能把父 Agent 已装配的管理工具带进来。
+            disallowed.add(AgentDispatchTool.NAME);
+            disallowed.add(TaskToolNames.TASK_STOP);
+            disallowed.add(TaskToolNames.SEND_MESSAGE);
+        }
         if (definition.getDisallowedTools() != null) {
             disallowed.addAll(definition.getDisallowedTools());
         }
         return disallowed;
+    }
+
+    /**
+     * 管理工具是 Agent 的运行契约，不属于业务 allowedTools。
+     * 除 dataAgent 外，每个 Agent 都必须能创建、指导、停止自己的后代。
+     */
+    private static void attachManagementTools(ToolCollection child, SubAgentDefinition definition) {
+        if ("dataAgent".equals(definition.getAgentType())) {
+            return;
+        }
+        child.addTool(new AgentDispatchTool());
+        child.addTool(new TaskStopTool());
+        child.addTool(new AgentListTool());
+        child.addTool(new SendMessageTool());
     }
 
     private static void copyInheritedView(ToolCollection parentTools,

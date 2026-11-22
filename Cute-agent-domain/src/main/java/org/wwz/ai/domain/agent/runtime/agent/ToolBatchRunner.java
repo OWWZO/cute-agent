@@ -59,8 +59,9 @@ final class ToolBatchRunner {
             return;
         }
         CompletableFuture<Void> all = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-        // TaskOutput 是长轮询，本身就该等到底，不套用批次超时。
-        long timeoutSeconds = containsTaskOutput(commands) ? 0L : resolveToolBatchTimeoutSeconds();
+        // TaskOutput 是长轮询，Agent 是可运行数小时的子任务；两者都必须等到底，
+        // 不能套用父工具批次超时。
+        long timeoutSeconds = containsLongRunningTool(commands) ? 0L : resolveToolBatchTimeoutSeconds();
         AgentContext context = agent.getContext();
         long deadlineNanos = timeoutSeconds > 0L
                 ? System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
@@ -132,7 +133,7 @@ final class ToolBatchRunner {
         }
     }
 
-    private static boolean containsTaskOutput(List<ToolCall> commands) {
+    static boolean containsLongRunningTool(List<ToolCall> commands) {
         if (commands == null) {
             return false;
         }
@@ -140,7 +141,8 @@ final class ToolBatchRunner {
             if (command == null || command.getFunction() == null) {
                 continue;
             }
-            if (TaskToolNames.TASK_OUTPUT.equals(command.getFunction().getName())) {
+            String name = command.getFunction().getName();
+            if (TaskToolNames.TASK_OUTPUT.equals(name) || AgentDispatchTool.NAME.equals(name)) {
                 return true;
             }
         }

@@ -55,19 +55,6 @@ public class RuntimeBackgroundTaskRegistryMergeTest {
         }
 
         @Override
-        public int loadTodoHighWaterMark(String sessionId) {
-            return 0;
-        }
-
-        @Override
-        public void upsertTodo(String sessionId, SessionTaskItem item) {
-        }
-
-        @Override
-        public void deleteTodo(String sessionId, String taskId) {
-        }
-
-        @Override
         public void replaceTodos(String sessionId, List<SessionTaskItem> items) {
         }
 

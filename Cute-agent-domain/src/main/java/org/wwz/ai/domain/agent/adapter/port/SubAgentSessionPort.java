@@ -35,4 +35,12 @@ public interface SubAgentSessionPort {
     default String findSessionUserId(String sessionId) {
         return null;
     }
+
+    /**
+     * 按子会话 ID 读取直接父会话 ID。会话表是多层 Agent 血缘的权威来源；
+     * 后台任务表在旧实例上可能缺少 parent_agent_id 列，归属校验需要这条回退路径。
+     */
+    default String findParentSessionId(String sessionId) {
+        return null;
+    }
 }

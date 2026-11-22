@@ -22,10 +22,14 @@ import org.wwz.ai.domain.agent.ledger.entity.DialogueSession;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.command.AgentExecutionCommand;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionNotificationHub;
 import org.wwz.ai.domain.agent.runtime.tasklist.TaskNotification;
+import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 
 import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
@@ -37,6 +41,7 @@ public class BackgroundTaskAutoContinuationSettlementTest {
 
     @After
     public void tearDown() {
+        SessionBackgroundTaskHub.clearAll();
         SessionNotificationHub.clearAll();
     }
 
@@ -192,6 +197,114 @@ public class BackgroundTaskAutoContinuationSettlementTest {
         Assert.assertTrue(accepted);
         Assert.assertEquals(0, settleCount.get());
         Assert.assertTrue(activeRuns.findBySessionId(sessionId).isEmpty());
+    }
+
+    @Test
+    public void wakeLaunchFailureRestoresWaitingPhase() {
+        String childSessionId = "sub_agent-waiting";
+        String rootSessionId = "root-session";
+        RuntimeBackgroundTask logicalTask = RuntimeBackgroundTask.builder()
+                .id("task-waiting")
+                .type(RuntimeBackgroundTask.TYPE_LOCAL_AGENT)
+                .status(RuntimeBackgroundTask.STATUS_RUNNING)
+                .agentId("agent-waiting")
+                .childSessionId(childSessionId)
+                .parentSessionId("parent-session")
+                .parentAgentId("root-session")
+                .ownerAgentId("root-session")
+                .rootSessionId(rootSessionId)
+                .phase(RuntimeBackgroundTask.PHASE_WAITING_BACKGROUND)
+                .build();
+        ActiveAgentRunRegistry activeRuns = new ActiveAgentRunRegistry();
+        SessionProjectionRegistry projections = new SessionProjectionRegistry();
+        IExecutionLedgerReadRepository readRepository = Mockito.mock(IExecutionLedgerReadRepository.class);
+        Mockito.when(readRepository.querySessionEntity(childSessionId))
+                .thenReturn(DialogueSession.builder()
+                        .sessionId(childSessionId)
+                        .userId("user-1")
+                        .sessionKind(org.wwz.ai.domain.agent.ledger.model.SessionKind.SUBAGENT.code())
+                        .build());
+        TasklistPersistencePort persistence = Mockito.mock(TasklistPersistencePort.class);
+        Mockito.when(persistence.findActiveBackgroundTaskByChildSessionId(childSessionId))
+                .thenReturn(Optional.of(logicalTask));
+        Mockito.when(persistence.loadBackgroundTasks(rootSessionId)).thenReturn(List.of(logicalTask));
+
+        CuteConfig config = new CuteConfig();
+        config.setBackgroundAutoContinuation(true);
+        BackgroundTaskAutoContinuationApplicationService continuation =
+                new BackgroundTaskAutoContinuationApplicationService(
+                        readRepository,
+                        (request, stream) -> {
+                        },
+                        activeRuns,
+                        (ignoredSessionId, ignoredFrame) -> {
+                        },
+                        new AgentRunLaunchGate(0),
+                        new SessionEventClock(
+                                readRepository,
+                                Mockito.mock(IExecutionLedgerWriteRepository.class)),
+                        projections,
+                        config);
+        ReflectionTestUtils.setField(continuation, "handlerMap", Collections.emptyMap());
+        ReflectionTestUtils.setField(continuation, "dispatchExecutor", (Executor) command -> {
+            throw new RejectedExecutionException("busy");
+        });
+        ReflectionTestUtils.setField(continuation, "agentTimelineFrameEnricher",
+                Mockito.mock(AgentTimelineFrameEnricher.class));
+        ReflectionTestUtils.setField(continuation, "tasklistPersistencePort", persistence);
+
+        Assert.assertTrue(continuation.dispatchWake(
+                childSessionId, logicalTask.getId(), "background_task", null, ignored -> {
+                }));
+        Assert.assertEquals(RuntimeBackgroundTask.PHASE_WAITING_BACKGROUND, logicalTask.getPhase());
+        Assert.assertEquals(Integer.valueOf(0), logicalTask.getClosingTurnCount());
+        Assert.assertTrue(activeRuns.findBySessionId(childSessionId).isEmpty());
+    }
+
+    @Test
+    public void completedSubAgentWithoutActiveLogicalTaskCanWakeAsNewLocalRoot() {
+        String childSessionId = "sub_agent-direct-chat";
+        ActiveAgentRunRegistry activeRuns = new ActiveAgentRunRegistry();
+        SessionProjectionRegistry projections = new SessionProjectionRegistry();
+        IExecutionLedgerReadRepository readRepository = Mockito.mock(IExecutionLedgerReadRepository.class);
+        Mockito.when(readRepository.querySessionEntity(childSessionId))
+                .thenReturn(DialogueSession.builder()
+                        .sessionId(childSessionId)
+                        .userId("user-1")
+                        .sessionKind(org.wwz.ai.domain.agent.ledger.model.SessionKind.SUBAGENT.code())
+                        .build());
+        TasklistPersistencePort persistence = Mockito.mock(TasklistPersistencePort.class);
+        Mockito.when(persistence.findActiveBackgroundTaskByChildSessionId(childSessionId))
+                .thenReturn(Optional.empty());
+
+        AtomicReference<AgentExecutionCommand> dispatched = new AtomicReference<>();
+        CuteConfig config = new CuteConfig();
+        config.setBackgroundAutoContinuation(true);
+        BackgroundTaskAutoContinuationApplicationService continuation =
+                new BackgroundTaskAutoContinuationApplicationService(
+                        readRepository,
+                        (request, stream) -> dispatched.set(request),
+                        activeRuns,
+                        (ignoredSessionId, ignoredFrame) -> {
+                        },
+                        new AgentRunLaunchGate(0),
+                        new SessionEventClock(
+                                readRepository,
+                                Mockito.mock(IExecutionLedgerWriteRepository.class)),
+                        projections,
+                        config);
+        ReflectionTestUtils.setField(continuation, "handlerMap", Collections.emptyMap());
+        ReflectionTestUtils.setField(continuation, "dispatchExecutor", (Executor) Runnable::run);
+        ReflectionTestUtils.setField(continuation, "agentTimelineFrameEnricher",
+                Mockito.mock(AgentTimelineFrameEnricher.class));
+        ReflectionTestUtils.setField(continuation, "tasklistPersistencePort", persistence);
+
+        Assert.assertTrue(continuation.dispatchWake(
+                childSessionId, null, "background_task", null, ignored -> {
+                }));
+        Assert.assertNotNull(dispatched.get());
+        Assert.assertEquals("", dispatched.get().getQuery());
+        Assert.assertEquals("", dispatched.get().getBasePrompt());
     }
 
     private static BackgroundTaskCompletionEvent event(String sessionId, String taskId) {

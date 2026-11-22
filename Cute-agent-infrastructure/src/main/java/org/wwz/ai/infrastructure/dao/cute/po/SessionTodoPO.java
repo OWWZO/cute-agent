@@ -12,11 +12,7 @@ public class SessionTodoPO {
     private String subject;
     private String description;
     private String activeForm;
-    private String owner;
     private String status;
-    private String blocksJson;
-    private String blockedByJson;
-    private String metadataJson;
     private Integer seqNo;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

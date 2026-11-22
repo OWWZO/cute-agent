@@ -12,8 +12,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * allowedTools 的契约：null / "*" 表示全部允许，显式空集合表示不允许任何工具。
- * 空集合曾被当成「全部允许」，是一个静默提权口子。
+ * allowedTools 的契约：null / "*" 表示全部业务工具，显式空集合表示不允许业务工具。
+ * Agent / TaskStop / SendMessage 是运行时管理契约，不参与 allowlist。
  */
 public class SubAgentAllowlistContractTest {
 
@@ -27,8 +27,14 @@ public class SubAgentAllowlistContractTest {
         Assert.assertFalse(definition.allowsAllTools());
 
         ToolCollection child = SubAgentToolFilter.filter(parentTools(), definition);
-        Assert.assertTrue("空 allowlist 不得继承父级本地工具", child.getToolMap().isEmpty());
+        Assert.assertFalse("空 allowlist 不得继承父级本地工具",
+                child.getToolMap().containsKey("workspace_read"));
+        Assert.assertFalse("空 allowlist 不得继承父级本地工具",
+                child.getToolMap().containsKey("workspace_write"));
         Assert.assertTrue("空 allowlist 不得继承父级 MCP 工具", child.getMcpToolMap().isEmpty());
+        Assert.assertTrue("管理工具不受 allowlist 控制", child.getToolMap().containsKey("Agent"));
+        Assert.assertTrue("管理工具不受 allowlist 控制", child.getToolMap().containsKey("TaskStop"));
+        Assert.assertTrue("管理工具不受 allowlist 控制", child.getToolMap().containsKey("SendMessage"));
     }
 
     @Test
@@ -52,6 +58,24 @@ public class SubAgentAllowlistContractTest {
 
         Assert.assertTrue(child.getToolMap().containsKey("workspace_read"));
         Assert.assertFalse("名单外的工具不得进入子会话", child.getToolMap().containsKey("workspace_write"));
+    }
+
+    @Test
+    public void dataAgentNeverInheritsManagementTools() {
+        SubAgentDefinition definition = SubAgentDefinition.builder()
+                .agentType("dataAgent")
+                .build();
+        ToolCollection parent = parentTools();
+        parent.addTool(new StubTool("Agent"));
+        parent.addTool(new StubTool("TaskStop"));
+        parent.addTool(new StubTool("SendMessage"));
+
+        ToolCollection child = SubAgentToolFilter.filter(parent, definition);
+
+        Assert.assertFalse(child.getToolMap().containsKey("Agent"));
+        Assert.assertFalse(child.getToolMap().containsKey("TaskStop"));
+        Assert.assertFalse(child.getToolMap().containsKey("SendMessage"));
+        Assert.assertTrue(child.getToolMap().containsKey("workspace_read"));
     }
 
     private static ToolCollection parentTools() {

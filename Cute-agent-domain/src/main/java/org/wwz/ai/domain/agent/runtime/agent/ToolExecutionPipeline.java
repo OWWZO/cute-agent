@@ -22,6 +22,8 @@ import org.wwz.ai.domain.agent.runtime.tool.common.planmode.RequestDesktopContro
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskToolNames;
 import org.wwz.ai.domain.agent.runtime.tool.deferred.DeferredToolCatalog;
 import org.wwz.ai.domain.agent.runtime.tool.deferred.DeferredToolCall;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentExecutionScope;
+import org.wwz.ai.types.agent.exception.AgentExecutorBusyException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -29,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
@@ -117,6 +120,16 @@ final class ToolExecutionPipeline {
             CompletableFuture<ToolExecutionOutcome> executionFuture = AgentExecutorSupport
                     .supplyAsync(executor, scene, context,
                             () -> finalizeOutcome(toolCall, executeInternal(dispatches.get(toolCall.getId()), toolCall)));
+            if (batchRunner.isAgentDispatchTool(toolCall) && rejectedBecauseBusy(executionFuture)) {
+                // Agent 工具本身必须拥有 CallerRuns 语义：task 池满时不是把失败写回模型，
+                // 而是在当前 ReAct 线程继续执行同一个工具，避免父子树互相等线程。
+                log.warn("{} Agent tool task pool busy, falling back to caller-runs",
+                        context == null ? "-" : context.getRequestId());
+                executionFuture = CompletableFuture.completedFuture(
+                        SubAgentExecutionScope.runInline(
+                                () -> finalizeOutcome(toolCall,
+                                        executeInternal(dispatches.get(toolCall.getId()), toolCall))));
+            }
             executionFutures.add(executionFuture);
             futures.add(executionFuture.handle((outcome, error) -> {
                 if (ToolBatchRunner.isCancellation(error)) {
@@ -456,6 +469,20 @@ final class ToolExecutionPipeline {
             return ExecutionLedgerConstants.STATUS_STOPPED;
         }
         return ExecutionLedgerConstants.STATUS_FAILED;
+    }
+
+    private static boolean rejectedBecauseBusy(CompletableFuture<?> future) {
+        if (future == null || !future.isCompletedExceptionally()) {
+            return false;
+        }
+        try {
+            future.getNow(null);
+            return false;
+        } catch (CompletionException e) {
+            return e.getCause() instanceof AgentExecutorBusyException;
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private Map<String, ToolExecutionOutcome> finishCancelledBeforeStart(List<ToolCall> commands) {

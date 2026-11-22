@@ -48,13 +48,12 @@ public class SubAgentDispatchTest {
     }
 
     @Test
-    public void shouldFilterOutAgentAndWriteToolsForReadOnlyDefinition() {
+    public void shouldFilterOutBusinessToolsButKeepAgentManagementTools() {
         ToolCollection parent = new ToolCollection();
         parent.addTool(new StubTool("workspace_read"));
         parent.addTool(new StubTool("workspace_write"));
         parent.addTool(new StubTool("deep_search"));
         parent.addTool(new StubTool("file_tool"));
-        parent.addTool(new StubTool(AgentDispatchTool.NAME));
 
         SubAgentDefinition readOnly = SubAgentDefinition.builder()
                 .agentType("read-only")
@@ -67,35 +66,40 @@ public class SubAgentDispatchTest {
         Assert.assertTrue(child.getToolMap().containsKey("deep_search"));
         Assert.assertFalse(child.getToolMap().containsKey("workspace_write"));
         Assert.assertFalse(child.getToolMap().containsKey("file_tool"));
-        Assert.assertFalse(child.getToolMap().containsKey(AgentDispatchTool.NAME));
+        Assert.assertTrue(child.getToolMap().containsKey(AgentDispatchTool.NAME));
+        Assert.assertTrue(child.getToolMap().containsKey("TaskStop"));
+        Assert.assertTrue(child.getToolMap().containsKey("SendMessage"));
     }
 
     @Test
-    public void shouldAlwaysStripAgentFromGeneralPurpose() {
+    public void generalPurposeCanDispatchFurther() {
         ToolCollection parent = new ToolCollection();
         parent.addTool(new StubTool("file_tool"));
         parent.addTool(new StubTool("code_interpreter"));
-        parent.addTool(new StubTool(AgentDispatchTool.NAME));
 
         SubAgentDefinition gp = new SubAgentRegistry().require(SubAgentRegistry.TYPE_GENERAL_PURPOSE);
         ToolCollection child = SubAgentToolFilter.filter(parent, gp);
 
         Assert.assertTrue(child.getToolMap().containsKey("file_tool"));
         Assert.assertTrue(child.getToolMap().containsKey("code_interpreter"));
-        Assert.assertFalse(child.getToolMap().containsKey(AgentDispatchTool.NAME));
+        Assert.assertTrue(child.getToolMap().containsKey(AgentDispatchTool.NAME));
     }
 
     @Test
-    public void shouldKeepAgentWhenDispatchAllowed() {
+    public void customWhitelistCannotRemoveManagementTools() {
         ToolCollection parent = new ToolCollection();
         parent.addTool(new StubTool("file_tool"));
-        parent.addTool(new StubTool(AgentDispatchTool.NAME));
 
-        SubAgentDefinition gp = new SubAgentRegistry().require(SubAgentRegistry.TYPE_GENERAL_PURPOSE);
-        ToolCollection child = SubAgentToolFilter.filter(parent, gp, true);
+        SubAgentDefinition gp = SubAgentDefinition.builder()
+                .agentType("custom")
+                .allowedTools(java.util.Set.of("file_tool"))
+                .build();
+        ToolCollection child = SubAgentToolFilter.filter(parent, gp);
 
         Assert.assertTrue(child.getToolMap().containsKey("file_tool"));
         Assert.assertTrue(child.getToolMap().containsKey(AgentDispatchTool.NAME));
+        Assert.assertTrue(child.getToolMap().containsKey("TaskStop"));
+        Assert.assertTrue(child.getToolMap().containsKey("SendMessage"));
     }
 
     @Test

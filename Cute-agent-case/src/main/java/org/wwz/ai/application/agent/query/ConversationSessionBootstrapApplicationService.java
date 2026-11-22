@@ -19,6 +19,8 @@ import org.wwz.ai.domain.agent.ledger.model.ConversationRunSummary;
 import org.wwz.ai.domain.agent.ledger.timeline.TimelineItemProjection;
 import org.wwz.ai.domain.agent.ledger.model.ExecutionLedgerConstants;
 import org.wwz.ai.domain.agent.ledger.replay.ConversationHistoryReplayService;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionTaskListStore;
+import org.wwz.ai.domain.agent.runtime.tasklist.TasklistPersistencePort;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -29,8 +31,8 @@ import java.util.function.Function;
 /**
  * 会话切换 bootstrap 聚合应用服务。
  * <p>
- * 把「恢复一个会话所需的全部读请求」收敛为一次调用：历史摘要、产物文件、三类 HITL 待办，
- * 以及末尾 turn 的 run 回放。鉴权由调用方（trigger）在进入本服务前完成，
+ * 把「恢复一个会话所需的全部读请求」收敛为一次调用：历史摘要、产物文件、Todo 当前快照、
+ * 三类 HITL 待办，以及末尾 turn 的 run 回放。鉴权由调用方（trigger）在进入本服务前完成，
  * 与 {@link ConversationHistoryReplayService} 分层一致。
  * 三类 HITL 是独立业务域，这里只做顺序调用与打包，不搬移各自的 listPending 逻辑。
  */
@@ -56,6 +58,7 @@ public class ConversationSessionBootstrapApplicationService {
     private final AskUserQuestionApplicationService askUserQuestionApplicationService;
     private final DesktopControlApplicationService desktopControlApplicationService;
     private final PlanApprovalApplicationService planApprovalApplicationService;
+    private final TasklistPersistencePort tasklistPersistencePort;
 
     /**
      * 聚合查询会话 bootstrap 数据。
@@ -100,9 +103,23 @@ public class ConversationSessionBootstrapApplicationService {
                         desktopControlApplicationService::listPending))
                 .planApproval(safeListPending("plan-approval", sessionId,
                         planApprovalApplicationService::listPending))
+                .sessionTasks(loadSessionTasks(sessionId))
                 .replays(inlineReplays.replays)
                 .replaysIncluded(inlineReplays.included)
                 .build();
+    }
+
+    /**
+     * Todo 是会话当前状态，不属于某一轮的 ledger 回放。
+     * 刷新时直接从持久化列表恢复，避免只能依赖实时 session_tasks SSE。
+     */
+    private Map<String, Object> loadSessionTasks(String sessionId) {
+        try {
+            return new SessionTaskListStore(sessionId, tasklistPersistencePort).toClientSnapshot();
+        } catch (Exception e) {
+            log.warn("bootstrap 读取 session todo 失败, sessionId={}", sessionId, e);
+            return Map.of();
+        }
     }
 
     /**
@@ -305,6 +322,9 @@ public class ConversationSessionBootstrapApplicationService {
         private List<Map<String, Object>> desktopControl;
 
         private List<Map<String, Object>> planApproval;
+
+        /** 会话当前 Todo 快照；与实时 session_tasks 使用同一结构。 */
+        private Map<String, Object> sessionTasks;
 
         /** 末尾 turn 的 run 回放，key = requestId。 */
         private Map<String, ConversationRunReplay> replays;

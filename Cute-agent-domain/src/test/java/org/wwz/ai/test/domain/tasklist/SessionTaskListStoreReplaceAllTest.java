@@ -16,7 +16,7 @@ public class SessionTaskListStoreReplaceAllTest {
     @Test
     public void invalidStatusDoesNotWipeExistingTasks() {
         SessionTaskListStore store = new SessionTaskListStore("list-1");
-        store.create("任务 A", "描述 A", null, null);
+        store.replaceAll(List.of(Map.of("subject", "任务 A", "status", "pending")));
 
         try {
             store.replaceAll(List.of(Map.of("content", "任务 B", "status", "blocked")));
@@ -33,7 +33,6 @@ public class SessionTaskListStoreReplaceAllTest {
     @Test
     public void validReplaceStillRebuildsList() {
         SessionTaskListStore store = new SessionTaskListStore("list-2");
-        store.create("旧任务", "旧描述", null, null);
 
         store.replaceAll(List.of(
                 Map.of("content", "进行中", "status", "in_progress"),
@@ -45,5 +44,20 @@ public class SessionTaskListStoreReplaceAllTest {
         Assert.assertEquals(SessionTaskItem.STATUS_IN_PROGRESS, items.get(0).getStatus());
         Assert.assertEquals("2", items.get(1).getId());
         Assert.assertEquals(SessionTaskItem.STATUS_COMPLETED, items.get(1).getStatus());
+    }
+
+    @Test
+    public void allCompletedItemsRemainUntilExplicitEmptyReplace() {
+        SessionTaskListStore store = new SessionTaskListStore("list-3");
+
+        store.replaceAll(List.of(
+                Map.of("content", "任务 A", "status", "completed"),
+                Map.of("content", "任务 B", "status", "completed")));
+
+        Assert.assertEquals(2, store.list().size());
+        Assert.assertEquals(SessionTaskItem.STATUS_COMPLETED, store.list().get(0).getStatus());
+
+        store.replaceAll(List.of());
+        Assert.assertTrue(store.list().isEmpty());
     }
 }

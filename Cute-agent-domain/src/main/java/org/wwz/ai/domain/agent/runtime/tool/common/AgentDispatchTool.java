@@ -7,6 +7,8 @@ import org.wwz.ai.domain.agent.runtime.agent.AgentContext;
 import org.wwz.ai.domain.agent.runtime.cancel.ActiveAgentRunRegistry;
 import org.wwz.ai.domain.agent.runtime.subagent.BackgroundSubAgentExecutor;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentDefinition;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentExecutionMode;
+import org.wwz.ai.domain.agent.runtime.subagent.SubAgentExecutionScope;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentRegistry;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentObservationBuilder;
 import org.wwz.ai.domain.agent.runtime.subagent.SubAgentResult;
@@ -172,6 +174,10 @@ public class AgentDispatchTool implements BaseTool {
                     agentContext, description, prompt, subagentType,
                     null, null, null, parentToolUseId);
             Map<String, Object> data = SubAgentObservationBuilder.build(result, NAME, false);
+            data.put("executionMode",
+                    SubAgentExecutionScope.isInline()
+                            ? SubAgentExecutionMode.INLINE
+                            : SubAgentExecutionMode.POOL);
             if (!result.isCompleted()) {
                 return ToolResultPayload.failureFrom(
                         StringUtils.defaultIfBlank(result.getErrorMsg(), "Agent 执行失败"),

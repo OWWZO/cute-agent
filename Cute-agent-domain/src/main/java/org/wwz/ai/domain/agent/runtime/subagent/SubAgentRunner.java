@@ -25,9 +25,13 @@ import org.wwz.ai.domain.agent.runtime.dto.tool.ToolCall;
 import org.wwz.ai.domain.agent.runtime.enums.AgentState;
 import org.wwz.ai.domain.agent.runtime.enums.RoleType;
 import org.wwz.ai.domain.agent.runtime.printer.Printer;
+import org.wwz.ai.domain.agent.runtime.prompt.AgentExecutionRole;
+import org.wwz.ai.domain.agent.runtime.prompt.PromptAssembler;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTask;
 import org.wwz.ai.domain.agent.runtime.tasklist.RuntimeBackgroundTaskRegistry;
 import org.wwz.ai.domain.agent.runtime.tasklist.SessionAgentMailboxHub;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionBackgroundTaskHub;
+import org.wwz.ai.domain.agent.runtime.tasklist.SessionNotificationHub;
 import org.wwz.ai.domain.agent.runtime.tool.ToolCollection;
 
 import java.util.ArrayList;
@@ -54,11 +58,13 @@ public class SubAgentRunner {
     /** 长 thinking / 工具静默时向前端发心跳，避免 UI 假死感（对标 onQueryProgress）。 */
     private static final long PROGRESS_HEARTBEAT_SECONDS = 30L;
 
-    private static final ScheduledExecutorService PROGRESS_SCHEDULER = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "subagent-progress");
-        t.setDaemon(true);
-        return t;
-    });
+    /** 定时调度器保留单平台线程；它只投递心跳，不承载阻塞 I/O。 */
+    private static final ScheduledExecutorService PROGRESS_SCHEDULER =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread thread = new Thread(r, "subagent-progress");
+                thread.setDaemon(true);
+                return thread;
+            });
 
     private final SubAgentRegistry registry;
     private final SubAgentConcurrencyGate concurrencyGate;
@@ -161,6 +167,19 @@ public class SubAgentRunner {
                               RunCancellation cancellationOverride,
                               String preferredAgentId,
                               String explicitParentToolUseId) {
+        return run(parentContext, description, prompt, subagentType, resumeAgentId,
+                cancellationOverride, preferredAgentId, explicitParentToolUseId, null);
+    }
+
+    public SubAgentResult run(AgentContext parentContext,
+                              String description,
+                              String prompt,
+                              String subagentType,
+                              String resumeAgentId,
+                              RunCancellation cancellationOverride,
+                              String preferredAgentId,
+                              String explicitParentToolUseId,
+                              String logicalRunId) {
         long start = System.currentTimeMillis();
         boolean resume = StringUtils.isNotBlank(resumeAgentId);
         String agentId;
@@ -178,6 +197,11 @@ public class SubAgentRunner {
 
         if (parentContext == null) {
             return failed(agentId, childSessionId, definition, description, prompt, start, "parent AgentContext 为空");
+        }
+        int childDepth = SubAgentContextFactory.childDelegationDepth(parentContext);
+        if (childDepth > SubAgentTreeLimits.MAX_DELEGATION_DEPTH) {
+            return failed(agentId, childSessionId, definition, description, prompt, start,
+                    "子 Agent 深度上限为 " + SubAgentTreeLimits.MAX_DELEGATION_DEPTH);
         }
         if (StringUtils.isBlank(prompt)) {
             return failed(agentId, childSessionId, definition, description, prompt, start, "prompt 不能为空");
@@ -198,10 +222,30 @@ public class SubAgentRunner {
                     "无法唤醒子 Agent：SessionWorkingMemoryService 未注入");
         }
 
+        boolean background = cancellationOverride != null;
+        String rootSessionId = SubAgentContextFactory.rootSessionId(parentContext);
+        if (!background) {
+            RuntimeBackgroundTaskRegistry.TreeQuotaDecision quota =
+                    parentContext.requireBackgroundTasks().reserveTreeAgent(
+                            rootSessionId,
+                            SubAgentContextFactory.currentAgentId(parentContext),
+                            agentId);
+            if (!quota.allowed()) {
+                return failed(agentId, childSessionId, definition, description, prompt, start,
+                        quota.reason());
+            }
+        }
         try {
-            SubAgentResult gated = concurrencyGate.runWithPermit(() ->
-                    runUnlocked(parentContext, description, prompt, definition, agentId, childSessionId, start, resume,
-                            cancellationOverride, explicitParentToolUseId));
+            SubAgentResult gated;
+            if (SubAgentExecutionScope.isInline()) {
+                // task 池已拒绝并 CallerRuns：当前线程没有 gate permit，也不能再抢第二把。
+                gated = runUnlocked(parentContext, description, prompt, definition, agentId, childSessionId,
+                        start, resume, cancellationOverride, explicitParentToolUseId, logicalRunId);
+            } else {
+                gated = concurrencyGate.runWithPermit(() ->
+                        runUnlocked(parentContext, description, prompt, definition, agentId, childSessionId,
+                                start, resume, cancellationOverride, explicitParentToolUseId, logicalRunId));
+            }
             if (gated == null) {
                 return failed(agentId, childSessionId, definition, description, prompt, start,
                         "子 Agent 并发已达上限(" + concurrencyGate.getMaxConcurrent()
@@ -211,6 +255,10 @@ public class SubAgentRunner {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return failed(agentId, childSessionId, definition, description, prompt, start, "子 Agent 等待并发许可被中断");
+        } finally {
+            if (!background) {
+                parentContext.requireBackgroundTasks().releaseTreeAgent(rootSessionId, agentId);
+            }
         }
     }
 
@@ -223,7 +271,8 @@ public class SubAgentRunner {
                                        long start,
                                        boolean resume,
                                        RunCancellation cancellationOverride,
-                                       String explicitParentToolUseId) {
+                                       String explicitParentToolUseId,
+                                       String logicalRunId) {
         ToolCollection parentToolCollection = parentContext.getSubAgentToolCollection() != null
                 ? parentContext.getSubAgentToolCollection()
                 : parentContext.getToolCollection();
@@ -240,10 +289,10 @@ public class SubAgentRunner {
         // 占位失败说明另一个实例仍持有该 agentId：本实例不启动子 Agent，
         // 但仍要落一条 FAILED 的 child run 并回传原因（否则调用方看到的是「什么都没发生」）。
         boolean claimed = SessionAgentMailboxHub.tryMarkActive(sessionKey, agentId);
-        String rejectionReason = claimed ? null : "子 Agent 仍在运行，请用 TaskOutput 等待后再 resume";
+        String rejectionReason = claimed ? null : "子 Agent 正在启动或收尾，请稍后重试 SendMessage";
         try {
             return runClaimed(parentContext, description, prompt, definition, agentId, childSessionId,
-                    start, resume, cancellationOverride, parentToolUseId, childTools, sessionKey,
+                    start, resume, cancellationOverride, parentToolUseId, childTools, logicalRunId, sessionKey,
                     rejectionReason);
         } finally {
             // 只有本次真正占位成功才允许释放：否则会清掉另一个运行实例的邮箱。
@@ -264,6 +313,7 @@ public class SubAgentRunner {
                                       RunCancellation cancellationOverride,
                                       String parentToolUseId,
                                       ToolCollection childTools,
+                                      String logicalRunId,
                                       String sessionKey,
                                       String rejectionReason) {
         // 先落库后运行：子会话身份行必须在 child run 启动前写入（对齐 ZCode「持久化早于 Spawned 广播」）。
@@ -279,13 +329,28 @@ public class SubAgentRunner {
         String childRequestId = SubAgentContextFactory.newChildRequestId(agentId);
         Printer isolatedChildPrinter = openIsolatedChildStream(
                 parentContext, childSessionId, childRequestId, prompt);
+        Printer childEventPrinter = WorkspaceFileEventPrinter.wrap(
+                isolatedChildPrinter,
+                parentContext.getPrinter(),
+                SubAgentContextFactory.rootSessionId(parentContext),
+                childSessionId,
+                childRequestId,
+                parentToolUseId,
+                agentId,
+                definition.getAgentType());
 
         final AgentContext childContext;
         try {
             childContext = SubAgentContextFactory.create(
                     parentContext, prompt, description, childTools, agentId, definition.getAgentType(),
-                    parentToolUseId, isolatedChildPrinter,
-                    isolatedChildPrinter == null ? null : childRequestId);
+                    parentToolUseId, childEventPrinter,
+                    childEventPrinter == null ? null : childRequestId);
+            childContext.setTreeIdentity(
+                    childContext.getRootSessionId(),
+                    childContext.getDelegationDepth(),
+                    childContext.getParentAgentId(),
+                    logicalRunId);
+            childContext.setToolScopeApplied(Boolean.TRUE);
             // 后台 Agent：用任务级取消令牌，TaskStop 不误伤主 run；同步派发仍共享父令牌
             if (cancellationOverride != null) {
                 childContext.control().bindCancellation(cancellationOverride);
@@ -298,14 +363,8 @@ public class SubAgentRunner {
                     childContext,
                     ExecutionLedgerConstants.ENTRY_AGENT_SUBAGENT,
                     prompt);
-            if (isolatedChildPrinter != null) {
-                registerIsolatedChildRun(
-                        parentContext,
-                        childContext,
-                        childSessionId,
-                        childRequestId
-                );
-            }
+            // ActiveRun 是取消/并发判活的事实来源，不能依赖 SSE 隔离开关。
+            registerChildRun(parentContext, childContext, childSessionId, childRequestId);
         } catch (RuntimeException e) {
             // startup 广播前失败时子流已在注册表中，必须立即注销，避免留下无法查询的孤儿投影。
             if (isolatedChildPrinter != null) {
@@ -324,6 +383,7 @@ public class SubAgentRunner {
                 new java.util.concurrent.atomic.AtomicInteger(ExecutionLedgerConstants.STATUS_FAILED);
         java.util.concurrent.atomic.AtomicReference<String> childRunSummary =
                 new java.util.concurrent.atomic.AtomicReference<>("");
+        AtomicBoolean waitingForBackground = new AtomicBoolean(false);
         try {
             childContext.bindPendingInjectQueue(SessionAgentMailboxHub.queue(sessionKey, agentId));
 
@@ -341,9 +401,9 @@ public class SubAgentRunner {
 
             // resume：每次运行需要唯一 requestId，否则 working_memory persist 幂等跳过
             if (resume) {
-                if (isSubAgentStillRunning(parentContext, agentId)) {
+                if (isSubAgentStillRunning(parentContext, agentId, logicalRunId)) {
                     return failed(agentId, childSessionId, definition, description, prompt, start,
-                            "子 Agent 仍在运行，请用 TaskOutput 等待后再 resume",
+                            "目标 agentId 仍有另一条运行中的任务，请等待其结束或先用 TaskStop 停止后再唤醒",
                             null, false);
                 }
                 // 与首跑统一短 requestId；父 requestId 仅用于日志
@@ -376,11 +436,15 @@ public class SubAgentRunner {
             childTools.setAgentContext(childContext);
 
             SessionAgentMailboxHub.markActive(sessionKey, agentId, true);
+            childContext.setResolvedSystemPrompt(PromptAssembler.assembleForContext(
+                    childContext,
+                    AgentExecutionRole.WORKER,
+                    definition.getAgentType(),
+                    definition.getSystemPrompt(),
+                    null).systemPrompt());
             agent = new ReactImplAgent(childContext);
             agent.setName("subagent:" + definition.getAgentType());
             agent.setDescription(StringUtils.defaultIfBlank(description, definition.getAgentType()));
-            // 子 Agent 使用 ReAct 底座 + 类型指令，不额外注入专门终答契约
-            agent.applySubAgentSystemPrompt(definition.getSystemPrompt());
             // 子 agent 与主 agent 复用同一套行模型：正文 delta 同样走 agent_stream，
             // 由隔离子会话流（openIsolatedChildStream）承载、子会话面板用同一条 combineData
             // 链路消费；透传回退路径由 SubAgentPrinter 打嵌套标签、前端挂嵌套时间线。
@@ -418,6 +482,7 @@ public class SubAgentRunner {
                 int toolUseCount = countToolUses(agent);
                 // 成功/think 失败都落库，便于主 Agent resume
                 boolean memoryPersisted = persistSubWorkingMemory(childContext, parentContext, agent, definition);
+                markConsumedNotifications(childContext, memoryPersisted);
                 String content;
                 if (thinkFailed) {
                     String reason = StringUtils.defaultIfBlank(
@@ -442,6 +507,40 @@ public class SubAgentRunner {
                             .build();
                 }
                 content = ReactFinalAnswerResolver.resolve(agent, runResult);
+                if (hasOutstandingOwnedWork(childContext, agentId)) {
+                    if (logicalRunId != null) {
+                        // 候选答复只进入子会话历史；逻辑任务仍保持 running，父 Agent 看不到它。
+                        content = emitSubAgentFinalReply(childContext, agent, content);
+                        childContext.requireBackgroundTasks().markWaiting(logicalRunId);
+                        waitingForBackground.set(true);
+                        childRunStatus.set(ExecutionLedgerConstants.STATUS_SUCCESS);
+                        childRunSummary.set(content);
+                        return SubAgentResult.builder()
+                                .status(SubAgentResult.STATUS_WAITING)
+                                .agentId(agentId)
+                                .childSessionId(childSessionId)
+                                .agentType(definition.getAgentType())
+                                .description(description)
+                                .prompt(prompt)
+                                .content(content)
+                                .totalToolUseCount(toolUseCount)
+                                .totalDurationMs(System.currentTimeMillis() - start)
+                                .memoryPersisted(memoryPersisted)
+                                .build();
+                    }
+                    ForegroundDrainResult drained = drainForegroundUntilQuiet(
+                            childContext, parentContext, agent, definition, agentId);
+                    memoryPersisted = drained.memoryPersisted();
+                    content = drained.content();
+                    toolUseCount = drained.toolUseCount();
+                    if (!drained.quiet()) {
+                        childRunStatus.set(ExecutionLedgerConstants.STATUS_FAILED);
+                        childRunSummary.set(content);
+                        return failed(agentId, childSessionId, definition, description, prompt, start,
+                                "子 Agent 的后台工作未在收尾轮上限内完成",
+                                content, memoryPersisted);
+                    }
+                }
                 content = emitSubAgentFinalReply(childContext, agent, content);
                 childRunStatus.set(ExecutionLedgerConstants.STATUS_SUCCESS);
                 childRunSummary.set(content);
@@ -474,7 +573,7 @@ public class SubAgentRunner {
             return failed(agentId, childSessionId, definition, description, prompt, start, err, content, memoryPersisted);
         } finally {
             ActiveAgentRunRegistry activeRunRegistry = parentContext.activeAgentRunRegistry();
-            if (activeRunRegistry != null && isolatedChildPrinter != null) {
+            if (activeRunRegistry != null) {
                 activeRunRegistry.end(childRequestId);
             }
             // 子 run 终态收口（含取消：/stop 走异常或正常路径都已覆盖）
@@ -494,7 +593,7 @@ public class SubAgentRunner {
                         parentContext.getRequestId(), agentId, ledgerError.getMessage());
             }
             // Phase 3：父流补一条自包含的 subagent_end，然后关闭子会话投影流。
-            if (isolatedChildPrinter != null) {
+            if (isolatedChildPrinter != null && !waitingForBackground.get()) {
                 emitParentSubAgentFrame(parentContext, "subagent_end", childSessionId, childRequestId,
                         parentToolUseId, agentId, definition.getAgentType(), description,
                         childContext.isRunCancelled() ? "stopped" : resolveEndStatus(childRunStatus.get()),
@@ -505,14 +604,87 @@ public class SubAgentRunner {
         }
     }
 
+    private ForegroundDrainResult drainForegroundUntilQuiet(AgentContext childContext,
+                                                            AgentContext parentContext,
+                                                            ReactImplAgent agent,
+                                                            SubAgentDefinition definition,
+                                                            String agentId) {
+        String content = "";
+        int toolUseCount = countToolUses(agent);
+        boolean memoryPersisted = persistSubWorkingMemory(childContext, parentContext, agent, definition);
+        for (int closingTurn = 0; closingTurn < SubAgentTreeLimits.MAX_CLOSING_TURNS; closingTurn++) {
+            if (childContext.isRunCancelled() || parentContext.isRunCancelled()) {
+                return new ForegroundDrainResult(content, toolUseCount, memoryPersisted, true);
+            }
+            awaitOwnedBackgroundTasks(childContext, agentId);
+            if (!hasOutstandingOwnedWork(childContext, agentId)) {
+                return new ForegroundDrainResult(content, toolUseCount, memoryPersisted, true);
+            }
+
+            // 同一前台逻辑任务继续下一轮：先把本轮完整记忆作为下一轮前缀，
+            // 再把后台通知在 BaseAgent 首步 drain 进上下文。
+            childContext.setWorkingMemoryMessages(new ArrayList<>(agent.getMemory().getMessages()));
+            String turnResult = agent.run("");
+            toolUseCount = countToolUses(agent);
+            memoryPersisted = persistSubWorkingMemory(childContext, parentContext, agent, definition);
+            markConsumedNotifications(childContext, memoryPersisted);
+            content = ReactFinalAnswerResolver.resolve(agent, turnResult);
+        }
+        return new ForegroundDrainResult(content, toolUseCount, memoryPersisted,
+                !hasOutstandingOwnedWork(childContext, agentId));
+    }
+
+    private void awaitOwnedBackgroundTasks(AgentContext childContext, String agentId) {
+        RuntimeBackgroundTaskRegistry registry = childContext.requireBackgroundTasks();
+        for (RuntimeBackgroundTask task : registry.listRunningOwnedBy(agentId)) {
+            registry.awaitUntilTerminal(task.getId(),
+                    () -> childContext.isRunCancelled());
+        }
+    }
+
+    private static boolean hasOutstandingOwnedWork(AgentContext childContext, String agentId) {
+        RuntimeBackgroundTaskRegistry registry = childContext.requireBackgroundTasks();
+        if (!registry.listRunningOwnedBy(agentId).isEmpty()) {
+            return true;
+        }
+        if (registry.hasUnconsumedOwnedBy(agentId)) {
+            return true;
+        }
+        String sessionKey = SessionBackgroundTaskHub.keyFor(
+                childContext.getSessionId(), childContext.getRequestId());
+        if (SessionNotificationHub.hasPending(sessionKey)) {
+            return true;
+        }
+        var inbox = childContext.sessionInboxPort();
+        return inbox != null
+                && (inbox.hasDeliverableKind(childContext.getSessionId(),
+                        org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem.KIND_BACKGROUND_NOTIFICATION)
+                || inbox.hasDeliverableKind(childContext.getSessionId(),
+                        org.wwz.ai.domain.agent.runtime.inbox.SessionInboxItem.KIND_USER_MESSAGE));
+    }
+
+    private static void markConsumedNotifications(AgentContext childContext, boolean memoryPersisted) {
+        if (!memoryPersisted) {
+            return;
+        }
+        childContext.requireBackgroundTasks().markNotified(
+                childContext.control().drainConsumedBackgroundNotifications());
+    }
+
+    private record ForegroundDrainResult(String content,
+                                         int toolUseCount,
+                                         boolean memoryPersisted,
+                                         boolean quiet) {
+    }
+
     private static String resolveEndStatus(int runStatus) {
         return runStatus == ExecutionLedgerConstants.STATUS_SUCCESS ? "completed" : "failed";
     }
 
-    private static void registerIsolatedChildRun(AgentContext parentContext,
-                                                 AgentContext childContext,
-                                                 String childSessionId,
-                                                 String childRequestId) {
+    private static void registerChildRun(AgentContext parentContext,
+                                         AgentContext childContext,
+                                         String childSessionId,
+                                         String childRequestId) {
         ActiveAgentRunRegistry registry = parentContext.activeAgentRunRegistry();
         if (registry == null || childContext == null) {
             return;
@@ -756,7 +928,9 @@ public class SubAgentRunner {
      * <p>mailbox 占位由调用方 {@code tryMarkActive} 原子取得，这里不能再查 active——
      * 那会把当前这次运行自己误判成「仍在运行」。</p>
      */
-    private static boolean isSubAgentStillRunning(AgentContext parent, String agentId) {
+    private static boolean isSubAgentStillRunning(AgentContext parent,
+                                                  String agentId,
+                                                  String excludeTaskId) {
         if (StringUtils.isBlank(agentId)) {
             return false;
         }
@@ -765,9 +939,14 @@ public class SubAgentRunner {
             return false;
         }
         for (RuntimeBackgroundTask task : registry.listRunning()) {
-            if (task != null && agentId.equals(StringUtils.trimToEmpty(task.getAgentId()))) {
-                return true;
+            if (task == null
+                    || !agentId.equals(StringUtils.trimToEmpty(task.getAgentId()))) {
+                continue;
             }
+            if (excludeTaskId != null && excludeTaskId.equals(task.getId())) {
+                continue;
+            }
+            return true;
         }
         return false;
     }

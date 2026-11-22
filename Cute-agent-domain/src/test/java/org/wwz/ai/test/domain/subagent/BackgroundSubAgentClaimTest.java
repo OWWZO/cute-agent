@@ -41,7 +41,7 @@ public class BackgroundSubAgentClaimTest {
         CountDownLatch release = new CountDownLatch(1);
         SubAgentRunner runner = Mockito.mock(SubAgentRunner.class);
         Mockito.when(runner.run(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(),
-                        Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
+                        Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
                 .thenAnswer(invocation -> {
                     started.countDown();
                     release.await(5, TimeUnit.SECONDS);
@@ -60,7 +60,7 @@ public class BackgroundSubAgentClaimTest {
         ToolResultPayload second = submit(parent, runner, "agent-claim");
         Assert.assertEquals("第二个并发续跑不得再启动一条 run",
                 Boolean.FALSE, data(second).get("ok"));
-        Assert.assertTrue(String.valueOf(data(second).get("message")).contains("正在运行"));
+        Assert.assertTrue(String.valueOf(data(second).get("message")).contains("正在启动或收尾"));
 
         release.countDown();
         waitUntilIdle(registry);

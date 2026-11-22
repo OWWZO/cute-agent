@@ -45,6 +45,22 @@ public class BackgroundTaskNotificationTest {
     }
 
     @Test
+    public void taskStopTerminalStateWinsOverLateCompletion() {
+        RuntimeBackgroundTaskRegistry registry = new RuntimeBackgroundTaskRegistry();
+        RuntimeBackgroundTask task = registry.registerLocalAgent("停止", "general-purpose", "prompt");
+
+        registry.stop(task.getId());
+        registry.complete(task.getId(), SubAgentResult.builder()
+                .status(SubAgentResult.STATUS_COMPLETED)
+                .agentId("agent-stopped")
+                .content("late")
+                .build());
+
+        Assert.assertEquals(RuntimeBackgroundTask.STATUS_STOPPED, task.getStatus());
+        Assert.assertFalse("已停止任务不得再发完成通知", registry.claimNotification(task.getId()));
+    }
+
+    @Test
     public void markNotifiedIsIdempotent() {
         RuntimeBackgroundTaskRegistry registry = new RuntimeBackgroundTaskRegistry();
         RuntimeBackgroundTask task = registry.registerLocalAgent("调研", "general-purpose", "prompt");

@@ -7,9 +7,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 会话级 Todo 任务列表。
@@ -18,7 +16,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SessionTaskListStore {
 
     private final String listId;
-    private final AtomicInteger highWaterMark = new AtomicInteger(0);
     private final Map<String, SessionTaskItem> tasks = new ConcurrentHashMap<>();
     private final TasklistPersistencePort persistence;
 
@@ -42,137 +39,17 @@ public class SessionTaskListStore {
         }
         try {
             List<SessionTaskItem> loaded = persistence.loadTodos(listId);
-            int max = persistence.loadTodoHighWaterMark(listId);
             if (loaded != null) {
                 for (SessionTaskItem item : loaded) {
                     if (item == null || StringUtils.isBlank(item.getId())) {
                         continue;
                     }
                     tasks.put(item.getId(), item);
-                    try {
-                        max = Math.max(max, Integer.parseInt(item.getId()));
-                    } catch (NumberFormatException ignored) {
-                        // keep max
-                    }
                 }
             }
-            highWaterMark.set(Math.max(0, max));
         } catch (Exception ignored) {
             // best-effort：hydrate 失败保持空列表
         }
-    }
-
-    public synchronized SessionTaskItem create(String subject,
-                                               String description,
-                                               String activeForm,
-                                               Map<String, Object> metadata) {
-        if (StringUtils.isBlank(subject)) {
-            throw new IllegalArgumentException("subject 不能为空");
-        }
-        if (StringUtils.isBlank(description)) {
-            throw new IllegalArgumentException("description 不能为空");
-        }
-        String id = String.valueOf(highWaterMark.incrementAndGet());
-        SessionTaskItem item = SessionTaskItem.builder()
-                .id(id)
-                .subject(subject.trim())
-                .description(description.trim())
-                .activeForm(StringUtils.trimToNull(activeForm))
-                .status(SessionTaskItem.STATUS_PENDING)
-                .blocks(new ArrayList<>())
-                .blockedBy(new ArrayList<>())
-                .metadata(metadata == null ? new ConcurrentHashMap<>() : new ConcurrentHashMap<>(metadata))
-                .build();
-        tasks.put(id, item);
-        persistUpsert(item);
-        return item;
-    }
-
-    public Optional<SessionTaskItem> get(String taskId) {
-        if (StringUtils.isBlank(taskId)) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(tasks.get(taskId.trim()));
-    }
-
-    public synchronized Optional<SessionTaskItem> update(String taskId,
-                                                         String subject,
-                                                         String description,
-                                                         String status,
-                                                         String activeForm,
-                                                         String owner,
-                                                         List<String> addBlocks,
-                                                         List<String> addBlockedBy) {
-        SessionTaskItem existing = tasks.get(StringUtils.trimToEmpty(taskId));
-        if (existing == null) {
-            return Optional.empty();
-        }
-        // 写时复制：读者可能正持有旧引用做 toDetailMap()，绝不能原地改 blocks/blockedBy。
-        SessionTaskItem item = copyOf(existing);
-        if (StringUtils.isNotBlank(subject)) {
-            item.setSubject(subject.trim());
-        }
-        if (description != null) {
-            item.setDescription(description);
-        }
-        if (StringUtils.isNotBlank(status)) {
-            item.setStatus(normalizeStatus(status));
-        }
-        if (activeForm != null) {
-            item.setActiveForm(StringUtils.trimToNull(activeForm));
-        }
-        if (owner != null) {
-            item.setOwner(StringUtils.trimToNull(owner));
-        }
-        if (addBlocks != null && !addBlocks.isEmpty()) {
-            if (item.getBlocks() == null) {
-                item.setBlocks(new ArrayList<>());
-            }
-            for (String id : addBlocks) {
-                if (StringUtils.isNotBlank(id) && !item.getBlocks().contains(id.trim())) {
-                    item.getBlocks().add(id.trim());
-                }
-            }
-        }
-        if (addBlockedBy != null && !addBlockedBy.isEmpty()) {
-            if (item.getBlockedBy() == null) {
-                item.setBlockedBy(new ArrayList<>());
-            }
-            for (String id : addBlockedBy) {
-                if (StringUtils.isNotBlank(id) && !item.getBlockedBy().contains(id.trim())) {
-                    item.getBlockedBy().add(id.trim());
-                }
-            }
-        }
-        tasks.put(item.getId(), item);
-        persistUpsert(item);
-        return Optional.of(item);
-    }
-
-    /** 复制一份可独立修改的条目；列表字段重建，避免与并发读者共享同一个 ArrayList。 */
-    private static SessionTaskItem copyOf(SessionTaskItem source) {
-        return SessionTaskItem.builder()
-                .id(source.getId())
-                .subject(source.getSubject())
-                .description(source.getDescription())
-                .activeForm(source.getActiveForm())
-                .owner(source.getOwner())
-                .status(source.getStatus())
-                .blocks(source.getBlocks() == null ? new ArrayList<>() : new ArrayList<>(source.getBlocks()))
-                .blockedBy(source.getBlockedBy() == null ? new ArrayList<>() : new ArrayList<>(source.getBlockedBy()))
-                .metadata(source.getMetadata() == null
-                        ? new LinkedHashMap<>()
-                        : new LinkedHashMap<>(source.getMetadata()))
-                .build();
-    }
-
-    public synchronized Optional<SessionTaskItem> update(String taskId,
-                                                         String subject,
-                                                         String description,
-                                                         String status,
-                                                         String activeForm,
-                                                         String owner) {
-        return update(taskId, subject, description, status, activeForm, owner, null, null);
     }
 
     public List<SessionTaskItem> list() {
@@ -187,14 +64,6 @@ public class SessionTaskListStore {
         return items;
     }
 
-    public synchronized boolean delete(String taskId) {
-        boolean removed = tasks.remove(StringUtils.trimToEmpty(taskId)) != null;
-        if (removed) {
-            persistDelete(taskId);
-        }
-        return removed;
-    }
-
     public synchronized List<SessionTaskItem> replaceAll(List<Map<String, Object>> todoMaps) {
         List<SessionTaskItem> oldSnapshot = list();
         List<Map<String, Object>> rawItems = todoMaps == null ? List.of() : todoMaps;
@@ -202,7 +71,6 @@ public class SessionTaskListStore {
         // 先校验并构造完整的新列表，任何非法 status 都在清空旧状态之前抛出；
         // 否则一次被拒绝的写入会先清空内存列表，而持久化列表仍保留旧值。
         List<SessionTaskItem> newItems = new ArrayList<>();
-        boolean allDone = true;
         int nextId = 0;
         for (Map<String, Object> raw : rawItems) {
             if (raw == null) {
@@ -210,9 +78,6 @@ public class SessionTaskListStore {
             }
             String status = normalizeStatus(String.valueOf(
                     firstNonNull(raw.get("status"), SessionTaskItem.STATUS_PENDING)));
-            if (!SessionTaskItem.STATUS_COMPLETED.equals(status)) {
-                allDone = false;
-            }
             String content = firstNonBlank(
                     str(raw.get("content")),
                     str(raw.get("subject")),
@@ -229,22 +94,13 @@ public class SessionTaskListStore {
                     .description(description.trim())
                     .activeForm(activeForm)
                     .status(status)
-                    .blocks(new ArrayList<>())
-                    .blockedBy(new ArrayList<>())
-                    .metadata(new ConcurrentHashMap<>())
                     .build());
         }
 
         tasks.clear();
-        highWaterMark.set(0);
-        if (allDone) {
-            persistReplace(List.of());
-            return oldSnapshot;
-        }
         for (SessionTaskItem item : newItems) {
             tasks.put(item.getId(), item);
         }
-        highWaterMark.set(nextId);
         persistReplace(list());
         return oldSnapshot;
     }
@@ -282,28 +138,6 @@ public class SessionTaskListStore {
         body.put("inProgress", inProgress);
         body.put("completed", completed);
         return body;
-    }
-
-    private void persistUpsert(SessionTaskItem item) {
-        if (persistence == null || item == null) {
-            return;
-        }
-        try {
-            persistence.upsertTodo(listId, item);
-        } catch (Exception ignored) {
-            // best-effort
-        }
-    }
-
-    private void persistDelete(String taskId) {
-        if (persistence == null) {
-            return;
-        }
-        try {
-            persistence.deleteTodo(listId, taskId);
-        } catch (Exception ignored) {
-            // best-effort
-        }
     }
 
     private void persistReplace(List<SessionTaskItem> items) {

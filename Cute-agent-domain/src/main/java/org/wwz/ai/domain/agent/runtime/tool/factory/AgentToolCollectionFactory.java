@@ -21,12 +21,9 @@ import org.wwz.ai.domain.agent.runtime.tool.common.planmode.AskUserQuestionTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.RequestDesktopControlTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.EnterPlanModeTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.ExitPlanModeTool;
-import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskCreateTool;
-import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskGetTool;
-import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskListTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.SendMessageTool;
+import org.wwz.ai.domain.agent.runtime.tool.common.planmode.AgentListTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskStopTool;
-import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TaskUpdateTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.planmode.TodoWriteTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.DataAnalysisTool;
 import org.wwz.ai.domain.agent.runtime.tool.common.CodeExecutionTool;
@@ -349,7 +346,9 @@ public class AgentToolCollectionFactory {
      * </p>
      */
     private ToolCollection applySubAgentSessionScope(ToolCollection toolCollection, AgentContext agentContext) {
-        if (agentContext == null || agentContext.isSubAgent() || subAgentSessionToolScope == null) {
+        if (agentContext == null
+                || Boolean.TRUE.equals(agentContext.getToolScopeApplied())
+                || subAgentSessionToolScope == null) {
             return toolCollection;
         }
         SubAgentSessionToolScope.Resolution resolution =
@@ -360,13 +359,16 @@ public class AgentToolCollectionFactory {
             denied.setMcpToolExecutor(toolCollection.getMcpToolExecutor());
             denied.restoreTaskScopedState(toolCollection.snapshotTaskScopedState());
             denied.setAgentContext(agentContext);
+            agentContext.setToolScopeApplied(Boolean.TRUE);
             return denied;
         }
         if (!resolution.isResolved()) {
+            agentContext.setToolScopeApplied(Boolean.TRUE);
             return toolCollection;
         }
         ToolCollection scoped = SubAgentToolFilter.filter(toolCollection, resolution.definition());
         scoped.setAgentContext(agentContext);
+        agentContext.setToolScopeApplied(Boolean.TRUE);
         return scoped;
     }
 
@@ -531,23 +533,14 @@ public class AgentToolCollectionFactory {
     private void registerPlanModeTools(ToolCollection toolCollection) {
         // Plan Mode 工具共享当前上下文的 task/approval registry，工具调用结果才能
         // 在多轮执行中保持同一状态，而不是每次 build 重新创建孤立状态机。
-        TaskCreateTool taskCreateTool = new TaskCreateTool();
-        toolCollection.addTool(taskCreateTool);
-
-        TaskGetTool taskGetTool = new TaskGetTool();
-        toolCollection.addTool(taskGetTool);
-
-        TaskUpdateTool taskUpdateTool = new TaskUpdateTool();
-        toolCollection.addTool(taskUpdateTool);
-
-        TaskListTool taskListTool = new TaskListTool();
-        toolCollection.addTool(taskListTool);
-
         TodoWriteTool todoWriteTool = new TodoWriteTool();
         toolCollection.addTool(todoWriteTool);
 
         TaskStopTool taskStopTool = new TaskStopTool();
         toolCollection.addTool(taskStopTool);
+
+        AgentListTool agentListTool = new AgentListTool();
+        toolCollection.addTool(agentListTool);
 
         SendMessageTool sendMessageTool = new SendMessageTool();
         toolCollection.addTool(sendMessageTool);

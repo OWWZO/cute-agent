@@ -49,6 +49,10 @@ public class SubAgentChildSessionPersistenceTest {
                 parent, "prompt", "desc", new ToolCollection(), "agent-9", "general-purpose");
 
         Assert.assertEquals("sub_agent-9", child.getSubAgentChildSessionId());
+        Assert.assertEquals("parent-session", child.getRootSessionId());
+        Assert.assertEquals(Integer.valueOf(1), child.getDelegationDepth());
+        Assert.assertEquals("parent-session", child.getParentAgentId());
+        Assert.assertFalse(child.getToolScopeApplied());
         // Phase 2：子 Agent 记账必须落到子会话，而不是继续共享父 sessionId
         Assert.assertEquals("sub_agent-9", child.getSessionId());
         // Phase 2：run 级状态必须是全新实例，否则子调用会计进父 run 计数
