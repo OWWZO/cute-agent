@@ -81,7 +81,6 @@ public class CodeExecutionTool implements BaseTool {
         fileItem.put("description", "工作区文件条目");
         properties.put("files", Map.of("type", "array", "items", fileItem, "description", "写入工作区的小型文本或 Base64 文件"));
         properties.put("timeoutSeconds", Map.of("type", "integer", "minimum", 1, "maximum", 600));
-        properties.put("memoryBytes", Map.of("type", "integer", "description", "可选内存上限（字节）"));
         properties.put("importTier", Map.of("type", "string", "enum", List.of("stdlib", "extended", "unrestricted")));
         properties.put("resetWorkspace", Map.of("type", "boolean"));
         properties.put("workspaceFile", Map.of("type", "string", "description", "工作区内已有 Python 源码文件，提供时优先执行它"));
@@ -115,6 +114,7 @@ public class CodeExecutionTool implements BaseTool {
                     context.getWorkspaceRoot(), context.getSessionId());
             Map<String, Object> request = new LinkedHashMap<>(params);
             request.remove(ToolCallIntentSchema.FIELD);
+            request.remove("memoryBytes");
             request.put("fileNames", validateFileNames(toStringList(params.get("fileNames")), workspaceRoot));
             String workspaceFile = validateWorkspaceFile(workspaceFileArg);
             if (workspaceFile != null) {

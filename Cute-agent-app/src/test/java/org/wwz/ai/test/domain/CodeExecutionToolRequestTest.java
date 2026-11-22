@@ -16,6 +16,49 @@ import java.util.Map;
 public class CodeExecutionToolRequestTest {
 
     @Test
+    public void memoryBytesIsNeitherExposedNorForwarded() {
+        java.util.concurrent.atomic.AtomicReference<String> capturedBody = new java.util.concurrent.atomic.AtomicReference<>();
+        RemoteHttpPort httpPort = request -> {
+            capturedBody.set(request.getBody());
+            return """
+                    {"status":"ok","stdout":"","stderr":"","result":null,"fileInfo":[]}
+                    """;
+        };
+        CuteConfig config = new CuteConfig();
+        ReflectionTestUtils.setField(config, "codeInterpreterUrl", "http://cute-tool");
+        AgentContext context = AgentContext.builder()
+                .requestId("req-code-memory-bytes")
+                .sessionId("session-code-memory-bytes")
+                .userId("user-code-memory-bytes")
+                .runtimeDependencies(CuteRuntimeTestSupport.runtimeDependencies(config, httpPort))
+                .build();
+        ToolArtifactSource artifactSource = ToolArtifactSource.builder()
+                .sessionId(context.getSessionId())
+                .requestId(context.getRequestId())
+                .toolCallId("call-code-memory-bytes")
+                .toolName("code_execution")
+                .build();
+        CodeExecutionTool tool = new CodeExecutionTool();
+
+        Map<?, ?> properties = (Map<?, ?>) tool.toParams().get("properties");
+        Assert.assertFalse("memoryBytes 不应再暴露给模型", properties.containsKey("memoryBytes"));
+
+        context.bindCurrentToolArtifactSource(artifactSource);
+        try {
+            tool.execute(Map.of(
+                    "intent", "验证无效内存参数不会透传",
+                    "source", "print(1)",
+                    "memoryBytes", 0
+            ), context);
+        } finally {
+            context.clearCurrentToolArtifactSource();
+        }
+
+        com.alibaba.fastjson.JSONObject request = JSON.parseObject(capturedBody.get());
+        Assert.assertFalse("memoryBytes 不应转发给 cute-tool", request.containsKey("memoryBytes"));
+    }
+
+    @Test
     public void workspaceFileRequestAlwaysIncludesNonBlankStringSource() {
         java.util.concurrent.atomic.AtomicReference<String> capturedBody = new java.util.concurrent.atomic.AtomicReference<>();
         RemoteHttpPort httpPort = request -> {
